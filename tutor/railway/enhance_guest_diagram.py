@@ -90,16 +90,16 @@ function DiagramMessage({ content }: { content: string }) {
   if (!diagram) {
     return <MarkdownRenderer content={content} className="text-[15px] leading-7" />;
   }
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#f7f5f0}body{display:grid;place-items:center;min-height:100vh;padding:18px;box-sizing:border-box}svg{display:block;max-width:100%;height:auto}</style></head><body>${diagram.svg}</body></html>`;
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f7f5f0;overflow:auto;overscroll-behavior:contain}body{display:grid;place-items:center;min-height:100vh;padding:clamp(10px,2.5vw,18px);box-sizing:border-box}svg{display:block;max-width:100%;max-height:calc(100vh - 20px);width:auto;height:auto}</style></head><body>${diagram.svg}</body></html>`;
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 max-w-full space-y-3 overflow-hidden">
       {diagram.narrative && <MarkdownRenderer content={diagram.narrative} className="text-[15px] leading-7" />}
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[#f7f5f0] shadow-sm">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[#f7f5f0] shadow-sm">
         <iframe
           title="Murikah Tutor generated diagram"
           sandbox=""
           srcDoc={srcDoc}
-          className="h-[380px] w-full border-0 sm:h-[520px]"
+          className="block h-[52dvh] min-h-[300px] max-h-[680px] w-full max-w-full border-0 sm:h-[58dvh]"
           loading="lazy"
         />
       </div>
