@@ -47,7 +47,16 @@ export default function MurikahSocialButtons({ next = "/chat", resolveNext }: { 
       .then((data) => {
         if (!alive) return;
         const values = Array.isArray(data.providers) ? data.providers : [];
-        setProviders(values.filter((item) => ["google", "microsoft", "apple"].includes(item.id)));
+        const order: Record<Provider["id"], number> = {
+          google: 0,
+          microsoft: 1,
+          apple: 2,
+        };
+        setProviders(
+          values
+            .filter((item) => ["google", "microsoft", "apple"].includes(item.id))
+            .sort((a, b) => order[a.id] - order[b.id]),
+        );
       })
       .catch(() => {
         if (alive) setProviders([]);
