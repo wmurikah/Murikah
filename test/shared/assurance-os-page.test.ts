@@ -48,6 +48,10 @@ test('hero uses the approved copy, CTAs and a real product capture', async () =>
 
 test('how it works uses six 16:10 product captures and accessible six-second tabs', async () => {
   const workflow = await readFile(workflowUrl, 'utf8');
+  const workflowCss = await readFile(
+    new URL('../../src/components/assurance-os/AssuranceOsWorkflow.css', import.meta.url),
+    'utf8',
+  );
   const assets = ['plan', 'fieldwork', 'review', 'findings', 'remediation', 'report'];
 
   assert.match(workflow, /const STAGE_MS = 6000/);
@@ -61,7 +65,7 @@ test('how it works uses six 16:10 product captures and accessible six-second tab
   assert.match(workflow, /onMouseEnter=\{\(\) => setHovered\(true\)\}/);
   assert.match(workflow, /onFocusCapture=\{\(\) => setFocused\(true\)\}/);
   assert.match(workflow, /prefers-reduced-motion/);
-  assert.match(workflow, /animation: aow-fade 300ms/);
+  assert.match(workflowCss, /animation: aow-fade 300ms/);
   assert.match(workflow, /width="640"/);
   assert.match(workflow, /height="400"/);
   assert.match(workflow, /Try this stage in the sandbox →/);
