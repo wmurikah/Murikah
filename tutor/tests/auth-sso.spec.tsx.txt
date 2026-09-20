@@ -1,0 +1,60 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function providers(value: object) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ),
+  );
+}
+
+describe("Murikah social sign-in", () => {
+  it("renders Google as a branded single sign-on action", async () => {
+    providers({
+      providers: [
+        { id: "microsoft", label: "Microsoft" },
+        { id: "google", label: "Google" },
+      ],
+    });
+
+    render(<MurikahSocialButtons next="/chat" />);
+
+    expect(await screen.findByText("Single sign-on")).toBeVisible();
+    const google = screen.getByRole("link", { name: "Continue with Google" });
+    expect(google).toHaveAttribute(
+      "href",
+      "/api/auth/oauth/google/start?next=%2Fchat",
+    );
+    expect(google).toHaveAttribute("data-provider", "google");
+
+    const logo = google.querySelector('[data-google-logo="true"]');
+    expect(logo).not.toBeNull();
+    expect(logo?.querySelector('[fill="#4285F4"]')).not.toBeNull();
+    expect(logo?.querySelector('[fill="#34A853"]')).not.toBeNull();
+    expect(logo?.querySelector('[fill="#FBBC05"]')).not.toBeNull();
+    expect(logo?.querySelector('[fill="#EA4335"]')).not.toBeNull();
+
+    const links = screen.getAllByRole("link");
+    expect(links[0]).toHaveTextContent("Continue with Google");
+    expect(screen.getByText("or continue with email or username")).toBeVisible();
+  });
+
+  it("does not show an orphan SSO divider when no provider is configured", async () => {
+    providers({ providers: [] });
+    const { container } = render(<MurikahSocialButtons next="/chat" />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText("Single sign-on")).toBeNull();
+    expect(screen.queryByText("or continue with email or username")).toBeNull();
+  });
+});
