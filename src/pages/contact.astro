@@ -230,7 +230,7 @@ const labelCls = 'block text-sm font-medium text-navy';
     const params = new URLSearchParams(window.location.search);
     const message = form.querySelector<HTMLTextAreaElement>('[name="message"]');
     if (params.get('intent') === 'demo' && message && !message.value) {
-      message.value = 'I would like a demonstration of Assurance OS / GRC. Our priorities are: ';
+      message.value = 'I would like a demonstration of Assurance OS. Our priorities are: ';
     }
     const statusEl = document.querySelector<HTMLElement>('#form-status');
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
