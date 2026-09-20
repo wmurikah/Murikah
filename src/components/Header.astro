@@ -132,7 +132,9 @@ const navLink =
 
       {/* Desktop CTA, identical to the hero primary action. */}
       <div class="hidden lg:block">
-        <Button href={PRIMARY_CTA.href} variant="primary">{PRIMARY_CTA.label}</Button>
+        <Button href={PRIMARY_CTA.href} variant="primary" size="lg" class="rounded-[12px]">
+          {PRIMARY_CTA.label}
+        </Button>
       </div>
 
       {/* Mobile menu toggle, 44px tap target (Fitts's Law). */}
@@ -219,7 +221,7 @@ const navLink =
           )
         }
         <div class="px-1 pt-3">
-          <Button href={PRIMARY_CTA.href} variant="primary" class="w-full">
+          <Button href={PRIMARY_CTA.href} variant="primary" size="lg" class="w-full rounded-[12px]">
             {PRIMARY_CTA.label}
           </Button>
         </div>
