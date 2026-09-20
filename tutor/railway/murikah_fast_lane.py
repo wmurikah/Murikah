@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+DEFAULT_NVIDIA_API_ROOT = "https://integrate.api.nvidia.com/v1"
+DEFAULT_FAST_HISTORY_CHARS = 60000
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
 DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 20.0
@@ -47,6 +50,69 @@ def configured_gemini_model() -> str:
 
 def gemini_configured() -> bool:
     return bool(os.environ.get("MURIKAH_GEMINI_API_KEY", "").strip())
+
+
+def configured_nvidia_fast_model() -> str:
+    return (
+        os.environ.get("MURIKAH_CHAT_NVIDIA_MODEL", "").strip()
+        or os.environ.get("MURIKAH_LLM_TERTIARY_MODEL", "").strip()
+        or DEFAULT_NVIDIA_FAST_MODEL
+    )
+
+
+def nvidia_configured() -> bool:
+    return bool(os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip())
+
+
+def portable_chat_messages(
+    messages: list[dict[str, Any]],
+    *,
+    max_chars: int = DEFAULT_FAST_HISTORY_CHARS,
+) -> list[dict[str, str]]:
+    """Keep only portable chat fields and a bounded recent conversation window.
+
+    DeepTutor history can carry provider-private state on assistant messages.
+    Passing those extra fields into another OpenAI-compatible provider makes
+    failover fragile, especially on follow-up turns. The fast lane needs only
+    role/content. Keep system instructions plus the newest conversational
+    messages within a predictable payload budget.
+    """
+    system: list[dict[str, str]] = []
+    conversation: list[dict[str, str]] = []
+    for item in messages:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            continue
+        content = _text_content(item.get("content")).strip()
+        if not content:
+            continue
+        row = {"role": role, "content": content}
+        if role == "system":
+            system.append(row)
+        else:
+            conversation.append(row)
+
+    budget = max(8000, int(max_chars))
+    selected: list[dict[str, str]] = []
+    used = 0
+    for item in reversed(conversation):
+        size = len(item["content"])
+        if selected and used + size > budget:
+            break
+        if not selected and size > budget:
+            item = {**item, "content": item["content"][-budget:]}
+            size = len(item["content"])
+        selected.append(item)
+        used += size
+    selected.reverse()
+
+    if system:
+        sys_budget = min(20000, max(4000, budget // 3))
+        latest = system[-1]["content"]
+        system = [{"role": "system", "content": latest[:sys_budget]}]
+    return [*system, *selected]
 
 
 def _text_content(value: Any) -> str:
@@ -167,6 +233,68 @@ async def gemini_stream(
                 text = _gemini_text(event)
                 if text:
                     yield text
+
+
+async def nvidia_stream(
+    messages: list[dict[str, Any]],
+    *,
+    max_tokens: int = 1800,
+) -> AsyncIterator[str]:
+    """Stream the NVIDIA NIM fast fallback directly over OpenAI-compatible SSE."""
+    api_key = os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("NVIDIA NIM is not configured.")
+    base = (
+        os.environ.get("MURIKAH_NVIDIA_NIM_BASE_URL", "").strip()
+        or DEFAULT_NVIDIA_API_ROOT
+    ).rstrip("/")
+    url = f"{base}/chat/completions"
+    model = configured_nvidia_fast_model()
+    payload = {
+        "model": model,
+        "messages": portable_chat_messages(messages),
+        "max_tokens": max(128, int(max_tokens)),
+        "temperature": 0.4,
+        "stream": True,
+    }
+    request_started = time.perf_counter()
+    timeout = httpx.Timeout(connect=5.0, read=None, write=15.0, pool=5.0)
+    async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+        async with client.stream(
+            "POST",
+            url,
+            headers={
+                "authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+                "accept": "text/event-stream",
+            },
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            logger.info(
+                "MURIKAH_LATENCY route=fast provider=nvidia event=headers model=%s elapsed_ms=%s",
+                model,
+                latency_ms(request_started),
+            )
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                raw = line[5:].strip()
+                if not raw or raw == "[DONE]":
+                    continue
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("error"):
+                    raise RuntimeError("Tutor provider is temporarily unavailable.")
+                for choice in event.get("choices", []) or []:
+                    if not isinstance(choice, dict):
+                        continue
+                    delta = choice.get("delta") or {}
+                    text = delta.get("content") if isinstance(delta, dict) else ""
+                    if isinstance(text, str) and text:
+                        yield text
 
 
 async def close_stream(stream: AsyncIterator[str] | None) -> None:
