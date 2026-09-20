@@ -90,7 +90,7 @@ def patch_chat_media(root: Path) -> None:
         path,
         'w-full max-w-[min(520px,90%)]',
         'w-full max-w-full sm:max-w-[min(520px,90%)]',
-        3,
+        4,
         "generated media width",
     )
     replace_count(
