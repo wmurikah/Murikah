@@ -21,6 +21,7 @@ export default defineConfig({
     '/labs': { status: 301, destination: '/automation' },
     '/academy': { status: 301, destination: '/training' },
     '/intelligence': { status: 301, destination: '/research' },
+    '/audit-os': { status: 301, destination: '/assurance-os' },
   },
 
   // Default output is static: marketing pages are prerendered to HTML assets,
@@ -59,7 +60,7 @@ export default defineConfig({
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
         const services = [
           '/internal-audit',
-          '/audit-os',
+          '/assurance-os',
           '/automation',
           '/advisory',
           '/training',
