@@ -42,10 +42,17 @@ test('service labels use matching canonical URLs', () => {
     assert.equal(SERVICES.find((service) => service.name === route.label)?.href, route.to);
   }
 
-  const nav = JSON.stringify(NAV);
+  const navHrefs = NAV.flatMap((item) => [
+    item.href,
+    ...(item.children?.map((child) => child.href) ?? []),
+  ]);
+
   for (const route of routes) {
-    assert.ok(nav.includes(route.to), `navigation is missing ${route.to}`);
-    assert.ok(!nav.includes(route.from), `navigation still links to legacy route ${route.from}`);
+    assert.ok(navHrefs.includes(route.to), `navigation is missing ${route.to}`);
+    assert.ok(
+      !navHrefs.includes(route.from),
+      `navigation still links to legacy route ${route.from}`,
+    );
   }
 });
 

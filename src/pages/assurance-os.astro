@@ -6,7 +6,7 @@ import Section from '@/components/primitives/Section.astro';
 import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import AuditOsWalkthrough from '@/components/audit-os/AuditOsWalkthrough';
-import { PRICING } from '@/site.config';
+import { PRICING, PRIMARY_CTA } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
 const features = [
@@ -91,11 +91,11 @@ const faqs: FaqItem[] = [
   metaDescription="Assurance OS, Murikah's assurance platform, runs work papers, findings, remediation and board reporting in one place, with an AI assistant. Built for mid-market audit teams."
   heading="Assurance OS: the platform your audit work runs on."
   intro="Plan engagements, review work papers, track findings and prepare committee reports in one workspace. Assurance OS brings the audit workflow together with an AI assistant to support drafting and analysis."
-  primaryCta={{ label: 'Request a demo', href: '/contact?intent=demo' }}
-  secondaryCta={{ label: 'Open Assurance OS', href: 'https://grc.murikah.com' }}
+  primaryCta={{ label: 'Try the public sandbox', href: '/assurance-os/sandbox' }}
+  secondaryCta={{ label: PRIMARY_CTA.label, href: PRIMARY_CTA.href }}
   faqs={faqs}
   closingTitle="Put your audit on a system built to be proven"
-  closingBody="Request a demonstration of the audit workflow and discuss your reporting needs."
+  closingBody="Explore the workflow with sample data first. If it fits, book a short call to discuss onboarding and reporting needs."
 >
   <Section tone="paper" aria-labelledby="what-it-does">
     <h2

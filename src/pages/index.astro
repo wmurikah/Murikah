@@ -1,263 +1,260 @@
 ---
 export const prerender = true;
 
-import { getCollection } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
-import Card from '@/components/primitives/Card.astro';
-import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
-import Faq from '@/components/primitives/Faq.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
-import ProductLinks from '@/components/ProductLinks.astro';
-import HeroFilm from '@/components/hero/HeroFilm.astro';
-import { SITE, SERVICES, AUDIENCE, STANDARDS } from '@/site.config';
-import type { FaqItem } from '@/lib/types';
-
-const topGuides = (await getCollection('insights', ({ data }) => !data.draft))
-  .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
-  .slice(0, 3);
-
-const why = [
-  {
-    title: 'Nothing gets lost in the handover',
-    body: 'The service, the platform and your board reporting share one structure, so evidence carries straight from fieldwork to the board pack without being rebuilt at each step.',
-  },
-];
+import AuditOsWalkthrough from '@/components/audit-os/AuditOsWalkthrough';
+import { SITE, SERVICES, AUDIENCE, STANDARDS, PRIMARY_CTA } from '@/site.config';
 
 const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os').map(
   (service, index) => ({
     ...service,
     shortSummary: [
       'Independent assurance over operations, systems, governance and data protection.',
-      'Practical CRM, CMS and workflow automation built around the work.',
+      'Workflow automation and internal tools built after the process is understood.',
       'AI governance, analytics and decision support for executives and boards.',
-      'CISA, ISO 42001 and lead-auditor readiness grounded in practice.',
-      'Anonymised benchmarks and research for better-informed decisions.',
+      'Practical training for audit, risk, AI governance and assurance teams.',
+      'Benchmarking and research that turns assurance data into context.',
     ][index],
   }),
 );
 
-const faqs: FaqItem[] = [
+const proof = [
   {
-    question: 'What does Murikah do?',
-    answer:
-      'Murikah helps organisations run, prove and improve internal audit and AI governance. We deliver co-sourced and outsourced internal audit, Assurance OS, advisory, training and automation builds in one joined-up relationship.',
+    title: 'Standards-based',
+    body: 'Internal audit work follows the IIA Global Internal Audit Standards, with ISO/IEC 27001 and ISO/IEC 42001 used where information security and AI governance are in scope.',
   },
   {
-    question: 'Who is Murikah for?',
-    answer:
-      'Heads of internal audit, audit committee and board chairs, CFOs, CEOs, and heads of risk and compliance at regulated mid-market organisations. Our first focus is SACCOs, banks, microfinance institutions, fintechs, donor-funded NGOs and family businesses with active boards.',
+    title: 'Evidence stays connected',
+    body: 'Work papers, findings, action plans and committee reporting stay in one reviewable Assurance OS workflow.',
   },
   {
-    question: 'Can we use the software and services separately?',
-    answer:
-      'We combine senior assurance judgement and the platform it runs on. You get people who can reason through the work, software that keeps evidence and follow-up moving, and a cost model designed for the mid-market.',
+    title: 'See the output',
+    body: 'Review an illustrative audit finding before you speak to us.',
+    href: '/sample-report',
   },
 ];
 ---
 
-<BaseLayout titleFull="Internal audit and AI governance | Murikah" description={SITE.description}>
+<BaseLayout
+  titleFull="Internal audit and Assurance OS | Murikah"
+  description="Internal audit and Assurance OS for teams accountable to boards, regulators and customers. Plan, evidence, report and follow up in one connected workflow."
+>
   <section
-    class="ceramic-hero border-b border-hairline bg-surface py-6 lg:py-4"
+    id="hero"
+    class="ceramic-hero border-b border-hairline bg-surface py-8 lg:py-12"
     aria-labelledby="home-title"
   >
     <Container>
-      <div class="grid items-center gap-6 lg:grid-cols-2">
-        <div>
-          <p class="eyebrow">Internal audit · Governance · Software</p>
+      <div class="grid items-center gap-10 lg:grid-cols-12">
+        <div class="lg:col-span-6">
+          <p class="eyebrow">Internal audit · Assurance OS</p>
           <h1
             id="home-title"
-            class="mt-6 font-serif text-[clamp(2.6rem,5vw,4.5rem)] leading-[1.06] tracking-tight text-navy"
+            class="mt-6 font-serif text-[clamp(2.7rem,5vw,4.8rem)] leading-[1.03] tracking-tight text-navy"
           >
-            Clear evidence.<br />Confident decisions.
+            Internal audit you can trace from plan to board pack.
           </h1>
           <p class="mt-6 max-w-xl text-xl leading-relaxed text-slate">
-            Internal audit, AI governance and practical software for teams accountable to boards,
-            regulators and customers.
+            Murikah combines standards-based internal audit with Assurance OS, so planning, evidence,
+            findings, remediation and committee reporting stay connected.
           </p>
-          <div class="mt-8 flex flex-wrap gap-3">
-            <Button href="/contact" size="lg">Discuss your requirements</Button>
-            <Button href="/products" variant="ghost" size="lg">Explore products</Button>
+          <div class="mt-8">
+            <Button href={PRIMARY_CTA.href} size="lg">{PRIMARY_CTA.label}</Button>
           </div>
-          <p class="mt-6 text-sm text-slate">
-            Kenya and East Africa · Services scoped to your organisation
+          <p class="mt-5 text-sm text-slate">
+            Prefer to explore first?{' '}
+            <a href="/assurance-os/sandbox" class="font-medium text-blue no-underline hover:underline">
+              Try Assurance OS with sample data →
+            </a>
           </p>
         </div>
-        <HeroFilm />
-      </div>
-      <div
-        class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-hairline pt-3 text-xs text-slate"
-        aria-label="Standards and service context"
-      >
-        <span class="font-medium tracking-[0.08em] text-gold uppercase">Work guided by</span>
-        {STANDARDS.map((standard) => <span>{standard.short}</span>)}
-        <span>{SITE.areaServed}</span>
-        <a href="/pricing" class="font-medium text-blue no-underline hover:underline">
-          Indicative pricing
-        </a>
+
+        <div class="lg:col-span-6">
+          <div class="overflow-hidden rounded-[1.5rem] bg-paper shadow-card ring-1 ring-hairline">
+            <div class="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <div>
+                <p class="text-sm font-semibold text-navy">Assurance OS</p>
+                <p class="text-xs text-slate">Sample workspace · Q3 internal audit plan</p>
+              </div>
+              <span class="rounded-full bg-surface px-3 py-1 text-xs font-medium text-gold ring-1 ring-hairline">
+                Sample data
+              </span>
+            </div>
+            <div class="grid gap-4 p-5 sm:grid-cols-3">
+              <div class="rounded-xl bg-surface p-4 ring-1 ring-hairline">
+                <p class="text-xs font-medium tracking-[0.08em] text-slate uppercase">Engagements</p>
+                <p class="mt-2 text-3xl font-semibold text-navy">6</p>
+                <p class="mt-1 text-xs text-slate">Plan → fieldwork → review</p>
+              </div>
+              <div class="rounded-xl bg-surface p-4 ring-1 ring-hairline">
+                <p class="text-xs font-medium tracking-[0.08em] text-slate uppercase">Open findings</p>
+                <p class="mt-2 text-3xl font-semibold text-navy">4</p>
+                <p class="mt-1 text-xs text-slate">Risk, owner and action linked</p>
+              </div>
+              <div class="rounded-xl bg-surface p-4 ring-1 ring-hairline">
+                <p class="text-xs font-medium tracking-[0.08em] text-slate uppercase">Due actions</p>
+                <p class="mt-2 text-3xl font-semibold text-navy">3</p>
+                <p class="mt-1 text-xs text-slate">Tracked through closure</p>
+              </div>
+            </div>
+            <div class="border-t border-hairline px-5 py-4">
+              <div class="flex items-center justify-between gap-4">
+                <span>
+                  <span class="block text-sm font-medium text-navy">User access review</span>
+                  <span class="mt-1 block text-xs text-slate">Finding linked to an owned remediation action</span>
+                </span>
+                <span class="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-gold ring-1 ring-hairline">
+                  High
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </Container>
   </section>
-  <Section tone="paper" aria-labelledby="products-title" class="border-b border-hairline">
-    <div class="mb-6">
-      <p class="eyebrow">Working products</p><h2
-        id="products-title"
-        class="mt-4 font-serif text-4xl text-navy"
-      >
-        Your work. The right workspace.
-      </h2>
-    </div>
-    <ProductLinks />
-  </Section>
-  <Section tone="surface" aria-labelledby="services-title" class="border-b border-hairline">
-    <div class="reveal mx-auto max-w-3xl text-center">
-      <p class="eyebrow is-centred">What we do</p>
+
+  <Section id="proof" tone="paper" aria-labelledby="proof-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <p class="eyebrow">Proof</p>
       <h2
-        id="services-title"
-        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
+        id="proof-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
       >
-        Specialist support where you need it.
+        Evidence before claims.
       </h2>
-      <p class="mt-5 text-lg text-slate">
-        Five service lines, scoped to your priorities. Software is available separately through our
-        products.
+      <p class="mt-4 text-lg text-slate">
+        The method, the standards and a sample output are visible before you buy.
       </p>
     </div>
 
-    <div class="mt-6 grid gap-x-6 gap-y-3 lg:grid-cols-6">
+    <div class="mt-8 grid gap-5 lg:grid-cols-3">
       {
-        serviceCards.map((s, i) => (
-          <a
-            href={s.href}
-            class:list={[
-              'group grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-hairline py-4 no-underline lg:col-span-2',
-              i >= 3 && 'lg:col-span-3',
-            ]}
-          >
-            <span class="pt-0.5 text-xs font-semibold tracking-[0.14em] text-gold uppercase">
-              {String(i + 1).padStart(2, '0')}
-            </span>
-            <span>
-              <span class="block text-xl font-semibold text-navy">{s.fullName}</span>
-              <span class="mt-1.5 block text-sm leading-relaxed text-slate">{s.shortSummary}</span>
-              <span class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-blue">
-                View service{' '}
-                <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
-              </span>
-            </span>
-          </a>
+        proof.map((item) => (
+          <article class="rounded-card bg-surface p-6 ring-1 ring-hairline">
+            <h3 class="text-xl text-navy">{item.title}</h3>
+            <p class="mt-3 text-slate">{item.body}</p>
+            {item.href && (
+              <a href={item.href} class="mt-5 inline-flex font-medium text-blue no-underline hover:underline">
+                View sample finding →
+              </a>
+            )}
+          </article>
+        ))
+      }
+    </div>
+
+    <div class="mt-6 flex flex-wrap gap-2" aria-label="Standards our work follows">
+      {
+        STANDARDS.map((standard) => (
+          <span class="rounded-full bg-paper px-3 py-1.5 text-sm text-navy ring-1 ring-hairline">
+            {standard.short}
+          </span>
         ))
       }
     </div>
   </Section>
 
-  <Section tone="paper" aria-labelledby="experience-title">
-    <div class="grid items-start gap-6 lg:grid-cols-12 lg:gap-8">
-      <div class="reveal lg:sticky lg:top-28 lg:col-span-5">
-        <p class="eyebrow">Why it works</p>
+  <Section id="platform" tone="surface" aria-labelledby="platform-title" class="border-b border-hairline">
+    <div class="grid gap-10 lg:grid-cols-12 lg:items-start">
+      <div class="lg:col-span-5">
+        <p class="eyebrow">Platform</p>
         <h2
-          id="experience-title"
-          class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
+          id="platform-title"
+          class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
         >
-          From fieldwork to follow-up.
+          Assurance OS is the operating layer for the audit.
         </h2>
+        <p class="mt-5 max-w-prose text-lg text-slate">
+          Plan engagements, capture work papers, review evidence, raise findings, track actions and
+          prepare committee reporting without rebuilding the trail in separate files.
+        </p>
+        <div class="mt-7">
+          <Button href="/assurance-os/sandbox" size="lg">Try the public sandbox</Button>
+        </div>
+        <p class="mt-4 text-sm">
+          <a href="/assurance-os" class="font-medium text-blue no-underline hover:underline">
+            See Assurance OS →
+          </a>
+        </p>
       </div>
       <div class="lg:col-span-7">
-        {
-          why.map((w) => (
-            <div class="reveal border-t border-hairline py-4 first:border-t-0 first:pt-0">
-              <h3 class="text-2xl text-navy">{w.title}</h3>
-              <p class="mt-3 max-w-2xl text-lg text-slate">{w.body}</p>
-            </div>
-          ))
-        }
+        <AuditOsWalkthrough client:visible />
       </div>
     </div>
   </Section>
 
-  <Section tone="surface" aria-labelledby="audience-title" class="border-y border-hairline">
-    <div class="reveal mx-auto max-w-3xl text-center">
-      <p class="eyebrow is-centred">Who it is for</p>
+  <Section id="services" tone="paper" aria-labelledby="services-title" class="border-b border-hairline">
+    <div class="max-w-3xl">
+      <p class="eyebrow">Services</p>
       <h2
-        id="audience-title"
-        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
+        id="services-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
       >
-        For teams accountable to boards, regulators and funders.
+        Specialist work around the platform.
       </h2>
+      <p class="mt-4 text-lg text-slate">
+        Start with the service you need. The Services page compares who each line is for, what it
+        produces and how it starts.
+      </p>
     </div>
-    <div class="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+
+    <div class="mt-8 grid gap-x-8 gap-y-2 md:grid-cols-2">
       {
-        AUDIENCE.map((seg) => (
-          <div class="reveal rounded-[1.6rem] bg-paper p-6 ring-1 ring-hairline">
-            <p class="font-medium text-navy">{seg.name}</p>
-            <p class="mt-2 text-sm text-slate">{seg.note}</p>
-          </div>
+        serviceCards.map((service, index) => (
+          <a
+            href={service.href}
+            class="group grid grid-cols-[2.4rem_1fr] gap-3 border-t border-hairline py-5 no-underline"
+          >
+            <span class="pt-1 text-xs font-semibold tracking-[0.14em] text-gold uppercase">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <span>
+              <span class="block text-xl font-semibold text-navy">{service.fullName}</span>
+              <span class="mt-1.5 block text-sm leading-relaxed text-slate">{service.shortSummary}</span>
+              <span class="mt-3 inline-flex text-sm font-medium text-blue group-hover:underline">
+                Compare this service →
+              </span>
+            </span>
+          </a>
         ))
       }
     </div>
   </Section>
 
-  {
-    topGuides.length > 0 && (
-      <Section tone="paper" aria-labelledby="guides-title">
-        <div class="reveal flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p class="eyebrow">Insights</p>
-            <h2
-              id="guides-title"
-              class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
-            >
-              Learn the thinking behind the system
-            </h2>
-          </div>
-          <a
-            href="/insights"
-            class="font-medium text-blue no-underline hover:text-blue-deep hover:underline"
-          >
-            All insights &rarr;
-          </a>
-        </div>
-        <FeatureGrid cols={3} class="mt-6">
-          {topGuides.map((g) => (
-            <Card href={`/insights/${g.id}/`} class="reveal flex flex-col">
-              {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
-              <h3 class="mt-3 text-lg text-navy">{g.data.title}</h3>
-              <p class="mt-2 grow text-slate">{g.data.description}</p>
-              <span
-                aria-hidden="true"
-                class="mt-5 inline-flex items-center gap-1 text-sm font-medium text-blue"
-              >
-                Read guide <span>&rarr;</span>
-              </span>
-            </Card>
-          ))}
-        </FeatureGrid>
-      </Section>
-    )
-  }
-
-  <Section tone="surface" aria-labelledby="home-faq" class="border-t border-hairline">
-    <div class="reveal max-w-2xl">
-      <p class="eyebrow">Questions</p>
+  <Section id="audience" tone="surface" aria-labelledby="audience-title" class="border-b border-hairline">
+    <div class="mx-auto max-w-3xl text-center">
+      <p class="eyebrow is-centred">Audience</p>
       <h2
-        id="home-faq"
-        class="mt-5 text-[length:var(--text-title)] leading-[1.1] font-semibold tracking-[-0.015em] text-navy"
+        id="audience-title"
+        class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
       >
-        Questions before you enquire
+        Built for teams accountable to boards, regulators and funders.
       </h2>
     </div>
-    <Faq items={faqs} class="reveal mt-6 max-w-3xl" />
-    <FaqPageSchema items={faqs} />
+    <div class="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+      {
+        AUDIENCE.map((segment) => (
+          <article class="rounded-[1.4rem] bg-paper p-5 ring-1 ring-hairline">
+            <h3 class="font-medium text-navy">{segment.name}</h3>
+            <p class="mt-2 text-sm text-slate">{segment.note}</p>
+          </article>
+        ))
+      }
+    </div>
+    <p class="mt-6 text-center text-sm text-slate">{SITE.areaServed}</p>
   </Section>
 
   <CtaSection
-    eyebrow="Discuss your requirements"
-    title="Start with the work that matters most"
-    body="Tell us what you need. We will respond within two working days."
-    secondaryLabel="Explore products"
-    secondaryHref="/products"
+    id="contact"
+    eyebrow="Contact"
+    title="Book a 20-minute call"
+    body="Tell us what you are trying to improve. We will confirm a short call and the right next step."
+    primaryLabel={PRIMARY_CTA.label}
+    primaryHref={PRIMARY_CTA.href}
   />
 </BaseLayout>
