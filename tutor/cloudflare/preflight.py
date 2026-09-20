@@ -283,6 +283,8 @@ def main() -> int:
             'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py',
             'COPY tutor/railway /opt/murikah/railway',
+            'COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx',
+            'tests/integration/auth-sso.spec.tsx',
             'COPY tutor/tests /opt/murikah/tests',
             'RUN python -m unittest discover -s /opt/murikah/tests -v',
             'COPY tutor/railway/bootstrap_fast_lane.py /app/murikah-fast-lane-bootstrap.py',
