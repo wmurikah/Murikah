@@ -159,6 +159,10 @@ def main() -> None:
             "Your 7 guest interactions are complete.",
             "resolveNext={continuationForAccountChange}",
             "/api/murikah/access/signup",
+            'aria-label="Account access"',
+            'aria-current={!isSignup ? "page" : undefined}',
+            'aria-current={isSignup ? "page" : undefined}',
+            "bg-[#1E2A30] text-white shadow-md",
         ),
     )
     require_markers(
@@ -167,6 +171,14 @@ def main() -> None:
             "resolveNext?: () => string | Promise<string>",
             "event.preventDefault()",
             "await resolveNext()",
+            'data-google-logo="true"',
+            'fill="#4285F4"',
+            'fill="#34A853"',
+            'fill="#FBBC05"',
+            'fill="#EA4335"',
+            'aria-label="Single sign-on"',
+            'data-provider={provider.id}',
+            "or continue with email or username",
         ),
     )
     require_markers(
