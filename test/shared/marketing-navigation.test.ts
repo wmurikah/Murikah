@@ -21,7 +21,11 @@ test('marketing dropdowns stay within the five-link choice limit', () => {
 
 test('pricing is a top-level destination and the header keeps one primary CTA', () => {
   assert.equal(NAV.find((item) => item.label === 'Pricing')?.href, '/pricing');
-  assert.ok(NAV.every((item) => item.children?.every((child) => child.href !== '/pricing') ?? true));
+  assert.ok(
+    NAV.every(
+      (item) => item.children?.every((child) => child.href !== '/pricing') ?? true,
+    ),
+  );
   assert.deepEqual(PRIMARY_CTA, {
     label: 'Discuss your requirements',
     href: '/contact',
