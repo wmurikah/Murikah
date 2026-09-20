@@ -88,7 +88,10 @@ def _member_session_hours() -> int:
         value = int(os.environ.get("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS", "9600"))
     except ValueError as exc:
         raise RuntimeError("MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS must be an integer.") from exc
-    return min(max(value, 720), 9600)
+    # Production policy is deliberately fixed at the browser-compatible
+    # persistent-cookie ceiling. A stale dashboard value such as 24h must not
+    # silently reintroduce routine member sign-outs.
+    return 9600
 
 
 def bootstrap_auth() -> None:
