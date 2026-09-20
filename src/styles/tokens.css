@@ -34,12 +34,14 @@
   --color-ivory: #f8f4ea; /* main warm canvas */
   --color-porcelain: #fffcf6; /* raised cards, clean surfaces */
   --color-stone: #e8e0d2; /* subtle section contrast */
-  --color-hairline: #d8d1c3; /* dividers, borders, quiet structure */
+  --color-hairline: #d8d1c3; /* decorative dividers and quiet structure */
+  --color-control-border: #737e89; /* interactive boundaries; >= 3:1 on light canvas */
 
   /* The single premium accent, used sparingly */
   --color-brass: #a9822e; /* aged brass: fine accents, small marks, rare emphasis */
   --color-brass-deep: #8a6a22; /* derived: brass hover/active */
   --color-brass-soft: #d6c38a; /* very subtle washes and low-opacity glints only */
+  --color-brass-on-dark: #d1aa58; /* text/accent on navy; never light-surface body text */
 
   /* Restrained interactive text + accessible focus */
   --color-blue: #223a63; /* quiet interactive text (links, small affordances) */
