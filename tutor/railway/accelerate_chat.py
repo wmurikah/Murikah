@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V4"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V5"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -31,12 +31,15 @@ from deeptutor.murikah_fast_lane import (
     close_stream,
     configured_gemini_model,
     configured_nvidia_fast_model,
+    configured_qwen_fast_model,
     gemini_configured,
     gemini_stream,
     latency_ms,
     nvidia_configured,
     nvidia_stream,
     portable_chat_messages,
+    qwen_configured,
+    qwen_stream,
     race_first_visible,
 )
 from deeptutor.runtime.request_contracts import get_capability_request_schema
@@ -46,7 +49,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V4
+# MURIKAH_DUAL_LANE_CHAT_V5
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
@@ -56,10 +59,10 @@ def _positive_seconds(name: str, default: float) -> float:
 
 
 _FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 9.0
+    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 8.0
 )
 _OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 14.0
+    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 12.0
 )
 _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
@@ -197,59 +200,60 @@ NEW_RUN = '''    @staticmethod
                 ),
             )
 
-        # Use redundant low-latency transports. Gemini stays immediate for
-        # ordinary Chat; NVIDIA Nemotron Lightning starts shortly after as a
-        # direct, independent NIM fallback. Remaining configured providers hedge
-        # later. This avoids one provider or one adapter stranding a follow-up.
-        non_gemini = [config for config in resolved if str(config.model) != gemini_model]
+        # Three independent fast-chat routes: Google's lowest-latency stable
+        # Flash-Lite model, NVIDIA Nemotron Lightning with hidden thinking off,
+        # and Qwen Flash through DashScope. A catalog model remains a fourth
+        # safety net, but ordinary Chat never falls into the multi-agent loop.
         nvidia_model = configured_nvidia_fast_model()
         nvidia_on = nvidia_configured()
-
-        selected = resolved[0] if resolved else None
-        selected_is_other = bool(
-            selected
-            and str(getattr(selected, "model", "")) not in {gemini_model, nvidia_model}
-        )
-        if selected_is_other:
-            hedges.append(deep_candidate(selected, 0.0))
+        qwen_model = configured_qwen_fast_model()
+        qwen_on = qwen_configured()
 
         if gemini_on:
             hedges.append(
                 HedgeCandidate(
                     name=f"gemini:{gemini_model}",
-                    delay_seconds=0.0 if not selected_is_other else 0.75,
+                    delay_seconds=0.0,
                     factory=lambda: gemini_stream(
                         messages,
                         max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
-
         if nvidia_on:
             hedges.append(
                 HedgeCandidate(
                     name=f"nvidia-fast:{nvidia_model}",
-                    delay_seconds=0.75 if not selected_is_other else 1.0,
+                    delay_seconds=0.55 if gemini_on else 0.0,
                     factory=lambda: nvidia_stream(
                         messages,
                         max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
+        if qwen_on:
+            hedges.append(
+                HedgeCandidate(
+                    name=f"qwen-fast:{qwen_model}",
+                    delay_seconds=1.1 if (gemini_on or nvidia_on) else 0.0,
+                    factory=lambda: qwen_stream(
+                        messages,
+                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    ),
+                )
+            )
 
-        remainder = [
+        fallback_configs = [
             config
-            for config in non_gemini
-            if config is not selected
-            and str(getattr(config, "model", "")) != nvidia_model
+            for config in resolved
+            if str(getattr(config, "model", "")) not in {gemini_model, nvidia_model, qwen_model}
         ]
-        for index, config in enumerate(remainder[:2]):
-            hedges.append(deep_candidate(config, 2.5 + (index * 1.5)))
+        if fallback_configs:
+            hedges.append(deep_candidate(fallback_configs[0], 1.8))
 
         if not hedges:
-            logger.warning("MURIKAH_LATENCY route=fast event=no_candidates")
-            await prompt_pipeline.run(context, stream)
-            return
+            logger.error("MURIKAH_LATENCY route=fast event=no_candidates")
+            raise RuntimeError("Murikah is temporarily unavailable. Please try again.")
 
         call_id = new_call_id("chat-responding")
         trace_meta = build_trace_metadata(
@@ -278,6 +282,54 @@ NEW_RUN = '''    @staticmethod
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
         if winner is None:
+            # One transparent reconnect race before the learner sees any error.
+            # Start every direct provider at once; shared trial capacity or a
+            # transient regional connection must not kill an ordinary follow-up.
+            retry_hedges: list[HedgeCandidate] = []
+            if gemini_on:
+                retry_hedges.append(
+                    HedgeCandidate(
+                        name=f"gemini-retry:{gemini_model}",
+                        delay_seconds=0.0,
+                        factory=lambda: gemini_stream(
+                            messages,
+                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        ),
+                    )
+                )
+            if nvidia_on:
+                retry_hedges.append(
+                    HedgeCandidate(
+                        name=f"nvidia-retry:{nvidia_model}",
+                        delay_seconds=0.0,
+                        factory=lambda: nvidia_stream(
+                            messages,
+                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        ),
+                    )
+                )
+            if qwen_on:
+                retry_hedges.append(
+                    HedgeCandidate(
+                        name=f"qwen-retry:{qwen_model}",
+                        delay_seconds=0.0,
+                        factory=lambda: qwen_stream(
+                            messages,
+                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        ),
+                    )
+                )
+            if fallback_configs:
+                retry_hedges.append(deep_candidate(fallback_configs[0], 0.0))
+            if retry_hedges:
+                winner = await race_first_visible(
+                    retry_hedges,
+                    request_started=request_started,
+                    first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
+                    overall_timeout=min(7.0, _OVERALL_FIRST_TOKEN_SECONDS),
+                )
+
+        if winner is None:
             elapsed = latency_ms(request_started)
             context.metadata["murikah_provider"] = ""
             context.metadata["murikah_model"] = ""
@@ -287,7 +339,7 @@ NEW_RUN = '''    @staticmethod
                 elapsed,
             )
             await stream.progress(
-                "Murikah could not start this response. Please retry.",
+                "Murikah is reconnecting. Please try again.",
                 source="chat",
                 stage="failed",
                 metadata=merge_trace_metadata(
@@ -295,7 +347,7 @@ NEW_RUN = '''    @staticmethod
                     {
                         "trace_kind": "call_status",
                         "call_state": "failed",
-                        "status_code": "fast_lane_timeout",
+                        "status_code": "provider_unavailable",
                         "retryable": True,
                         "murikah_lane": "fast",
                     },
@@ -304,9 +356,7 @@ NEW_RUN = '''    @staticmethod
             # Ordinary chat never falls through to the multi-agent pipeline.
             # Raising gives the turn runtime a terminal ERROR + DONE event and
             # releases the composer instead of leaving Reasoning spinning.
-            raise TimeoutError(
-                "Murikah could not complete this response right now. Please retry."
-            )
+            raise RuntimeError("Murikah is temporarily unavailable. Please try again.")
 
         answer_parts = [winner.first_chunk]
         chunk_meta = merge_trace_metadata(
@@ -326,10 +376,12 @@ NEW_RUN = '''    @staticmethod
         )
 
         context.metadata["murikah_provider"] = winner.name
-        if winner.name.startswith("gemini:"):
-            winner_model = configured_gemini_model()
-        elif winner.name.startswith("nvidia-fast:"):
-            winner_model = configured_nvidia_fast_model()
+        if winner.name.startswith(("gemini:", "gemini-retry:")):
+            winner_model = gemini_model
+        elif winner.name.startswith(("nvidia-fast:", "nvidia-retry:")):
+            winner_model = nvidia_model
+        elif winner.name.startswith(("qwen-fast:", "qwen-retry:")):
+            winner_model = qwen_model
         else:
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
         context.metadata["murikah_model"] = winner_model
@@ -366,7 +418,15 @@ NEW_RUN = '''    @staticmethod
                 winner.name,
                 latency_ms(request_started),
             )
-            raise TimeoutError("Murikah fast chat exceeded its response deadline.") from exc
+            raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
+        except Exception as exc:
+            logger.warning(
+                "MURIKAH_LATENCY route=fast event=terminal_stream_error provider=%s elapsed_ms=%s type=%s",
+                winner.name,
+                latency_ms(request_started),
+                type(exc).__name__,
+            )
+            raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
         finally:
             await close_stream(winner.stream)
 

@@ -46,8 +46,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v22 adds direct NVIDIA NIM failover, portable bounded follow-up history, and safe terminal errors.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v22" }
+# v23 races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash before any learner-visible failure.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v23" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
@@ -67,4 +67,6 @@ new_sqlite_classes = ["TutorContainer"]
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
 MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
 MURIKAH_GUEST_PROMPT_LIMIT = "7"
+MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"
+MURIKAH_FAST_CHAT_QWEN_MODEL = "qwen3.8-flash"
 TZ = "Africa/Nairobi"
