@@ -50,9 +50,8 @@ test('marketing text pairs meet WCAG AA contrast thresholds', async () => {
     ['gold text on white', token['--color-gold'], token['--color-surface']],
     ['link text on paper', token['--color-blue'], token['--color-paper']],
     ['white text on navy', '#ffffff', token['--color-navy']],
-    ['white text in header menu', '#ffffff', token['--color-header-veil']],
+    ['white text on deliberate navy feature', '#ffffff', token['--color-header-veil']],
     ['gold text on navy', token['--color-brass-on-dark'], token['--color-navy']],
-    ['navy text on gold header CTA', token['--color-navy'], token['--color-brass-on-dark']],
   ] as const;
 
   for (const [name, foreground, background] of normalTextPairs) {
@@ -108,7 +107,7 @@ test('functional form borders do not use the decorative hairline token', async (
   assert.doesNotMatch(subscribe, /placeholder:text-slate\/60/);
 });
 
-test('dark surfaces stay scarce: header dark, closing CTA and footer light', async () => {
+test('public chrome stays light while navy remains the primary-action colour', async () => {
   const cta = await readFile(
     new URL('../../src/components/primitives/CtaSection.astro', import.meta.url),
     'utf8',
@@ -122,7 +121,10 @@ test('dark surfaces stay scarce: header dark, closing CTA and footer light', asy
     'utf8',
   );
 
-  assert.match(header, /bg-header-bg/);
+  assert.match(header, /bg-paper\/95/);
+  assert.doesNotMatch(header, /\bon-dark\b/);
+  assert.doesNotMatch(header, /bg-header-bg/);
+  assert.match(header, /murikah-logo-dark\.png/);
   assert.match(cta, /<Section tone="paper"/);
   assert.doesNotMatch(cta, /tone="navy-rich"/);
   const css = await readFile(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
@@ -131,4 +133,5 @@ test('dark surfaces stay scarce: header dark, closing CTA and footer light', asy
   assert.doesNotMatch(footer, /bg-header-bg/);
   assert.doesNotMatch(footer, /\bon-dark\b/);
   assert.doesNotMatch(css, /\.marketing-shell\.ceramic-ink \.newsletter-panel/);
+  assert.match(css, /> header \.btn-primary[\s\S]*?background: #071d35;/);
 });

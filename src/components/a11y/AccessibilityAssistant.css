@@ -216,6 +216,18 @@
   cursor: default;
 }
 
+@media (max-width: 639px) {
+  .a11y {
+    right: calc(0.75rem + env(safe-area-inset-right));
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  .a11y__toggle {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .a11y__toggle,
   .a11y__panel,
