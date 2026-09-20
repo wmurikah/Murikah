@@ -5,10 +5,30 @@ import test from 'node:test';
 import { NAV, SERVICES } from '../../src/site.config.ts';
 
 const routes = [
-  { label: 'Internal audit', from: '/assurance', to: '/internal-audit', file: 'internal-audit.astro' },
-  { label: 'Automation', from: '/labs', to: '/automation', file: 'automation.astro' },
-  { label: 'Training', from: '/academy', to: '/training', file: 'training.astro' },
-  { label: 'Research', from: '/intelligence', to: '/research', file: 'research.astro' },
+  {
+    label: 'Internal audit',
+    from: '/assurance',
+    to: '/internal-audit',
+    file: 'internal-audit.astro',
+  },
+  {
+    label: 'Automation',
+    from: '/labs',
+    to: '/automation',
+    file: 'automation.astro',
+  },
+  {
+    label: 'Training',
+    from: '/academy',
+    to: '/training',
+    file: 'training.astro',
+  },
+  {
+    label: 'Research',
+    from: '/intelligence',
+    to: '/research',
+    file: 'research.astro',
+  },
 ] as const;
 
 test('service labels use matching canonical URLs', () => {
@@ -23,12 +43,27 @@ test('service labels use matching canonical URLs', () => {
   }
 });
 
+test('canonical pages preserve label-to-title information scent', async () => {
+  for (const route of routes) {
+    const page = await readFile(new URL(`../../src/pages/${route.file}`, import.meta.url), 'utf8');
+    assert.ok(
+      page.includes(`metaTitle="${route.label}`),
+      `${route.to} title no longer starts with ${route.label}`,
+    );
+  }
+});
+
 test('canonical service page files exist and legacy page files are removed', async () => {
   for (const route of routes) {
     await access(new URL(`../../src/pages/${route.file}`, import.meta.url));
   }
 
-  for (const legacy of ['assurance.astro', 'labs.astro', 'academy.astro', 'intelligence.astro']) {
+  for (const legacy of [
+    'assurance.astro',
+    'labs.astro',
+    'academy.astro',
+    'intelligence.astro',
+  ]) {
     await assert.rejects(access(new URL(`../../src/pages/${legacy}`, import.meta.url)));
   }
 });
