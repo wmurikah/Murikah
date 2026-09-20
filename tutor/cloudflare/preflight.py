@@ -219,6 +219,7 @@ def main() -> int:
             '"MURIKAH_TAVILY_API_KEY"',
             'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
             'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
+            'MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"',
         ),
     )
     require_markers(
