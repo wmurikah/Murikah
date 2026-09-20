@@ -12,7 +12,7 @@ The repository contains the applications, shared platform code, database schemas
 | Product | Purpose | Main areas |
 | --- | --- | --- |
 | **CMS** | Customer operations | Leads, customer accounts, orders, service requests and connected fulfilment workflows |
-| **GRC / Assurance OS** | Internal audit and risk | Audit planning, evidence, work papers, findings, action plans, remediation and reporting |
+| **Assurance OS** | Internal audit and risk | Audit planning, evidence, work papers, findings, action plans, remediation and reporting |
 | **ENGR / Engineering Rhythm** | Maintenance operations | Assets, maintenance schedules, work orders, technician assignment and operating follow-up |
 | **Tutor** | AI-assisted learning | Learning, research, co-writing and diagram design in an isolated AI workspace |
 
