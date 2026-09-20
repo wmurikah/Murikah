@@ -125,7 +125,10 @@ test('dark surfaces stay scarce: header dark, closing CTA and footer light', asy
   assert.match(header, /bg-header-bg/);
   assert.match(cta, /<Section tone="paper"/);
   assert.doesNotMatch(cta, /tone="navy-rich"/);
+  const css = await readFile(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
+
   assert.match(footer, /bg-paper-shade/);
   assert.doesNotMatch(footer, /bg-header-bg/);
   assert.doesNotMatch(footer, /\bon-dark\b/);
+  assert.doesNotMatch(css, /\.marketing-shell\.ceramic-ink \.newsletter-panel/);
 });
