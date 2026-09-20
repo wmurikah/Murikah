@@ -1,10 +1,10 @@
 /**
  * Shared JSON-LD builders so the Organization is described identically wherever
  * it appears (the global Organization node, the About page, and each guide's
- * author and publisher). Murikah is a company: no Person node and no individual
- * is named, and no claim here goes beyond what the site states plainly.
+ * author and publisher). The organization node includes the named founder now
+ * that the public site carries the same verifiable person-level proof.
  */
-import { SITE, SOCIAL, KNOWS_ABOUT } from '@/site.config';
+import { SITE, SOCIAL, KNOWS_ABOUT, FOUNDER } from '@/site.config';
 
 export const organizationId = `${SITE.url}/#organization`;
 
@@ -33,6 +33,12 @@ export function buildOrganization() {
     email: SITE.email,
     foundingDate: String(SITE.foundingYear),
     areaServed: SITE.areaServed,
+    founder: {
+      '@type': 'Person',
+      name: FOUNDER.name,
+      jobTitle: 'Founder',
+      sameAs: [FOUNDER.scholarUrl],
+    },
     knowsAbout: [...KNOWS_ABOUT],
     sameAs: SOCIAL.map((s) => s.href),
   };
