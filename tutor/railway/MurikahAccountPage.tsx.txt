@@ -1,58 +1,322 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { login, invalidateAuthStatusCache } from "@/lib/auth";
 import { normalizeInternalReturnPath, inheritLoginHash } from "@/shared/auth/return-url";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
 
+const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
+const RESUME_NEXT = "/chat?resume_guest=1";
+
+type SessionMessage = {
+  role?: string;
+  content?: string;
+};
+
+type SessionSnapshot = {
+  session_id?: string;
+  messages?: SessionMessage[];
+  preferences?: {
+    llm_selection?: {
+      profile_id?: string;
+      model_id?: string;
+      reasoning_effort?: string;
+    } | null;
+  };
+};
+
+function sessionIdFromNext(next: string): string {
+  const path = next.split(/[?#]/, 1)[0] || "";
+  const match = /^\/chat\/([^/]+)$/.exec(path);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+async function preserveGuestConversation(next: string): Promise<boolean> {
+  const sessionId = sessionIdFromNext(next);
+  if (!sessionId) return false;
+
+  try {
+    const statusResponse = await fetch("/api/murikah/access/status", {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!statusResponse.ok) return false;
+    const status = (await statusResponse.json()) as { guest?: boolean };
+    if (!status.guest) return false;
+
+    const sessionResponse = await fetch(
+      `/api/sessions/${encodeURIComponent(sessionId)}`,
+      { cache: "no-store", credentials: "same-origin" },
+    );
+    if (!sessionResponse.ok) return false;
+    const session = (await sessionResponse.json()) as SessionSnapshot;
+    const messages = Array.isArray(session.messages)
+      ? session.messages
+          .filter(
+            (item) =>
+              (item.role === "user" || item.role === "assistant") &&
+              typeof item.content === "string" &&
+              item.content.trim(),
+          )
+          .map((item) => ({
+            role: item.role as "user" | "assistant",
+            content: String(item.content).trim().slice(0, 12000),
+          }))
+          .slice(-24)
+      : [];
+    if (!messages.length) return false;
+
+    const selection = session.preferences?.llm_selection;
+    const llmSelection =
+      selection?.profile_id && selection?.model_id
+        ? {
+            profile_id: String(selection.profile_id),
+            model_id: String(selection.model_id),
+            ...(selection.reasoning_effort
+              ? { reasoning_effort: String(selection.reasoning_effort) }
+              : {}),
+          }
+        : null;
+
+    window.localStorage.setItem(
+      GUEST_STATE_KEY,
+      JSON.stringify({
+        version: 2,
+        handoffId: `workspace:${sessionId}`,
+        messages,
+        modeId: "chat",
+        spaceId: "home",
+        spaceConfigOverrides: { home: {} },
+        persona: "",
+        llmSelection,
+        updatedAt: Date.now(),
+      }),
+    );
+    return true;
+  } catch {
+    // The account flow still works even if there is no guest session to import.
+    return false;
+  }
+}
+
 function AccountForm({ signup }: { signup: boolean }) {
   const params = useSearchParams();
-  signup = signup || params.get("signup") === "1";
+  const isSignup = signup || params.get("signup") === "1";
+  const guestExhausted = params.get("guest_exhausted") === "1";
   const next = normalizeInternalReturnPath(params.get("next"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(params.get("oauth_error") || "");
   const [busy, setBusy] = useState(false);
-  async function submit(event: React.FormEvent) {
+
+  const continuationForAccountChange = useCallback(async () => {
+    return (await preserveGuestConversation(next)) ? RESUME_NEXT : next;
+  }, [next]);
+
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (signup && password !== confirm) { setError("The passwords do not match."); return; }
+    if (isSignup && password !== confirm) {
+      setError("The passwords do not match.");
+      return;
+    }
     setBusy(true);
     try {
-      if (signup) {
-        const res = await fetch("/api/murikah/access/signup", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+      let destination = next;
+      if (isSignup) {
+        // Local signup converts the temporary guest identity in-place, retaining
+        // the same user/workspace id and therefore the same session URL.
+        const res = await fetch("/api/murikah/access/signup", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(typeof body.detail === "string" ? body.detail : "Check your account details and try again.");
+          throw new Error(
+            typeof body.detail === "string"
+              ? body.detail
+              : "Check your account details and try again.",
+          );
         }
         invalidateAuthStatusCache();
       } else {
+        // Signing into an existing account changes the user id. Snapshot the
+        // guest transcript first, then import it into that account after login.
+        destination = await continuationForAccountChange();
         const result = await login(username, password);
         if (!result.ok) throw new Error(result.error || "Sign in failed.");
       }
-      // Full navigation resets cached guest identity and account-scoped providers.
-      window.location.assign(inheritLoginHash(next, window.location.hash));
-    } catch (e) { setError(e instanceof Error ? e.message : "Couldn't reach Tutor. Please try again."); setBusy(false); }
+      window.location.assign(
+        inheritLoginHash(destination, window.location.hash),
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Couldn't reach Tutor. Please try again.",
+      );
+      setBusy(false);
+    }
   }
-  const inputClass = "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#A9822E]/30";
-  return <div className="w-full max-w-sm px-5 py-10">
-    <div className="mb-8 text-center"><div className="inline-flex rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">Murikah <span className="mx-3 text-[#A9822E]">|</span> Tutor</div>
-      <h1 className="mt-5 text-2xl font-semibold">{signup ? "Create your account" : "Welcome back"}</h1>
-      <p className="mt-2 text-sm text-[var(--muted-foreground)]">{signup ? "Keep your guest work and continue learning." : "Sign in to continue your learning."}</p>
+
+  const switchHref = `${isSignup ? "/login" : "/register"}?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`;
+  const inputClass =
+    "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#A9822E]/30";
+
+  return (
+    <div className="w-full max-w-md px-5 py-10">
+      <div className="mb-7 text-center">
+        <div className="inline-flex items-center rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">
+          Murikah <span className="mx-3 text-[#A9822E]">|</span> Tutor
+        </div>
+        <h1 className="mt-5 text-2xl font-semibold">
+          {isSignup ? "Create your account" : "Welcome back"}
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+          {isSignup
+            ? "Keep your guest work and continue learning."
+            : "Sign in to continue your learning."}
+        </p>
+      </div>
+
+      {guestExhausted && (
+        <div className="mb-5 rounded-2xl border border-[#A9822E]/25 bg-[#A9822E]/10 px-4 py-3 text-sm leading-6">
+          <p className="font-semibold">Your 7 guest interactions are complete.</p>
+          <p className="text-[var(--muted-foreground)]">
+            {isSignup
+              ? "Create an account to keep this workspace and continue from the same conversation."
+              : "Sign in and Murikah will carry this guest conversation into your account."}
+          </p>
+        </div>
+      )}
+
+      <div className="mb-5 grid grid-cols-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-1">
+        <a
+          href={`/login?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`}
+          className={`rounded-lg px-3 py-2 text-center text-sm font-semibold ${!isSignup ? "bg-[var(--card)] shadow-sm" : "text-[var(--muted-foreground)]"}`}
+        >
+          Sign in
+        </a>
+        <a
+          href={`/register?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`}
+          className={`rounded-lg px-3 py-2 text-center text-sm font-semibold ${isSignup ? "bg-[var(--card)] shadow-sm" : "text-[var(--muted-foreground)]"}`}
+        >
+          Sign up
+        </a>
+      </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-600"
+        >
+          {error}
+        </p>
+      )}
+
+      <MurikahSocialButtons
+        next={next}
+        resolveNext={continuationForAccountChange}
+      />
+
+      <div className="my-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)] before:h-px before:flex-1 before:bg-[var(--border)] after:h-px after:flex-1 after:bg-[var(--border)]">
+        or continue with email or username
+      </div>
+
+      <form
+        onSubmit={submit}
+        className="space-y-5 rounded-2xl border border-[var(--border)] p-6 shadow-sm"
+      >
+        <div>
+          <label htmlFor="username" className="mb-2 block text-sm font-medium">
+            Email or username
+          </label>
+          <input
+            id="username"
+            autoComplete="username"
+            maxLength={254}
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label htmlFor="password" className="mb-2 block text-sm font-medium">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete={isSignup ? "new-password" : "current-password"}
+            minLength={isSignup ? 8 : undefined}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+          />
+          {isSignup && (
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Use at least 8 characters.
+            </p>
+          )}
+        </div>
+        {isSignup && (
+          <div>
+            <label htmlFor="confirm" className="mb-2 block text-sm font-medium">
+              Confirm password
+            </label>
+            <input
+              id="confirm"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-lg bg-[#1E2A30] px-4 py-3 font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? "Please wait…" : isSignup ? "Create account" : "Sign in"}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-sm">
+        {isSignup ? "Already have an account? " : "New to Murikah Tutor? "}
+        <a className="font-semibold underline" href={switchHref}>
+          {isSignup ? "Sign in" : "Sign up"}
+        </a>
+      </p>
+      {!guestExhausted && (
+        <p className="mt-4 text-center text-sm">
+          <a href="/">Continue as guest</a>
+        </p>
+      )}
     </div>
-    {error && <p role="alert" className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-600">{error}</p>}
-    <MurikahSocialButtons next={next} />
-    <form onSubmit={submit} className="space-y-5 rounded-2xl border border-[var(--border)] p-6 shadow-sm">
-      <div><label htmlFor="username" className="mb-2 block text-sm font-medium">Email or username</label><input id="username" autoComplete="username" maxLength={254} required value={username} onChange={e => setUsername(e.target.value)} className={inputClass} /></div>
-      <div><label htmlFor="password" className="mb-2 block text-sm font-medium">Password</label><input id="password" type="password" autoComplete={signup ? "new-password" : "current-password"} minLength={signup ? 8 : undefined} required value={password} onChange={e => setPassword(e.target.value)} className={inputClass} />{signup && <p className="mt-1 text-xs text-[var(--muted-foreground)]">Use at least 8 characters.</p>}</div>
-      {signup && <div><label htmlFor="confirm" className="mb-2 block text-sm font-medium">Confirm password</label><input id="confirm" type="password" autoComplete="new-password" required value={confirm} onChange={e => setConfirm(e.target.value)} className={inputClass} /></div>}
-      <button type="submit" disabled={busy} className="w-full rounded-lg bg-[#1E2A30] px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Please wait…" : signup ? "Create account" : "Sign in"}</button>
-    </form>
-    <p className="mt-6 text-center text-sm">{signup ? "Already have an account? " : "New to Murikah Tutor? "}<a className="font-semibold underline" href={`${signup ? "/login" : "/register"}?next=${encodeURIComponent(next)}`}>{signup ? "Sign in" : "Sign up"}</a></p>
-    <p className="mt-4 text-center text-sm"><a href="/">Continue as guest</a></p>
-  </div>;
+  );
 }
-export default function MurikahAccountPage({ signup = false }: { signup?: boolean }) {
-  return <Suspense fallback={<p>Loading…</p>}><AccountForm signup={signup} /></Suspense>;
+
+export default function MurikahAccountPage({
+  signup = false,
+}: {
+  signup?: boolean;
+}) {
+  return (
+    <Suspense fallback={<p>Loading…</p>}>
+      <AccountForm signup={signup} />
+    </Suspense>
+  );
 }
