@@ -92,7 +92,7 @@ Trimmed; build output (`dist/`, `.astro/`, `.wrangler/`), `node_modules/`, and `
     │   │   └── subscribe.ts               # POST, prerender = false
     │   ├── index.astro
     │   ├── about.astro
-    │   ├── internal-audit.astro / audit-os.astro / automation.astro
+    │   ├── internal-audit.astro / assurance-os.astro / automation.astro
     │   ├── advisory.astro / training.astro / research.astro
     │   ├── contact.astro
     │   ├── insights/index.astro
@@ -213,7 +213,7 @@ export default defineConfig({
         const path = new URL(item.url).pathname.replace(/\/$/, '') || '/';
         const services = [
           '/internal-audit',
-          '/audit-os',
+          '/assurance-os',
           '/automation',
           '/advisory',
           '/training',
@@ -379,7 +379,7 @@ PUBLIC_SITE_URL="http://localhost:4321"
 | `/`                | `src/pages/index.astro`    | Home                                      |
 | `/about`           | `about.astro`              | Company                                   |
 | `/internal-audit`       | `internal-audit.astro`          | Service line                              |
-| `/audit-os`        | `audit-os.astro`           | Service line                              |
+| `/assurance-os`        | `assurance-os.astro`           | Service line                              |
 | `/automation`            | `automation.astro`               | Service line + **stubbed** sandbox island |
 | `/advisory`        | `advisory.astro`           | Service line                              |
 | `/training`         | `training.astro`            | Service line                              |
@@ -555,7 +555,7 @@ Unfinished or to-confirm items found on `main`:
 - **`{{PLACEHOLDER}}` tokens to resolve before launch** (the voice convention marks unverified specifics):
   - `src/site.config.ts`: `legalName` (`{{LEGAL: confirm the registered legal entity name}}`), `email` (`{{CONTACT: confirm the final public address}}`), `twitter` handle and social profile URLs (`{{SOCIAL: ...}}`).
   - `src/pages/privacy.astro` and `src/pages/terms.astro`: marked `{{LEGAL REVIEW REQUIRED}}` with several `{{LEGAL: ...}}` tokens (dates, retention periods, processors, cookie/analytics tooling, ODPC registration number, liability wording). Plain-English templates pending legal review.
-  - `src/pages/audit-os.astro`: `{{DATA: confirm hosting region and data-residency commitments before launch}}`.
+  - `src/pages/assurance-os.astro`: `{{DATA: confirm hosting region and data-residency commitments before launch}}`.
   - `src/pages/training.astro`: `{{ACADEMY: confirm upcoming dates}}`.
   - `src/pages/insights/index.astro`: `{{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}}`.
   - `db/seed.ts`: the sample lead message is marked `[placeholder]` (development data only).
