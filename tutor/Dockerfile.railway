@@ -27,6 +27,7 @@ COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
 COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py
+COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py
@@ -76,6 +77,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
     && python /opt/murikah/prepare_next_build.py /src/DeepTutor \
     && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
+    && python /opt/murikah/harden_member_runtime.py /src/DeepTutor \
     && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
@@ -116,6 +118,21 @@ ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev
 LABEL com.murikah.tutor.cloudflare-image-rev="${MURIKAH_CLOUDFLARE_IMAGE_REV}"
 USER root
 RUN python -c "from deeptutor.__version__ import __version__; expected='${DEEPTUTOR_VERSION}'; assert __version__ == expected, f'Expected DeepTutor {expected}, base image is {__version__}'"
+
+# Math Animator is exposed in the production capability picker, so its
+# dependencies are part of the production contract rather than an optional
+# developer extra. Install Manim plus the system render toolchain once in the
+# final runtime image, then fail the image build if any required executable is
+# absent. This prevents a selectable feature from reaching users half-installed.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       build-essential cmake ffmpeg pkg-config \
+       libcairo2 libcairo2-dev libpango-1.0-0 libpango1.0-dev \
+       texlive-latex-base texlive-latex-extra texlive-fonts-recommended \
+       texlive-science dvisvgm \
+    && python -m pip install --no-cache-dir "manim>=0.19.0,<0.20" \
+    && python -c "import manim, shutil; assert shutil.which('ffmpeg'); assert shutil.which('latex'); assert shutil.which('dvisvgm')" \
+    && rm -rf /var/lib/apt/lists/*
 
 # The upstream runtime owns the Python dependency stack. Replace only the
 # Murikah overlay router modules and patched API/chat surfaces after verifying
