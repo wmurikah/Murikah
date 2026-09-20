@@ -2,12 +2,29 @@
 import { PRODUCTS } from '@/site.config';
 import ProductMark from '@/components/ProductMark.astro';
 
-const productId = (label: string) => `product-${label.toLowerCase()}`;
+interface Product {
+  label: string;
+  fullName: string;
+  href: string;
+  description: string;
+  useCase: string;
+  access: string;
+  previewLabel: string;
+  preview: string[];
+}
+
+interface Props {
+  products?: Product[];
+}
+
+const { products = PRODUCTS } = Astro.props;
+const productId = (label: string) =>
+  `product-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
 ---
 
-<ul class="grid gap-4 sm:grid-cols-2">
+<ul class="grid gap-4 md:grid-cols-3">
   {
-    PRODUCTS.map((product) => (
+    products.map((product) => (
       <li class="min-w-0">
         <article
           id={productId(product.label)}
