@@ -21,7 +21,7 @@ def main() -> int:
     target = root / "deeptutor/services/session/turns/executor.py"
     text = target.read_text(encoding="utf-8")
 
-    if "MURIKAH_D1_LEARNING_JOURNAL_V1" in text:
+    if "MURIKAH_D1_LEARNING_JOURNAL_V2" in text:
         return 0
 
     text = replace_once(
@@ -29,7 +29,7 @@ def main() -> int:
         """        provider_response_state: dict[str, Any] | None = None
 """,
         """        provider_response_state: dict[str, Any] | None = None
-        # MURIKAH_D1_LEARNING_JOURNAL_V1
+        # MURIKAH_D1_LEARNING_JOURNAL_V2
         # D1 is the durable system of record for learner turns. DeepTutor's
         # SQLite session store remains an execution cache for the pinned
         # upstream engine, but no completed Murikah chat exists only there.
@@ -152,8 +152,9 @@ def main() -> int:
             if stream_done_sent:
 """,
         """        except Exception as exc:
+            _murikah_timed_out = isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+            _murikah_public_error = "Murikah could not complete this response right now. Please retry."
             if murikah_journal_started and not murikah_journal_terminal and _murikah_journal is not None:
-                _murikah_timed_out = isinstance(exc, (TimeoutError, asyncio.TimeoutError))
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(
                         _murikah_journal.learning_turn_fail,
@@ -171,6 +172,37 @@ def main() -> int:
             if stream_done_sent:
 """,
         "D1 failure journal",
+    )
+
+    # DeepTutor normally publishes str(exc) into the user-facing ERROR event.
+    # Keep the raw exception in server logs/D1, but never render provider or
+    # backend internals in a learner's chat bubble.
+    text = replace_once(
+        text,
+        """                        content=str(exc),
+                        metadata={"turn_terminal": True, "status": "failed"},
+""",
+        """                        content=_murikah_public_error,
+                        metadata={
+                            "turn_terminal": True,
+                            "status": "failed",
+                            "error_code": "fast_lane_timeout" if _murikah_timed_out else "internal_error",
+                            "retryable": True,
+                        },
+""",
+        "learner-safe terminal error",
+    )
+    text = replace_once(
+        text,
+        """                        metadata={"status": "failed"},
+""",
+        """                        metadata={
+                            "status": "failed",
+                            "error_code": "fast_lane_timeout" if _murikah_timed_out else "internal_error",
+                            "retryable": True,
+                        },
+""",
+        "learner-safe terminal done metadata",
     )
 
     target.write_text(text, encoding="utf-8")
