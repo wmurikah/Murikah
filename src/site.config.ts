@@ -228,33 +228,23 @@ export const NAV: NavItem[] = [
   },
   {
     label: 'Platform',
-    href: '/products',
-    match: ['/products', '/assurance-os'],
+    href: '/assurance-os',
+    match: ['/assurance-os', '/products'],
     children: [
-      {
-        label: 'Platform overview',
-        href: '/products',
-        description: 'Choose the Murikah workspace for your task.',
-      },
       {
         label: 'Assurance OS',
         href: '/assurance-os',
         description: 'Plan audits, review evidence and track findings and action plans.',
       },
       {
-        label: 'CMS',
-        href: 'https://cms.murikah.com',
-        description: 'Manage leads, customer accounts, orders and service requests.',
+        label: 'Try the sandbox',
+        href: '/assurance-os/sandbox',
+        description: 'Explore Assurance OS with sample audit data. No sign-in required.',
       },
       {
-        label: 'Tutor',
-        href: 'https://tutor.murikah.com',
-        description: 'Learn, research, co-write and design diagrams with AI.',
-      },
-      {
-        label: 'ENGR',
-        href: 'https://engr.murikah.com',
-        description: 'Manage assets, maintenance schedules and work orders.',
+        label: 'More from Murikah Labs',
+        href: '/products',
+        description: 'Explore CMS, Tutor and ENGR away from the core assurance offer.',
       },
     ],
   },
@@ -331,8 +321,8 @@ export const NAV: NavItem[] = [
 
 /** The one gold action across the site. */
 export const PRIMARY_CTA = {
-  label: 'Discuss your requirements',
-  href: '/contact',
+  label: 'Book a 20-minute call',
+  href: '/contact?intent=call',
 } as const;
 
 export const SOCIAL: SocialLink[] = [
@@ -350,7 +340,14 @@ export const SOCIAL: SocialLink[] = [
  * lives in the header navigation, so the footer can stay short and scannable.
  */
 export const FOOTER_GROUPS: { heading: string; links: { label: string; href: string }[] }[] = [
-  { heading: 'Products', links: PRODUCTS },
+  {
+    heading: 'Platform',
+    links: [
+      { label: 'Assurance OS', href: '/assurance-os' },
+      { label: 'Public sandbox', href: '/assurance-os/sandbox' },
+      { label: 'More from Murikah Labs', href: '/products' },
+    ],
+  },
   {
     heading: 'Who we are',
     links: [
