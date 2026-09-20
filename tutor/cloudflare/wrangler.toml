@@ -67,4 +67,5 @@ new_sqlite_classes = ["TutorContainer"]
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
 MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
 MURIKAH_GUEST_PROMPT_LIMIT = "7"
+MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"
 TZ = "Africa/Nairobi"
