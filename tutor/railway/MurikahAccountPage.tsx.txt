@@ -147,6 +147,9 @@ function AccountForm({ signup }: { signup: boolean }) {
           );
         }
         invalidateAuthStatusCache();
+        // Signup renames the current guest identity in place, so the original
+        // session remains authoritative and no transcript clone is needed.
+        window.localStorage.removeItem(GUEST_STATE_KEY);
       } else {
         // Signing into an existing account changes the user id. Snapshot the
         // guest transcript first, then import it into that account after login.
