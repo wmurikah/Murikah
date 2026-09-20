@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-19-v21"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v22"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -373,8 +373,12 @@ def main() -> int:
         "tutor/railway/murikah_fast_lane.py",
         (
             'DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"',
+            'DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"',
+            'def portable_chat_messages(',
             'thinkingLevel": "low"',
             'async def gemini_stream(',
+            'async def nvidia_stream(',
+            'trust_env=False',
             'async def race_first_visible(',
             'MURIKAH_LATENCY route=fast',
         ),
@@ -382,10 +386,12 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V3',
+            'MURIKAH_DUAL_LANE_CHAT_V4',
             'def _agent_reason(',
             'force_agentic_chat',
             'race_first_visible(',
+            'nvidia-fast:',
+            'portable_chat_messages',
             'terminal_first_token_timeout',
             '_FAST_TURN_TIMEOUT_SECONDS',
             'route=deep_agent',
@@ -404,7 +410,9 @@ def main() -> int:
     require_markers(
         "tutor/railway/persist_learning_journal.py",
         (
-            "MURIKAH_D1_LEARNING_JOURNAL_V1",
+            "MURIKAH_D1_LEARNING_JOURNAL_V2",
+            "_murikah_public_error",
+            "learner-safe terminal error",
             "learning_turn_start",
             "learning_turn_finish",
             "learning_turn_fail",
@@ -579,7 +587,7 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive and deep-task NVIDIA settings remain preserved")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat uses native + OpenAI-compatible Gemini transports before NVIDIA fallback")
+    print(" - fast chat hedges native Gemini with an independent direct NVIDIA NIM fallback")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
@@ -590,7 +598,7 @@ def main() -> int:
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
-    print(" - ordinary follow-ups cannot silently fall into the multi-agent pipeline")
+    print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
     return 0
