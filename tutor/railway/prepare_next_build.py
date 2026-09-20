@@ -26,16 +26,21 @@ def harden_fast_lane(root: Path) -> None:
             'logger = logging.getLogger(__name__)\n\n# MURIKAH_FAST_LANE_FAILOVER_V4\n',
             "fast-lane marker",
         )
-        text = replace_once(
-            text,
-            '    async with httpx.AsyncClient(timeout=timeout) as client:\n',
+        client_anchor = '    async with httpx.AsyncClient(timeout=timeout) as client:\n'
+        client_count = text.count(client_anchor)
+        if client_count not in {1, 2}:
+            raise RuntimeError(
+                f"Expected one or two pinned DeepTutor fast-provider HTTP clients, found {client_count}. "
+                "The pinned upstream source may have changed."
+            )
+        text = text.replace(
+            client_anchor,
             '    # Cloudflare provides direct container egress. Ignore inherited proxy\n'
             '    # variables so a stale proxy cannot turn provider calls into generic\n'
             '    # connection failures.\n'
             '    async with httpx.AsyncClient(\n'
             '        timeout=timeout, follow_redirects=True, trust_env=False\n'
             '    ) as client:\n',
-            "Gemini HTTP client",
         )
         text = replace_once(
             text,
@@ -93,12 +98,11 @@ def harden_fast_lane(root: Path) -> None:
         fast.write_text(text, encoding="utf-8")
 
     chat = root / "deeptutor" / "agents" / "chat" / "capability.py"
-    text = chat.read_text(encoding="utf-8")
-    if "gemini_compat =" not in text:
-        old = '''        non_gemini = [config for config in resolved if str(config.model) != gemini_model]\n        if resolved and not selected_is_gemini:\n            hedges.append(deep_candidate(resolved[0], 0.0))\n            if gemini_on:\n                hedges.append(\n                    HedgeCandidate(\n                        name=f"gemini:{gemini_model}",\n                        delay_seconds=2.5,\n                        factory=lambda: gemini_stream(\n                            messages,\n                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),\n                        ),\n                    )\n                )\n            remainder = [config for config in non_gemini if config is not resolved[0]]\n            for index, config in enumerate(remainder[:2]):\n                hedges.append(deep_candidate(config, 4.5 + (index * 2.0)))\n        else:\n            if gemini_on:\n                hedges.append(\n                    HedgeCandidate(\n                        name=f"gemini:{gemini_model}",\n                        delay_seconds=0.0,\n                        factory=lambda: gemini_stream(\n                            messages,\n                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),\n                        ),\n                    )\n                )\n            for index, config in enumerate(non_gemini[:3]):\n                delay = 2.5 + (index * 2.0) if gemini_on else index * 2.5\n                hedges.append(deep_candidate(config, delay))\n'''
-        new = '''        gemini_compat = [config for config in resolved if str(config.model) == gemini_model]\n        non_gemini = [config for config in resolved if str(config.model) != gemini_model]\n        if resolved and not selected_is_gemini:\n            hedges.append(deep_candidate(resolved[0], 0.0))\n            if gemini_on:\n                hedges.append(\n                    HedgeCandidate(\n                        name=f"gemini-native:{gemini_model}",\n                        delay_seconds=2.5,\n                        factory=lambda: gemini_stream(\n                            messages,\n                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),\n                        ),\n                    )\n                )\n            if gemini_compat:\n                hedges.append(deep_candidate(gemini_compat[0], 3.5))\n            remainder = [config for config in non_gemini if config is not resolved[0]]\n            for index, config in enumerate(remainder[:2]):\n                hedges.append(deep_candidate(config, 4.5 + (index * 2.0)))\n        else:\n            if gemini_on:\n                hedges.append(\n                    HedgeCandidate(\n                        name=f"gemini-native:{gemini_model}",\n                        delay_seconds=0.0,\n                        factory=lambda: gemini_stream(\n                            messages,\n                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),\n                        ),\n                    )\n                )\n            # The pinned release already supports Google's OpenAI-compatible\n            # endpoint. Start it one second later as an independent Gemini path\n            # before falling back to NVIDIA. The first real model token wins.\n            if gemini_compat:\n                hedges.append(deep_candidate(gemini_compat[0], 1.0))\n            for index, config in enumerate(non_gemini[:3]):\n                delay = 2.5 + (index * 2.0) if gemini_on else index * 2.5\n                hedges.append(deep_candidate(config, delay))\n'''
-        text = replace_once(text, old, new, "authenticated hedge block")
-        chat.write_text(text, encoding="utf-8")
+    chat_text = chat.read_text(encoding="utf-8")
+    if "MURIKAH_DUAL_LANE_CHAT_V4" not in chat_text:
+        raise RuntimeError(
+            "Murikah dual-provider Chat overlay is missing before final build hardening."
+        )
 
     guest = root / "deeptutor" / "api" / "routers" / "murikah_guest.py"
     text = guest.read_text(encoding="utf-8")
@@ -148,7 +152,7 @@ def main() -> int:
 
     config.write_text(text, encoding="utf-8")
     harden_fast_lane(root)
-    print("Prepared pinned DeepTutor build configuration and overload-aware fast-lane failover.")
+    print("Prepared pinned DeepTutor build configuration and dual-provider fast-lane failover.")
     return 0
 
 
