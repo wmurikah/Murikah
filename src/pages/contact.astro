@@ -25,7 +25,7 @@ const statusMap: Record<string, { kind: 'success' | 'error'; msg: string }> = {
 const initialStatus = status ? statusMap[status] : undefined;
 
 const field =
-  'mt-1.5 block w-full min-h-[2.75rem] rounded-btn border border-hairline bg-surface px-3.5 py-2.5 text-ink placeholder:text-slate/60 aria-[invalid]:border-status-high';
+  'mt-1.5 block w-full min-h-[2.75rem] rounded-btn border border-control-border bg-surface px-3.5 py-2.5 text-ink placeholder:text-slate aria-[invalid]:border-status-high';
 const labelCls = 'block text-sm font-medium text-navy';
 ---
 
