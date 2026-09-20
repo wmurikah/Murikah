@@ -19,6 +19,7 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 DEFAULT_NVIDIA_API_ROOT = "https://integrate.api.nvidia.com/v1"
+DEFAULT_FAST_HISTORY_CHARS = 60000
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
 DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 20.0
@@ -61,6 +62,55 @@ def configured_nvidia_model() -> str:
 
 def nvidia_configured() -> bool:
     return bool(os.environ.get("MURIKAH_NVIDIA_NIM_API_KEY", "").strip())
+
+
+def portable_chat_messages(
+    messages: list[dict[str, Any]],
+    *,
+    max_chars: int = DEFAULT_FAST_HISTORY_CHARS,
+) -> list[dict[str, str]]:
+    """Keep only portable chat fields and a bounded recent conversation window.
+
+    DeepTutor history can carry provider-private state on assistant messages.
+    Passing those fields into another provider makes failover fragile,
+    especially on follow-up turns. Fast chat only needs role/content.
+    """
+    system: list[dict[str, str]] = []
+    conversation: list[dict[str, str]] = []
+    for item in messages:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            continue
+        content = _text_content(item.get("content")).strip()
+        if not content:
+            continue
+        row = {"role": role, "content": content}
+        if role == "system":
+            system.append(row)
+        else:
+            conversation.append(row)
+
+    budget = max(8000, int(max_chars))
+    selected: list[dict[str, str]] = []
+    used = 0
+    for item in reversed(conversation):
+        size = len(item["content"])
+        if selected and used + size > budget:
+            break
+        if not selected and size > budget:
+            item = {**item, "content": item["content"][-budget:]}
+            size = len(item["content"])
+        selected.append(item)
+        used += size
+    selected.reverse()
+
+    if system:
+        sys_budget = min(20000, max(4000, budget // 3))
+        latest = system[-1]["content"]
+        system = [{"role": "system", "content": latest[:sys_budget]}]
+    return [*system, *selected]
 
 
 def _gemini_thinking_level(model: str) -> str:
@@ -192,7 +242,7 @@ async def gemini_stream(
 
 def _nvidia_payload(messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
     normalized_messages: list[dict[str, str]] = []
-    for message in messages:
+    for message in portable_chat_messages(messages):
         role = str(message.get("role") or "user").strip().lower()
         if role not in {"system", "user", "assistant"}:
             role = "user"
