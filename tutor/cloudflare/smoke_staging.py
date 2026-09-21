@@ -76,11 +76,12 @@ def main() -> int:
         or persistence.get("ok") is not True
         or persistence.get("schemaVersion") != "1"
         or persistence.get("learningJournalSchemaVersion") != "1"
+        or persistence.get("ownershipSchemaVersion") != "1"
     ):
-        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning journal schema is not ready")
+        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning/ownership schema is not ready")
         print(f"Persistence status: HTTP {persistence_code} {persistence_body[:1000]}")
         return 1
-    print(" - D1 persistence schema v1 and learning journal schema v1 are ready")
+    print(" - D1 persistence, learning journal and ownership schemas v1 are ready")
     started = time.monotonic()
     last: dict = {}
 
@@ -104,10 +105,27 @@ def main() -> int:
                 if parsed.get("ready") is True:
                     health_code, health_body = get("/health")
                     if health_code == 200:
+                        ownership_code, ownership_body = get("/__muri/persistence-status")
+                        ownership = parse_json(ownership_body)
+                        if (
+                            ownership_code != 200
+                            or ownership.get("ownershipSchemaVersion") != "1"
+                            or int(ownership.get("unregisteredObjectCount") or 0) != 0
+                        ):
+                            print(
+                                "Murikah Tutor staging smoke test: FAILED - "
+                                "durable object ownership reconciliation is incomplete"
+                            )
+                            print(
+                                f"Persistence status: HTTP {ownership_code} "
+                                f"{ownership_body[:1000]}"
+                            )
+                            return 1
                         print("Murikah Tutor staging smoke test: PASS")
                         print(" - edge Worker reachable")
                         print(" - Tutor frontend listening on 3782")
                         print(" - Tutor backend readiness passed")
+                        print(" - every durable manifest object has a D1 ownership record")
                         return 0
                     print(
                         f" - readiness probe passed but /health returned HTTP {health_code}: "
