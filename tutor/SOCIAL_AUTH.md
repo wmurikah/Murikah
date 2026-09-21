@@ -14,6 +14,13 @@ Use these exact HTTPS redirect / return URLs in the provider consoles:
 
 The runtime public base defaults to `https://tutor.murikah.com` and can be overridden with `MURIKAH_PUBLIC_BASE_URL`.
 
+For Google Auth Platform branding, use these public legal URLs:
+
+- Privacy policy: `https://murikah.com/privacy`
+- Terms of service: `https://murikah.com/terms`
+
+Both pages are public, require no login, are linked from the Murikah website footer, and the Tutor account screen links to the same URLs.
+
 ## Google
 
 Create a Google OAuth web client for Murikah Tutor. Configure the production redirect URI exactly as shown above. Use the normal `openid profile email` scopes; no Google API data access is required by Tutor sign-in.
