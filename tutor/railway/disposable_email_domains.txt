@@ -1,4 +1,4 @@
-0-mail.com
+# Source: disposable-email-domains/disposable-email-domains (CC0 public-domain dedication)\n# Vendored for deterministic Tutor signup abuse prevention; see upstream README for maintenance notes.\n0-mail.com
 0-mailer.dynv6.net
 000-webmail.myhome-server.de
 000000000000000.theworkpc.com
