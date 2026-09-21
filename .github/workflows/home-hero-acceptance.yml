@@ -120,6 +120,7 @@ jobs:
           (async () => {
             await build(1920, 1200);
             await build(1280, 800);
+            await build(768, 480);
 
             const fallbackMeta = await sharp(`${dir}/hero-building.jpg`).metadata();
             if (fallbackMeta.width !== 1920 || fallbackMeta.height !== 1200) {
@@ -141,7 +142,7 @@ jobs:
           **Licence page:** https://creativecommons.org/publicdomain/zero/1.0/
 
           The original 5,449 × 3,625 photograph was cropped and resized for the Murikah homepage.
-          The AVIF and WebP derivatives are 1920 × 1200 and 1280 × 800. No client or partner
+          The AVIF and WebP derivatives are 1920 × 1200, 1280 × 800 and 768 × 480. No client or partner
           endorsement is implied.
           EOF
 
