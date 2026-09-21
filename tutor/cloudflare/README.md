@@ -85,8 +85,24 @@ https://tutor.murikah.com/
 
 The Worker-provided `workers.dev` hostname remains enabled temporarily for direct diagnostics.
 
-## Persistence remains pending
+## Persistence and ownership
 
-The public hostname cutover does not make Container-local `/app/data` durable. Provider/model configuration is now reconstructable from Cloudflare, but before retiring the Codespaces rollback path we still need durable persistence for users/auth, sessions/messages, memory, knowledge state, uploads, generated workspaces, and learning progress, followed by sleep/wake, replacement, migration, and rollback verification.
+Tutor user data is durably externalised from the disposable Container:
 
-See `PERSISTENCE.md` for the storage migration design.
+- D1 `TUTOR_DB` is the structured learning, guest-quota, account-metadata and object-ownership control plane;
+- private R2 `TUTOR_FILES` stores durable user/workspace objects;
+- every R2-backed manifest object is reconciled to an explicit D1 owner/type record on startup;
+- per-user paths are written to canonical `users/<uid>/<object-type>/<object-id>` R2 keys on their next changed checkpoint;
+- provider/API credentials and signing secrets remain Cloudflare Secrets rather than learner data.
+
+The local `/app/data` tree remains a compatibility execution cache for pinned DeepTutor subsystems and is safely restored/checkpointed without placing live SQLite databases on R2.
+
+Use the lifecycle acceptance probe before and after sleep/wake, deploy, forced replacement or rollback:
+
+```bash
+python tutor/cloudflare/verify_persistence_lifecycle.py --snapshot /tmp/tutor-before.json
+# perform the lifecycle event
+python tutor/cloudflare/verify_persistence_lifecycle.py --verify /tmp/tutor-before.json
+```
+
+See `PERSISTENCE.md` for the ownership model, migration safeguards and acceptance criteria.
