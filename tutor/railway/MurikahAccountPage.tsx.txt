@@ -299,7 +299,10 @@ function AccountForm({ signup }: { signup: boolean }) {
     "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#A9822E]/30";
 
   return (
-    <div className="w-full max-w-md px-5 py-10">
+    <div className="relative w-full max-w-md px-5 py-10">
+      <div className="fixed right-4 top-4 z-40 sm:right-6 sm:top-6">
+        <MurikahInviteFriends />
+      </div>
       <div className="mb-7 text-center">
         <div className="inline-flex items-center rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">
           Murikah <span className="mx-3 text-[#A9822E]">|</span> Tutor
@@ -309,7 +312,7 @@ function AccountForm({ signup }: { signup: boolean }) {
         </h1>
         <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
           {isSignup
-            ? "Keep your guest work and continue learning."
+            ? "Keep your guest work and continue learning. New accounts verify the email address before sign-in."
             : "Sign in to continue your learning."}
         </p>
       </div>
@@ -369,11 +372,12 @@ function AccountForm({ signup }: { signup: boolean }) {
       >
         <div>
           <label htmlFor="username" className="mb-2 block text-sm font-medium">
-            Email or username
+            {isSignup ? "Email" : "Email or username"}
           </label>
           <input
             id="username"
-            autoComplete="username"
+            type={isSignup ? "email" : "text"}
+            autoComplete={isSignup ? "email" : "username"}
             maxLength={254}
             required
             value={username}
@@ -397,7 +401,7 @@ function AccountForm({ signup }: { signup: boolean }) {
           />
           {isSignup && (
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Use at least 8 characters.
+              Use at least 8 characters. After this step, Murikah sends a six-digit code to your email.
             </p>
           )}
         </div>
@@ -436,6 +440,84 @@ function AccountForm({ signup }: { signup: boolean }) {
         <p className="mt-4 text-center text-sm">
           <a href="/">Continue as guest</a>
         </p>
+      )}
+
+      {verification && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/40 px-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verify-email-title"
+        >
+          <form
+            onSubmit={verifyEmail}
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--background)] p-6 shadow-2xl"
+          >
+            <div className="text-center">
+              <div className="mx-auto grid size-11 place-items-center rounded-full bg-[#A9822E]/12 text-lg font-semibold text-[#A9822E]">
+                @
+              </div>
+              <h2 id="verify-email-title" className="mt-4 text-xl font-semibold">
+                Verify your email
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+                Enter the six-digit code sent to {verification.maskedEmail}. Your account is not activated until this code matches.
+              </p>
+            </div>
+
+            {verificationError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-600"
+              >
+                {verificationError}
+              </p>
+            )}
+
+            <label className="mt-5 block">
+              <span className="mb-2 block text-sm font-medium">Verification code</span>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                autoFocus
+                value={verificationCode}
+                onChange={(event) =>
+                  setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-center text-2xl font-semibold tracking-[0.35em] outline-none focus:ring-2 focus:ring-[#A9822E]/30"
+                aria-label="Six-digit verification code"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={verificationBusy || verificationCode.length !== 6}
+              className="mt-5 w-full rounded-xl bg-[#1E2A30] px-4 py-3 font-semibold text-white disabled:opacity-50"
+            >
+              {verificationBusy ? "Checking…" : "Verify and continue"}
+            </button>
+
+            <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <button
+                type="button"
+                disabled={verificationBusy || resendSeconds > 0}
+                onClick={resendVerification}
+                className="font-medium text-[var(--foreground)] disabled:text-[var(--muted-foreground)]"
+              >
+                {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
+              </button>
+              <a
+                href={verification.social ? "/login" : switchHref}
+                className="text-[var(--muted-foreground)] underline underline-offset-2"
+              >
+                {verification.social ? "Use another account" : "Change email"}
+              </a>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );
