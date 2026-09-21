@@ -48,8 +48,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v29 adds explicit D1 ownership/account metadata for every durable R2 object and closes non-admin provider credential configuration.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v29" }
+# v30 keeps persistence reconciliation off the readiness path and hardens deploy diagnostics after a failed health transition.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v30" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4

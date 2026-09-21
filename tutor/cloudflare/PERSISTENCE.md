@@ -72,12 +72,14 @@ The Worker derives ownership from the validated runtime path and verifies any ow
 On every Cloudflare container start, Tutor:
 
 1. restores the existing R2-backed compatibility tree;
-2. rebuilds normal runtime/model settings exactly as before;
-3. reconciles all existing manifest objects into the D1 ownership registry;
-4. reconciles non-secret existing account metadata into D1;
-5. checkpoints the bootstrapped baseline and resumes the existing background sync loop.
+2. restores the stable authentication secret and rebuilds normal runtime/model settings exactly as before;
+3. opens the backend and frontend ports so learners are not held behind metadata maintenance;
+4. starts the normal durable checkpoint loop in the background;
+5. reconciles existing manifest objects and non-secret account metadata into D1 in a separate retrying background task.
 
-This order intentionally preserves the response-time, follow-up, stream-continuation, guest handoff, diagram, Math Animator and other reliability fixes already in production. The v29 work changes persistence metadata and authorization boundaries; it does not replace the current chat execution paths.
+Only restore/auth/bootstrap are startup-critical. Ownership reconciliation and checkpoint maintenance are additive durable-state work and are deliberately kept off the port-3782 readiness path. The deployment smoke test still waits for ownership reconciliation to converge before declaring a release complete, so availability is not traded for silent persistence drift.
+
+This order preserves the response-time, follow-up, stream-continuation, guest handoff, diagram, Math Animator and other reliability fixes already in production. The v30 change is startup sequencing and deployment diagnostics; it does not replace the current chat execution paths.
 
 ### Administrator versus learner controls
 
