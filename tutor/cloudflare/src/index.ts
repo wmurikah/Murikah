@@ -157,8 +157,86 @@ function safePersistencePath(url: URL): string | null {
   return parts.join('/');
 }
 
-function persistenceObjectKey(path: string): string {
-  return 'runtime/' + path.split('/').map((part) => encodeURIComponent(part)).join('/');
+type PersistenceOwnership = {
+  ownerKind: 'user' | 'partner' | 'admin' | 'system';
+  ownerId: string;
+  objectType: string;
+};
+
+function objectTypeForPath(path: string): string {
+  const parts = path.toLowerCase().split('/');
+  const joined = '/' + parts.join('/') + '/';
+  if (joined.includes('/knowledge') || joined.includes('/kb/') || joined.includes('/rag/')) {
+    return 'knowledge';
+  }
+  if (joined.includes('/book') || joined.includes('/reading') || joined.includes('/notebook')) {
+    return 'learning_asset';
+  }
+  if (joined.includes('/memory')) return 'memory';
+  if (
+    joined.includes('/session') ||
+    joined.includes('/chat') ||
+    joined.includes('/conversation')
+  ) {
+    return 'conversation';
+  }
+  if (
+    joined.includes('/upload') ||
+    joined.includes('/attachment') ||
+    joined.includes('/document') ||
+    joined.includes('/files/')
+  ) {
+    return 'upload';
+  }
+  if (
+    joined.includes('/diagram') ||
+    joined.includes('/visual') ||
+    joined.includes('/generated') ||
+    joined.includes('/output') ||
+    joined.includes('/math_animator')
+  ) {
+    return 'generated';
+  }
+  if (joined.includes('/settings/')) return 'settings';
+  if (joined.includes('/auth/') || joined.includes('/grant')) return 'control';
+  return 'workspace';
+}
+
+function persistenceOwnership(path: string): PersistenceOwnership {
+  const parts = path.split('/');
+  const first = parts[0] || '';
+  const second = parts[1] || '';
+  if (first === 'users' && validPersistenceId(second)) {
+    return { ownerKind: 'user', ownerId: second, objectType: objectTypeForPath(path) };
+  }
+  if (first === 'partners' && validPersistenceId(second)) {
+    return { ownerKind: 'partner', ownerId: second, objectType: objectTypeForPath(path) };
+  }
+  if (first === 'user') {
+    return { ownerKind: 'admin', ownerId: 'admin', objectType: objectTypeForPath(path) };
+  }
+  return { ownerKind: 'system', ownerId: 'system', objectType: objectTypeForPath(path) };
+}
+
+function persistenceObjectKey(ownership: PersistenceOwnership, objectId: string): string {
+  const root =
+    ownership.ownerKind === 'user'
+      ? 'users'
+      : ownership.ownerKind === 'partner'
+        ? 'partners'
+        : ownership.ownerKind;
+  return [
+    root,
+    encodeURIComponent(ownership.ownerId),
+    encodeURIComponent(ownership.objectType),
+    objectId,
+  ].join('/');
+}
+
+function safeContentType(value: string | null): string {
+  const text = String(value || 'application/octet-stream').trim();
+  if (!text || text.length > 128 || /[\r\n]/.test(text)) return 'application/octet-stream';
+  return text;
 }
 
 function validPersistenceId(value: unknown): string {
