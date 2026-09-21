@@ -36,7 +36,7 @@ def main() -> int:
     nav_text = replace_once(
         nav_text,
         "  BookText,\n  Bot,",
-        "  BookText,\n  Bot,\n  Briefcase,",
+        "  BookText,\n  Bot,\n  GraduationCap,",
         "Virtual Internship sidebar icon import",
     )
 
