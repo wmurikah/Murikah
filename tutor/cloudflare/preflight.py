@@ -554,9 +554,23 @@ def main() -> int:
             '"/__muri/persistence-status"',
             'schemaVersion',
             'learningJournalSchemaVersion',
+            'ownershipSchemaVersion',
+            'unregisteredObjectCount',
+            'every durable manifest object has a D1 ownership record',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/verify_persistence_lifecycle.py",
+        (
+            '"/__muri/persistence-status"',
+            '"ownershipSchemaVersion"',
+            '"unregisteredObjectCount"',
+            "Murikah Tutor persistence lifecycle acceptance: PASS",
+            "--snapshot",
+            "--verify",
         ),
     )
     require_markers(
