@@ -146,6 +146,55 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             if previous is not None:
                 fast.os.environ["MURIKAH_FAST_CHAT_QWEN_MODEL"] = previous
 
+    async def test_finish_signal_is_not_coalesced_into_buffered_json(self):
+        signal = fast.finish_signal("length")
+        items = [
+            item
+            async for item in fast.validated_stream(stream('{"answer":', signal))
+        ]
+        self.assertEqual(items, ['{"answer":', signal])
+
+    async def test_finish_signal_is_not_a_visible_first_token(self):
+        signal = fast.finish_signal("length")
+        visible = await fast._next_visible(stream(signal, "Continuation starts here."))
+        self.assertEqual(visible, "Continuation starts here.")
+        self.assertEqual(fast.parse_finish_signal(signal), "length")
+
+    async def test_provider_finish_reasons_distinguish_truncation(self):
+        self.assertTrue(fast.finish_reason_needs_continuation("length"))
+        self.assertTrue(fast.finish_reason_needs_continuation("MAX_TOKENS"))
+        self.assertFalse(fast.finish_reason_needs_continuation("stop"))
+        self.assertEqual(
+            fast._gemini_finish_reason({"candidates": [{"finishReason": "MAX_TOKENS"}]}),
+            "max_tokens",
+        )
+
+    async def test_continuation_prompt_preserves_partial_answer(self):
+        messages = [
+            {"role": "system", "content": "Teach clearly."},
+            {"role": "user", "content": "Explain regression."},
+        ]
+        recovery = fast.continuation_messages(
+            messages,
+            "Regression estimates the relationship between",
+        )
+        self.assertEqual(recovery[-2]["role"], "assistant")
+        self.assertIn("relationship between", recovery[-2]["content"])
+        self.assertEqual(recovery[-1]["role"], "user")
+        self.assertIn("Continue the assistant answer exactly", recovery[-1]["content"])
+
+    async def test_overlap_trimming_avoids_repeated_tail(self):
+        existing = "The model estimates a coefficient for each variable."
+        repeated = "coefficient for each variable. The sign shows direction."
+        self.assertEqual(
+            fast.trim_continuation_overlap(existing, repeated),
+            "The sign shows direction.",
+        )
+
+    async def test_incomplete_eof_detection_is_conservative(self):
+        self.assertTrue(fast.likely_incomplete_answer("The next step is to"))
+        self.assertFalse(fast.likely_incomplete_answer("That completes the example."))
+
     async def test_followup_history_is_valid_gemini_conversation(self):
         payload = fast._gemini_payload([
             {"role": "system", "content": "Teach clearly."},
