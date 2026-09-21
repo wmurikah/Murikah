@@ -104,12 +104,10 @@ class VerifiedEmailSignupTests(unittest.TestCase):
         ):
             self.assertIn(marker, worker)
 
-    def test_missing_resend_key_does_not_block_worker_deploy_or_bypass_verification(self):
-        wrangler = source("cloudflare/wrangler.toml")
-        required_block = wrangler.split("[secrets]", 1)[1].split("[[d1_databases]]", 1)[0]
-        self.assertNotIn('"RESEND_API_KEY"', required_block)
-        self.assertIn("RESEND_API_KEY is intentionally not deploy-required", wrangler)
-
+    def test_missing_resend_key_does_not_bypass_verification(self):
+        # Wrangler deploy-policy is validated by cloudflare/preflight.py before
+        # the image build. This installed-runtime test only pins fail-closed
+        # verification semantics because wrangler.toml is not copied into /opt/murikah.
         worker = source("cloudflare/src/index.ts")
         self.assertIn(
             "if (!apiKey) throw new Error('verification_email_not_configured')",
