@@ -92,6 +92,10 @@ test('hero picture contract uses AVIF and WebP variants with eager high-priority
   const page = await readFile(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
 
   assert.match(page, /<picture class="home-hero__picture">/);
+  assert.match(page, /hero-building-768\.avif/);
+  assert.match(page, /hero-building-768\.webp/);
+  assert.match(page, /rel="preload"/);
+  assert.match(page, /imagesrcset="\/images\/hero\/hero-building-768\.avif 768w/);
   assert.match(page, /hero-building-1280\.avif 1280w/);
   assert.match(page, /hero-building-1920\.avif 1920w/);
   assert.match(page, /hero-building-1280\.webp 1280w/);
@@ -107,6 +111,8 @@ test('hero picture contract uses AVIF and WebP variants with eager high-priority
   const source = new URL('../../public/images/hero/hero-building.jpg', import.meta.url);
   if (await exists(source)) {
     for (const file of [
+      'hero-building-768.avif',
+      'hero-building-768.webp',
       'hero-building-1280.avif',
       'hero-building-1920.avif',
       'hero-building-1280.webp',
