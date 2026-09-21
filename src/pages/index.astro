@@ -4,10 +4,13 @@ export const prerender = true;
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import Container from '@/components/primitives/Container.astro';
 import Button from '@/components/primitives/Button.astro';
 import AuditOsWalkthrough from '@/components/audit-os/AuditOsWalkthrough';
 import { SITE, SERVICES, AUDIENCE, STANDARDS, PRIMARY_CTA, FOUNDER } from '@/site.config';
+import { HOME_HERO } from '@/data/homeHero';
+import { TRUST } from '@/data/trust';
+
+const permittedLogos = TRUST.logos.filter((logo) => logo.verified && logo.permitted);
 
 const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os').map(
   (service, index) => ({
@@ -28,65 +31,128 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
   titleFull="Internal audit and Assurance OS | Murikah"
   description="Internal audit and Assurance OS for teams accountable to boards, regulators and customers. Plan, evidence, report and follow up in one connected workflow."
 >
-  <section
-    id="hero"
-    class="ceramic-hero overflow-hidden border-b border-hairline bg-paper"
-    aria-labelledby="home-title"
-  >
-    <Container>
-      <div class="mx-auto max-w-[70rem] pt-20 text-center md:pt-24 lg:pt-[6.5rem]">
-        <h1
-          id="home-title"
-          class="mx-auto max-w-[13ch] font-sans text-[clamp(2.5rem,6vw,5rem)] leading-[1.05] font-semibold tracking-[-0.03em] text-balance text-navy"
-        >
-          <span class="block">Audit you can trace.</span>
-          <span class="block">From plan to board pack.</span>
-        </h1>
+  <link
+    slot="head"
+    rel="preload"
+    as="image"
+    type="image/avif"
+    href="/images/hero/hero-building-1280.avif"
+    imagesrcset="/images/hero/hero-building-768.avif 768w, /images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
+    imagesizes="(min-width: 1024px) 55vw, 100vw"
+    fetchpriority="high"
+  />
 
-        <p
-          class="mx-auto mt-6 max-w-[60ch] text-[clamp(1.25rem,2vw,1.375rem)] leading-[1.55] text-slate"
-        >
-          Murikah pairs senior internal audit with Assurance OS, so evidence, findings and actions
-          stay linked.
-        </p>
+  <section id="hero" class="home-hero on-dark" aria-labelledby="home-title">
+    <span class="home-hero__nav-sentinel" data-home-nav-sentinel aria-hidden="true"></span>
 
-        <div class="mx-auto mt-10 flex max-w-2xl flex-col justify-center gap-3 sm:flex-row">
-          <Button href={PRIMARY_CTA.href} size="lg" class="w-full rounded-[12px] sm:w-auto">
-            {PRIMARY_CTA.label}
-          </Button>
-          <Button
-            href="/assurance-os/sandbox"
-            variant="secondary"
-            size="lg"
-            class="w-full rounded-[12px] sm:w-auto"
-          >
-            Try with sample data →
-          </Button>
-        </div>
-
-        <p class="mt-5 text-sm text-slate">
-          Guided by IIA Standards · ISO/IEC 27001 · ISO/IEC 42001
-        </p>
-      </div>
-
-      <figure
-        class="hero-product-frame mx-auto mt-12 max-w-[1120px] overflow-hidden rounded-[16px] bg-surface ring-1 ring-hairline"
-      >
+    <div class="home-hero__media" aria-hidden="true">
+      <picture class="home-hero__picture">
+        <source
+          media="(max-width: 639px)"
+          type="image/avif"
+          srcset="/images/hero/hero-building-768.avif"
+        />
+        <source
+          media="(max-width: 639px)"
+          type="image/webp"
+          srcset="/images/hero/hero-building-768.webp"
+        />
+        <source
+          type="image/avif"
+          srcset="/images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
+          sizes="(min-width: 1024px) 55vw, 100vw"
+        />
+        <source
+          type="image/webp"
+          srcset="/images/hero/hero-building-1280.webp 1280w, /images/hero/hero-building-1920.webp 1920w"
+          sizes="(min-width: 1024px) 55vw, 100vw"
+        />
         <img
-          src="/images/assurance-os-trace.webp"
-          alt="Assurance OS trace view linking an audit plan, evidence, a high-risk finding, an owned remediation action and the board pack."
-          width="960"
-          height="651"
+          src="/images/hero/hero-building.jpg"
+          alt=""
+          width="1920"
+          height="1200"
           fetchpriority="high"
           loading="eager"
           decoding="async"
-          class="hero-product-shot h-auto w-full"
         />
-        <figcaption class="sr-only">
-          Product-derived Assurance OS preview using fictional Murikah Demo records; no client data is shown.
-        </figcaption>
-      </figure>
-    </Container>
+      </picture>
+    </div>
+
+    <div class="home-hero__content">
+      <div class="home-hero__copy">
+        <h1 id="home-title" class="home-hero__headline home-hero__reveal home-hero__reveal--headline">
+          {HOME_HERO.headline.map((line) => <span>{line}</span>)}
+        </h1>
+
+        <div class="home-hero__gold-line home-hero__reveal home-hero__reveal--line" aria-hidden="true">
+        </div>
+
+        <p class="home-hero__body home-hero__reveal home-hero__reveal--body">
+          {HOME_HERO.body}
+        </p>
+
+        <div class="home-hero__actions home-hero__reveal home-hero__reveal--actions">
+          <a class="home-hero__primary" href={HOME_HERO.primary.href}>
+            {HOME_HERO.primary.label}
+          </a>
+          <a class="home-hero__secondary" href={HOME_HERO.secondary.href}>
+            <span>{HOME_HERO.secondary.label}</span>
+            <svg
+              class="home-hero__secondary-arrow"
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3.75 9h10.5m-4-4 4 4-4 4"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </a>
+        </div>
+
+        <div class="home-hero__trust home-hero__reveal home-hero__reveal--trust">
+          <span class="home-hero__trust-caption">{TRUST.caption}</span>
+          <ul class="home-hero__trust-items" aria-label="Standards that guide our work">
+            {TRUST.items.map((item) => <li>{item}</li>)}
+          </ul>
+
+          {
+            permittedLogos.length > 0 && (
+              <div class="home-hero__trust-logos" aria-label="Verified client logos">
+                {permittedLogos.map((logo) =>
+                  logo.href ? (
+                    <a href={logo.href} aria-label={logo.name}>
+                      <img
+                        src={logo.src}
+                        alt={logo.name}
+                        width={logo.width}
+                        height={logo.height}
+                        loading="lazy"
+                      />
+                    </a>
+                  ) : (
+                    <img
+                      src={logo.src}
+                      alt={logo.name}
+                      width={logo.width}
+                      height={logo.height}
+                      loading="lazy"
+                    />
+                  ),
+                )}
+              </div>
+            )
+          }
+        </div>
+      </div>
+    </div>
   </section>
 
   <Section id="proof" tone="paper" aria-labelledby="proof-title" class="border-b border-hairline">
@@ -295,4 +361,420 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     primaryLabel={PRIMARY_CTA.label}
     primaryHref={PRIMARY_CTA.href}
   />
+
+  <script>
+    document.documentElement.classList.add('home-hero-page');
+
+    const homeHeader = document.querySelector<HTMLElement>('[data-home-header]');
+    const navSentinel = document.querySelector<HTMLElement>('[data-home-nav-sentinel]');
+
+    if (homeHeader && navSentinel && 'IntersectionObserver' in window) {
+      const observer = new IntersectionObserver(
+        ([entry]) => homeHeader.classList.toggle('is-scrolled', !entry?.isIntersecting),
+        { threshold: 0 },
+      );
+      observer.observe(navSentinel);
+    }
+  </script>
+
+  <style>
+    .home-hero {
+      --home-hero-gutter: clamp(1.5rem, 8.33vw, 7.5rem);
+      position: relative;
+      width: 100%;
+      height: min(100svh, 900px);
+      min-height: 640px;
+      overflow: clip;
+      background: var(--color-navy);
+      color: var(--color-hero-ivory);
+      isolation: isolate;
+    }
+
+    .home-hero__nav-sentinel {
+      position: absolute;
+      top: 24px;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+    }
+
+    .home-hero__media {
+      position: absolute;
+      inset: 0 0 0 45%;
+      z-index: 0;
+      width: 55%;
+      overflow: hidden;
+      background: var(--color-navy);
+    }
+
+    .home-hero__picture,
+    .home-hero__picture img {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .home-hero__picture {
+      --hero-image-opacity: 1;
+      opacity: var(--hero-image-opacity);
+    }
+
+    .home-hero__picture img {
+      object-fit: cover;
+      object-position: 70% center;
+      transform: scale(1.04);
+      animation: home-hero-image-scale 8s var(--ease-out-soft) forwards;
+    }
+
+    .home-hero__media::before,
+    .home-hero__media::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .home-hero__media::before {
+      z-index: 2;
+      background: var(--color-navy);
+      animation: home-hero-image-fade 900ms var(--ease-out-soft) forwards;
+    }
+
+    .home-hero__media::after {
+      z-index: 1;
+      background:
+        linear-gradient(0deg, var(--color-navy) 0%, transparent 25%),
+        linear-gradient(
+          90deg,
+          var(--color-navy) 0%,
+          var(--color-navy) 38%,
+          rgba(7, 29, 53, 0.65) 60%,
+          rgba(7, 29, 53, 0) 100%
+        );
+    }
+
+    .home-hero__content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      height: 100%;
+      padding:
+        calc(var(--header-height) + 1.5rem) var(--home-hero-gutter)
+        2.5rem;
+    }
+
+    .home-hero__copy {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .home-hero__headline {
+      margin: 0;
+      color: var(--color-hero-ivory);
+      font-family: var(--font-display);
+      font-size: clamp(44px, 6vw, 84px);
+      font-weight: 450;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+
+    .home-hero__headline span {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .home-hero__gold-line {
+      width: 48px;
+      height: 2px;
+      margin: 32px 0;
+      background: var(--color-brass-on-dark);
+    }
+
+    .home-hero__body {
+      max-width: 34em;
+      margin: 0;
+      color: color-mix(in srgb, var(--color-hero-ivory) 82%, transparent);
+      font-family: var(--font-sans);
+      font-size: clamp(17px, 1.4vw, 21px);
+      font-weight: 350;
+      line-height: 1.6;
+    }
+
+    .home-hero__actions {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      margin-top: 36px;
+    }
+
+    .home-hero__primary,
+    .home-hero__secondary {
+      min-height: 52px;
+      font-family: var(--font-sans);
+    }
+
+    .home-hero__primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 28px;
+      border-radius: 6px;
+      background: var(--color-brass-on-dark);
+      color: var(--color-navy);
+      font-weight: 600;
+      text-decoration: none;
+      transition:
+        background-color 180ms var(--ease-out-soft),
+        transform 180ms var(--ease-out-soft);
+    }
+
+    .home-hero__primary:hover {
+      background: color-mix(in srgb, var(--color-brass-on-dark) 94%, white);
+      color: var(--color-navy);
+      transform: translateY(-1px);
+    }
+
+    .home-hero__primary:focus-visible,
+    .home-hero__secondary:focus-visible {
+      outline: 2px solid var(--color-hero-ivory);
+      outline-offset: 3px;
+    }
+
+    .home-hero__secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--color-hero-ivory);
+      font-weight: 500;
+      text-decoration-line: underline;
+      text-decoration-color: var(--color-brass-on-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 6px;
+    }
+
+    .home-hero__secondary:hover {
+      color: var(--color-hero-ivory);
+    }
+
+    .home-hero__secondary-arrow {
+      transition: transform 180ms var(--ease-out-soft);
+    }
+
+    .home-hero__secondary:hover .home-hero__secondary-arrow {
+      transform: translateX(4px);
+    }
+
+    .home-hero__trust {
+      margin-top: 40px;
+      font-family: var(--font-sans);
+    }
+
+    .home-hero__trust-caption {
+      display: block;
+      color: color-mix(in srgb, var(--color-hero-ivory) 70%, transparent);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .home-hero__trust-items {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0;
+      margin: 10px 0 0;
+      padding: 0;
+      color: color-mix(in srgb, var(--color-hero-ivory) 80%, transparent);
+      font-size: 14px;
+      line-height: 1.5;
+      list-style: none;
+    }
+
+    .home-hero__trust-items li + li {
+      margin-left: 0.9rem;
+      padding-left: 0.9rem;
+      border-left: 1px solid color-mix(in srgb, var(--color-hero-ivory) 28%, transparent);
+    }
+
+    .home-hero__trust-logos {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+
+    .home-hero__trust-logos a {
+      display: inline-flex;
+      min-width: 44px;
+      min-height: 44px;
+      align-items: center;
+    }
+
+    .home-hero__trust-logos img {
+      max-height: 28px;
+      width: auto;
+    }
+
+    .home-hero__reveal {
+      opacity: 0;
+      transform: translateY(16px);
+      animation: home-hero-reveal 600ms var(--ease-out-soft) forwards;
+    }
+
+    .home-hero__reveal--headline {
+      animation-delay: 0ms;
+    }
+
+    .home-hero__reveal--line {
+      animation-delay: 120ms;
+    }
+
+    .home-hero__reveal--body {
+      animation-delay: 200ms;
+    }
+
+    .home-hero__reveal--actions {
+      animation-delay: 280ms;
+    }
+
+    .home-hero__reveal--trust {
+      animation-delay: 360ms;
+    }
+
+    @keyframes home-hero-reveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes home-hero-image-fade {
+      to {
+        opacity: 0;
+      }
+    }
+
+    @keyframes home-hero-image-scale {
+      to {
+        transform: scale(1);
+      }
+    }
+
+    @media (max-width: 1023px) {
+      .home-hero__media {
+        inset: 0;
+        width: 100%;
+      }
+
+      .home-hero__picture {
+        --hero-image-opacity: 0.35;
+      }
+
+      .home-hero__picture img {
+        animation: none;
+        transform: none;
+      }
+
+      .home-hero__media::after {
+        background:
+          linear-gradient(0deg, var(--color-navy) 0%, rgba(7, 29, 53, 0.68) 34%, transparent 70%),
+          linear-gradient(
+            90deg,
+            rgba(7, 29, 53, 0.96) 0%,
+            rgba(7, 29, 53, 0.88) 56%,
+            rgba(7, 29, 53, 0.74) 100%
+          );
+      }
+
+      .home-hero__content {
+        padding-inline: clamp(1.5rem, 6vw, 4rem);
+      }
+
+      .home-hero__headline span {
+        white-space: normal;
+      }
+    }
+
+    @media (max-width: 639px) {
+      .home-hero {
+        min-height: 640px;
+      }
+
+      .home-hero__content {
+        align-items: flex-start;
+        padding-top: 120px;
+        padding-bottom: 32px;
+      }
+
+      .home-hero__headline {
+        font-size: 40px;
+      }
+
+      .home-hero__gold-line {
+        margin-block: 24px;
+      }
+
+      .home-hero__actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        margin-top: 28px;
+      }
+
+      .home-hero__primary {
+        width: 100%;
+      }
+
+      .home-hero__secondary {
+        align-self: flex-start;
+        min-height: 44px;
+      }
+
+      .home-hero__trust {
+        margin-top: 28px;
+      }
+
+      .home-hero__trust-items {
+        row-gap: 0.45rem;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .home-hero__content {
+        padding-inline: 1.25rem;
+      }
+
+      .home-hero__trust-items li + li {
+        margin-left: 0.65rem;
+        padding-left: 0.65rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .home-hero__reveal,
+      .home-hero__picture,
+      .home-hero__picture img,
+      .home-hero__primary,
+      .home-hero__secondary-arrow {
+        opacity: 1;
+        transform: none;
+        animation: none !important;
+        transition: none !important;
+      }
+
+      .home-hero__picture {
+        opacity: var(--hero-image-opacity);
+      }
+
+      .home-hero__media::before {
+        opacity: 0;
+        animation: none !important;
+      }
+    }
+  </style>
 </BaseLayout>
