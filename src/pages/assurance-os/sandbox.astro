@@ -2,84 +2,204 @@
 export const prerender = true;
 
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import Section from '@/components/primitives/Section.astro';
-import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
-import CtaSection from '@/components/primitives/CtaSection.astro';
+import Container from '@/components/primitives/Container.astro';
+import Button from '@/components/primitives/Button.astro';
 import PublicSandbox from '@/components/assurance-os/PublicSandbox';
 import { PRIMARY_CTA } from '@/site.config';
-
-const crumbs = [
-  { label: 'Home', href: '/' },
-  { label: 'Assurance OS', href: '/assurance-os' },
-  { label: 'Public sandbox', href: '/assurance-os/sandbox' },
-];
 ---
 
 <BaseLayout
-  titleFull="Assurance OS public sandbox | Murikah"
-  description="Try Assurance OS with fictional sample audit data. Explore findings, action plans and board reporting without creating an account."
+  titleFull="Try Assurance OS with sample data | Murikah"
+  description="Explore a realistic browser-only Assurance OS workspace with fictional audit data, role-based workflows, findings, remediation, risk and committee reporting."
+  mainClass="sandbox-marketing-page"
 >
-  <Section tone="surface" aria-labelledby="sandbox-title" class="border-b border-hairline">
-    <div class="max-w-3xl">
-      <Breadcrumb items={crumbs} class="mb-7" />
-      <p class="eyebrow">Assurance OS · Public sandbox</p>
-      <h1
-        id="sandbox-title"
-        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-navy"
-      >
-        Try the audit workflow before you talk to sales.
-      </h1>
-      <p class="mt-6 max-w-2xl text-xl text-slate">
-        Explore fictional findings, remediation actions and a committee summary. No sign-in, no
-        customer data and no changes to the live Assurance OS application.
-      </p>
-      <p class="mt-4 text-sm text-slate">
-        Already have access?{' '}
-        <a
-          href="https://grc.murikah.com"
-          class="font-medium text-blue no-underline hover:underline"
-        >
-          Open Assurance OS ↗
-        </a>
-      </p>
+  <meta slot="head" name="robots" content="index,follow" />
+
+  <section class="sandbox-page-intro" aria-labelledby="sandbox-title">
+    <Container>
+      <div class="sandbox-page-intro__copy">
+        <h1 id="sandbox-title">Try Assurance OS with sample data</h1>
+        <p>
+          Work through a fictional SACCO audit portfolio in a realistic Assurance OS workspace. No
+          sign-in, no network calls and nothing you type leaves your browser.
+        </p>
+      </div>
+    </Container>
+  </section>
+
+  <section
+    class="sandbox-app-stage"
+    aria-label="Interactive Assurance OS sample workspace"
+    data-nosnippet
+  >
+    <div class="sandbox-app-stage__inner">
+      <PublicSandbox client:visible />
     </div>
-  </Section>
+  </section>
 
-  <Section tone="paper" aria-label="Interactive Assurance OS sample workspace">
-    <PublicSandbox client:load />
-  </Section>
+  <section class="sandbox-page-outro" aria-labelledby="sandbox-real-title">
+    <Container>
+      <h2 id="sandbox-real-title">What this demo represents</h2>
+      <ul>
+        <li>
+          <strong>Real workflow shape.</strong> Work-paper fields, action-plan states and role gates
+          mirror the Assurance OS codebase where those models exist.
+        </li>
+        <li>
+          <strong>Fictional portfolio.</strong> Kilima Savings and Credit Cooperative Ltd, every
+          person, date, finding and file in the sandbox is fabricated sample data.
+        </li>
+        <li>
+          <strong>Browser-only simulation.</strong> Persistence, scripted AI examples, generated
+          evidence previews and the committee pack run locally without the live application.
+        </li>
+      </ul>
+    </Container>
+  </section>
 
-  <Section tone="surface" aria-labelledby="notice-title" class="border-y border-hairline">
-    <div class="grid gap-6 lg:grid-cols-3">
-      <article>
-        <h2 id="notice-title" class="text-xl text-navy">Sample, not a live tenant</h2>
-        <p class="mt-3 text-sm text-slate">
-          Every name, finding and date in this sandbox is fictional and exists only to demonstrate
-          the workflow.
-        </p>
-      </article>
-      <article>
-        <h2 class="text-xl text-navy">Nothing is saved</h2>
-        <p class="mt-3 text-sm text-slate">
-          Status changes happen in your browser and reset on refresh. The sandbox sends no audit
-          records to the live application.
-        </p>
-      </article>
-      <article>
-        <h2 class="text-xl text-navy">The real product stays protected</h2>
-        <p class="mt-3 text-sm text-slate">
-          Customer workspaces keep their existing authentication and access controls. The sandbox
-          does not bypass or weaken them.
-        </p>
-      </article>
-    </div>
-  </Section>
-
-  <CtaSection
-    eyebrow="Next step"
-    title="Book a 20-minute call"
-    body="If the workflow fits the way your team audits, we can discuss scope, onboarding and the right subscription tier."
-    primaryLabel={PRIMARY_CTA.label}
-    primaryHref={PRIMARY_CTA.href}
-  />
+  <section class="sandbox-page-cta">
+    <Container>
+      <div>
+        <h2>Want to see Assurance OS against your audit workflow?</h2>
+        <p>We can walk through your planning, review, reporting and follow-up requirements in 20 minutes.</p>
+      </div>
+      <Button href={PRIMARY_CTA.href} variant="primary" size="lg">
+        Book a 20-minute call
+      </Button>
+    </Container>
+  </section>
 </BaseLayout>
+
+<style>
+  .sandbox-marketing-page {
+    background: var(--color-paper);
+  }
+
+  .sandbox-page-intro {
+    padding: clamp(3.5rem, 7vw, 6rem) 0 2.5rem;
+    border-bottom: 1px solid var(--color-hairline);
+    background: var(--color-paper);
+  }
+
+  .sandbox-page-intro__copy {
+    max-width: 56rem;
+  }
+
+  .sandbox-page-intro h1,
+  .sandbox-page-outro h2,
+  .sandbox-page-cta h2 {
+    margin: 0;
+    color: var(--color-navy);
+    font-family: var(--font-sans);
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+
+  .sandbox-page-intro h1 {
+    font-size: clamp(2.25rem, 5vw, 4rem);
+    line-height: 1.05;
+  }
+
+  .sandbox-page-intro p {
+    max-width: 52rem;
+    margin: 1.25rem 0 0;
+    color: var(--color-slate);
+    font-size: clamp(1rem, 1.4vw, 1.18rem);
+    line-height: 1.65;
+  }
+
+  .sandbox-app-stage {
+    padding: 2rem clamp(1rem, 3vw, 2.5rem);
+    background: #f4f1e9;
+  }
+
+  .sandbox-app-stage__inner {
+    width: min(100%, 1600px);
+    margin: 0 auto;
+  }
+
+  .sandbox-page-outro {
+    padding: 4rem 0;
+    border-top: 1px solid var(--color-hairline);
+    background: var(--color-paper);
+  }
+
+  .sandbox-page-outro h2 {
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+  }
+
+  .sandbox-page-outro ul {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem;
+    margin: 2rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sandbox-page-outro li {
+    position: relative;
+    padding-left: 1rem;
+    color: var(--color-slate);
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .sandbox-page-outro li::before {
+    content: '';
+    position: absolute;
+    top: 0.65em;
+    left: 0;
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 999px;
+    background: var(--color-brass);
+  }
+
+  .sandbox-page-outro strong {
+    color: var(--color-navy);
+  }
+
+  .sandbox-page-cta {
+    padding: 3rem 0;
+    border-top: 1px solid var(--color-hairline);
+    background: #fff;
+  }
+
+  .sandbox-page-cta :global(.container) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+
+  .sandbox-page-cta h2 {
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
+  }
+
+  .sandbox-page-cta p {
+    max-width: 46rem;
+    margin: 0.65rem 0 0;
+    color: var(--color-slate);
+  }
+
+  @media (max-width: 760px) {
+    .sandbox-page-intro {
+      padding: 3rem 0 2rem;
+    }
+
+    .sandbox-app-stage {
+      padding: 0;
+    }
+
+    .sandbox-page-outro ul {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .sandbox-page-cta :global(.container) {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
+</style>
