@@ -553,7 +553,7 @@ def main() -> int:
         (
             'href: "/virtual-internship"',
             'label: "Virtual Internship"',
-            "icon: Briefcase",
+            "icon: GraduationCap",
             "3+ month simulated workplace",
         ),
     )
