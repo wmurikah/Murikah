@@ -1341,12 +1341,32 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
     const learningTurns = await env.TUTOR_DB.prepare(
       'SELECT COUNT(*) AS count FROM tutor_turns',
     ).first<{ count: number }>();
+    const ownershipSchema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'ownership_schema_version'",
+    ).first<{ value: string }>();
+    const ownershipCounts = await env.TUTOR_DB.prepare(
+      'SELECT ' +
+        '(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL) AS owned_objects, ' +
+        "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'user') AS user_objects, " +
+        "(SELECT COUNT(*) FROM tutor_accounts WHERE account_status = 'active') AS active_accounts, " +
+        '(SELECT COUNT(*) FROM persistence_objects p LEFT JOIN tutor_objects o ON o.runtime_path = p.path WHERE o.object_id IS NULL) AS unregistered_objects',
+    ).first<{
+      owned_objects: number;
+      user_objects: number;
+      active_accounts: number;
+      unregistered_objects: number;
+    }>();
     return persistenceJson({
       ok: true,
       schemaVersion: schema?.value || '',
       learningJournalSchemaVersion: learningSchema?.value || '',
+      ownershipSchemaVersion: ownershipSchema?.value || '',
       learningTurnCount: learningTurns?.count || 0,
       durableObjectCount: objects?.count || 0,
+      ownedObjectCount: ownershipCounts?.owned_objects || 0,
+      userOwnedObjectCount: ownershipCounts?.user_objects || 0,
+      activeAccountCount: ownershipCounts?.active_accounts || 0,
+      unregisteredObjectCount: ownershipCounts?.unregistered_objects || 0,
       activeGuestSessions: guests?.count || 0,
       lastCheckpointAt: checkpoint?.updated_at || null,
       r2PrivateBindingConfigured: Boolean(env.TUTOR_FILES),
