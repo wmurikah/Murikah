@@ -40,6 +40,8 @@ type TutorEnv = {
   MURIKAH_TUTOR_TOKEN_EXPIRE_HOURS?: string;
   MURIKAH_GOOGLE_CLIENT_ID?: string;
   MURIKAH_GOOGLE_CLIENT_SECRET?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
   MURIKAH_MICROSOFT_CLIENT_ID?: string;
   MURIKAH_MICROSOFT_CLIENT_SECRET?: string;
   MURIKAH_MICROSOFT_TENANT?: string;
@@ -104,6 +106,10 @@ const READY_CACHE_MS = 5_000;
 const PERSISTENCE_PREFIX = '/__muri/persist';
 const PERSISTENCE_CLOCK_SKEW_SECONDS = 120;
 const PERSISTENCE_MAX_PATHS = 20_000;
+const EMAIL_CODE_TTL_SECONDS = 10 * 60;
+const EMAIL_RESEND_SECONDS = 60;
+const EMAIL_MAX_ATTEMPTS = 5;
+const EMAIL_MAX_SENDS = 3;
 
 let readyCacheUntil = 0;
 let statusInFlight: Promise<RuntimeStatus> | null = null;
@@ -246,6 +252,71 @@ function validPersistenceId(value: unknown): string {
 
 function learningText(value: unknown, limit: number): string {
   return String(value || '').replace(/\0/g, '').slice(0, Math.max(0, limit));
+}
+
+function normalizeEmail(value: unknown): string {
+  const email = learningText(value, 254).trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return '';
+  return email;
+}
+
+function verificationRequesterHash(value: unknown): string {
+  const text = learningText(value, 64).trim().toLowerCase();
+  return /^[0-9a-f]{64}$/.test(text) ? text : '';
+}
+
+async function hmacHex(secret: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value)),
+  );
+  return Array.from(signature, (item) => item.toString(16).padStart(2, '0')).join('');
+}
+
+function sixDigitCode(): string {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(bytes[0] % 1_000_000).padStart(6, '0');
+}
+
+async function sendVerificationEmail(
+  env: TutorEnv,
+  email: string,
+  code: string,
+): Promise<void> {
+  const apiKey = optional(env.RESEND_API_KEY);
+  if (!apiKey) throw new Error('verification_email_not_configured');
+  const from = optional(env.RESEND_FROM_EMAIL) || 'Murikah Tutor <noreply@murikah.com>';
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: email,
+      subject: 'Your Murikah Tutor verification code',
+      text: [
+        'Your Murikah Tutor verification code is:',
+        '',
+        code,
+        '',
+        'This code expires in 10 minutes and can only be used once.',
+        'If you did not try to create a Murikah Tutor account, you can ignore this email.',
+      ].join('\n'),
+    }),
+  });
+  if (!response.ok) {
+    console.error('Tutor verification email send failed', response.status);
+    throw new Error('verification_email_send_failed');
+  }
 }
 
 async function textSha256(value: string): Promise<string> {
@@ -583,12 +654,175 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     }
   }
 
+  if (route === '/email/start' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const email = normalizeEmail(body.email);
+    const purpose = learningText(body.purpose, 32);
+    const provider = learningText(body.provider, 32);
+    const requesterHash = verificationRequesterHash(body.requester_hash);
+    if (!email || !['local_signup', 'social_signup'].includes(purpose)) {
+      return persistenceJson({ error: 'invalid_email_verification_request' }, 400);
+    }
+    const domain = email.split('@')[1] || '';
+    const hourAgo = now - 3600;
+    const emailRate = await env.TUTOR_DB.prepare(
+      'SELECT COUNT(*) AS count FROM tutor_email_verifications WHERE email = ? AND created_at >= ?',
+    ).bind(email, hourAgo).first<{ count: number }>();
+    if (Number(emailRate?.count || 0) >= 5) {
+      return persistenceJson({ error: 'verification_rate_limited', retry_after: 3600 }, 429);
+    }
+    if (requesterHash) {
+      const requesterRate = await env.TUTOR_DB.prepare(
+        'SELECT COUNT(*) AS count FROM tutor_email_verifications WHERE requester_hash = ? AND created_at >= ?',
+      ).bind(requesterHash, hourAgo).first<{ count: number }>();
+      if (Number(requesterRate?.count || 0) >= 10) {
+        return persistenceJson({ error: 'verification_rate_limited', retry_after: 3600 }, 429);
+      }
+    }
+
+    const challengeId = crypto.randomUUID().replace(/-/g, '');
+    const code = sixDigitCode();
+    const secret = optional(env.MURIKAH_TUTOR_AUTH_SECRET);
+    const digest = await hmacHex(secret, `${challengeId}\n${email}\n${code}`);
+    const expiresAt = now + EMAIL_CODE_TTL_SECONDS;
+    const resendAfter = now + EMAIL_RESEND_SECONDS;
+    await env.TUTOR_DB.prepare(
+      'INSERT INTO tutor_email_verifications(challenge_id, email, email_domain, purpose, provider, requester_hash, code_digest, attempts, max_attempts, send_count, expires_at, resend_after, verified_at, consumed_at, created_at, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, NULL, NULL, ?, ?)',
+    )
+      .bind(
+        challengeId,
+        email,
+        domain,
+        purpose,
+        provider,
+        requesterHash,
+        digest,
+        EMAIL_MAX_ATTEMPTS,
+        expiresAt,
+        resendAfter,
+        now,
+        now,
+      )
+      .run();
+    try {
+      await sendVerificationEmail(env, email, code);
+    } catch (error) {
+      console.error('Tutor verification start could not send email', error);
+      return persistenceJson({ error: 'verification_email_unavailable' }, 503);
+    }
+    return persistenceJson({
+      ok: true,
+      challenge_id: challengeId,
+      expires_in: EMAIL_CODE_TTL_SECONDS,
+      resend_after: EMAIL_RESEND_SECONDS,
+      masked_email: email.replace(/^(.{1,2}).*(@.*)$/, '$1••••$2'),
+    });
+  }
+
+  if (route === '/email/resend' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const challengeId = validPersistenceId(body.challenge_id);
+    const requesterHash = verificationRequesterHash(body.requester_hash);
+    if (!challengeId) return persistenceJson({ error: 'invalid_verification_challenge' }, 400);
+    const row = await env.TUTOR_DB.prepare(
+      'SELECT email, requester_hash, expires_at, resend_after, send_count, consumed_at FROM tutor_email_verifications WHERE challenge_id = ?',
+    ).bind(challengeId).first<{
+      email: string;
+      requester_hash: string;
+      expires_at: number;
+      resend_after: number;
+      send_count: number;
+      consumed_at: number | null;
+    }>();
+    if (!row || row.consumed_at || Number(row.expires_at || 0) <= now) {
+      return persistenceJson({ error: 'verification_expired' }, 410);
+    }
+    if (row.requester_hash && requesterHash && row.requester_hash !== requesterHash) {
+      return persistenceJson({ error: 'verification_requester_mismatch' }, 403);
+    }
+    if (Number(row.send_count || 0) >= EMAIL_MAX_SENDS) {
+      return persistenceJson({ error: 'verification_send_limit' }, 429);
+    }
+    if (Number(row.resend_after || 0) > now) {
+      return persistenceJson({
+        error: 'verification_resend_cooldown',
+        retry_after: Number(row.resend_after) - now,
+      }, 429);
+    }
+    const code = sixDigitCode();
+    const secret = optional(env.MURIKAH_TUTOR_AUTH_SECRET);
+    const digest = await hmacHex(secret, `${challengeId}\n${row.email}\n${code}`);
+    const resendAfter = now + EMAIL_RESEND_SECONDS;
+    await env.TUTOR_DB.prepare(
+      'UPDATE tutor_email_verifications SET code_digest = ?, attempts = 0, send_count = send_count + 1, resend_after = ?, updated_at = ? WHERE challenge_id = ?',
+    ).bind(digest, resendAfter, now, challengeId).run();
+    try {
+      await sendVerificationEmail(env, row.email, code);
+    } catch (error) {
+      console.error('Tutor verification resend could not send email', error);
+      return persistenceJson({ error: 'verification_email_unavailable' }, 503);
+    }
+    return persistenceJson({ ok: true, resend_after: EMAIL_RESEND_SECONDS });
+  }
+
+  if (route === '/email/verify' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const challengeId = validPersistenceId(body.challenge_id);
+    const code = learningText(body.code, 12).trim();
+    if (!challengeId || !/^\d{6}$/.test(code)) {
+      return persistenceJson({ error: 'invalid_verification_code' }, 422);
+    }
+    const row = await env.TUTOR_DB.prepare(
+      'SELECT email, purpose, provider, code_digest, attempts, max_attempts, expires_at, consumed_at FROM tutor_email_verifications WHERE challenge_id = ?',
+    ).bind(challengeId).first<{
+      email: string;
+      purpose: string;
+      provider: string;
+      code_digest: string;
+      attempts: number;
+      max_attempts: number;
+      expires_at: number;
+      consumed_at: number | null;
+    }>();
+    if (!row || row.consumed_at || Number(row.expires_at || 0) <= now) {
+      return persistenceJson({ error: 'verification_expired' }, 410);
+    }
+    if (Number(row.attempts || 0) >= Number(row.max_attempts || EMAIL_MAX_ATTEMPTS)) {
+      return persistenceJson({ error: 'verification_attempt_limit' }, 429);
+    }
+    const secret = optional(env.MURIKAH_TUTOR_AUTH_SECRET);
+    const supplied = await hmacHex(secret, `${challengeId}\n${row.email}\n${code}`);
+    if (supplied !== row.code_digest) {
+      await env.TUTOR_DB.prepare(
+        'UPDATE tutor_email_verifications SET attempts = attempts + 1, updated_at = ? WHERE challenge_id = ?',
+      ).bind(now, challengeId).run();
+      return persistenceJson({ error: 'invalid_verification_code' }, 422);
+    }
+    await env.TUTOR_DB.prepare(
+      'UPDATE tutor_email_verifications SET verified_at = ?, consumed_at = ?, updated_at = ? WHERE challenge_id = ?',
+    ).bind(now, now, now, challengeId).run();
+    return persistenceJson({
+      ok: true,
+      email: row.email,
+      purpose: row.purpose,
+      provider: row.provider,
+      verified_at: now,
+    });
+  }
+
   if (route === '/account/upsert' && request.method === 'POST') {
     const body = await requestJson(request);
     const actorId = validPersistenceId(body.actor_id);
     const username = learningText(body.username, 254);
     const role = learningText(body.role || 'member', 16);
     const authProvider = learningText(body.auth_provider || 'local', 32);
+    const email = normalizeEmail(body.email);
+    const emailVerifiedAtRaw = Number(body.email_verified_at || 0);
+    const emailVerifiedAt =
+      Number.isSafeInteger(emailVerifiedAtRaw) && emailVerifiedAtRaw > 0
+        ? emailVerifiedAtRaw
+        : null;
     if (!actorId || !['guest', 'member', 'admin'].includes(role) || !authProvider) {
       return persistenceJson({ error: 'invalid_account_metadata' }, 400);
     }
@@ -602,12 +836,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         now,
       );
       await env.TUTOR_DB.prepare(
-        'INSERT INTO tutor_accounts(actor_id, username, role, account_status, auth_provider, created_at, updated_at) ' +
-          "VALUES (?, ?, ?, 'active', ?, ?, ?) " +
+        'INSERT INTO tutor_accounts(actor_id, username, role, account_status, auth_provider, created_at, updated_at, email, email_verified_at) ' +
+          "VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?) " +
           'ON CONFLICT(actor_id) DO UPDATE SET username = excluded.username, role = excluded.role, ' +
-          "account_status = 'active', auth_provider = excluded.auth_provider, updated_at = excluded.updated_at",
+          "account_status = 'active', auth_provider = excluded.auth_provider, updated_at = excluded.updated_at, " +
+          "email = CASE WHEN excluded.email <> '' THEN excluded.email ELSE tutor_accounts.email END, " +
+          'email_verified_at = COALESCE(excluded.email_verified_at, tutor_accounts.email_verified_at)',
       )
-        .bind(actorId, username, role, authProvider, now, now)
+        .bind(actorId, username, role, authProvider, now, now, email, emailVerifiedAt)
         .run();
       return persistenceJson({ ok: true });
     } catch (error) {
