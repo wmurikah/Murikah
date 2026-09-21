@@ -109,13 +109,18 @@ jobs:
             );
           }
 
-          await build(1920, 1200);
-          await build(1280, 800);
+          (async () => {
+            await build(1920, 1200);
+            await build(1280, 800);
 
-          const fallbackMeta = await sharp(`${dir}/hero-building.jpg`).metadata();
-          if (fallbackMeta.width !== 1920 || fallbackMeta.height !== 1200) {
-            throw new Error('hero-building.jpg must be exactly 1920×1200');
-          }
+            const fallbackMeta = await sharp(`${dir}/hero-building.jpg`).metadata();
+            if (fallbackMeta.width !== 1920 || fallbackMeta.height !== 1200) {
+              throw new Error('hero-building.jpg must be exactly 1920×1200');
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 
           cat > public/images/hero/LICENSE.md <<'EOF'
