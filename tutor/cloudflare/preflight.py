@@ -256,6 +256,8 @@ def main() -> int:
             'python /app/murikah-fast-lane-bootstrap.py',
             'python -m deeptutor.murikah_persistence reconcile-ownership',
             'python -m deeptutor.murikah_persistence reconcile-accounts',
+            'wait_for_runtime_port()',
+            'socket.create_connection(("127.0.0.1", 3782)',
             'Persistence metadata reconciliation attempt',
             'Persistence metadata reconciliation complete.',
             'python -m deeptutor.murikah_persistence sync-loop &',
