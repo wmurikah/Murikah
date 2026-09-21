@@ -1,0 +1,67 @@
+[
+  {
+    "userId": "USR-CAE",
+    "fullName": "Amina Kilele",
+    "email": "amina.kilele@kilima.example",
+    "roleCode": "HEAD_OF_AUDIT",
+    "roleLabel": "Chief Audit Executive",
+    "affiliateCode": "HO",
+    "avatar": "AK"
+  },
+  {
+    "userId": "USR-AM",
+    "fullName": "Peter Mwangaza",
+    "email": "peter.mwangaza@kilima.example",
+    "roleCode": "AUDIT_MANAGER",
+    "roleLabel": "Audit Manager",
+    "affiliateCode": "HO",
+    "avatar": "PM"
+  },
+  {
+    "userId": "USR-SA",
+    "fullName": "Faith Kioo",
+    "email": "faith.kioo@kilima.example",
+    "roleCode": "SENIOR_AUDITOR",
+    "roleLabel": "Senior Auditor",
+    "affiliateCode": "HO",
+    "avatar": "FK"
+  },
+  {
+    "userId": "USR-AUD",
+    "fullName": "Daniel Kifaru",
+    "email": "daniel.kifaru@kilima.example",
+    "roleCode": "AUDITOR",
+    "roleLabel": "Auditor",
+    "affiliateCode": "NKR",
+    "avatar": "DK"
+  },
+  {
+    "userId": "USR-BOARD",
+    "fullName": "Grace Zawadi",
+    "email": "grace.zawadi@kilima.example",
+    "roleCode": "BOARD_MEMBER",
+    "roleLabel": "Audit Committee Chair",
+    "affiliateCode": "HO",
+    "avatar": "GZ"
+  },
+  {
+    "userId": "USR-FIN",
+    "fullName": "Irene Bahari",
+    "email": "irene.bahari@kilima.example",
+    "roleCode": "UNIT_MANAGER",
+    "roleLabel": "Process Owner (Finance)",
+    "affiliateCode": "HO",
+    "process": "Finance",
+    "avatar": "IB"
+  },
+  {
+    "userId": "USR-ICT",
+    "fullName": "Kevin Imara",
+    "email": "kevin.imara@kilima.example",
+    "roleCode": "UNIT_MANAGER",
+    "roleLabel": "Process Owner (ICT)",
+    "affiliateCode": "HO",
+    "process": "ICT",
+    "avatar": "KI"
+  }
+]

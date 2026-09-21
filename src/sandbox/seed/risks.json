@@ -1,0 +1,402 @@
+[
+  {
+    "riskId": "RSK-001",
+    "title": "Unauthorised privileged access",
+    "process": "ICT",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 1,
+    "inherentImpact": 5,
+    "residualLikelihood": 1,
+    "residualImpact": 4,
+    "controlLinks": [
+      "CTRL-001",
+      "CTRL-008"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-002",
+    "title": "Liquidity concentration",
+    "process": "Finance",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 2,
+    "inherentImpact": 4,
+    "residualLikelihood": 1,
+    "residualImpact": 4,
+    "controlLinks": [
+      "CTRL-002",
+      "CTRL-009"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-003",
+    "title": "Credit underwriting exceptions",
+    "process": "Credit",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 3,
+    "inherentImpact": 3,
+    "residualLikelihood": 3,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-003",
+      "CTRL-010"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-004",
+    "title": "Fraudulent supplier changes",
+    "process": "Operations",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 4,
+    "inherentImpact": 2,
+    "residualLikelihood": 3,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-004",
+      "CTRL-011"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-005",
+    "title": "Regulatory reporting error",
+    "process": "Procurement",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 5,
+    "inherentImpact": 1,
+    "residualLikelihood": 5,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-005",
+      "CTRL-012"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-006",
+    "title": "Member data exposure",
+    "process": "HR",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 1,
+    "inherentImpact": 5,
+    "residualLikelihood": 1,
+    "residualImpact": 5,
+    "controlLinks": [
+      "CTRL-006",
+      "CTRL-013"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-007",
+    "title": "Business continuity failure",
+    "process": "ICT",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 2,
+    "inherentImpact": 4,
+    "residualLikelihood": 2,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-007",
+      "CTRL-014"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-008",
+    "title": "Branch cash loss",
+    "process": "Finance",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 3,
+    "inherentImpact": 3,
+    "residualLikelihood": 2,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-008",
+      "CTRL-015"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-009",
+    "title": "Loan arrears deterioration",
+    "process": "Credit",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 4,
+    "inherentImpact": 2,
+    "residualLikelihood": 4,
+    "residualImpact": 2,
+    "controlLinks": [
+      "CTRL-009",
+      "CTRL-016"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-010",
+    "title": "Cyber incident response delay",
+    "process": "Operations",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 5,
+    "inherentImpact": 1,
+    "residualLikelihood": 4,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-010",
+      "CTRL-017"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-011",
+    "title": "Third-party service disruption",
+    "process": "Procurement",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 1,
+    "inherentImpact": 5,
+    "residualLikelihood": 1,
+    "residualImpact": 5,
+    "controlLinks": [
+      "CTRL-011",
+      "CTRL-018"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-012",
+    "title": "Payroll error",
+    "process": "HR",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 2,
+    "inherentImpact": 4,
+    "residualLikelihood": 1,
+    "residualImpact": 4,
+    "controlLinks": [
+      "CTRL-012",
+      "CTRL-019"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-013",
+    "title": "Procurement conflict of interest",
+    "process": "ICT",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 3,
+    "inherentImpact": 3,
+    "residualLikelihood": 3,
+    "residualImpact": 2,
+    "controlLinks": [
+      "CTRL-013",
+      "CTRL-020"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-014",
+    "title": "KYC control failure",
+    "process": "Finance",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 4,
+    "inherentImpact": 2,
+    "residualLikelihood": 3,
+    "residualImpact": 2,
+    "controlLinks": [
+      "CTRL-014",
+      "CTRL-021"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-015",
+    "title": "Backup recovery failure",
+    "process": "Credit",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 5,
+    "inherentImpact": 1,
+    "residualLikelihood": 5,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-015",
+      "CTRL-022"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-016",
+    "title": "Segregation of duties conflict",
+    "process": "Operations",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 1,
+    "inherentImpact": 5,
+    "residualLikelihood": 1,
+    "residualImpact": 4,
+    "controlLinks": [
+      "CTRL-016",
+      "CTRL-023"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-017",
+    "title": "Interest-rate mismatch",
+    "process": "Procurement",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 2,
+    "inherentImpact": 4,
+    "residualLikelihood": 2,
+    "residualImpact": 4,
+    "controlLinks": [
+      "CTRL-017",
+      "CTRL-024"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-018",
+    "title": "Dormant account abuse",
+    "process": "HR",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 3,
+    "inherentImpact": 3,
+    "residualLikelihood": 2,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-018",
+      "CTRL-025"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-019",
+    "title": "Change management failure",
+    "process": "ICT",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 4,
+    "inherentImpact": 2,
+    "residualLikelihood": 4,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-019",
+      "CTRL-001"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-020",
+    "title": "Physical security breach",
+    "process": "Finance",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 5,
+    "inherentImpact": 1,
+    "residualLikelihood": 4,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-020",
+      "CTRL-002"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-021",
+    "title": "Complaints backlog",
+    "process": "Credit",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 1,
+    "inherentImpact": 5,
+    "residualLikelihood": 1,
+    "residualImpact": 5,
+    "controlLinks": [
+      "CTRL-021",
+      "CTRL-003"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  },
+  {
+    "riskId": "RSK-022",
+    "title": "Reconciliation break",
+    "process": "Operations",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 2,
+    "inherentImpact": 4,
+    "residualLikelihood": 1,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-022",
+      "CTRL-004"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-023",
+    "title": "Policy override accumulation",
+    "process": "Procurement",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 3,
+    "inherentImpact": 3,
+    "residualLikelihood": 3,
+    "residualImpact": 3,
+    "controlLinks": [
+      "CTRL-023",
+      "CTRL-005"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-024",
+    "title": "Data retention breach",
+    "process": "HR",
+    "ownerId": "USR-FIN",
+    "inherentLikelihood": 4,
+    "inherentImpact": 2,
+    "residualLikelihood": 3,
+    "residualImpact": 2,
+    "controlLinks": [
+      "CTRL-024",
+      "CTRL-006"
+    ],
+    "appetite": "Within appetite",
+    "treatment": "Monitor"
+  },
+  {
+    "riskId": "RSK-025",
+    "title": "Board reporting incompleteness",
+    "process": "ICT",
+    "ownerId": "USR-ICT",
+    "inherentLikelihood": 5,
+    "inherentImpact": 1,
+    "residualLikelihood": 5,
+    "residualImpact": 1,
+    "controlLinks": [
+      "CTRL-025",
+      "CTRL-007"
+    ],
+    "appetite": "Outside appetite",
+    "treatment": "Mitigate"
+  }
+]
