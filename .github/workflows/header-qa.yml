@@ -1,0 +1,148 @@
+name: Header QA
+
+on:
+  push:
+    branches:
+      - fix/unified-site-header-v2
+    paths:
+      - 'src/components/Header.astro'
+      - 'src/layouts/BaseLayout.astro'
+      - 'src/styles/global.css'
+      - 'src/pages/index.astro'
+      - 'src/components/assurance-os/**'
+      - 'src/components/a11y/**'
+      - 'public/brand/murikah-header-lockup.svg'
+      - 'test/header/**'
+      - 'test/shared/header-shell.test.ts'
+      - 'test-results/compare-header-lighthouse.mjs'
+      - '.github/workflows/header-qa.yml'
+  pull_request:
+    paths:
+      - 'src/components/Header.astro'
+      - 'src/layouts/BaseLayout.astro'
+      - 'src/styles/global.css'
+      - 'src/pages/index.astro'
+      - 'src/components/assurance-os/**'
+      - 'src/components/a11y/**'
+      - 'public/brand/murikah-header-lockup.svg'
+      - 'test/header/**'
+      - 'test/shared/header-shell.test.ts'
+      - '.github/workflows/header-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  header-qa:
+    name: Route crawl, Axe, visuals and Lighthouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install application dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser QA tools without changing the lockfile
+        run: pnpm add --save-dev --lockfile=false @playwright/test @axe-core/playwright lighthouse
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build public site
+        run: pnpm build
+
+      - name: Start local Cloudflare preview
+        shell: bash
+        run: |
+          pnpm exec wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 4321 > /tmp/header-wrangler.log 2>&1 &
+          echo $! > /tmp/header-wrangler.pid
+          for attempt in $(seq 1 90); do
+            if curl --silent --fail http://127.0.0.1:4321/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/header-wrangler.log
+          exit 1
+
+      - name: Run route-wide Playwright and Axe header suite
+        env:
+          HEADER_BASE_URL: http://127.0.0.1:4321
+        run: pnpm exec playwright test --config test/header/playwright.config.cjs
+
+      - name: Run Lighthouse mobile comparison
+        shell: bash
+        run: |
+          mkdir -p test-results/lighthouse
+          CHROME_PATH="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
+          run_lighthouse () {
+            local url="$1"
+            local output="$2"
+            pnpm exec lighthouse "$url"               --chrome-path="$CHROME_PATH"               --only-categories=performance               --form-factor=mobile               --output=json               --output-path="$output"               --quiet
+          }
+
+          run_lighthouse "https://murikah.com/" "test-results/lighthouse/production-home.json"
+          run_lighthouse "http://127.0.0.1:4321/" "test-results/lighthouse/candidate-home.json"
+
+          run_lighthouse "https://murikah.com/assurance-os" "test-results/lighthouse/production-assurance-os.json"
+          run_lighthouse "http://127.0.0.1:4321/assurance-os" "test-results/lighthouse/candidate-assurance-os.json"
+
+          run_lighthouse "https://murikah.com/insights" "test-results/lighthouse/production-insights.json"
+          run_lighthouse "http://127.0.0.1:4321/insights" "test-results/lighthouse/candidate-insights.json"
+
+          node test-results/compare-header-lighthouse.mjs
+
+      - name: Restore dependency manifests before artifact commit
+        if: always()
+        run: git checkout -- package.json pnpm-lock.yaml
+
+      - name: Commit six before-and-after screenshots to the feature branch
+        if: >-
+          success() &&
+          github.event_name == 'push' &&
+          github.ref_name == 'fix/unified-site-header-v2' &&
+          github.actor != 'github-actions[bot]'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/images/header-audit/*.png
+          if git diff --cached --quiet; then
+            echo "No screenshot changes to commit."
+          else
+            git commit -m "Add unified header before-and-after screenshots [skip ci]"
+            git push
+          fi
+
+      - name: Upload header QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: header-qa-${{ github.run_id }}
+          path: |
+            test-results/header-top-120/
+            test-results/header-playwright/
+            test-results/lighthouse/
+            test-results/lighthouse-summary.md
+            public/images/header-audit/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show preview log on failure
+        if: failure()
+        run: cat /tmp/header-wrangler.log || true
