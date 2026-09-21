@@ -49,9 +49,12 @@ Required secrets:
 - `MURIKAH_TUTOR_AUTH_SECRET`
 - `MURIKAH_GOOGLE_CLIENT_ID`
 - `MURIKAH_GOOGLE_CLIENT_SECRET`
+- `RESEND_API_KEY` — sends first-account email verification codes
 - `MURIKAH_NVIDIA_NIM_API_KEY`
 - `MURIKAH_DASHSCOPE_API_KEY`
 - `MURIKAH_TAVILY_API_KEY`
+
+New local and social accounts are activated only after a six-digit code sent to their email is verified. The Worker sends those messages through Resend using `RESEND_API_KEY`; the key remains in Worker Secrets and is never forwarded into the Tutor container. `RESEND_FROM_EMAIL` defaults to the repository-managed `Murikah Tutor <noreply@murikah.com>` sender and that sender/domain must be verified in the Resend account.
 
 `MURIKAH_TUTOR_AUTH_SECRET` is the stable DeepTutor session-signing secret. It must be at least 32 characters and must remain unchanged across normal deployments. The Cloudflare runtime restores it to `data/system/auth/auth_secret` before DeepTutor imports its authentication module, so replacing a Container does not invalidate every existing signed session merely because the local disk was recreated.
 

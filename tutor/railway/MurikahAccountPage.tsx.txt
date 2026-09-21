@@ -1,9 +1,10 @@
 "use client";
-import { Suspense, useCallback, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { login, invalidateAuthStatusCache } from "@/lib/auth";
 import { normalizeInternalReturnPath, inheritLoginHash } from "@/shared/auth/return-url";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
 const RESUME_NEXT = "/chat?resume_guest=1";
@@ -11,6 +12,12 @@ const RESUME_NEXT = "/chat?resume_guest=1";
 type SessionMessage = {
   role?: string;
   content?: string;
+};
+
+type VerificationState = {
+  challengeId: string;
+  maskedEmail: string;
+  social: boolean;
 };
 
 type SessionSnapshot = {
@@ -114,6 +121,29 @@ function AccountForm({ signup }: { signup: boolean }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(params.get("oauth_error") || "");
   const [busy, setBusy] = useState(false);
+  const [verification, setVerification] = useState<VerificationState | null>(() => {
+    const challengeId = params.get("challenge") || "";
+    return params.get("verify_email") === "1" && challengeId
+      ? {
+          challengeId,
+          maskedEmail: params.get("masked_email") || "your email",
+          social: true,
+        }
+      : null;
+  });
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationError, setVerificationError] = useState("");
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setInterval(
+      () => setResendSeconds((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
 
   const continuationForAccountChange = useCallback(async () => {
     return (await preserveGuestConversation(next)) ? RESUME_NEXT : next;
@@ -130,26 +160,34 @@ function AccountForm({ signup }: { signup: boolean }) {
     try {
       let destination = next;
       if (isSignup) {
-        // Local signup converts the temporary guest identity in-place, retaining
-        // the same user/workspace id and therefore the same session URL.
+        // New accounts are not created until the emailed six-digit code is
+        // verified. Passwords stay in this browser component until that step.
         const res = await fetch("/api/murikah/access/signup", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ email: username, password }),
         });
+        const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
           throw new Error(
             typeof body.detail === "string"
               ? body.detail
               : "Check your account details and try again.",
           );
         }
-        invalidateAuthStatusCache();
-        // Signup renames the current guest identity in place, so the original
-        // session remains authoritative and no transcript clone is needed.
-        window.localStorage.removeItem(GUEST_STATE_KEY);
+        const challengeId = String(body.challenge_id || "");
+        if (!challengeId) throw new Error("Email verification could not be started.");
+        setVerification({
+          challengeId,
+          maskedEmail: String(body.masked_email || username),
+          social: false,
+        });
+        setVerificationCode("");
+        setVerificationError("");
+        setResendSeconds(Math.max(0, Number(body.resend_after) || 60));
+        setBusy(false);
+        return;
       } else {
         // Signing into an existing account changes the user id. Snapshot the
         // guest transcript first, then import it into that account after login.
@@ -170,12 +208,101 @@ function AccountForm({ signup }: { signup: boolean }) {
     }
   }
 
+  async function verifyEmail(event: FormEvent) {
+    event.preventDefault();
+    if (!verification || verificationCode.length !== 6) return;
+    setVerificationBusy(true);
+    setVerificationError("");
+    try {
+      const endpoint = verification.social
+        ? "/api/auth/oauth/verify-email"
+        : "/api/murikah/access/signup/verify";
+      const payload = verification.social
+        ? {
+            challenge_id: verification.challengeId,
+            code: verificationCode,
+          }
+        : {
+            challenge_id: verification.challengeId,
+            code: verificationCode,
+            email: username,
+            password,
+          };
+      const res = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof body.detail === "string"
+            ? body.detail
+            : "That verification code could not be confirmed.",
+        );
+      }
+      invalidateAuthStatusCache();
+      if (!verification.social) {
+        // Local signup converts the guest identity in-place after verification.
+        window.localStorage.removeItem(GUEST_STATE_KEY);
+      }
+      const destination =
+        typeof body.next === "string" && body.next.startsWith("/")
+          ? body.next
+          : next;
+      window.location.assign(
+        inheritLoginHash(destination, window.location.hash),
+      );
+    } catch (cause) {
+      setVerificationError(
+        cause instanceof Error
+          ? cause.message
+          : "That verification code could not be confirmed.",
+      );
+      setVerificationBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (!verification || resendSeconds > 0 || verificationBusy) return;
+    setVerificationBusy(true);
+    setVerificationError("");
+    try {
+      const res = await fetch("/api/murikah/access/email/resend", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challenge_id: verification.challengeId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof body.detail === "string"
+            ? body.detail
+            : "A new code could not be sent.",
+        );
+      }
+      setResendSeconds(Math.max(0, Number(body.resend_after) || 60));
+      setVerificationCode("");
+    } catch (cause) {
+      setVerificationError(
+        cause instanceof Error ? cause.message : "A new code could not be sent.",
+      );
+    } finally {
+      setVerificationBusy(false);
+    }
+  }
+
   const switchHref = `${isSignup ? "/login" : "/register"}?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`;
   const inputClass =
     "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#A9822E]/30";
 
   return (
-    <div className="w-full max-w-md px-5 py-10">
+    <div className="relative w-full max-w-md px-5 py-10">
+      <div className="fixed right-4 top-4 z-40 sm:right-6 sm:top-6">
+        <MurikahInviteFriends />
+      </div>
       <div className="mb-7 text-center">
         <div className="inline-flex items-center rounded-lg bg-[#1E2A30] px-4 py-2 font-semibold text-white">
           Murikah <span className="mx-3 text-[#A9822E]">|</span> Tutor
@@ -185,7 +312,7 @@ function AccountForm({ signup }: { signup: boolean }) {
         </h1>
         <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
           {isSignup
-            ? "Keep your guest work and continue learning."
+            ? "Keep your guest work and continue learning. New accounts verify the email address before sign-in."
             : "Sign in to continue your learning."}
         </p>
       </div>
@@ -245,11 +372,12 @@ function AccountForm({ signup }: { signup: boolean }) {
       >
         <div>
           <label htmlFor="username" className="mb-2 block text-sm font-medium">
-            Email or username
+            {isSignup ? "Email" : "Email or username"}
           </label>
           <input
             id="username"
-            autoComplete="username"
+            type={isSignup ? "email" : "text"}
+            autoComplete={isSignup ? "email" : "username"}
             maxLength={254}
             required
             value={username}
@@ -273,7 +401,7 @@ function AccountForm({ signup }: { signup: boolean }) {
           />
           {isSignup && (
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Use at least 8 characters.
+              Use at least 8 characters. After this step, Murikah sends a six-digit code to your email.
             </p>
           )}
         </div>
@@ -312,6 +440,84 @@ function AccountForm({ signup }: { signup: boolean }) {
         <p className="mt-4 text-center text-sm">
           <a href="/">Continue as guest</a>
         </p>
+      )}
+
+      {verification && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/40 px-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verify-email-title"
+        >
+          <form
+            onSubmit={verifyEmail}
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--background)] p-6 shadow-2xl"
+          >
+            <div className="text-center">
+              <div className="mx-auto grid size-11 place-items-center rounded-full bg-[#A9822E]/12 text-lg font-semibold text-[#A9822E]">
+                @
+              </div>
+              <h2 id="verify-email-title" className="mt-4 text-xl font-semibold">
+                Verify your email
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+                Enter the six-digit code sent to {verification.maskedEmail}. Your account is not activated until this code matches.
+              </p>
+            </div>
+
+            {verificationError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-600"
+              >
+                {verificationError}
+              </p>
+            )}
+
+            <label className="mt-5 block">
+              <span className="mb-2 block text-sm font-medium">Verification code</span>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                autoFocus
+                value={verificationCode}
+                onChange={(event) =>
+                  setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-center text-2xl font-semibold tracking-[0.35em] outline-none focus:ring-2 focus:ring-[#A9822E]/30"
+                aria-label="Six-digit verification code"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={verificationBusy || verificationCode.length !== 6}
+              className="mt-5 w-full rounded-xl bg-[#1E2A30] px-4 py-3 font-semibold text-white disabled:opacity-50"
+            >
+              {verificationBusy ? "Checking…" : "Verify and continue"}
+            </button>
+
+            <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <button
+                type="button"
+                disabled={verificationBusy || resendSeconds > 0}
+                onClick={resendVerification}
+                className="font-medium text-[var(--foreground)] disabled:text-[var(--muted-foreground)]"
+              >
+                {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
+              </button>
+              <a
+                href={verification.social ? "/login" : switchHref}
+                className="text-[var(--muted-foreground)] underline underline-offset-2"
+              >
+                {verification.social ? "Use another account" : "Change email"}
+              </a>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

@@ -254,74 +254,147 @@ async def guest_session(request: Request, response: Response):
     return {"guest": True, "ok": True}
 
 
-class Signup(BaseModel):
-    username: str = Field(min_length=3, max_length=254)
+class SignupStart(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=8, max_length=72)
 
 
-@router.post("/signup", status_code=201)
-async def signup(body: Signup, request: Request, response: Response):
+class SignupVerify(SignupStart):
+    challenge_id: str = Field(min_length=16, max_length=128)
+    code: str = Field(min_length=6, max_length=6)
+
+
+class VerificationResend(BaseModel):
+    challenge_id: str = Field(min_length=16, max_length=128)
+
+
+def _assert_account_available(email: str) -> None:
+    from deeptutor.multi_user import identity
+
+    with identity._USERS_WRITE_LOCK:
+        users = identity.load_users()
+        bootstrap_name, _ = identity._env_bootstrap_admin()
+        if email in {name.lower() for name in users} or email == bootstrap_name.lower():
+            raise HTTPException(409, "That account already exists. Please sign in.")
+
+
+@router.post("/signup", status_code=202)
+async def signup_start(body: SignupStart, request: Request):
+    """Send the mandatory first-account verification code; create no member yet."""
+    check_origin(request)
+    from deeptutor.services.auth import AUTH_ENABLED, POCKETBASE_ENABLED
+    from deeptutor.murikah_email_verification import (
+        start_challenge,
+        validate_signup_email,
+    )
+
+    if not AUTH_ENABLED or POCKETBASE_ENABLED:
+        raise HTTPException(503, "Account creation is unavailable. Please try again later.")
+    email = await validate_signup_email(body.email)
+    if len(body.password.encode()) > 72:
+        raise HTTPException(422, "Password must be at most 72 UTF-8 bytes.")
+    _assert_account_available(email)
+    challenge = start_challenge(
+        email,
+        purpose="local_signup",
+        request=request,
+    )
+    return {
+        "ok": True,
+        "verification_required": True,
+        "challenge_id": str(challenge.get("challenge_id") or ""),
+        "masked_email": str(challenge.get("masked_email") or ""),
+        "expires_in": int(challenge.get("expires_in") or 600),
+        "resend_after": int(challenge.get("resend_after") or 60),
+    }
+
+
+@router.post("/signup/verify", status_code=201)
+async def signup_verify(body: SignupVerify, request: Request, response: Response):
+    """Create/convert the account only after D1 confirms the emailed code."""
     check_origin(request)
     from deeptutor.multi_user import identity
     from deeptutor.services.auth import AUTH_ENABLED, POCKETBASE_ENABLED, hash_password
+    from deeptutor.murikah_email_verification import (
+        normalize_email,
+        verify_challenge,
+    )
+
     if not AUTH_ENABLED or POCKETBASE_ENABLED:
         raise HTTPException(503, "Account creation is unavailable. Please try again later.")
-    username = body.username.strip().lower()
-    if (username.startswith(PREFIX) or
-        not re.fullmatch(r"(?:[a-z0-9_.-]{3,64}|[^@\s]+@[^@\s]+\.[^@\s]+)", username)):
-        raise HTTPException(422, "Enter a valid email address or username.")
+    email = normalize_email(body.email)
     if len(body.password.encode()) > 72:
         raise HTTPException(422, "Password must be at most 72 UTF-8 bytes.")
+    _assert_account_available(email)
+
+    verified = verify_challenge(body.challenge_id, body.code)
+    if (
+        str(verified.get("purpose") or "") != "local_signup"
+        or str(verified.get("email") or "").strip().lower() != email
+    ):
+        raise HTTPException(403, "This verification code does not match this signup.")
+    verified_at = int(verified.get("verified_at") or time.time())
+
     password_hash = hash_password(body.password)
     payload = request_identity(request)
     guest_name = payload.username if payload and payload.username.startswith(PREFIX) else ""
     with identity._USERS_WRITE_LOCK:
         users = identity.load_users()
         bootstrap_name, _ = identity._env_bootstrap_admin()
-        if username in {name.lower() for name in users} or username == bootstrap_name.lower():
+        if email in {name.lower() for name in users} or email == bootstrap_name.lower():
             raise HTTPException(409, "That account already exists. Please sign in.")
         record = users.get(guest_name) if guest_name else None
         if record and record.get("id") != payload.user_id:
             raise HTTPException(409, "Guest session changed. Please reload and try again.")
         record = dict(record or {"id": identity.new_user_id(), "created_at": identity.utc_now()})
         record.update(hash=password_hash, role="user", preset="standard", disabled=False)
-        # D1 identity is updated before the local compatibility cache, so a
-        # successful account conversion never exists only on container disk.
+
         durable_identity = _durable_guest_store()
         if durable_identity is not None:
             try:
                 durable_identity.account_upsert(
                     record["id"],
-                    username=username,
+                    username=email,
                     role="member",
                     auth_provider="local",
+                    email=email,
+                    email_verified_at=verified_at,
                 )
             except durable_identity.PersistenceError as exc:
                 raise HTTPException(
                     503, "Account storage is temporarily unavailable. Please retry."
                 ) from exc
-        # Renaming keeps the workspace ID and all its conversations/files intact.
+
         if guest_name:
             users.pop(guest_name, None)
-        users[username] = record
+        users[email] = record
         identity._write_users(users)
+
     if guest_name:
         durable = _durable_guest_store()
         if durable is not None:
             try:
                 durable.guest_delete(record["id"])
             except durable.PersistenceError as exc:
-                # The account write has already succeeded. Never turn a successful
-                # signup into a retry loop just because the obsolete guest ledger
-                # could not be deleted; it expires automatically and is no longer
-                # consulted for the signed-in account.
                 print(f"[Murikah Tutor] Guest ledger cleanup deferred: {type(exc).__name__}")
         else:
             with ledger() as db:
                 db.execute("DELETE FROM guests WHERE uid=?", (record["id"],))
     grant_models(record["id"])
-    set_session(response, username, record["id"])
-    return {"ok": True, "role": "user"}
+    set_session(response, email, record["id"])
+    return {"ok": True, "role": "user", "email_verified": True}
+
+
+@router.post("/email/resend")
+async def resend_verification(body: VerificationResend, request: Request):
+    check_origin(request)
+    from deeptutor.murikah_email_verification import resend_challenge
+
+    result = resend_challenge(body.challenge_id, request=request)
+    return {
+        "ok": True,
+        "resend_after": int(result.get("resend_after") or 60),
+    }
 
 
 def guest_prompt(method):

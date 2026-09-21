@@ -32,6 +32,12 @@ The application integration is now repository-managed rather than a dashboard-on
 
 The existing `MURIKAH_TUTOR_AUTH_SECRET` authenticates this internal bridge with a separate HMAC request protocol, timestamp window and D1 replay nonce. No additional Cloudflare secret or API token is required.
 
+## D1 verified-email challenges
+
+`0005_tutor_email_verification.sql` adds the first-account verification state used by both local signup and new SSO identities. D1 stores the normalized email/domain, purpose/provider, HMAC digest of the six-digit code, attempt/send counters, expiry/cooldown timestamps and one-time consumption state. Plaintext verification codes are never persisted.
+
+The same migration adds non-secret `email` and `email_verified_at` account metadata. Existing accounts are grandfathered and continue to sign in normally; the gate applies to new accounts moving forward. The Resend API key remains a Cloudflare Worker Secret and is not forwarded into the Linux container or stored in D1/R2.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:
