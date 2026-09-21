@@ -107,6 +107,20 @@ export function sandboxReducer(state: SandboxState, action: SandboxAction): Sand
       const entry = logEntry(state, 'ENGAGEMENT_RESCHEDULED', 'engagement', action.engagementId, `Engagement moved to ${action.quarter}`, { quarter: before?.quarter }, { quarter: action.quarter });
       return { ...state, engagements, auditLog: [entry, ...state.auditLog] };
     }
+    case 'ADD_ACTION_EVIDENCE': {
+      const now = new Date().toISOString();
+      const actionPlans = state.actionPlans.map((item) =>
+        item.actionPlanId === action.actionPlanId
+          ? {
+              ...item,
+              evidence: [...item.evidence, { name: action.name, type: action.typeName, sizeKb: action.sizeKb }],
+              activity: [...item.activity, { id: item.actionPlanId + '-evidence-' + Date.now(), label: 'Implementation evidence uploaded', createdAt: now, actor: state.activeRoleCode, kind: 'evidence' }],
+            }
+          : item,
+      );
+      const entry = logEntry(state, 'EVIDENCE_ATTACHED', 'action_plan', action.actionPlanId, 'Implementation evidence attached in sandbox', null, { name: action.name });
+      return { ...state, actionPlans, auditLog: [entry, ...state.auditLog] };
+    }
     case 'UPDATE_ACTION_STATUS': {
       const existing = state.actionPlans.find((item) => item.actionPlanId === action.actionPlanId);
       if (!existing || existing.status === action.status) return state;
