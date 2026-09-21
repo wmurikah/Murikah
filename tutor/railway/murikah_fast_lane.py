@@ -79,7 +79,7 @@ def likely_incomplete_answer(text: str) -> bool:
         return True
     if value.count("```") % 2:
         return True
-    if value[-1] in ",;:—–-([{\/":
+    if value[-1] in ",;:—–-([{/":
         return True
     words = value.lower().split()
     if not words:
