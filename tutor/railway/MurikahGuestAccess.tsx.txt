@@ -1,0 +1,55 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { fetchAuthStatus } from "@/lib/auth";
+
+const SIGN_IN = "/login?next=%2Fchat";
+const SIGN_UP = "/register?next=%2Fchat";
+
+export default function MurikahGuestAccess() {
+  const [guest, setGuest] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchAuthStatus()
+      .then((status) => {
+        if (!alive) return;
+        setGuest(
+          Boolean(
+            status?.enabled &&
+              status?.authenticated &&
+              status.username?.startsWith("guest_"),
+          ),
+        );
+      })
+      .catch(() => {
+        if (alive) setGuest(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!guest) return null;
+
+  return (
+    <div
+      className="ml-1 flex shrink-0 items-center gap-1.5 border-l border-[var(--border)] pl-2"
+      aria-label="Guest account access"
+    >
+      <Link
+        href={SIGN_IN}
+        className="inline-flex h-8 items-center justify-center rounded-lg border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+      >
+        Sign in
+      </Link>
+      <Link
+        href={SIGN_UP}
+        className="inline-flex h-8 items-center justify-center rounded-lg bg-[#1E2A30] px-2.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+      >
+        Sign up
+      </Link>
+    </div>
+  );
+}

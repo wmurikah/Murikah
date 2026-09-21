@@ -299,6 +299,7 @@ def main() -> int:
             'COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py',
             'COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt',
             'COPY tutor/railway/MurikahInviteFriends.tsx.txt /opt/murikah/MurikahInviteFriends.tsx.txt',
+            'COPY tutor/railway/MurikahGuestAccess.tsx.txt /opt/murikah/MurikahGuestAccess.tsx.txt',
             'COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py',
             'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
             'COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py',
@@ -513,10 +514,31 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/railway/MurikahGuestAccess.tsx.txt",
+        (
+            'status.username?.startsWith("guest_")',
+            'const SIGN_IN = "/login?next=%2Fchat"',
+            'const SIGN_UP = "/register?next=%2Fchat"',
+            'aria-label="Guest account access"',
+            "Sign in",
+            "Sign up",
+        ),
+    )
+    require_markers(
+        "tutor/railway/apply_workspace_access.py",
+        (
+            '"MurikahGuestAccess.tsx.txt": "web/components/auth/MurikahGuestAccess.tsx"',
+            'import MurikahGuestAccess from "@/components/auth/MurikahGuestAccess";',
+            "<MurikahGuestAccess />",
+        ),
+    )
+    require_markers(
         "tutor/railway/MurikahGuestChatV2.tsx.txt",
         (
             'const SIGN_UP =',
             'import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";',
+            'username?: string',
+            'auth?.authenticated && !auth.username?.startsWith("guest_")',
         ),
     )
     require_markers(

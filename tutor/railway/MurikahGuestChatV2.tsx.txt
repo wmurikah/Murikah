@@ -46,7 +46,7 @@ import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
 import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 type Message = { role: "user" | "assistant"; content: string };
-type AuthStatusResponse = { authenticated?: boolean };
+type AuthStatusResponse = { authenticated?: boolean; username?: string };
 type GuestStatusResponse = { remaining?: number; requires_auth?: boolean };
 type GuestChatResponse = {
   answer?: string;
@@ -734,7 +734,7 @@ export default function MurikahGuestChat() {
       .then(([auth, guest, models]) => {
         if (!alive) return;
         if (Array.isArray(models?.options)) setModelOptions(models.options);
-        if (auth?.authenticated) {
+        if (auth?.authenticated && !auth.username?.startsWith("guest_")) {
           router.replace(messages.length ? RESUME_NEXT : "/chat");
           return;
         }

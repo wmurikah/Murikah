@@ -21,6 +21,7 @@ def main(root, overlay):
         "MurikahGuestBanner.tsx.txt": "web/components/auth/MurikahGuestBanner.tsx",
         "MurikahAccountPage.tsx.txt": "web/components/auth/MurikahAccountPage.tsx",
         "MurikahInviteFriends.tsx.txt": "web/components/auth/MurikahInviteFriends.tsx",
+        "MurikahGuestAccess.tsx.txt": "web/components/auth/MurikahGuestAccess.tsx",
     }.items():
         shutil.copy2(overlay / source, root / target)
     for page in ("login", "register"):
@@ -51,6 +52,36 @@ def main(root, overlay):
                 <Pencil size={15} strokeWidth={1.5} aria-hidden="true" />
                 {t("Edit")}
               </button>''')
+
+    # The guest is authenticated internally so DeepTutor can persist the
+    # workspace, but that internal guest JWT must not make voluntary account
+    # actions disappear. Keep Sign in / Sign up beside the real chat header
+    # actions for guest_* identities; members and admins never render them.
+    chat_workspace = root / "web/features/chat/components/ChatWorkspace.tsx"
+    replace(
+        chat_workspace,
+        'import { useAppShell } from "@/context/AppShellContext";',
+        'import { useAppShell } from "@/context/AppShellContext";\n'
+        'import MurikahGuestAccess from "@/components/auth/MurikahGuestAccess";',
+    )
+    replace(
+        chat_workspace,
+        '''                <HeaderActionButton
+                  onClick={toggleViewerPanel}
+                  active={viewerPanelOpen}
+                  icon={PanelRight}
+                  label={t("Activity")}
+                  title={t("Session activity, attachments & previews")}
+                />''',
+        '''                <HeaderActionButton
+                  onClick={toggleViewerPanel}
+                  active={viewerPanelOpen}
+                  icon={PanelRight}
+                  label={t("Activity")}
+                  title={t("Session activity, attachments & previews")}
+                />
+                <MurikahGuestAccess />''',
+    )
     main_py = root / "deeptutor/api/main.py"
     # Imported here after auth/router modules, avoiding initialization cycles.
     replace(main_py, '# Auth router is public — login/logout/register/status require no token',
