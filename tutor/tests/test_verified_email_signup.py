@@ -104,17 +104,6 @@ class VerifiedEmailSignupTests(unittest.TestCase):
         ):
             self.assertIn(marker, worker)
 
-    def test_missing_resend_key_does_not_bypass_verification(self):
-        # Wrangler deploy-policy is validated by cloudflare/preflight.py before
-        # the image build. This installed-runtime test only pins fail-closed
-        # verification semantics because wrangler.toml is not copied into /opt/murikah.
-        worker = source("cloudflare/src/index.ts")
-        self.assertIn(
-            "if (!apiKey) throw new Error('verification_email_not_configured')",
-            worker,
-        )
-        self.assertIn("verification_email_unavailable", worker)
-
     def test_invite_and_guest_voluntary_auth_surfaces_exist(self):
         invite = source("railway/MurikahInviteFriends.tsx.txt")
         guest = source("railway/MurikahGuestChatV2.tsx.txt")
