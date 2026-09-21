@@ -242,7 +242,7 @@ def main() -> None:
             "inherited = deployment_llm_rows(catalog)",
             "unique: list[dict[str, Any]] = []",
             "if active is None and options:",
-            "is_owner_bound(effective)",
+            "is_owner_bound(profile)",
             '"source": "admin"',
         ),
     )
