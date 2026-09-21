@@ -236,6 +236,45 @@ def main() -> None:
         ),
     )
     require_markers(
+        root / "deeptutor/multi_user/model_access.py",
+        (
+            "def deployment_llm_rows(",
+            "inherited = deployment_llm_rows(catalog)",
+            "unique: list[dict[str, Any]] = []",
+            "if active is None and options:",
+            "is_owner_bound(profile)",
+            '"source": "admin"',
+        ),
+    )
+    settings_nav = root / "web/features/settings/navigation/settings-nav.ts"
+    settings_nav_text = settings_nav.read_text(encoding="utf-8")
+    model_start = settings_nav_text.find("const MODEL_CHILDREN: SettingsLeaf[] = [")
+    model_end = settings_nav_text.find("const CHAT_CHILDREN: SettingsLeaf[] = [", model_start)
+    if model_start < 0 or model_end < 0:
+        raise RuntimeError(f"could not isolate model settings section in {settings_nav}")
+    model_section = settings_nav_text[model_start:model_end]
+    for key in (
+        "connections",
+        "llm",
+        "task-models",
+        "embedding",
+        "search",
+        "tts",
+        "stt",
+        "imagegen",
+        "videogen",
+    ):
+        key_pos = model_section.find(f'key: "{key}"')
+        if key_pos < 0:
+            raise RuntimeError(f"missing model settings leaf {key!r} in {settings_nav}")
+        next_item = model_section.find("\n  {", key_pos + 1)
+        item = model_section[key_pos : len(model_section) if next_item < 0 else next_item]
+        if "adminOnly: true" not in item:
+            raise RuntimeError(
+                f"ordinary users can still see admin model settings leaf {key!r}"
+            )
+
+    require_markers(
         root / "deeptutor/api/routers/auth.py",
         (
             "sliding: every normal auth-status read renews",
