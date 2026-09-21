@@ -71,7 +71,8 @@ export function sandboxReducer(state: SandboxState, action: SandboxAction): Sand
       const user = state.users.find((item) => item.userId === action.userId);
       if (!user) return state;
       const entry = logEntry(state, 'ROLE_SWITCHED', 'user', user.userId, `Role switched to ${user.roleLabel}`, { role: state.activeRoleCode }, { role: user.roleCode });
-      return { ...state, activeUserId: user.userId, activeRoleCode: user.roleCode, auditLog: [entry, ...state.auditLog] };
+      const screen = user.roleCode === 'BOARD_MEMBER' ? 'reports' : user.roleCode === 'UNIT_MANAGER' ? 'actions' : state.screen;
+      return { ...state, activeUserId: user.userId, activeRoleCode: user.roleCode, screen, selectedFindingId: null, selectedWorkPaperId: null, auditLog: [entry, ...state.auditLog] };
     }
     case 'SWITCH_ENTITY':
       return { ...state, activeAffiliateCode: action.affiliateCode };
@@ -197,12 +198,32 @@ export function sandboxReducer(state: SandboxState, action: SandboxAction): Sand
     }
     case 'ACCEPT_AI_DRAFT': {
       if (action.entityType === 'finding') {
-        const patch = action.field === 'rootCause' ? { rootCause: action.text } : action.field === 'recommendation' ? { recommendation: action.text } : {};
+        const patch =
+          action.field === 'rootCause'
+            ? { rootCause: action.text }
+            : action.field === 'recommendation'
+              ? { recommendation: action.text }
+              : action.field === 'observationDescription'
+                ? { observationDescription: action.text }
+                : action.field === 'criteria'
+                  ? { criteria: action.text }
+                  : {};
         const findings = state.findings.map((item) => item.id === action.entityId ? { ...item, ...patch } : item);
         const entry = logEntry(state, 'AI_DRAFT_ACCEPTED', 'work_paper', action.entityId, `AI-assisted draft accepted by ${state.activeRoleCode}`, null, { field: action.field });
         return { ...state, findings, auditLog: [entry, ...state.auditLog] };
       }
-      const workPapers = state.workPapers.map((item) => item.workPaperId === action.entityId ? { ...item, observationDescription: action.field === 'observationDescription' ? action.text : item.observationDescription, recommendation: action.field === 'recommendation' ? action.text : item.recommendation } : item);
+      const workPapers = state.workPapers.map((item) =>
+        item.workPaperId === action.entityId
+          ? {
+              ...item,
+              observationDescription:
+                action.field === 'observationDescription' ? action.text : item.observationDescription,
+              recommendation: action.field === 'recommendation' ? action.text : item.recommendation,
+              riskDescription: action.field === 'riskDescription' ? action.text : item.riskDescription,
+              standards: action.field === 'standards' ? action.text : item.standards,
+            }
+          : item,
+      );
       const entry = logEntry(state, 'AI_DRAFT_ACCEPTED', 'work_paper', action.entityId, `AI-assisted draft accepted by ${state.activeRoleCode}`, null, { field: action.field });
       return { ...state, workPapers, auditLog: [entry, ...state.auditLog] };
     }
@@ -212,6 +233,10 @@ export function sandboxReducer(state: SandboxState, action: SandboxAction): Sand
       return { ...state, notifications: state.notifications.map((item) => item.id === action.id ? { ...item, read: true } : item) };
     case 'DISMISS_TOUR':
       return { ...state, tourDismissed: true };
+    case 'LOG_EVENT': {
+      const entry = logEntry(state, action.action, action.entityType, action.entityId, action.details);
+      return { ...state, auditLog: [entry, ...state.auditLog] };
+    }
     case 'CLEAR_UNDO':
       return { ...state, undo: null };
     case 'UNDO_LAST': {
