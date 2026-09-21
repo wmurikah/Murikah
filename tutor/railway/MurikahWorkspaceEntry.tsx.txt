@@ -1,5 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 let sessionRequest: Promise<Response> | null = null;
 
@@ -56,9 +58,25 @@ export default function MurikahWorkspaceEntry() {
   // created in parallel. First-time visitors never see an authentication page.
   return (
     <main className="min-h-dvh bg-[var(--background)] text-[var(--foreground)]" aria-busy={!error}>
-      <header className="flex h-20 items-center border-b border-[var(--border)] px-5 sm:px-8">
+      <header className="flex h-20 items-center justify-between gap-3 border-b border-[var(--border)] px-5 sm:px-8">
         <div className="rounded-xl bg-[#1E2A30] px-5 py-3 text-lg font-semibold text-white shadow-sm">
           Murikah <span className="mx-2 text-[#C59A39]">|</span> Tutor
+        </div>
+        <div className="flex items-center gap-2">
+          <MurikahInviteFriends compact className="sm:hidden" />
+          <MurikahInviteFriends className="hidden sm:inline-flex" />
+          <Link
+            href="/login?next=%2Fchat"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold hover:bg-[var(--muted)]"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/register?next=%2Fchat"
+            className="rounded-lg bg-[#1E2A30] px-3 py-2 text-sm font-semibold text-white shadow-sm"
+          >
+            Sign up
+          </Link>
         </div>
       </header>
       <section className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-4xl flex-col px-5 py-8 sm:px-8">

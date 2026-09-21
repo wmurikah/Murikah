@@ -43,7 +43,7 @@ class AccessTests(unittest.TestCase):
         identity._write_users = lambda users: (self.users.clear(), self.users.update(users))
         identity.new_user_id = lambda: "u_" + access.secrets.token_hex(16)
         identity.utc_now = lambda: "2026-09-16T00:00:00Z"
-        identity._env_bootstrap_admin = lambda: ("admin", "protected")
+        identity._env_bootstrap_admin = lambda: ("admin@example.com", "protected")
         identity.get_user = self.users.get
         parent = ModuleType("deeptutor.multi_user")
         parent.identity = identity
@@ -58,10 +58,57 @@ class AccessTests(unittest.TestCase):
         guest._read_count = lambda cookie: int(cookie or 0)
         context = ModuleType("deeptutor.multi_user.context")
         context.get_current_user = lambda: self.payload
+        self.challenges = {}
+        email_verification = ModuleType("deeptutor.murikah_email_verification")
+
+        async def validate_signup_email(value):
+            email = str(value or "").strip().lower()
+            if "@" not in email or email.startswith("@") or email.endswith("@"):
+                raise access.HTTPException(422, "Enter a valid email address.")
+            return email
+
+        def start_challenge(email, *, purpose, request, provider=""):
+            challenge_id = "challenge_" + access.secrets.token_hex(16)
+            self.challenges[challenge_id] = {
+                "email": email,
+                "purpose": purpose,
+                "provider": provider,
+                "verified_at": int(time.time()),
+            }
+            return {
+                "challenge_id": challenge_id,
+                "masked_email": email,
+                "expires_in": 600,
+                "resend_after": 60,
+            }
+
+        def verify_challenge(challenge_id, code):
+            row = self.challenges.get(challenge_id)
+            if not row or code != "123456":
+                raise access.HTTPException(422, "That verification code is incorrect.")
+            return dict(row)
+
+        def normalize_email(value):
+            email = str(value or "").strip().lower()
+            if "@" not in email:
+                raise access.HTTPException(422, "Enter a valid email address.")
+            return email
+
+        def resend_challenge(challenge_id, *, request):
+            if challenge_id not in self.challenges:
+                raise access.HTTPException(410, "That verification code has expired.")
+            return {"ok": True, "resend_after": 60}
+
+        email_verification.validate_signup_email = validate_signup_email
+        email_verification.start_challenge = start_challenge
+        email_verification.verify_challenge = verify_challenge
+        email_verification.normalize_email = normalize_email
+        email_verification.resend_challenge = resend_challenge
         self.modules = patch.dict(sys.modules, {
             "deeptutor.multi_user": parent, "deeptutor.multi_user.identity": identity,
             "deeptutor.services.auth": auth, "deeptutor.api.routers.murikah_guest": guest,
             "deeptutor.multi_user.context": context,
+            "deeptutor.murikah_email_verification": email_verification,
         })
         self.modules.start()
         self.grants = patch.object(access, "grant_models")
@@ -106,6 +153,24 @@ class AccessTests(unittest.TestCase):
         self.client.cookies.set("dt_token", "test")
         return uid
 
+    def signup_start(self, email, password="strong-password", **extra):
+        return self.client.post(
+            "/api/murikah/access/signup",
+            json={"email": email, "password": password, **extra},
+        )
+
+    def signup_verify(self, start_response, email, password="strong-password"):
+        challenge_id = start_response.json()["challenge_id"]
+        return self.client.post(
+            "/api/murikah/access/signup/verify",
+            json={
+                "challenge_id": challenge_id,
+                "code": "123456",
+                "email": email,
+                "password": password,
+            },
+        )
+
     def test_seven_then_eighth_denied(self):
         uid = self.guest()
         for n in range(7): self.assertTrue(access.reserve(uid, str(n)))
@@ -135,36 +200,50 @@ class AccessTests(unittest.TestCase):
 
     def test_signup_keeps_workspace_id_and_revokes_guest(self):
         uid = self.guest()
-        res = self.client.post("/api/murikah/access/signup", json={"username": "wilbur", "password": "strong-password"})
+        start = self.signup_start("wilbur@example.com")
+        self.assertEqual(start.status_code, 202, start.text)
+        self.assertNotIn("wilbur@example.com", self.users)
+        res = self.signup_verify(start, "wilbur@example.com")
         self.assertEqual(res.status_code, 201, res.text)
-        self.assertEqual(self.users["wilbur"]["id"], uid)
-        self.assertEqual(self.users["wilbur"]["role"], "user")
+        self.assertEqual(self.users["wilbur@example.com"]["id"], uid)
+        self.assertEqual(self.users["wilbur@example.com"]["role"], "user")
         self.assertNotIn("guest_example", self.users)
-        with self.assertRaises(RuntimeError): access.reserve(uid, "after-promotion")
+        with self.assertRaises(RuntimeError):
+            access.reserve(uid, "after-promotion")
         cookie = res.headers["set-cookie"]
         self.assertIn("HttpOnly", cookie)
         self.assertIn("Secure", cookie)
 
     def test_first_public_signup_is_never_admin(self):
-        res = self.client.post("/api/murikah/access/signup", json={"username": "first", "password": "strong-password", "role": "admin"})
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(self.users["first"]["role"], "user")
+        start = self.signup_start("first@example.com", role="admin")
+        self.assertEqual(start.status_code, 202, start.text)
+        res = self.signup_verify(start, "first@example.com")
+        self.assertEqual(res.status_code, 201, res.text)
+        self.assertEqual(self.users["first@example.com"]["role"], "user")
 
     def test_duplicate_case_and_bootstrap_admin_cannot_be_overwritten(self):
-        self.users["Existing"] = {"id": "u_existing", "hash": "unchanged"}
-        for name in ("existing", "ADMIN"):
-            res = self.client.post("/api/murikah/access/signup", json={"username": name, "password": "strong-password"})
-            self.assertEqual(res.status_code, 409)
-        self.assertEqual(self.users["Existing"]["hash"], "unchanged")
+        self.users["Existing@Example.com"] = {"id": "u_existing", "hash": "unchanged"}
+        for email in ("existing@example.com", "ADMIN@EXAMPLE.COM"):
+            res = self.signup_start(email)
+            self.assertEqual(res.status_code, 409, res.text)
+        self.assertEqual(self.users["Existing@Example.com"]["hash"], "unchanged")
 
-    def test_invalid_password_and_reserved_name(self):
-        for username, password in (("guest_test", "strong-password"), ("user", "short"), ("user", "🎉" * 30)):
-            res = self.client.post("/api/murikah/access/signup", json={"username": username, "password": password})
-            self.assertEqual(res.status_code, 422)
+    def test_invalid_email_and_password_are_rejected_before_account_creation(self):
+        for email, password in (
+            ("guest_test", "strong-password"),
+            ("user@example.com", "short"),
+            ("user@example.com", "🎉" * 30),
+        ):
+            res = self.signup_start(email, password)
+            self.assertEqual(res.status_code, 422, res.text)
         self.assertFalse(self.users)
 
     def test_cross_origin_signup_rejected(self):
-        res = self.client.post("/api/murikah/access/signup", headers={"Origin": "https://other.example"}, json={"username": "user", "password": "strong-password"})
+        res = self.client.post(
+            "/api/murikah/access/signup",
+            headers={"Origin": "https://other.example"},
+            json={"email": "user@example.com", "password": "strong-password"},
+        )
         self.assertEqual(res.status_code, 403)
 
     def test_guest_creation_is_ordinary_and_carries_old_count(self):

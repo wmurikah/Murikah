@@ -21,7 +21,8 @@ import time
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from pydantic import BaseModel, Field
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
 
@@ -33,7 +34,9 @@ from deeptutor.services.file_io import atomic_write_text
 router = APIRouter()
 
 _STATE_COOKIE = "mt_oauth_state"
+_PENDING_COOKIE = "mt_oauth_pending"
 _STATE_TTL_SECONDS = 10 * 60
+_PENDING_TTL_SECONDS = 10 * 60
 _IDENTITIES_FILE = AUTH_DIR / "murikah_social_identities.json"
 _IDENTITIES_LOCK = threading.Lock()
 _PUBLIC_BASE_DEFAULT = "https://tutor.murikah.com"
@@ -179,6 +182,14 @@ def _write_identities(data: dict[str, dict[str, str]]) -> None:
     atomic_write_text(_IDENTITIES_FILE, json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _existing_social_username(provider: str, subject: str) -> str:
+    mapping_key = f"{provider}:{subject}"
+    with _IDENTITIES_LOCK:
+        existing = _read_identities().get(mapping_key) or {}
+    username = str(existing.get("username") or "")
+    return username if username and get_user_info(username) else ""
+
+
 def _social_username(provider: str, subject: str, email: str) -> str:
     mapping_key = f"{provider}:{subject}"
     with _IDENTITIES_LOCK:
@@ -211,7 +222,14 @@ def _social_username(provider: str, subject: str, email: str) -> str:
         return candidate
 
 
-def _persist_social_account(username: str, provider: str, info: dict[str, object]) -> None:
+def _persist_social_account(
+    username: str,
+    provider: str,
+    info: dict[str, object],
+    *,
+    email: str = "",
+    email_verified_at: int = 0,
+) -> None:
     if not _env("MURIKAH_TUTOR_RUNTIME").startswith("cloudflare-container"):
         return
     from deeptutor import murikah_persistence
@@ -224,6 +242,8 @@ def _persist_social_account(username: str, provider: str, info: dict[str, object
                 username=username,
                 role="admin" if str(info.get("role") or "").lower() == "admin" else "member",
                 auth_provider=provider,
+                email=email,
+                email_verified_at=email_verified_at,
             )
             return
         except murikah_persistence.PersistenceError as exc:
@@ -233,15 +253,84 @@ def _persist_social_account(username: str, provider: str, info: dict[str, object
     raise RuntimeError("Social account storage is temporarily unavailable.") from last_error
 
 
-def _login_redirect(provider: str, subject: str, email: str, next_path: str) -> RedirectResponse:
-    username = _social_username(provider, subject, email)
+def _session_redirect(username: str, next_path: str) -> RedirectResponse:
     info = get_user_info(username)
     if not info:
-        raise RuntimeError("Social account could not be created")
-    _persist_social_account(username, provider, info)
-    token = create_token(username, role=str(info.get("role") or "user"), user_id=str(info.get("id") or ""))
-    response = RedirectResponse(url=f"{_public_base()}{_safe_next(next_path)}", status_code=303)
+        raise RuntimeError("Social account could not be loaded")
+    token = create_token(
+        username,
+        role=str(info.get("role") or "user"),
+        user_id=str(info.get("id") or ""),
+    )
+    response = RedirectResponse(
+        url=f"{_public_base()}{_safe_next(next_path)}",
+        status_code=303,
+    )
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
+    response.delete_cookie(_STATE_COOKIE, path="/api/auth/oauth")
+    response.delete_cookie(_PENDING_COOKIE, path="/")
+    return response
+
+
+async def _login_or_verify_redirect(
+    provider: str,
+    subject: str,
+    email: str,
+    next_path: str,
+    request: Request,
+) -> RedirectResponse:
+    existing = _existing_social_username(provider, subject)
+    if existing:
+        return _session_redirect(existing, next_path)
+
+    from deeptutor.murikah_email_verification import (
+        start_challenge,
+        validate_signup_email,
+    )
+
+    verified_email = await validate_signup_email(email)
+    challenge = start_challenge(
+        verified_email,
+        purpose="social_signup",
+        provider=provider,
+        request=request,
+    )
+    challenge_id = str(challenge.get("challenge_id") or "")
+    if not challenge_id:
+        raise RuntimeError("Email verification challenge could not be created")
+
+    pending = _pack_state(
+        {
+            "provider": provider,
+            "subject": subject,
+            "email": verified_email,
+            "challenge_id": challenge_id,
+            "next": _safe_next(next_path),
+            "exp": int(datetime.now(timezone.utc).timestamp()) + _PENDING_TTL_SECONDS,
+        }
+    )
+    query = urlencode(
+        {
+            "verify_email": "1",
+            "challenge": challenge_id,
+            "provider": provider,
+            "masked_email": str(challenge.get("masked_email") or ""),
+            "next": _safe_next(next_path),
+        }
+    )
+    response = RedirectResponse(
+        url=f"{_public_base()}/login?{query}",
+        status_code=303,
+    )
+    response.set_cookie(
+        key=_PENDING_COOKIE,
+        value=pending,
+        max_age=_PENDING_TTL_SECONDS,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
     response.delete_cookie(_STATE_COOKIE, path="/api/auth/oauth")
     return response
 
@@ -250,6 +339,7 @@ def _error_redirect(message: str) -> RedirectResponse:
     safe = urlencode({"oauth_error": message[:160]})
     response = RedirectResponse(url=f"{_public_base()}/login?{safe}", status_code=303)
     response.delete_cookie(_STATE_COOKIE, path="/api/auth/oauth")
+    response.delete_cookie(_PENDING_COOKIE, path="/")
     return response
 
 
@@ -342,6 +432,69 @@ async def _exchange_identity(
         return subject, email
 
 
+class SocialEmailVerification(BaseModel):
+    challenge_id: str = Field(min_length=16, max_length=128)
+    code: str = Field(min_length=6, max_length=6)
+
+
+@router.post("/verify-email")
+async def verify_social_email(
+    body: SocialEmailVerification,
+    request: Request,
+    response: Response,
+) -> dict:
+    from deeptutor.murikah_access import check_origin
+    from deeptutor.murikah_email_verification import verify_challenge
+
+    check_origin(request)
+    try:
+        pending = _unpack_state(request.cookies.get(_PENDING_COOKIE))
+    except ValueError as exc:
+        raise HTTPException(410, "This sign-up verification has expired. Start again.") from exc
+
+    if str(pending.get("challenge_id") or "") != body.challenge_id:
+        raise HTTPException(403, "This verification code does not match this sign-up.")
+    provider = str(pending.get("provider") or "")
+    subject = str(pending.get("subject") or "")
+    email = str(pending.get("email") or "").strip().lower()
+    if provider not in _PROVIDER_LABELS or not subject or not email:
+        raise HTTPException(403, "This social sign-up is incomplete. Start again.")
+
+    verified = verify_challenge(body.challenge_id, body.code)
+    if (
+        str(verified.get("purpose") or "") != "social_signup"
+        or str(verified.get("provider") or "") != provider
+        or str(verified.get("email") or "").strip().lower() != email
+    ):
+        raise HTTPException(403, "This verification code does not match this sign-up.")
+
+    username = _social_username(provider, subject, email)
+    info = get_user_info(username)
+    if not info:
+        raise HTTPException(503, "Social account could not be created.")
+    verified_at = int(verified.get("verified_at") or time.time())
+    _persist_social_account(
+        username,
+        provider,
+        info,
+        email=email,
+        email_verified_at=verified_at,
+    )
+    token = create_token(
+        username,
+        role=str(info.get("role") or "user"),
+        user_id=str(info.get("id") or ""),
+    )
+    response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
+    response.delete_cookie(_PENDING_COOKIE, path="/")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "ok": True,
+        "next": _safe_next(str(pending.get("next") or "/chat")),
+        "email_verified": True,
+    }
+
+
 @router.get("/providers")
 async def providers() -> dict:
     return {
@@ -426,7 +579,13 @@ async def _finish_callback(
             verifier=str(saved.get("verifier") or ""),
             nonce=str(saved.get("nonce") or ""),
         )
-        return _login_redirect(provider, subject, email, str(saved.get("next") or "/chat"))
+        return await _login_or_verify_redirect(
+            provider,
+            subject,
+            email,
+            str(saved.get("next") or "/chat"),
+            request,
+        )
     except (ValueError, JWTError, httpx.HTTPError) as exc:
         return _error_redirect(str(exc) or "Social sign-in failed")
     except Exception:

@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v31"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v32"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -216,11 +216,13 @@ def main() -> int:
             '"MURIKAH_TUTOR_AUTH_SECRET"',
             '"MURIKAH_GOOGLE_CLIENT_ID"',
             '"MURIKAH_GOOGLE_CLIENT_SECRET"',
+            '"RESEND_API_KEY"',
             '"MURIKAH_NVIDIA_NIM_API_KEY"',
             '"MURIKAH_DASHSCOPE_API_KEY"',
             '"MURIKAH_TAVILY_API_KEY"',
             'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
             'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
+            'RESEND_FROM_EMAIL = "Murikah Tutor <noreply@murikah.com>"',
             'MURIKAH_FAST_CHAT_MODEL = "gemini-3.5-flash-lite"',
             'MURIKAH_FAST_CHAT_QWEN_MODEL = "qwen3.8-flash"',
         ),
@@ -277,6 +279,9 @@ def main() -> int:
             'LABEL com.murikah.tutor.cloudflare-image-rev=',
             'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
             'COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py',
+            'COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py',
+            'COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt',
+            'COPY tutor/railway/MurikahInviteFriends.tsx.txt /opt/murikah/MurikahInviteFriends.tsx.txt',
             'COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py',
             'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
             'COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py',
@@ -294,12 +299,16 @@ def main() -> int:
             'COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/settings.py /app/deeptutor/api/routers/settings.py',
             'COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx',
             'tests/integration/settings-admin-boundary.spec.tsx',
+            'COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verified-email-invites.spec.tsx',
+            'tests/integration/verified-email-invites.spec.tsx',
             '"manim>=0.19.0,<0.20"',
             'texlive-latex-base',
             'dvisvgm',
             'python /opt/murikah/persist_learning_journal.py /src/DeepTutor',
             'python /opt/murikah/brand_chat_status.py /src/DeepTutor',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_email_verification.py /app/deeptutor/murikah_email_verification.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/disposable_email_domains.txt /app/deeptutor/disposable_email_domains.txt',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py',
             'COPY tutor/railway /opt/murikah/railway',
             'COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx',
@@ -350,6 +359,7 @@ def main() -> int:
             'persistenceConfigured',
             'workerSecretConfigured',
             'authSecretConfigured',
+            'verificationEmailConfigured',
             'geminiFastLaneConfigured',
             'MURIKAH_GEMINI_API_KEY',
             'MURIKAH_FAST_CHAT_MODEL',
@@ -466,6 +476,80 @@ def main() -> int:
             'aria-current={!isSignup ? "page" : undefined}',
             'aria-current={isSignup ? "page" : undefined}',
             '"bg-[#1E2A30] text-white shadow-md ring-1 ring-[#1E2A30]"',
+            'verify_email',
+            '/api/murikah/access/signup/verify',
+            '/api/auth/oauth/verify-email',
+            'Verify your email',
+            'autoComplete="one-time-code"',
+            '<MurikahInviteFriends />',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahInviteFriends.tsx.txt",
+        (
+            "Invite friends to Murikah Tutor",
+            "mailto:?subject=",
+            "https://wa.me/?text=",
+            "navigator.share",
+            "Copy link",
+            "conversations and account data are never included",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahGuestChatV2.tsx.txt",
+        (
+            'const SIGN_UP =',
+            'import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";',
+        ),
+    )
+    require_markers(
+        "tutor/railway/polish_guest_shell.py",
+        (
+            '<MurikahInviteFriends compact className="sm:hidden" />',
+            'href={USERNAME_SIGN_IN}',
+            'href={SIGN_UP}',
+            'Sign up',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahWorkspaceEntry.tsx.txt",
+        (
+            '<MurikahInviteFriends',
+            'href="/login?next=%2Fchat"',
+            'href="/register?next=%2Fchat"',
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_email_verification.py",
+        (
+            "MURIKAH_VERIFIED_EMAIL_V1 = True",
+            "disposable_domains",
+            "privaterelay.appleid.com",
+            "cloudflare-dns.com/dns-query",
+            "Temporary or disposable email addresses cannot be used",
+            "email_verification_start",
+            "email_verification_verify",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_access.py",
+        (
+            '@router.post("/signup", status_code=202)',
+            '@router.post("/signup/verify", status_code=201)',
+            '@router.post("/email/resend")',
+            "verification_required",
+            "email_verified_at=verified_at",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_oauth.py",
+        (
+            '_PENDING_COOKIE = "mt_oauth_pending"',
+            "def _existing_social_username(",
+            "async def _login_or_verify_redirect(",
+            '@router.post("/verify-email")',
+            "purpose=\"social_signup\"",
+            "email_verified_at=verified_at",
         ),
     )
     require_markers(
@@ -577,6 +661,8 @@ def main() -> int:
             'schemaVersion',
             'learningJournalSchemaVersion',
             'ownershipSchemaVersion',
+            'emailVerificationSchemaVersion',
+            'verificationEmailConfigured',
             'unregisteredObjectCount',
             'every durable manifest object has a D1 ownership record',
             'MURIKAH_TUTOR_OWNERSHIP_TIMEOUT',
@@ -606,6 +692,7 @@ def main() -> int:
             "python tutor/scripts/preflight.py",
             "npm --prefix tutor/cloudflare run deploy:staging",
             "MURIKAH_TUTOR_AUTH_SECRET",
+            "RESEND_API_KEY",
             "PERSISTENCE.md",
         ),
     )
@@ -664,6 +751,20 @@ def main() -> int:
         ("CREATE TRIGGER",),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0005_tutor_email_verification.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS tutor_email_verifications",
+            "code_digest TEXT NOT NULL",
+            "attempts INTEGER NOT NULL DEFAULT 0",
+            "email_verified_at INTEGER",
+            "email_verification_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0005_tutor_email_verification.sql",
+        ("CREATE TRIGGER", "code TEXT"),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "/learning/actor",
@@ -684,8 +785,15 @@ def main() -> int:
             "/ownership/reconcile",
             "/ownership/status",
             "/account/upsert",
+            "/email/start",
+            "/email/resend",
+            "/email/verify",
+            "sendVerificationEmail",
+            "RESEND_API_KEY",
+            "code_digest",
             "/audit",
             "ownershipSchemaVersion",
+            "emailVerificationSchemaVersion",
             "unregisteredObjectCount",
             "mtime_ms",
             "INSERT OR IGNORE INTO guest_prompts",
@@ -704,6 +812,9 @@ def main() -> int:
             "def sync_loop()",
             "def object_ownership(",
             "def account_upsert(",
+            "def email_verification_start(",
+            "def email_verification_resend(",
+            "def email_verification_verify(",
             "def access_audit(",
             "def reconcile_ownership(",
             "def reconcile_accounts(",
@@ -780,6 +891,11 @@ def main() -> int:
     print(" - new user-owned R2 writes use canonical users/<user-id>/<object-type>/<object-id> keys")
     print(" - non-secret account role/status metadata is reconciled into D1 while credentials remain in Cloudflare Secrets/protected auth storage")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
+    print(" - new local and SSO accounts require a one-time emailed code before any member session is issued")
+    print(" - disposable email domains are rejected while legitimate consumer, Apple relay, school, university and corporate MX domains are accepted")
+    print(" - verification OTPs are HMAC-digested in D1, expire in 10 minutes, are rate-limited, and are never stored in plaintext")
+    print(" - guests can voluntarily sign in or sign up from the top-right before exhausting their seven interactions")
+    print(" - Invite friends is available on guest and account surfaces with copy, email, WhatsApp and native share actions")
     print(" - sign-in and sign-up tabs have explicit active-state contrast")
     print(" - Math Animator dependencies are installed and smoke-tested in the production image")
     print(" - Math Animator planning/summary JSON stages use bounded multi-provider recovery with deterministic fallbacks")

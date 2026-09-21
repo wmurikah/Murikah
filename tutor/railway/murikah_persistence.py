@@ -187,6 +187,8 @@ def account_upsert(
     username: str,
     role: str,
     auth_provider: str = "local",
+    email: str = "",
+    email_verified_at: int = 0,
 ) -> None:
     if not enabled():
         return
@@ -198,6 +200,59 @@ def account_upsert(
             "username": "" if role == "guest" else _learning_text(username, 254),
             "role": _learning_text(role, 16),
             "auth_provider": _learning_text(auth_provider or "local", 32),
+            "email": _learning_text(email, 254),
+            "email_verified_at": max(0, int(email_verified_at or 0)),
+        },
+    )
+
+
+def email_verification_start(
+    email: str,
+    *,
+    purpose: str,
+    provider: str = "",
+    requester_hash: str = "",
+) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Email verification is unavailable outside durable Tutor storage.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/email/start",
+        {
+            "email": _learning_text(email, 254),
+            "purpose": _learning_text(purpose, 32),
+            "provider": _learning_text(provider, 32),
+            "requester_hash": _learning_text(requester_hash, 64),
+        },
+    )
+
+
+def email_verification_resend(
+    challenge_id: str,
+    *,
+    requester_hash: str = "",
+) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Email verification is unavailable outside durable Tutor storage.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/email/resend",
+        {
+            "challenge_id": _learning_text(challenge_id, 128),
+            "requester_hash": _learning_text(requester_hash, 64),
+        },
+    )
+
+
+def email_verification_verify(challenge_id: str, code: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Email verification is unavailable outside durable Tutor storage.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/email/verify",
+        {
+            "challenge_id": _learning_text(challenge_id, 128),
+            "code": _learning_text(code, 12),
         },
     )
 

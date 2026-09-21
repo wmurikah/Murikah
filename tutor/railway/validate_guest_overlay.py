@@ -78,6 +78,10 @@ def main() -> None:
             'h-[calc(100dvh-4rem)]',
             'ref={transcriptRef} className="mx-auto min-h-0 w-full max-w-3xl flex-1 space-y-6 overflow-y-auto overscroll-y-contain scroll-smooth',
             'shrink-0 bg-[var(--background)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-3',
+            'const SIGN_UP =',
+            '<MurikahInviteFriends',
+            'href={USERNAME_SIGN_IN}',
+            'href={SIGN_UP}',
         ),
     )
     forbid_markers(
@@ -163,6 +167,22 @@ def main() -> None:
             'aria-current={!isSignup ? "page" : undefined}',
             'aria-current={isSignup ? "page" : undefined}',
             "bg-[#1E2A30] text-white shadow-md",
+            'verify_email',
+            '/api/murikah/access/signup/verify',
+            '/api/auth/oauth/verify-email',
+            "Verify your email",
+            'autoComplete="one-time-code"',
+            "<MurikahInviteFriends />",
+        ),
+    )
+    require_markers(
+        root / "web/components/auth/MurikahInviteFriends.tsx",
+        (
+            "Invite friends to Murikah Tutor",
+            "mailto:?subject=",
+            "https://wa.me/?text=",
+            "navigator.share",
+            "Copy link",
         ),
     )
     require_markers(
@@ -293,13 +313,43 @@ def main() -> None:
             "def access_audit(",
             "def reconcile_ownership(",
             "def reconcile_accounts(",
+            "def email_verification_start(",
+            "def email_verification_resend(",
+            "def email_verification_verify(",
         ),
     )
+    require_markers(
+        root / "deeptutor/murikah_email_verification.py",
+        (
+            "MURIKAH_VERIFIED_EMAIL_V1 = True",
+            "disposable_domains",
+            "privaterelay.appleid.com",
+            "cloudflare-dns.com/dns-query",
+            "Temporary or disposable email addresses cannot be used",
+        ),
+    )
+    disposable = root / "deeptutor/disposable_email_domains.txt"
+    if not disposable.is_file():
+        raise RuntimeError(f"missing disposable email blocklist: {disposable}")
+    disposable_count = sum(
+        1
+        for line in disposable.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    if disposable_count < 5000:
+        raise RuntimeError(
+            f"disposable email blocklist unexpectedly small: {disposable_count}"
+        )
     require_markers(
         root / "deeptutor/murikah_access.py",
         (
             "durable.account_upsert(",
             "durable_identity.account_upsert(",
+            '@router.post("/signup", status_code=202)',
+            '@router.post("/signup/verify", status_code=201)',
+            '@router.post("/email/resend")',
+            "verification_required",
+            "email_verified_at=verified_at",
         ),
     )
     require_markers(
@@ -308,6 +358,11 @@ def main() -> None:
             "def _persist_social_account(",
             "murikah_persistence.account_upsert(",
             "Social account storage is temporarily unavailable.",
+            '_PENDING_COOKIE = "mt_oauth_pending"',
+            "def _existing_social_username(",
+            "async def _login_or_verify_redirect(",
+            '@router.post("/verify-email")',
+            "email_verified_at=verified_at",
         ),
     )
 

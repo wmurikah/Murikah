@@ -42,11 +42,14 @@ COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay
 COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
 COPY tutor/railway/hide_guest_account_ui.py /opt/murikah/hide_guest_account_ui.py
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
+COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py
+COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt
 COPY tutor/railway/murikah_diagram.py /opt/murikah/murikah_diagram.py
 COPY tutor/railway/murikah_er.py /opt/murikah/murikah_er.py
 COPY tutor/railway/MurikahWorkspaceEntry.tsx.txt /opt/murikah/MurikahWorkspaceEntry.tsx.txt
 COPY tutor/railway/MurikahGuestBanner.tsx.txt /opt/murikah/MurikahGuestBanner.tsx.txt
 COPY tutor/railway/MurikahAccountPage.tsx.txt /opt/murikah/MurikahAccountPage.tsx.txt
+COPY tutor/railway/MurikahInviteFriends.tsx.txt /opt/murikah/MurikahInviteFriends.tsx.txt
 COPY tutor/railway/prepare_next_build.py /opt/murikah/prepare_next_build.py
 # The Next.js overlay sources are stored with a trailing .txt in this monorepo
 # so the root Astro/TypeScript checker does not compile them as Murikah site
@@ -102,7 +105,8 @@ COPY tutor/tests/diagram-studio.spec.tsx.txt ./tests/integration/diagram-studio.
 COPY tutor/tests/guest-limit.spec.tsx.txt ./tests/integration/guest-limit.spec.tsx
 COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx
 COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx
+COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verified-email-invites.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
@@ -148,6 +152,8 @@ RUN apt-get update \
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py /app/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_email_verification.py /app/deeptutor/murikah_email_verification.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/disposable_email_domains.txt /app/deeptutor/disposable_email_domains.txt
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_diagram.py /app/deeptutor/murikah_diagram.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_er.py /app/deeptutor/murikah_er.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/auth.py /app/deeptutor/services/auth.py

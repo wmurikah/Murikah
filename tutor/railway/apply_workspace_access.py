@@ -15,9 +15,12 @@ def replace(path, old, new):
 def main(root, overlay):
     for source, target in {
         "murikah_access.py": "deeptutor/murikah_access.py",
+        "murikah_email_verification.py": "deeptutor/murikah_email_verification.py",
+        "disposable_email_domains.txt": "deeptutor/disposable_email_domains.txt",
         "MurikahWorkspaceEntry.tsx.txt": "web/app/page.tsx",
         "MurikahGuestBanner.tsx.txt": "web/components/auth/MurikahGuestBanner.tsx",
         "MurikahAccountPage.tsx.txt": "web/components/auth/MurikahAccountPage.tsx",
+        "MurikahInviteFriends.tsx.txt": "web/components/auth/MurikahInviteFriends.tsx",
     }.items():
         shutil.copy2(overlay / source, root / target)
     for page in ("login", "register"):

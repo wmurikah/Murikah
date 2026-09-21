@@ -43,6 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AuthStatusResponse = { authenticated?: boolean };
@@ -179,6 +180,7 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
 const RESUME_NEXT = "/chat?resume_guest=1";
 const USERNAME_SIGN_IN = `/login?next=${encodeURIComponent(RESUME_NEXT)}`;
+const SIGN_UP = `/register?next=${encodeURIComponent(RESUME_NEXT)}`;
 const AUTH_GATE = `/login?guest_exhausted=1&next=${encodeURIComponent(RESUME_NEXT)}`;
 
 const MODES: ModeOption[] = [
