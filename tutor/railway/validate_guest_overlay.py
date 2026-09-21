@@ -275,6 +275,43 @@ def main() -> None:
             )
 
     require_markers(
+        root / "deeptutor/api/routers/settings.py",
+        (
+            "change_deployment_settings",
+            "model_provider_configuration",
+            "Model and provider configuration is managed by an administrator.",
+            "def _require_codex_oauth_actor() -> None:",
+            "_require_settings_admin()",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/murikah_persistence.py",
+        (
+            "def object_ownership(",
+            "x-murikah-object-owner-kind",
+            "def account_upsert(",
+            "def access_audit(",
+            "def reconcile_ownership(",
+            "def reconcile_accounts(",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/murikah_access.py",
+        (
+            "durable.account_upsert(",
+            "durable_identity.account_upsert(",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/api/routers/murikah_oauth.py",
+        (
+            "def _persist_social_account(",
+            "murikah_persistence.account_upsert(",
+            "Social account storage is temporarily unavailable.",
+        ),
+    )
+
+    require_markers(
         root / "deeptutor/api/routers/auth.py",
         (
             "sliding: every normal auth-status read renews",
