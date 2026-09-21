@@ -66,6 +66,12 @@ function SandboxApp(){
   },[fullScreen]);
 
   useEffect(()=>{
+    const exit=()=>setFullScreen(false);
+    window.addEventListener('murikah:sandbox-exit-fullscreen',exit);
+    return()=>window.removeEventListener('murikah:sandbox-exit-fullscreen',exit);
+  },[]);
+
+  useEffect(()=>{
     if(!state.undo) return;
     const timer=window.setTimeout(()=>dispatch({type:'CLEAR_UNDO'}),7000);
     return()=>window.clearTimeout(timer);
@@ -109,7 +115,7 @@ function SandboxApp(){
     <div className="sb-app" aria-label="Assurance OS sample workspace">
       <aside className="sb-sidebar">
         <div className="sb-sidebar__brand">
-          <img src="/images/murikah-logo-dark.png" alt="Murikah" width="875" height="155"/>
+          <img src="/brand/murikah-header-lockup.svg" alt="Murikah" width="875" height="155"/>
           <span>Assurance OS</span>
         </div>
 
