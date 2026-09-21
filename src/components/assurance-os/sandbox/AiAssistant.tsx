@@ -43,7 +43,18 @@ export default function AiAssistant({ open, onClose, entityType, entityId }: { o
     return()=>window.clearInterval(timer);
   },[full,streaming]);
 
-  const field=kind==='root'?'rootCause':kind==='action'?'recommendation':entityType==='work_paper'?'observationDescription':'rootCause';
+  const field =
+    kind === 'root'
+      ? entityType === 'finding'
+        ? 'rootCause'
+        : 'riskDescription'
+      : kind === 'action'
+        ? 'recommendation'
+        : kind === 'evidence'
+          ? 'observationDescription'
+          : entityType === 'finding'
+            ? 'criteria'
+            : 'standards';
 
   return <Drawer open={open} onClose={onClose} title="AI assistant" wide>
     <div className="sb-ai">
