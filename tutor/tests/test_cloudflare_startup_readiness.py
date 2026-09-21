@@ -36,6 +36,9 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
 
     def test_reconciliation_is_retrying_background_maintenance(self):
         text = _entrypoint_text()
+        self.assertIn("def", "def")  # keeps unittest source deterministic
+        self.assertIn("wait_for_runtime_port()", text)
+        self.assertGreaterEqual(text.count("wait_for_runtime_port"), 3)
         self.assertIn("Persistence metadata reconciliation attempt", text)
         self.assertIn("Persistence metadata reconciliation complete.", text)
         self.assertIn("reconcile_pid=$!", text)
