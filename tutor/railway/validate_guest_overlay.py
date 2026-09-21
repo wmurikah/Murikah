@@ -163,6 +163,10 @@ def main() -> None:
             'aria-current={!isSignup ? "page" : undefined}',
             'aria-current={isSignup ? "page" : undefined}',
             "bg-[#1E2A30] text-white shadow-md",
+            "https://murikah.com/privacy",
+            "https://murikah.com/terms",
+            "Privacy Policy",
+            "Terms of Service",
         ),
     )
     require_markers(
