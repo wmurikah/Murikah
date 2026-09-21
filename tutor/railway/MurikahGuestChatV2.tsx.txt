@@ -43,6 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AuthStatusResponse = { authenticated?: boolean };
@@ -179,6 +180,7 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
 const RESUME_NEXT = "/chat?resume_guest=1";
 const USERNAME_SIGN_IN = `/login?next=${encodeURIComponent(RESUME_NEXT)}`;
+const SIGN_UP = `/register?next=${encodeURIComponent(RESUME_NEXT)}`;
 const AUTH_GATE = `/login?guest_exhausted=1&next=${encodeURIComponent(RESUME_NEXT)}`;
 
 const MODES: ModeOption[] = [
@@ -1027,14 +1029,24 @@ export default function MurikahGuestChat() {
           </div>
 
           <div className="mt-3 border-t border-[var(--border)]/70 px-2 pt-3">
-            <Link
-              href={USERNAME_SIGN_IN}
-              onClick={persistGuestState}
-              title="Sign in and continue this conversation"
-              className={`block rounded-lg py-2 text-sm font-medium text-[var(--foreground)]/75 hover:bg-[var(--muted)] hover:text-[var(--foreground)] ${sidebarCollapsed ? "px-1 text-center text-xs" : "px-3"}`}
-            >
-              {sidebarCollapsed ? "Sign in" : "Sign in · keep this chat"}
-            </Link>
+            <div className={sidebarCollapsed ? "space-y-1" : "grid grid-cols-2 gap-1.5"}>
+              <Link
+                href={USERNAME_SIGN_IN}
+                onClick={persistGuestState}
+                title="Sign in and continue this conversation"
+                className={`rounded-lg py-2 text-center text-sm font-medium text-[var(--foreground)]/75 hover:bg-[var(--muted)] hover:text-[var(--foreground)] ${sidebarCollapsed ? "block px-1 text-xs" : "px-2"}`}
+              >
+                Sign in
+              </Link>
+              <Link
+                href={SIGN_UP}
+                onClick={persistGuestState}
+                title="Create an account and keep this conversation"
+                className={`rounded-lg bg-[#1E2A30] py-2 text-center text-sm font-semibold text-white hover:opacity-90 ${sidebarCollapsed ? "block px-1 text-xs" : "px-2"}`}
+              >
+                Sign up
+              </Link>
+            </div>
             {!sidebarCollapsed && <p className="mt-2 px-3 text-[11px] text-[var(--muted-foreground)]">Apache-2.0</p>}
           </div>
         </aside>
@@ -1051,14 +1063,23 @@ export default function MurikahGuestChat() {
                 <span aria-hidden>·</span>
                 <span>{activeSpace.label}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="hidden text-xs text-[var(--muted-foreground)] sm:inline">{remaining} guest {remaining === 1 ? "interaction" : "interactions"} left</span>
+              <div className="flex items-center gap-2">
+                <span className="hidden text-xs text-[var(--muted-foreground)] xl:inline">{remaining} guest {remaining === 1 ? "interaction" : "interactions"} left</span>
+                <MurikahInviteFriends compact className="sm:hidden" />
+                <MurikahInviteFriends className="hidden sm:inline-flex" />
                 <Link
                   href={USERNAME_SIGN_IN}
                   onClick={persistGuestState}
-                  className="text-sm font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+                  className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)]/80 hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 >
                   Sign in
+                </Link>
+                <Link
+                  href={SIGN_UP}
+                  onClick={persistGuestState}
+                  className="rounded-lg bg-[#1E2A30] px-3 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                >
+                  Sign up
                 </Link>
               </div>
             </div>
