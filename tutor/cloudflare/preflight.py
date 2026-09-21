@@ -499,9 +499,16 @@ def main() -> int:
         "tutor/railway/MurikahGuestChatV2.tsx.txt",
         (
             'const SIGN_UP =',
-            '<MurikahInviteFriends',
+            'import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";',
+        ),
+    )
+    require_markers(
+        "tutor/railway/polish_guest_shell.py",
+        (
+            '<MurikahInviteFriends compact className="sm:hidden" />',
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
+            'Sign up',
         ),
     )
     require_markers(
