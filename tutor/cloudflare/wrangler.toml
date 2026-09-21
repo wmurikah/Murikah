@@ -48,8 +48,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v27 prevents mid-response truncation by tracking finish reasons and silently continuing incomplete streams.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v27" }
+# v28 makes the admin model catalog the shared member model pool and keeps deployment model settings admin-only.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v28" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
