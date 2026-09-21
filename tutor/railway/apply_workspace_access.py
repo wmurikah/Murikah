@@ -94,6 +94,15 @@ async def validated_stream(source):
             text = str(chunk or "")
             if not text:
                 continue
+            # Finish metadata is an internal control frame, not learner text.
+            # Flush any ambiguous buffered content first so the sentinel cannot
+            # be concatenated into a JSON/code fragment and leak to the UI.
+            if parse_finish_signal(text) is not None:
+                if pending:
+                    yield pending
+                    pending = ""
+                yield text
+                continue
             pending += text
             normalized = pending.lstrip().lower()
             if not normalized:
