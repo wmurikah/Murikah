@@ -303,6 +303,9 @@ def main() -> int:
             'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
             'COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py',
             'python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor',
+            'COPY tutor/railway/add_virtual_internship_placeholder.py /opt/murikah/add_virtual_internship_placeholder.py',
+            'COPY tutor/railway/murikah-virtual-internship-page.tsx.txt /opt/murikah/murikah-virtual-internship-page.tsx',
+            'python /opt/murikah/add_virtual_internship_placeholder.py /src/DeepTutor /opt/murikah/murikah-virtual-internship-page.tsx',
             'COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py',
             'python /opt/murikah/harden_member_runtime.py /src/DeepTutor',
             'COPY tutor/railway/share_admin_models.py /opt/murikah/share_admin_models.py',
@@ -530,6 +533,38 @@ def main() -> int:
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
             'Sign up',
+            'href="/register?next=%2Fvirtual-internship"',
+            'aria-label="Virtual Internship — coming soon"',
+        ),
+    )
+    require_markers(
+        "tutor/VIRTUAL_INTERNSHIP_COMPETENCY_PASSPORT.md",
+        (
+            "Minimum standard internship duration: **90 calendar days**",
+            "## 12. Workplace politics and social dynamics",
+            "## 20. AI model use",
+            "## 22. Competency Evidence Record",
+            "## 34. Testing contract",
+            "## 37. Definition of done for the full product",
+        ),
+    )
+    require_markers(
+        "tutor/railway/add_virtual_internship_placeholder.py",
+        (
+            'href: "/virtual-internship"',
+            'label: "Virtual Internship"',
+            "icon: Briefcase",
+            "3+ month simulated workplace",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah-virtual-internship-page.tsx.txt",
+        (
+            "Virtual Internship",
+            "at least three months",
+            "AI workplace actors",
+            "Competency Passport",
+            "Start internship — coming later",
         ),
     )
     require_markers(
