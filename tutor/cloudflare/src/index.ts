@@ -1632,6 +1632,7 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
       runtime: env.MURIKAH_TUTOR_RUNTIME,
       adminPasswordConfigured: hasAdminSecret(runtimeEnv),
       authSecretConfigured: hasAuthSecret(runtimeEnv),
+      verificationEmailConfigured: Boolean(optional(env.RESEND_API_KEY)),
       geminiFastLaneConfigured: Boolean(runtimeEnv.MURIKAH_GEMINI_API_KEY),
       fastChatModel: runtimeEnv.MURIKAH_FAST_CHAT_MODEL,
       persistenceConfigured: Boolean(env.TUTOR_DB && env.TUTOR_FILES),
