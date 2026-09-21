@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 32" role="img" aria-labelledby="title">
+  <title id="title">Murikah</title>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 25V7.5L15.5 19.2 27.5 7.5V25" stroke="#F5F1E8" stroke-width="3.2"/>
+    <path d="M25.5 10L18.4 18.7" stroke="#D1AA58" stroke-width="2"/>
+    <g stroke="#F5F1E8" stroke-width="2.2">
+      <path d="M42 24V8l7 8 7-8v16"/>
+      <path d="M65 8v10.5c0 3.8 2.1 5.7 6 5.7s6-1.9 6-5.7V8"/>
+      <path d="M86 24V8h7.5c4 0 6 2 6 5s-2 5-6 5H86m8.2 0 6.3 6"/>
+      <path d="M108 8v16"/>
+      <path d="M117 8v16m0-7.8L130 8m-8 12 8.6 4"/>
+      <path d="M138 24 145 8l7 16m-11.7-6h9.4"/>
+      <path d="M161 8v16m13-16v16m-13-8h13"/>
+    </g>
+  </g>
+</svg>
