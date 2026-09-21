@@ -1,9 +1,10 @@
 "use client";
-import { Suspense, useCallback, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { login, invalidateAuthStatusCache } from "@/lib/auth";
 import { normalizeInternalReturnPath, inheritLoginHash } from "@/shared/auth/return-url";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 const GUEST_STATE_KEY = "murikah:tutor:guest-handoff:v2";
 const RESUME_NEXT = "/chat?resume_guest=1";
@@ -11,6 +12,12 @@ const RESUME_NEXT = "/chat?resume_guest=1";
 type SessionMessage = {
   role?: string;
   content?: string;
+};
+
+type VerificationState = {
+  challengeId: string;
+  maskedEmail: string;
+  social: boolean;
 };
 
 type SessionSnapshot = {
@@ -114,6 +121,29 @@ function AccountForm({ signup }: { signup: boolean }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(params.get("oauth_error") || "");
   const [busy, setBusy] = useState(false);
+  const [verification, setVerification] = useState<VerificationState | null>(() => {
+    const challengeId = params.get("challenge") || "";
+    return params.get("verify_email") === "1" && challengeId
+      ? {
+          challengeId,
+          maskedEmail: params.get("masked_email") || "your email",
+          social: true,
+        }
+      : null;
+  });
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationError, setVerificationError] = useState("");
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setInterval(
+      () => setResendSeconds((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
 
   const continuationForAccountChange = useCallback(async () => {
     return (await preserveGuestConversation(next)) ? RESUME_NEXT : next;
@@ -130,26 +160,34 @@ function AccountForm({ signup }: { signup: boolean }) {
     try {
       let destination = next;
       if (isSignup) {
-        // Local signup converts the temporary guest identity in-place, retaining
-        // the same user/workspace id and therefore the same session URL.
+        // New accounts are not created until the emailed six-digit code is
+        // verified. Passwords stay in this browser component until that step.
         const res = await fetch("/api/murikah/access/signup", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ email: username, password }),
         });
+        const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
           throw new Error(
             typeof body.detail === "string"
               ? body.detail
               : "Check your account details and try again.",
           );
         }
-        invalidateAuthStatusCache();
-        // Signup renames the current guest identity in place, so the original
-        // session remains authoritative and no transcript clone is needed.
-        window.localStorage.removeItem(GUEST_STATE_KEY);
+        const challengeId = String(body.challenge_id || "");
+        if (!challengeId) throw new Error("Email verification could not be started.");
+        setVerification({
+          challengeId,
+          maskedEmail: String(body.masked_email || username),
+          social: false,
+        });
+        setVerificationCode("");
+        setVerificationError("");
+        setResendSeconds(Math.max(0, Number(body.resend_after) || 60));
+        setBusy(false);
+        return;
       } else {
         // Signing into an existing account changes the user id. Snapshot the
         // guest transcript first, then import it into that account after login.
@@ -167,6 +205,92 @@ function AccountForm({ signup }: { signup: boolean }) {
           : "Couldn't reach Tutor. Please try again.",
       );
       setBusy(false);
+    }
+  }
+
+  async function verifyEmail(event: FormEvent) {
+    event.preventDefault();
+    if (!verification || verificationCode.length !== 6) return;
+    setVerificationBusy(true);
+    setVerificationError("");
+    try {
+      const endpoint = verification.social
+        ? "/api/auth/oauth/verify-email"
+        : "/api/murikah/access/signup/verify";
+      const payload = verification.social
+        ? {
+            challenge_id: verification.challengeId,
+            code: verificationCode,
+          }
+        : {
+            challenge_id: verification.challengeId,
+            code: verificationCode,
+            email: username,
+            password,
+          };
+      const res = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof body.detail === "string"
+            ? body.detail
+            : "That verification code could not be confirmed.",
+        );
+      }
+      invalidateAuthStatusCache();
+      if (!verification.social) {
+        // Local signup converts the guest identity in-place after verification.
+        window.localStorage.removeItem(GUEST_STATE_KEY);
+      }
+      const destination =
+        typeof body.next === "string" && body.next.startsWith("/")
+          ? body.next
+          : next;
+      window.location.assign(
+        inheritLoginHash(destination, window.location.hash),
+      );
+    } catch (cause) {
+      setVerificationError(
+        cause instanceof Error
+          ? cause.message
+          : "That verification code could not be confirmed.",
+      );
+      setVerificationBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (!verification || resendSeconds > 0 || verificationBusy) return;
+    setVerificationBusy(true);
+    setVerificationError("");
+    try {
+      const res = await fetch("/api/murikah/access/email/resend", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challenge_id: verification.challengeId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof body.detail === "string"
+            ? body.detail
+            : "A new code could not be sent.",
+        );
+      }
+      setResendSeconds(Math.max(0, Number(body.resend_after) || 60));
+      setVerificationCode("");
+    } catch (cause) {
+      setVerificationError(
+        cause instanceof Error ? cause.message : "A new code could not be sent.",
+      );
+    } finally {
+      setVerificationBusy(false);
     }
   }
 
