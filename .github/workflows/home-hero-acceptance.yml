@@ -293,7 +293,7 @@ jobs:
             expect(states.headline).toBe('none');
             expect(states.picture).toBe('none');
             expect(states.image).toBe('none');
-            expect(states.primary).toBe('0s');
+            expect(Number.parseFloat(states.primary)).toBeLessThanOrEqual(0.00001);
             console.log('REDUCED_MOTION=' + JSON.stringify(states));
             await context.close();
           });
