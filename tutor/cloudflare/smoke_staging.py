@@ -2,8 +2,9 @@
 """Post-deploy smoke test for Murikah Tutor Cloudflare staging.
 
 Runs in Cloudflare Workers Builds after `wrangler deploy`. It never reads secret
-values. It first verifies that the deployed Worker can see the required secrets,
-then waits for the real Tutor health route. On failure it prints safe isolated
+values. It first verifies that the deployed Worker can see startup-critical secrets,
+then waits for the real Tutor health route. Transactional email is reported
+separately because missing email configuration must block new signup, not deployment. On failure it prints safe isolated
 startup diagnostics so the build log contains the root cause automatically.
 """
 from __future__ import annotations
@@ -89,14 +90,17 @@ def main() -> int:
         config_code != 200
         or config.get("adminPasswordConfigured") is not True
         or config.get("authSecretConfigured") is not True
-        or config.get("verificationEmailConfigured") is not True
         or config.get("persistenceConfigured") is not True
     ):
-        print("Murikah Tutor staging smoke test: FAILED - required Worker secrets or persistence bindings are not visible at runtime")
+        print("Murikah Tutor staging smoke test: FAILED - startup-critical Worker secrets or persistence bindings are not visible at runtime")
         print(f"Worker config status: HTTP {config_code} {config_body[:1000]}")
         return 1
 
-    print(" - Worker runtime can see required admin/auth/email secrets and D1/R2 persistence bindings")
+    print(" - Worker runtime can see required admin/auth secrets and D1/R2 persistence bindings")
+    if config.get("verificationEmailConfigured") is True:
+        print(" - verification email is configured")
+    else:
+        print(" - verification email is not configured; new signup remains fail-closed until RESEND_API_KEY is added")
     try:
         persistence_code, persistence_body = get("/__muri/persistence-status")
         persistence = parse_json(persistence_body)
