@@ -24,7 +24,7 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
         reconcile = text.index(
             "python -m deeptutor.murikah_persistence reconcile-ownership"
         )
-        sync_loop = text.index("python -m deeptutor.murikah_persistence sync-loop &")
+        sync_loop = text.index("exec python -m deeptutor.murikah_persistence sync-loop")
 
         self.assertLess(backend, reconcile)
         self.assertLess(frontend, reconcile)
