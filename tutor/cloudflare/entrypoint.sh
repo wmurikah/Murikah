@@ -125,6 +125,22 @@ export PORT=3782
 export HOSTNAME=0.0.0.0
 export DEEPTUTOR_API_BASE_URL="http://127.0.0.1:8001"
 
+wait_for_runtime_port() {
+  python - <<'PY'
+import socket
+import time
+
+deadline = time.monotonic() + 45
+while time.monotonic() < deadline:
+    try:
+        with socket.create_connection(("127.0.0.1", 3782), timeout=0.5):
+            raise SystemExit(0)
+    except OSError:
+        time.sleep(0.25)
+raise SystemExit(1)
+PY
+}
+
 backend_pid=""
 frontend_pid=""
 persistence_pid=""
@@ -154,18 +170,27 @@ frontend_pid=$!
 
 # The checkpoint loop performs an immediate sync_once() internally, retries
 # transient persistence failures, and performs a final checkpoint on TERM/INT.
-# Running it in the background preserves the existing durability semantics
-# without putting R2/D1 round trips on the readiness critical path.
-python -m deeptutor.murikah_persistence sync-loop &
+# It waits until the frontend socket is actually listening before beginning any
+# R2/D1 work, so persistence I/O cannot compete with the cold-start critical path.
+(
+  if ! wait_for_runtime_port; then
+    echo "[Murikah Tutor] Persistence checkpoint loop could not observe port 3782; leaving service-failure handling to the main runtime." >&2
+    exit 1
+  fi
+  exec python -m deeptutor.murikah_persistence sync-loop
+) &
 persistence_pid=$!
 
 # v29 ownership/account reconciliation can touch many restored objects/accounts.
-# Run it independently with bounded retries so existing users can continue
-# working while metadata catches up. The deployment smoke test waits for the
-# ownership registry to reach zero unregistered objects before declaring the
-# release complete.
+# Run it independently with bounded retries only after the frontend socket is
+# live. The deployment smoke test waits for the ownership registry to reach
+# zero unregistered objects before declaring the release complete.
 (
   set +e
+  if ! wait_for_runtime_port; then
+    echo "[Murikah Tutor] Persistence metadata reconciliation could not observe port 3782; runtime health diagnostics will handle the startup failure." >&2
+    exit 1
+  fi
   delays=(1 2 4 8 12 20 30 45)
   attempt=0
   while [ "${attempt}" -lt "${#delays[@]}" ]; do
