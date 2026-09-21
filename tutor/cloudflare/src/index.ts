@@ -1580,6 +1580,9 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
     const ownershipSchema = await env.TUTOR_DB.prepare(
       "SELECT value FROM persistence_meta WHERE key = 'ownership_schema_version'",
     ).first<{ value: string }>();
+    const emailVerificationSchema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'email_verification_schema_version'",
+    ).first<{ value: string }>();
     const ownershipCounts = await env.TUTOR_DB.prepare(
       'SELECT ' +
         '(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL) AS owned_objects, ' +
@@ -1597,6 +1600,7 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
       schemaVersion: schema?.value || '',
       learningJournalSchemaVersion: learningSchema?.value || '',
       ownershipSchemaVersion: ownershipSchema?.value || '',
+      emailVerificationSchemaVersion: emailVerificationSchema?.value || '',
       learningTurnCount: learningTurns?.count || 0,
       durableObjectCount: objects?.count || 0,
       ownedObjectCount: ownershipCounts?.owned_objects || 0,
