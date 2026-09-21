@@ -62,6 +62,7 @@ async function neutralizeCurrentPageIndicator(page) {
     content: [
       '.site-nav-link[aria-current="page"] { color: var(--header-fg-muted) !important; }',
       '.site-nav-link[aria-current="page"]::after { transform: scaleX(0) !important; }',
+      'html { overflow-y: scroll !important; scrollbar-gutter: stable !important; }',
     ].join('\n'),
   });
 }
@@ -224,10 +225,11 @@ test('sandbox full-screen keeps the slim shared header and exits through it', as
   await page.getByRole('button', { name: 'Open full screen' }).click();
   await expect(page.locator('html')).toHaveClass(/sandbox-fullscreen/);
   await expect(page.locator('.site-header')).toHaveCSS('height', '48px');
-  await expect(page.getByRole('button', { name: 'Exit full screen' })).toBeVisible();
+  const headerExit = page.locator('.site-header').getByRole('button', { name: 'Exit full screen' });
+  await expect(headerExit).toBeVisible();
   await expect(page.locator('.site-header__cta--fullscreen')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Exit full screen' }).click();
+  await headerExit.click();
   await expect(page.locator('html')).not.toHaveClass(/sandbox-fullscreen/);
 });
 
