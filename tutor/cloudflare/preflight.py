@@ -497,8 +497,8 @@ def main() -> int:
         (
             'const SIGN_UP =',
             '<MurikahInviteFriends',
-            '>Sign in<',
-            '>Sign up<',
+            'href={USERNAME_SIGN_IN}',
+            'href={SIGN_UP}',
         ),
     )
     require_markers(
