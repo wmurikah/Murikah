@@ -1,4 +1,4 @@
-import type { RoleCode, SandboxState } from './types';
+import type { RoleCode, SandboxState, ScreenId } from './types';
 
 export type Permission =
   | 'finding.create'
@@ -69,4 +69,10 @@ export function roleScopeLabel(role: RoleCode): string {
   if (role === 'AUDIT_MANAGER') return 'Review and audit management';
   if (role === 'SENIOR_AUDITOR') return 'Create, edit and review';
   return 'Create and edit audit work';
+}
+
+export function canAccessScreen(role: RoleCode, screen: ScreenId): boolean {
+  if (role === 'BOARD_MEMBER') return screen === 'reports';
+  if (role === 'UNIT_MANAGER') return screen === 'actions';
+  return true;
 }
