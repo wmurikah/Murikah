@@ -254,8 +254,6 @@ def main() -> None:
         raise RuntimeError(f"could not isolate model settings section in {settings_nav}")
     model_section = settings_nav_text[model_start:model_end]
     for key in (
-        "voice",
-        "multimodal",
         "connections",
         "llm",
         "task-models",
