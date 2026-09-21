@@ -320,6 +320,55 @@ def main() -> None:
         ),
     )
     require_markers(
+        root / "deeptutor/agents/math_animator/structured_output.py",
+        (
+            "async def direct_structured_payload(",
+            "async def request_structured_payload(",
+            "MURIKAH_MATH_STRUCTURED_TIMEOUT_SECONDS",
+            "finish_reason_needs_continuation",
+            "primary_attempts = 2 if attachments else 1",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/math_animator/agents/concept_analysis_agent.py",
+        (
+            "request_structured_payload",
+            "Explain visually:",
+            "Create a clear",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/math_animator/agents/concept_design_agent.py",
+        (
+            "request_structured_payload",
+            "Use Manim Community Edition APIs only.",
+            "Do not require network access or external assets.",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/math_animator/agents/code_generator_agent.py",
+        (
+            "direct_structured_payload",
+            'required_nonempty="code"',
+            "Murikah could not prepare animation code after bounded retries.",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/math_animator/agents/summary_agent.py",
+        (
+            "request_structured_payload",
+            "Your math animation is ready.",
+        ),
+    )
+    require_markers(
+        root / "deeptutor/agents/math_animator/capability.py",
+        (
+            "Provider/backend details belong in server logs",
+            "await stream.error(\n                    fallback,",
+        ),
+    )
+
+    require_markers(
         root / "deeptutor/agents/loop/agent_loop.py",
         (
             "_murikah_solve_repair_attempted",
