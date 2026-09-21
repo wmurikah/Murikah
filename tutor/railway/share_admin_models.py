@@ -69,20 +69,14 @@ def patch_model_access(root: Path) -> None:
             model_id = str(model.get("id") or "").strip()
             if not model_id:
                 continue
-            try:
-                effective = resolve_profile_provider(catalog, "llm", profile, model)
-            except ValueError:
-                continue
-            if is_owner_bound(effective):
-                continue
             rows.append(
                 {
                     "profile_id": profile_id,
                     "model_id": model_id,
                     "name": model.get("name") or model.get("model") or model_id,
                     "model": model.get("model") or "",
-                    "provider": effective.get("binding") or "",
-                    "profile_name": effective.get("name") or profile.get("name") or profile_id,
+                    "provider": profile.get("binding") or "",
+                    "profile_name": profile.get("name") or profile_id,
                     "reasoning_effort": model.get("reasoning_effort"),
                     "supported_reasoning_efforts": model.get(
                         "codex_supported_reasoning_levels"
@@ -111,35 +105,34 @@ def patch_model_access(root: Path) -> None:
     catalog = admin_catalog()
     inherited = deployment_llm_rows(catalog)
     result: dict[str, list[dict[str, Any]]] = {"llm": list(inherited)}
-    inherited_keys = {
-        (str(item.get("profile_id") or ""), str(item.get("model_id") or ""))
-        for item in inherited
-    }
     for item in grant.get("models", {}).get("llm", []) or []:
 '''
     replace_once(path, old_result, new_result, "effective model-access seed")
 
-    old_model_loop = '''        for model_id in item.get("model_ids") or []:
-            model = _model_by_id(profile, str(model_id))
-            try:
+    old_return = '''        result["llm"].extend(personal_llm_rows())
+    return result
 '''
-    new_model_loop = '''        for model_id in item.get("model_ids") or []:
-            model_id = str(model_id)
-            if (profile_id, model_id) in inherited_keys:
-                # Legacy/manual grants may contain a model that is now part of
-                # Murikah's shared deployment pool. Keep the effective option
-                # list unique rather than rendering the same model twice.
-                continue
-            model = _model_by_id(profile, model_id)
-            try:
-'''
-    replace_once(path, old_model_loop, new_model_loop, "grant model loop")
+    new_return = '''        result["llm"].extend(personal_llm_rows())
 
-    old_model_id = '''                    "model_id": str(model_id),
+    # Legacy/manual grants may contain a model that is now inherited from the
+    # deployment pool. Keep one effective row per profile/model while preserving
+    # the inherited admin row first. Personal owner-bound rows use distinct
+    # owner-scoped profiles and remain available to their owner.
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in result["llm"]:
+        key = (
+            str(row.get("profile_id") or ""),
+            str(row.get("model_id") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    result["llm"] = unique
+    return result
 '''
-    new_model_id = '''                    "model_id": model_id,
-'''
-    replace_once(path, old_model_id, new_model_id, "normalized grant model id")
+    replace_once(path, old_return, new_return, "effective model-access dedupe")
 
     old_active = '''    active = next(
         (
