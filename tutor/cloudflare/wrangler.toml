@@ -17,20 +17,23 @@ enabled = true
 pattern = "tutor.murikah.com"
 custom_domain = true
 
-# Fail closed before deployment if essential production secrets are not actually
-# configured on the Worker. Google SSO and transactional verification email
-# are part of the production account experience; Microsoft/Apple and Gemini fast-chat remain optional.
+# Fail closed before deployment if startup-critical production secrets are not
+# configured on the Worker. RESEND_API_KEY is intentionally not deploy-required:
+# the Worker may stay available while new-account verification itself fails closed
+# until transactional email is configured.
 [secrets]
 required = [
   "MURIKAH_TUTOR_ADMIN_PASSWORD",
   "MURIKAH_TUTOR_AUTH_SECRET",
   "MURIKAH_GOOGLE_CLIENT_ID",
   "MURIKAH_GOOGLE_CLIENT_SECRET",
-  "RESEND_API_KEY",
   "MURIKAH_NVIDIA_NIM_API_KEY",
   "MURIKAH_DASHSCOPE_API_KEY",
   "MURIKAH_TAVILY_API_KEY",
 ]
+# RESEND_API_KEY is intentionally not deploy-required. When absent, the
+# /email/start and /email/resend paths return 503 and no new member session
+# can be issued because verification cannot complete.
 
 # Durable Tutor state is split by storage semantics. D1 owns structured
 # persistence metadata/transactional state; R2 owns private file/object state.

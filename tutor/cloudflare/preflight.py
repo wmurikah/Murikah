@@ -81,6 +81,23 @@ def validate_persistence_migration_fixture() -> None:
     if "SCHEMA_VERSION" not in normalized:
         failures.append(f"{relative} missing schema_version marker")
 
+def validate_resend_deploy_policy() -> None:
+    """Resend must gate signup, not the entire Worker deployment."""
+    relative = "tutor/cloudflare/wrangler.toml"
+    content = require(relative)
+    if not content:
+        return
+    try:
+        required_block = content.split("[secrets]", 1)[1].split("[[d1_databases]]", 1)[0]
+    except IndexError:
+        failures.append(f"{relative} is missing the expected [secrets] section")
+        return
+    if '"RESEND_API_KEY"' in required_block:
+        failures.append(
+            f"{relative} makes RESEND_API_KEY deploy-required; keep email verification fail-closed at runtime instead"
+        )
+
+
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
     bootstrap_path = ROOT / "tutor/railway/bootstrap_runtime.py"
@@ -216,7 +233,7 @@ def main() -> int:
             '"MURIKAH_TUTOR_AUTH_SECRET"',
             '"MURIKAH_GOOGLE_CLIENT_ID"',
             '"MURIKAH_GOOGLE_CLIENT_SECRET"',
-            '"RESEND_API_KEY"',
+            'RESEND_API_KEY is intentionally not deploy-required',
             '"MURIKAH_NVIDIA_NIM_API_KEY"',
             '"MURIKAH_DASHSCOPE_API_KEY"',
             '"MURIKAH_TAVILY_API_KEY"',
@@ -663,6 +680,7 @@ def main() -> int:
             'ownershipSchemaVersion',
             'emailVerificationSchemaVersion',
             'verificationEmailConfigured',
+            'new signup remains fail-closed',
             'unregisteredObjectCount',
             'every durable manifest object has a D1 ownership record',
             'MURIKAH_TUTOR_OWNERSHIP_TIMEOUT',
@@ -790,6 +808,8 @@ def main() -> int:
             "/email/verify",
             "sendVerificationEmail",
             "RESEND_API_KEY",
+            "if (!apiKey) throw new Error('verification_email_not_configured')",
+            "verification_email_unavailable",
             "code_digest",
             "/audit",
             "ownershipSchemaVersion",
@@ -849,6 +869,7 @@ def main() -> int:
         ),
     )
     validate_persistence_migration_fixture()
+    validate_resend_deploy_policy()
     validate_bootstrap_fixture()
 
     if failures:
@@ -894,6 +915,7 @@ def main() -> int:
     print(" - new local and SSO accounts require a one-time emailed code before any member session is issued")
     print(" - disposable email domains are rejected while legitimate consumer, Apple relay, school, university and corporate MX domains are accepted")
     print(" - verification OTPs are HMAC-digested in D1, expire in 10 minutes, are rate-limited, and are never stored in plaintext")
+    print(" - Resend is signup-required but not deploy-blocking; missing email configuration keeps new signup fail-closed")
     print(" - guests can voluntarily sign in or sign up from the top-right before exhausting their seven interactions")
     print(" - Invite friends is available on guest and account surfaces with copy, email, WhatsApp and native share actions")
     print(" - sign-in and sign-up tabs have explicit active-state contrast")
