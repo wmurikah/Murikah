@@ -678,6 +678,7 @@ const idFor = (label: string, index: number) =>
       trigger?.setAttribute('aria-expanded', 'false');
       panel?.setAttribute('aria-hidden', 'true');
       panel?.setAttribute('inert', '');
+      if (panel) panel.inert = true;
       if (openGroup === group) openGroup = null;
       if (focusTrigger) trigger?.focus();
     };
@@ -692,11 +693,12 @@ const idFor = (label: string, index: number) =>
       trigger.setAttribute('aria-expanded', 'true');
       panel.setAttribute('aria-hidden', 'false');
       panel.removeAttribute('inert');
+      panel.inert = false;
       openGroup = group;
       if (focus !== 'none') {
         const items = Array.from(panel.querySelectorAll<HTMLElement>('[role="menuitem"]'));
         const target = focus === 'first' ? items[0] : items.at(-1);
-        window.requestAnimationFrame(() => target?.focus());
+        target?.focus();
       }
     };
 
