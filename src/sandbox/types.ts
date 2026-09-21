@@ -273,6 +273,13 @@ export interface SandboxState {
   savedFindingViews: Array<{ id: string; name: string; filters: Record<string, string> }>;
   findingDraft: FindingDraft;
   tourDismissed: boolean;
+  undo: null | {
+    label: string;
+    actionPlanId?: string;
+    previousActionStatus?: ActionPlanStatus;
+    findingId?: string;
+    previousFinding?: Partial<Finding>;
+  };
 }
 
 export type SandboxAction =
@@ -293,4 +300,5 @@ export type SandboxAction =
   | { type: 'SAVE_FINDING_VIEW'; name: string; filters: Record<string, string> }
   | { type: 'MARK_NOTIFICATION'; id: string }
   | { type: 'DISMISS_TOUR' }
+  | { type: 'UNDO_LAST' }
   | { type: 'RESET'; state: SandboxState };
