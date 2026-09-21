@@ -56,7 +56,7 @@ Do not expose or commit the `.p8` private key.
 
 ## Cloudflare production activation
 
-The production Worker keeps provider credentials in Cloudflare Variables & Secrets. Google is now a required production secret pair. Configure the two values above on the `murikah-tutor-container-staging` Worker and keep the redirect URI exactly `https://tutor.murikah.com/api/auth/oauth/google/callback`. The provider-discovery endpoint exposes Google only when both credentials are complete, so a branded button can never lead to an unconfigured provider.
+The production Worker keeps provider credentials in Cloudflare Variables & Secrets. Google is now a required production secret pair, and `RESEND_API_KEY` is required for first-account verification email delivery. Configure the two values above on the `murikah-tutor-container-staging` Worker and keep the redirect URI exactly `https://tutor.murikah.com/api/auth/oauth/google/callback`. The provider-discovery endpoint exposes Google only when both credentials are complete, so a branded button can never lead to an unconfigured provider.
 
 ## Codespaces activation
 
@@ -81,11 +81,11 @@ The status command reports each provider as `READY`, `NOT CONFIGURED`, `RESTART 
 
 `/api/auth/oauth/providers` exposes only providers whose required runtime credentials are complete. The login page therefore renders `Continue with Google`, `Continue with Microsoft` and/or `Continue with Apple` only when that provider is actually configured.
 
-Successful provider authentication creates an ordinary Murikah Tutor user on first sign-in. Provider subject identifiers are mapped to local users under the persistent Tutor auth directory and the user receives the same signed DeepTutor session cookie used by local login.
+For an already-mapped provider identity, successful provider authentication signs the existing user in normally. For a **new** provider identity, Tutor does not create the member session immediately: it sends a six-digit code to the provider email, opens the Murikah verification step, and creates/maps the account only after that code is confirmed. The challenge expires after 10 minutes and is one-time-use. Existing provider users are not forced through this first-account gate again.
 
 A matching email address alone never auto-links an existing local account. This deliberately prevents an external identity from silently taking over an administrator or other pre-existing local account.
 
-Password self-registration remains closed after the bootstrap administrator. `/register` routes users to the social-first sign-in page instead.
+Local self-registration uses an email address rather than a username-only identity. New local accounts use the same email-verification gate before the guest identity is converted into a member. Existing local accounts continue to sign in normally.
 
 ## Guest access boundary
 
