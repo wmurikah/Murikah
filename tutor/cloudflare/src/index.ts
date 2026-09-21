@@ -583,6 +583,137 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     }
   }
 
+  if (route === '/account/upsert' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const username = learningText(body.username, 254);
+    const role = learningText(body.role || 'member', 16);
+    const authProvider = learningText(body.auth_provider || 'local', 32);
+    if (!actorId || !['guest', 'member', 'admin'].includes(role) || !authProvider) {
+      return persistenceJson({ error: 'invalid_account_metadata' }, 400);
+    }
+    try {
+      await upsertLearningActor(
+        env,
+        actorId,
+        role === 'member' ? 'member' : role,
+        role === 'guest' ? '' : username,
+        role === 'guest' ? actorId : '',
+        now,
+      );
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_accounts(actor_id, username, role, account_status, auth_provider, created_at, updated_at) ' +
+          "VALUES (?, ?, ?, 'active', ?, ?, ?) " +
+          'ON CONFLICT(actor_id) DO UPDATE SET username = excluded.username, role = excluded.role, ' +
+          "account_status = 'active', auth_provider = excluded.auth_provider, updated_at = excluded.updated_at",
+      )
+        .bind(actorId, username, role, authProvider, now, now)
+        .run();
+      return persistenceJson({ ok: true });
+    } catch (error) {
+      console.error('Tutor D1 account upsert failed', error);
+      return persistenceJson({ error: 'account_upsert_failed' }, 503);
+    }
+  }
+
+  if (route === '/audit' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = learningText(body.actor_id, 128);
+    const actorRole = learningText(body.actor_role, 16);
+    const action = learningText(body.action, 96);
+    const resource = learningText(body.resource, 192);
+    const outcome = learningText(body.outcome, 16);
+    const detail = learningText(body.detail, 500);
+    if (!action || !resource || !['allowed', 'denied', 'error'].includes(outcome)) {
+      return persistenceJson({ error: 'invalid_audit_event' }, 400);
+    }
+    const auditId = crypto.randomUUID().replace(/-/g, '');
+    await env.TUTOR_DB.prepare(
+      'INSERT INTO tutor_access_audit(audit_id, actor_id, actor_role, action, resource, outcome, detail, created_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+      .bind(auditId, actorId, actorRole, action, resource, outcome, detail, now)
+      .run();
+    return persistenceJson({ ok: true, audit_id: auditId });
+  }
+
+  if (route === '/ownership/reconcile' && request.method === 'POST') {
+    try {
+      const result = await env.TUTOR_DB.prepare(
+        'SELECT path, object_key, sha256, size_bytes, updated_at FROM persistence_objects ORDER BY path',
+      ).all<{
+        path: string;
+        object_key: string;
+        sha256: string;
+        size_bytes: number;
+        updated_at: number;
+      }>();
+      const rows = result.results || [];
+      let registered = 0;
+      for (let offset = 0; offset < rows.length; offset += 40) {
+        const statements: PersistenceStatement[] = [];
+        for (const row of rows.slice(offset, offset + 40)) {
+          const probe = new URL('https://persist.invalid/');
+          probe.searchParams.set('path', row.path);
+          const path = safePersistencePath(probe);
+          if (!path) continue;
+          const ownership = persistenceOwnership(path);
+          const objectId = await textSha256(path);
+          statements.push(
+            env.TUTOR_DB.prepare(
+              'INSERT INTO tutor_objects(object_id, owner_kind, owner_id, object_type, runtime_path, object_key, sha256, size_bytes, content_type, created_at, updated_at, deleted_at) ' +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'application/octet-stream', ?, ?, NULL) " +
+                'ON CONFLICT(runtime_path) DO UPDATE SET owner_kind = excluded.owner_kind, owner_id = excluded.owner_id, ' +
+                'object_type = excluded.object_type, object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+                'size_bytes = excluded.size_bytes, updated_at = excluded.updated_at, deleted_at = NULL',
+            ).bind(
+              objectId,
+              ownership.ownerKind,
+              ownership.ownerId,
+              ownership.objectType,
+              path,
+              row.object_key,
+              row.sha256,
+              Number(row.size_bytes || 0),
+              Number(row.updated_at || now),
+              now,
+            ),
+          );
+        }
+        if (statements.length) {
+          await env.TUTOR_DB.batch(statements);
+          registered += statements.length;
+        }
+      }
+      return persistenceJson({ ok: true, registered });
+    } catch (error) {
+      console.error('Tutor object ownership reconciliation failed', error);
+      return persistenceJson({ error: 'ownership_reconcile_failed' }, 503);
+    }
+  }
+
+  if (route === '/ownership/status' && request.method === 'GET') {
+    try {
+      const counts = await env.TUTOR_DB.prepare(
+        'SELECT ' +
+          '(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL) AS objects, ' +
+          "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'user') AS user_objects, " +
+          "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'partner') AS partner_objects, " +
+          "(SELECT COUNT(*) FROM tutor_accounts WHERE account_status = 'active') AS accounts, " +
+          '(SELECT COUNT(*) FROM persistence_objects p LEFT JOIN tutor_objects o ON o.runtime_path = p.path WHERE o.object_id IS NULL) AS unregistered',
+      ).first<{
+        objects: number;
+        user_objects: number;
+        partner_objects: number;
+        accounts: number;
+        unregistered: number;
+      }>();
+      return persistenceJson({ ok: true, ...(counts || {}) });
+    } catch (error) {
+      return persistenceJson({ ok: false, error: 'ownership_status_unavailable' }, 503);
+    }
+  }
+
   if (route === '/manifest' && request.method === 'GET') {
     const result = await env.TUTOR_DB.prepare(
       'SELECT path, sha256, size_bytes, mtime_ms, updated_at FROM persistence_objects ORDER BY path',
