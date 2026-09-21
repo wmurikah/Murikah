@@ -808,6 +808,8 @@ def main() -> int:
             "/email/verify",
             "sendVerificationEmail",
             "RESEND_API_KEY",
+            "if (!apiKey) throw new Error('verification_email_not_configured')",
+            "verification_email_unavailable",
             "code_digest",
             "/audit",
             "ownershipSchemaVersion",
