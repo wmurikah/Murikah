@@ -37,12 +37,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p public/images/hero
+          mkdir -p public/images/hero /tmp/home-hero-image-tools
+          (
+            cd /tmp/home-hero-image-tools
+            npm init -y >/dev/null
+            npm install --silent sharp@0.34.5
+          )
           curl --fail --location --retry 4 --retry-delay 2 \
             'https://upload.wikimedia.org/wikipedia/commons/4/40/Modern_office_building%2C_Theresienh%C3%B6he%2C_M%C3%BCnchen.jpg' \
             --output /tmp/hero-building-source.jpg
 
-          node --input-type=commonjs <<'NODE'
+          NODE_PATH=/tmp/home-hero-image-tools/node_modules node --input-type=commonjs <<'NODE'
           const fs = require('node:fs/promises');
           const sharp = require('sharp');
 
