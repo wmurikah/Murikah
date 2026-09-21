@@ -626,6 +626,13 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       const generation = request.headers.get('x-murikah-object-generation') || '';
       const mtime = Number(request.headers.get('x-murikah-object-mtime-ms') || '0');
       const size = Number(request.headers.get('x-murikah-object-size') || '0');
+      const ownership = persistenceOwnership(path);
+      const suppliedOwnerKind = request.headers.get('x-murikah-object-owner-kind') || '';
+      const suppliedOwnerId = request.headers.get('x-murikah-object-owner-id') || '';
+      const suppliedObjectType = request.headers.get('x-murikah-object-type') || '';
+      const suppliedObjectId = request.headers.get('x-murikah-object-id') || '';
+      const contentType = safeContentType(request.headers.get('x-murikah-object-content-type'));
+      const objectId = await textSha256(path);
       if (
         !/^[0-9a-f]{64}$/i.test(sha) ||
         sha !== signedContentSha ||
@@ -633,25 +640,61 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         !Number.isSafeInteger(mtime) ||
         mtime < 0 ||
         !Number.isSafeInteger(size) ||
-        size < 0
+        size < 0 ||
+        (suppliedOwnerKind && suppliedOwnerKind !== ownership.ownerKind) ||
+        (suppliedOwnerId && suppliedOwnerId !== ownership.ownerId) ||
+        (suppliedObjectType && suppliedObjectType !== ownership.objectType) ||
+        (suppliedObjectId && suppliedObjectId !== objectId)
       ) {
         return persistenceJson({ error: 'invalid_object_metadata' }, 400);
       }
-      const key = persistenceObjectKey(path);
+      const key = persistenceObjectKey(ownership, objectId);
       await env.TUTOR_FILES.put(key, request.body || new ArrayBuffer(0), {
-        customMetadata: { path, sha256: sha },
+        customMetadata: {
+          path,
+          sha256: sha,
+          object_id: objectId,
+          owner_kind: ownership.ownerKind,
+          owner_id: ownership.ownerId,
+          object_type: ownership.objectType,
+        },
       });
-      await env.TUTOR_DB.prepare(
-        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, mtime_ms, generation, updated_at) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
-          'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, mtime_ms = excluded.mtime_ms, ' +
-          'generation = excluded.generation, ' +
-          'updated_at = excluded.updated_at',
-      )
-        .bind(path, key, sha, size, mtime, mtime, generation, now)
-        .run();
-      return persistenceJson({ ok: true });
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, mtime_ms, generation, updated_at) ' +
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
+            'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+            'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, mtime_ms = excluded.mtime_ms, ' +
+            'generation = excluded.generation, updated_at = excluded.updated_at',
+        ).bind(path, key, sha, size, mtime, mtime, generation, now),
+        env.TUTOR_DB.prepare(
+          'INSERT INTO tutor_objects(object_id, owner_kind, owner_id, object_type, runtime_path, object_key, sha256, size_bytes, content_type, created_at, updated_at, deleted_at) ' +
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) ' +
+            'ON CONFLICT(runtime_path) DO UPDATE SET ' +
+            'object_id = excluded.object_id, owner_kind = excluded.owner_kind, owner_id = excluded.owner_id, ' +
+            'object_type = excluded.object_type, object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+            'size_bytes = excluded.size_bytes, content_type = excluded.content_type, updated_at = excluded.updated_at, deleted_at = NULL',
+        ).bind(
+          objectId,
+          ownership.ownerKind,
+          ownership.ownerId,
+          ownership.objectType,
+          path,
+          key,
+          sha,
+          size,
+          contentType,
+          now,
+          now,
+        ),
+      ]);
+      return persistenceJson({
+        ok: true,
+        object_id: objectId,
+        owner_kind: ownership.ownerKind,
+        owner_id: ownership.ownerId,
+        object_type: ownership.objectType,
+      });
     }
   }
 
