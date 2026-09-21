@@ -53,7 +53,14 @@ const navLink = isHome ? homeNavLink : standardNavLink;
   <Container>
     <div class="site-header-row flex items-center justify-between">
       {/* Logo, top-left, links home (Jakob's Law). Navy-and-brass on paper. */}
-      <a href="/" class="inline-flex rounded-md no-underline" aria-label="Murikah, home">
+      <a
+        href="/"
+        class:list={[
+          'inline-flex items-center rounded-md no-underline',
+          isHome && 'home-logo-link min-h-11 min-w-11',
+        ]}
+        aria-label="Murikah, home"
+      >
         {
           /* Dark lockup for the light navigation surface. */
         }
@@ -390,9 +397,9 @@ const navLink = isHome ? homeNavLink : standardNavLink;
     background: color-mix(in srgb, var(--color-hero-ivory) 8%, transparent);
   }
 
-  .site-header--home :global(a:focus-visible),
-  .site-header--home :global(button:focus-visible),
-  .site-header--home :global(summary:focus-visible) {
+  .home-logo-link:focus-visible,
+  .home-nav-link:focus-visible,
+  .home-mobile-toggle:focus-visible {
     outline-color: var(--color-hero-ivory);
     outline-offset: 3px;
   }
