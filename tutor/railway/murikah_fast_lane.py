@@ -117,14 +117,15 @@ def continuation_messages(
 def trim_continuation_overlap(existing: str, continuation: str) -> str:
     """Remove an exact repeated prefix when a recovery model restates the tail."""
     left = str(existing or "").rstrip()
-    right = str(continuation or "").lstrip()
+    raw = str(continuation or "")
+    right = raw.lstrip()
     if not left or not right:
-        return right
+        return raw if raw else right
     max_overlap = min(len(left), len(right), 1200)
     for size in range(max_overlap, 15, -1):
         if left[-size:].casefold() == right[:size].casefold():
             return right[size:].lstrip()
-    return right
+    return raw if raw[:1].isspace() else right
 
 
 def configured_gemini_model() -> str:
