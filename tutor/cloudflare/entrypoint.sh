@@ -107,12 +107,6 @@ from deeptutor.services.setup import init_user_directories
 init_user_directories(Path('/app'))
 PY
 
-# D1 is the durable ownership/control plane. Reconcile legacy R2 manifest rows
-# and non-secret account metadata before the application begins serving users.
-# These operations are idempotent and do not rewrite learner content.
-python -m deeptutor.murikah_persistence reconcile-ownership
-python -m deeptutor.murikah_persistence reconcile-accounts
-
 eval "$(python - <<'PY'
 import shlex
 from deeptutor.services.config import export_runtime_settings_to_env
@@ -131,31 +125,93 @@ export PORT=3782
 export HOSTNAME=0.0.0.0
 export DEEPTUTOR_API_BASE_URL="http://127.0.0.1:8001"
 
+wait_for_runtime_port() {
+  python - <<'PY'
+import socket
+import time
+
+deadline = time.monotonic() + 45
+while time.monotonic() < deadline:
+    try:
+        with socket.create_connection(("127.0.0.1", 3782), timeout=0.5):
+            raise SystemExit(0)
+    except OSError:
+        time.sleep(0.25)
+raise SystemExit(1)
+PY
+}
+
 backend_pid=""
 frontend_pid=""
 persistence_pid=""
+reconcile_pid=""
 cleanup() {
   trap - TERM INT EXIT
   if [ -n "${frontend_pid}" ] && kill -0 "${frontend_pid}" 2>/dev/null; then kill -TERM "${frontend_pid}" 2>/dev/null || true; fi
   if [ -n "${backend_pid}" ] && kill -0 "${backend_pid}" 2>/dev/null; then kill -TERM "${backend_pid}" 2>/dev/null || true; fi
   if [ -n "${persistence_pid}" ] && kill -0 "${persistence_pid}" 2>/dev/null; then kill -TERM "${persistence_pid}" 2>/dev/null || true; fi
+  if [ -n "${reconcile_pid}" ] && kill -0 "${reconcile_pid}" 2>/dev/null; then kill -TERM "${reconcile_pid}" 2>/dev/null || true; fi
   wait "${frontend_pid}" 2>/dev/null || true
   wait "${backend_pid}" 2>/dev/null || true
   wait "${persistence_pid}" 2>/dev/null || true
+  wait "${reconcile_pid}" 2>/dev/null || true
 }
 trap cleanup TERM INT EXIT
 
-# Persist the bootstrapped baseline immediately, then maintain a bounded
-# background checkpoint. The loop performs a final checkpoint on TERM/INT.
-python -m deeptutor.murikah_persistence sync-once
-python -m deeptutor.murikah_persistence sync-loop &
-persistence_pid=$!
-
+# Open the learner-facing services before any metadata migration/checkpoint
+# work. Restore and auth/bootstrap above are the only startup-critical storage
+# operations. D1 ownership/account reconciliation is additive metadata and must
+# never keep port 3782 closed or make a deploy look hung.
 echo "[Murikah Tutor] Starting Cloudflare runtime: backend 127.0.0.1:8001, frontend 0.0.0.0:3782"
 /app/start-backend.sh &
 backend_pid=$!
 /app/start-frontend.sh &
 frontend_pid=$!
+
+# The checkpoint loop performs an immediate sync_once() internally, retries
+# transient persistence failures, and performs a final checkpoint on TERM/INT.
+# It waits until the frontend socket is actually listening before beginning any
+# R2/D1 work, so persistence I/O cannot compete with the cold-start critical path.
+(
+  if ! wait_for_runtime_port; then
+    echo "[Murikah Tutor] Persistence checkpoint loop could not observe port 3782; leaving service-failure handling to the main runtime." >&2
+    exit 1
+  fi
+  exec python -m deeptutor.murikah_persistence sync-loop
+) &
+persistence_pid=$!
+
+# v29 ownership/account reconciliation can touch many restored objects/accounts.
+# Run it independently with bounded retries only after the frontend socket is
+# live. The deployment smoke test waits for the ownership registry to reach
+# zero unregistered objects before declaring the release complete.
+(
+  set +e
+  if ! wait_for_runtime_port; then
+    echo "[Murikah Tutor] Persistence metadata reconciliation could not observe port 3782; runtime health diagnostics will handle the startup failure." >&2
+    exit 1
+  fi
+  delays=(1 2 4 8 12 20 30 45)
+  attempt=0
+  while [ "${attempt}" -lt "${#delays[@]}" ]; do
+    attempt=$((attempt + 1))
+    echo "[Murikah Tutor] Persistence metadata reconciliation attempt ${attempt}."
+    python -m deeptutor.murikah_persistence reconcile-ownership
+    ownership_rc=$?
+    python -m deeptutor.murikah_persistence reconcile-accounts
+    accounts_rc=$?
+    if [ "${ownership_rc}" -eq 0 ] && [ "${accounts_rc}" -eq 0 ]; then
+      echo "[Murikah Tutor] Persistence metadata reconciliation complete."
+      exit 0
+    fi
+    delay="${delays[$((attempt - 1))]}"
+    echo "[Murikah Tutor] Persistence metadata reconciliation incomplete (ownership=${ownership_rc}, accounts=${accounts_rc}); retrying in ${delay}s." >&2
+    sleep "${delay}"
+  done
+  echo "[Murikah Tutor] Persistence metadata reconciliation exhausted retries; runtime remains available and smoke verification will report the durable-state gap." >&2
+  exit 1
+) &
+reconcile_pid=$!
 
 # If either long-running service exits, terminate the sibling and fail the
 # container. Cloudflare can then restart a clean instance instead of leaving a
