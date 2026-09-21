@@ -1,0 +1,1051 @@
+[
+  {
+    "actionPlanId": "AP-2026-001",
+    "findingId": "AUD-2026-001",
+    "workPaperId": "WP-2026-001",
+    "actionPlanRef": "AP-001",
+    "actionDescription": "Document and approve the revised control procedure for quarterly privileged-access recertification was not evidenced.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": -3,
+    "priority": "High",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -8,
+    "createdOffsetDays": -14,
+    "evidence": [
+      {
+        "name": "closure-evidence-001.pdf",
+        "type": "application/pdf",
+        "sizeKb": 184
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-002",
+    "findingId": "AUD-2026-002",
+    "workPaperId": "WP-2026-002",
+    "actionPlanRef": "AP-002",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for bank reconciliation review evidence was incomplete.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": -5,
+    "priority": "Medium",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -10,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-003",
+    "findingId": "AUD-2026-003",
+    "workPaperId": "WP-2026-003",
+    "actionPlanRef": "AP-003",
+    "actionDescription": "Configure a mandatory approval step in the workflow for loan override approvals were retained outside the credit file.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": -7,
+    "priority": "Medium",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -12,
+    "createdOffsetDays": -28,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-004",
+    "findingId": "AUD-2026-004",
+    "workPaperId": "WP-2026-004",
+    "actionPlanRef": "AP-004",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for dormant member account monitoring was not consistently documented.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": -9,
+    "priority": "Low",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -14,
+    "createdOffsetDays": -35,
+    "evidence": [
+      {
+        "name": "closure-evidence-004.pdf",
+        "type": "application/pdf",
+        "sizeKb": 403
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-005",
+    "findingId": "AUD-2026-005",
+    "workPaperId": "WP-2026-005",
+    "actionPlanRef": "AP-005",
+    "actionDescription": "Introduce automated reminder and escalation controls for emergency changes were not retrospectively reviewed within target.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": -11,
+    "priority": "Critical",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -16,
+    "createdOffsetDays": -42,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-006",
+    "findingId": "AUD-2026-006",
+    "workPaperId": "WP-2026-006",
+    "actionPlanRef": "AP-006",
+    "actionDescription": "Perform an independent validation and retain the result for supplier master amendments lacked independent verification.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": -13,
+    "priority": "High",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": -18,
+    "createdOffsetDays": -49,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-007",
+    "findingId": "AUD-2026-007",
+    "workPaperId": "WP-2026-007",
+    "actionPlanRef": "AP-007",
+    "actionDescription": "Train control owners and record completion for branch cash surprise counts were below the planned frequency.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 1,
+    "priority": "Medium",
+    "status": "In Progress",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": -4,
+    "createdOffsetDays": -56,
+    "evidence": [
+      {
+        "name": "closure-evidence-007.pdf",
+        "type": "application/pdf",
+        "sizeKb": 257
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-008",
+    "findingId": "AUD-2026-008",
+    "workPaperId": "WP-2026-008",
+    "actionPlanRef": "AP-008",
+    "actionDescription": "Update the monitoring register and report exceptions for backup restore testing did not cover the member portal.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 3,
+    "priority": "Medium",
+    "status": "Pending",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": -2,
+    "createdOffsetDays": -63,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-009",
+    "findingId": "AUD-2026-009",
+    "workPaperId": "WP-2026-009",
+    "actionPlanRef": "AP-009",
+    "actionDescription": "Document and approve the revised control procedure for competitive quotation exceptions were not centrally tracked.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 5,
+    "priority": "High",
+    "status": "In Progress",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": 0,
+    "createdOffsetDays": -70,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-010",
+    "findingId": "AUD-2026-010",
+    "workPaperId": "WP-2026-010",
+    "actionPlanRef": "AP-010",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for leaver access closure was not reconciled to hr exit dates.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 7,
+    "priority": "Low",
+    "status": "Pending",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": 2,
+    "createdOffsetDays": -77,
+    "evidence": [
+      {
+        "name": "closure-evidence-010.pdf",
+        "type": "application/pdf",
+        "sizeKb": 476
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-011",
+    "findingId": "AUD-2026-011",
+    "workPaperId": "WP-2026-011",
+    "actionPlanRef": "AP-011",
+    "actionDescription": "Configure a mandatory approval step in the workflow for quarterly privileged-access recertification was not evidenced — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 9,
+    "priority": "High",
+    "status": "In Progress",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": 4,
+    "createdOffsetDays": -84,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-012",
+    "findingId": "AUD-2026-012",
+    "workPaperId": "WP-2026-012",
+    "actionPlanRef": "AP-012",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for bank reconciliation review evidence was incomplete — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 11,
+    "priority": "Medium",
+    "status": "Pending",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": 6,
+    "createdOffsetDays": -91,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-013",
+    "findingId": "AUD-2026-013",
+    "workPaperId": "WP-2026-013",
+    "actionPlanRef": "AP-013",
+    "actionDescription": "Introduce automated reminder and escalation controls for loan override approvals were retained outside the credit file — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 13,
+    "priority": "Medium",
+    "status": "In Progress",
+    "escalationState": "Reminder scheduled",
+    "reminderOffsetDays": 8,
+    "createdOffsetDays": -14,
+    "evidence": [
+      {
+        "name": "closure-evidence-013.pdf",
+        "type": "application/pdf",
+        "sizeKb": 330
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-014",
+    "findingId": "AUD-2026-014",
+    "workPaperId": "WP-2026-014",
+    "actionPlanRef": "AP-014",
+    "actionDescription": "Perform an independent validation and retain the result for dormant member account monitoring was not consistently documented — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 15,
+    "priority": "Low",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 10,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-015",
+    "findingId": "AUD-2026-015",
+    "workPaperId": "WP-2026-015",
+    "actionPlanRef": "AP-015",
+    "actionDescription": "Train control owners and record completion for emergency changes were not retrospectively reviewed within target — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 60,
+    "priority": "Critical",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 55,
+    "createdOffsetDays": -28,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-016",
+    "findingId": "AUD-2026-016",
+    "workPaperId": "WP-2026-016",
+    "actionPlanRef": "AP-016",
+    "actionDescription": "Update the monitoring register and report exceptions for supplier master amendments lacked independent verification — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 63,
+    "priority": "High",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 58,
+    "createdOffsetDays": -35,
+    "evidence": [
+      {
+        "name": "closure-evidence-016.pdf",
+        "type": "application/pdf",
+        "sizeKb": 184
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-017",
+    "findingId": "AUD-2026-017",
+    "workPaperId": "WP-2026-017",
+    "actionPlanRef": "AP-017",
+    "actionDescription": "Document and approve the revised control procedure for branch cash surprise counts were below the planned frequency — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 66,
+    "priority": "Medium",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 61,
+    "createdOffsetDays": -42,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-018",
+    "findingId": "AUD-2026-018",
+    "workPaperId": "WP-2026-018",
+    "actionPlanRef": "AP-018",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for backup restore testing did not cover the member portal — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 69,
+    "priority": "Medium",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 64,
+    "createdOffsetDays": -49,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-019",
+    "findingId": "AUD-2026-019",
+    "workPaperId": "WP-2026-019",
+    "actionPlanRef": "AP-019",
+    "actionDescription": "Configure a mandatory approval step in the workflow for competitive quotation exceptions were not centrally tracked — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 72,
+    "priority": "High",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 67,
+    "createdOffsetDays": -56,
+    "evidence": [
+      {
+        "name": "closure-evidence-019.pdf",
+        "type": "application/pdf",
+        "sizeKb": 403
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-020",
+    "findingId": "AUD-2026-020",
+    "workPaperId": "WP-2026-020",
+    "actionPlanRef": "AP-020",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for leaver access closure was not reconciled to hr exit dates — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 18,
+    "priority": "Low",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 13,
+    "createdOffsetDays": -63,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-021",
+    "findingId": "AUD-2026-021",
+    "workPaperId": "WP-2026-021",
+    "actionPlanRef": "AP-021",
+    "actionDescription": "Introduce automated reminder and escalation controls for quarterly privileged-access recertification was not evidenced — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 21,
+    "priority": "High",
+    "status": "Closed",
+    "escalationState": "None",
+    "reminderOffsetDays": 16,
+    "createdOffsetDays": -70,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-022",
+    "findingId": "AUD-2026-022",
+    "workPaperId": "WP-2026-022",
+    "actionPlanRef": "AP-022",
+    "actionDescription": "Perform an independent validation and retain the result for bank reconciliation review evidence was incomplete — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 24,
+    "priority": "Medium",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 19,
+    "createdOffsetDays": -77,
+    "evidence": [
+      {
+        "name": "closure-evidence-022.pdf",
+        "type": "application/pdf",
+        "sizeKb": 257
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-023",
+    "findingId": "AUD-2026-023",
+    "workPaperId": "WP-2026-023",
+    "actionPlanRef": "AP-023",
+    "actionDescription": "Train control owners and record completion for loan override approvals were retained outside the credit file — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 27,
+    "priority": "Medium",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 22,
+    "createdOffsetDays": -84,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-024",
+    "findingId": "AUD-2026-024",
+    "workPaperId": "WP-2026-024",
+    "actionPlanRef": "AP-024",
+    "actionDescription": "Update the monitoring register and report exceptions for dormant member account monitoring was not consistently documented — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 30,
+    "priority": "Low",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 25,
+    "createdOffsetDays": -91,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-025",
+    "findingId": "AUD-2026-025",
+    "workPaperId": "WP-2026-025",
+    "actionPlanRef": "AP-025",
+    "actionDescription": "Document and approve the revised control procedure for emergency changes were not retrospectively reviewed within target — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 33,
+    "priority": "Critical",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 28,
+    "createdOffsetDays": -14,
+    "evidence": [
+      {
+        "name": "closure-evidence-025.pdf",
+        "type": "application/pdf",
+        "sizeKb": 476
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-026",
+    "findingId": "AUD-2026-026",
+    "workPaperId": "WP-2026-026",
+    "actionPlanRef": "AP-026",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for supplier master amendments lacked independent verification — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 36,
+    "priority": "High",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 31,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-027",
+    "findingId": "AUD-2026-027",
+    "workPaperId": "WP-2026-027",
+    "actionPlanRef": "AP-027",
+    "actionDescription": "Configure a mandatory approval step in the workflow for branch cash surprise counts were below the planned frequency — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 39,
+    "priority": "Medium",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 34,
+    "createdOffsetDays": -28,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-028",
+    "findingId": "AUD-2026-028",
+    "workPaperId": "WP-2026-028",
+    "actionPlanRef": "AP-028",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for backup restore testing did not cover the member portal — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 42,
+    "priority": "Medium",
+    "status": "Closed",
+    "escalationState": "None",
+    "reminderOffsetDays": 37,
+    "createdOffsetDays": -35,
+    "evidence": [
+      {
+        "name": "closure-evidence-028.pdf",
+        "type": "application/pdf",
+        "sizeKb": 330
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-029",
+    "findingId": "AUD-2026-029",
+    "workPaperId": "WP-2026-029",
+    "actionPlanRef": "AP-029",
+    "actionDescription": "Introduce automated reminder and escalation controls for competitive quotation exceptions were not centrally tracked — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 45,
+    "priority": "High",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 40,
+    "createdOffsetDays": -42,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-030",
+    "findingId": "AUD-2026-030",
+    "workPaperId": "WP-2026-030",
+    "actionPlanRef": "AP-030",
+    "actionDescription": "Perform an independent validation and retain the result for leaver access closure was not reconciled to hr exit dates — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 48,
+    "priority": "Low",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 43,
+    "createdOffsetDays": -49,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-031",
+    "findingId": "AUD-2026-031",
+    "workPaperId": "WP-2026-031",
+    "actionPlanRef": "AP-031",
+    "actionDescription": "Train control owners and record completion for quarterly privileged-access recertification was not evidenced — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 51,
+    "priority": "High",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 46,
+    "createdOffsetDays": -56,
+    "evidence": [
+      {
+        "name": "closure-evidence-031.pdf",
+        "type": "application/pdf",
+        "sizeKb": 184
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-032",
+    "findingId": "AUD-2026-032",
+    "workPaperId": "WP-2026-032",
+    "actionPlanRef": "AP-032",
+    "actionDescription": "Update the monitoring register and report exceptions for bank reconciliation review evidence was incomplete — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 54,
+    "priority": "Medium",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 49,
+    "createdOffsetDays": -63,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-033",
+    "findingId": "AUD-2026-033",
+    "workPaperId": "WP-2026-033",
+    "actionPlanRef": "AP-033",
+    "actionDescription": "Document and approve the revised control procedure for loan override approvals were retained outside the credit file — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 57,
+    "priority": "Medium",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 52,
+    "createdOffsetDays": -70,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-034",
+    "findingId": "AUD-2026-034",
+    "workPaperId": "WP-2026-034",
+    "actionPlanRef": "AP-034",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for dormant member account monitoring was not consistently documented — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 60,
+    "priority": "Low",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 55,
+    "createdOffsetDays": -77,
+    "evidence": [
+      {
+        "name": "closure-evidence-034.pdf",
+        "type": "application/pdf",
+        "sizeKb": 403
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-035",
+    "findingId": "AUD-2026-035",
+    "workPaperId": "WP-2026-035",
+    "actionPlanRef": "AP-035",
+    "actionDescription": "Configure a mandatory approval step in the workflow for emergency changes were not retrospectively reviewed within target — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 63,
+    "priority": "Critical",
+    "status": "Closed",
+    "escalationState": "None",
+    "reminderOffsetDays": 58,
+    "createdOffsetDays": -84,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-036",
+    "findingId": "AUD-2026-036",
+    "workPaperId": "WP-2026-036",
+    "actionPlanRef": "AP-036",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for supplier master amendments lacked independent verification — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 66,
+    "priority": "High",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 61,
+    "createdOffsetDays": -91,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-037",
+    "findingId": "AUD-2026-037",
+    "workPaperId": "WP-2026-037",
+    "actionPlanRef": "AP-037",
+    "actionDescription": "Introduce automated reminder and escalation controls for branch cash surprise counts were below the planned frequency — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 69,
+    "priority": "Medium",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 64,
+    "createdOffsetDays": -14,
+    "evidence": [
+      {
+        "name": "closure-evidence-037.pdf",
+        "type": "application/pdf",
+        "sizeKb": 257
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-038",
+    "findingId": "AUD-2026-038",
+    "workPaperId": "WP-2026-038",
+    "actionPlanRef": "AP-038",
+    "actionDescription": "Perform an independent validation and retain the result for backup restore testing did not cover the member portal — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 72,
+    "priority": "Medium",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 67,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-039",
+    "findingId": "AUD-2026-039",
+    "workPaperId": "WP-2026-039",
+    "actionPlanRef": "AP-039",
+    "actionDescription": "Train control owners and record completion for competitive quotation exceptions were not centrally tracked — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 18,
+    "priority": "High",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 13,
+    "createdOffsetDays": -28,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-040",
+    "findingId": "AUD-2026-040",
+    "workPaperId": "WP-2026-040",
+    "actionPlanRef": "AP-040",
+    "actionDescription": "Update the monitoring register and report exceptions for leaver access closure was not reconciled to hr exit dates — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 21,
+    "priority": "Low",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 16,
+    "createdOffsetDays": -35,
+    "evidence": [
+      {
+        "name": "closure-evidence-040.pdf",
+        "type": "application/pdf",
+        "sizeKb": 476
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-041",
+    "findingId": "AUD-2026-001",
+    "workPaperId": "WP-2026-001",
+    "actionPlanRef": "AP-041",
+    "actionDescription": "Document and approve the revised control procedure for quarterly privileged-access recertification was not evidenced.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 24,
+    "priority": "High",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 19,
+    "createdOffsetDays": -14,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-042",
+    "findingId": "AUD-2026-002",
+    "workPaperId": "WP-2026-002",
+    "actionPlanRef": "AP-042",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for bank reconciliation review evidence was incomplete.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 27,
+    "priority": "Medium",
+    "status": "Closed",
+    "escalationState": "None",
+    "reminderOffsetDays": 22,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-043",
+    "findingId": "AUD-2026-003",
+    "workPaperId": "WP-2026-003",
+    "actionPlanRef": "AP-043",
+    "actionDescription": "Configure a mandatory approval step in the workflow for loan override approvals were retained outside the credit file.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 30,
+    "priority": "Medium",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 25,
+    "createdOffsetDays": -28,
+    "evidence": [
+      {
+        "name": "closure-evidence-043.pdf",
+        "type": "application/pdf",
+        "sizeKb": 330
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-044",
+    "findingId": "AUD-2026-004",
+    "workPaperId": "WP-2026-004",
+    "actionPlanRef": "AP-044",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for dormant member account monitoring was not consistently documented.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 33,
+    "priority": "Low",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 28,
+    "createdOffsetDays": -35,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-045",
+    "findingId": "AUD-2026-005",
+    "workPaperId": "WP-2026-005",
+    "actionPlanRef": "AP-045",
+    "actionDescription": "Introduce automated reminder and escalation controls for emergency changes were not retrospectively reviewed within target.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 36,
+    "priority": "Critical",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 31,
+    "createdOffsetDays": -42,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-046",
+    "findingId": "AUD-2026-006",
+    "workPaperId": "WP-2026-006",
+    "actionPlanRef": "AP-046",
+    "actionDescription": "Perform an independent validation and retain the result for supplier master amendments lacked independent verification.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 39,
+    "priority": "High",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 34,
+    "createdOffsetDays": -49,
+    "evidence": [
+      {
+        "name": "closure-evidence-046.pdf",
+        "type": "application/pdf",
+        "sizeKb": 184
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-047",
+    "findingId": "AUD-2026-007",
+    "workPaperId": "WP-2026-007",
+    "actionPlanRef": "AP-047",
+    "actionDescription": "Train control owners and record completion for branch cash surprise counts were below the planned frequency.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 42,
+    "priority": "Medium",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 37,
+    "createdOffsetDays": -56,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-048",
+    "findingId": "AUD-2026-008",
+    "workPaperId": "WP-2026-008",
+    "actionPlanRef": "AP-048",
+    "actionDescription": "Update the monitoring register and report exceptions for backup restore testing did not cover the member portal.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 45,
+    "priority": "Medium",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 40,
+    "createdOffsetDays": -63,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-049",
+    "findingId": "AUD-2026-009",
+    "workPaperId": "WP-2026-009",
+    "actionPlanRef": "AP-049",
+    "actionDescription": "Document and approve the revised control procedure for competitive quotation exceptions were not centrally tracked.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 48,
+    "priority": "High",
+    "status": "Closed",
+    "escalationState": "None",
+    "reminderOffsetDays": 43,
+    "createdOffsetDays": -70,
+    "evidence": [
+      {
+        "name": "closure-evidence-049.pdf",
+        "type": "application/pdf",
+        "sizeKb": 403
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-050",
+    "findingId": "AUD-2026-010",
+    "workPaperId": "WP-2026-010",
+    "actionPlanRef": "AP-050",
+    "actionDescription": "Complete the outstanding review and retain signed evidence for leaver access closure was not reconciled to hr exit dates.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 51,
+    "priority": "Low",
+    "status": "Overdue",
+    "escalationState": "Escalated to management",
+    "reminderOffsetDays": 46,
+    "createdOffsetDays": -77,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-051",
+    "findingId": "AUD-2026-011",
+    "workPaperId": "WP-2026-011",
+    "actionPlanRef": "AP-051",
+    "actionDescription": "Configure a mandatory approval step in the workflow for quarterly privileged-access recertification was not evidenced — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 54,
+    "priority": "High",
+    "status": "Pending",
+    "escalationState": "None",
+    "reminderOffsetDays": 49,
+    "createdOffsetDays": -84,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-052",
+    "findingId": "AUD-2026-012",
+    "workPaperId": "WP-2026-012",
+    "actionPlanRef": "AP-052",
+    "actionDescription": "Reconcile the population and close unsupported exceptions for bank reconciliation review evidence was incomplete — nakuru branch.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 57,
+    "priority": "Medium",
+    "status": "In Progress",
+    "escalationState": "None",
+    "reminderOffsetDays": 52,
+    "createdOffsetDays": -91,
+    "evidence": [
+      {
+        "name": "closure-evidence-052.pdf",
+        "type": "application/pdf",
+        "sizeKb": 257
+      }
+    ]
+  },
+  {
+    "actionPlanId": "AP-2026-053",
+    "findingId": "AUD-2026-013",
+    "workPaperId": "WP-2026-013",
+    "actionPlanRef": "AP-053",
+    "actionDescription": "Introduce automated reminder and escalation controls for loan override approvals were retained outside the credit file — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 60,
+    "priority": "Medium",
+    "status": "Not Due",
+    "escalationState": "None",
+    "reminderOffsetDays": 55,
+    "createdOffsetDays": -14,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-054",
+    "findingId": "AUD-2026-014",
+    "workPaperId": "WP-2026-014",
+    "actionPlanRef": "AP-054",
+    "actionDescription": "Perform an independent validation and retain the result for dormant member account monitoring was not consistently documented — head office.",
+    "ownerIds": [
+      "USR-FIN"
+    ],
+    "dueOffsetDays": 63,
+    "priority": "Low",
+    "status": "Pending Verification",
+    "escalationState": "None",
+    "reminderOffsetDays": 58,
+    "createdOffsetDays": -21,
+    "evidence": []
+  },
+  {
+    "actionPlanId": "AP-2026-055",
+    "findingId": "AUD-2026-015",
+    "workPaperId": "WP-2026-015",
+    "actionPlanRef": "AP-055",
+    "actionDescription": "Train control owners and record completion for emergency changes were not retrospectively reviewed within target — head office.",
+    "ownerIds": [
+      "USR-ICT"
+    ],
+    "dueOffsetDays": 66,
+    "priority": "Critical",
+    "status": "Verified",
+    "escalationState": "None",
+    "reminderOffsetDays": 61,
+    "createdOffsetDays": -28,
+    "evidence": [
+      {
+        "name": "closure-evidence-055.pdf",
+        "type": "application/pdf",
+        "sizeKb": 476
+      }
+    ]
+  }
+]
