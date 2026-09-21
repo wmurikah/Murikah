@@ -396,7 +396,7 @@ def main() -> int:
             "def deployment_llm_rows(",
             "inherited = deployment_llm_rows(catalog)",
             "if active is None and options:",
-            "is_owner_bound(effective)",
+            "is_owner_bound(profile)",
             "deployment model configuration is admin-only",
         ),
     )
