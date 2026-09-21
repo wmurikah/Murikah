@@ -6,7 +6,7 @@ import { committeePdf } from '@/sandbox/pdf';
 import { Badge, Button, Panel, RatingBadge, TooltipLock } from '../Ui';
 
 export default function ReportsScreen(){
-  const {state}=useSandbox();
+  const {state,dispatch}=useSandbox();
   const [generating,setGenerating]=useState(false);
   const [ready,setReady]=useState(false);
   const [progress,setProgress]=useState(0);
@@ -30,6 +30,7 @@ export default function ReportsScreen(){
       if(elapsed>=3000){
         if(timerRef.current) window.clearInterval(timerRef.current);
         setGenerating(false);setReady(true);setProgress(100);
+        dispatch({type:'LOG_EVENT',action:'REPORT_GENERATED',entityType:'report',entityId:'quarterly-committee-pack',details:'Quarterly committee pack generated from current sandbox state'});
       }
     },120);
   };
@@ -60,10 +61,12 @@ export default function ReportsScreen(){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;a.download='kilima-quarterly-committee-pack.pdf';a.click();
+    dispatch({type:'LOG_EVENT',action:'REPORT_EXPORTED',entityType:'report',entityId:'quarterly-committee-pack',details:'Quarterly committee pack downloaded as PDF'});
     window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
 
   const print=()=>{
+    dispatch({type:'LOG_EVENT',action:'REPORT_PRINTED',entityType:'report',entityId:'quarterly-committee-pack',details:'Quarterly committee pack opened for printing'});
     document.documentElement.classList.add('sandbox-print-report');
     window.print();
     window.setTimeout(()=>document.documentElement.classList.remove('sandbox-print-report'),250);
