@@ -1,0 +1,38 @@
+[
+  {
+    "auditAreaId": "AA-ICT",
+    "areaCode": "ICT",
+    "areaName": "Information technology",
+    "description": "Identity, infrastructure, cyber security, resilience and change controls."
+  },
+  {
+    "auditAreaId": "AA-FIN",
+    "areaCode": "FIN",
+    "areaName": "Finance and treasury",
+    "description": "Financial control, liquidity, reconciliation and regulatory returns."
+  },
+  {
+    "auditAreaId": "AA-CRE",
+    "areaCode": "CRE",
+    "areaName": "Credit",
+    "description": "Underwriting, disbursement, collections and portfolio monitoring."
+  },
+  {
+    "auditAreaId": "AA-OPE",
+    "areaCode": "OPS",
+    "areaName": "Operations",
+    "description": "Member service, cash, branch operations and onboarding."
+  },
+  {
+    "auditAreaId": "AA-PRO",
+    "areaCode": "PRC",
+    "areaName": "Procurement",
+    "description": "Sourcing, vendor management and purchasing controls."
+  },
+  {
+    "auditAreaId": "AA-HR",
+    "areaCode": "HR",
+    "areaName": "People and payroll",
+    "description": "Payroll, access lifecycle, benefits and people controls."
+  }
+]
