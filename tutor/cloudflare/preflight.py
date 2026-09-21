@@ -538,7 +538,7 @@ def main() -> int:
         ),
     )
     require_markers(
-        "tutor/VIRTUAL_INTERNSHIP_COMPETENCY_PASSPORT.md",
+        "tutor/virtual-internship/README.md",
         (
             "Minimum standard internship duration: **90 calendar days**",
             "## 12. Workplace politics and social dynamics",
