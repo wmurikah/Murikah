@@ -26,12 +26,7 @@ class SharedModelAccessTests(unittest.TestCase):
         if not hasattr(model_access, "deployment_llm_rows"):
             self.fail("installed Tutor runtime is missing deployment_llm_rows")
 
-        original_resolver = model_access.resolve_profile_provider
-        try:
-            model_access.resolve_profile_provider = (
-                lambda _catalog, _service, profile, _model: profile
-            )
-            catalog = {
+        catalog = {
                 "services": {
                     "llm": {
                         "profiles": [
@@ -55,15 +50,13 @@ class SharedModelAccessTests(unittest.TestCase):
                     }
                 }
             }
-            rows = model_access.deployment_llm_rows(catalog)
-            self.assertEqual(
-                [(row["profile_id"], row["model_id"]) for row in rows],
-                [("shared", "m1")],
-            )
-            self.assertTrue(rows[0]["available"])
-            self.assertEqual(rows[0]["source"], "admin")
-        finally:
-            model_access.resolve_profile_provider = original_resolver
+        rows = model_access.deployment_llm_rows(catalog)
+        self.assertEqual(
+            [(row["profile_id"], row["model_id"]) for row in rows],
+            [("shared", "m1")],
+        )
+        self.assertTrue(rows[0]["available"])
+        self.assertEqual(rows[0]["source"], "admin")
 
     def test_member_default_falls_back_to_first_shareable_model(self):
         try:
