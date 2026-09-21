@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { SandboxProvider, useSandbox } from '@/sandbox/store';
 import type { ScreenId } from '@/sandbox/types';
+import { canAccessScreen } from '@/sandbox/permissions';
 import { Icon, type IconName } from './sandbox/Icon';
 import { LoadingRows } from './sandbox/Ui';
 import CommandPalette from './sandbox/CommandPalette';
@@ -81,6 +82,7 @@ function SandboxApp(){
   }),[state]);
 
   const activeUser=state.users.find(u=>u.userId===state.activeUserId) ?? state.users[0];
+  const visibleNav = nav.filter(item => canAccessScreen(state.activeRoleCode, item.id));
   const unread=state.notifications.filter(n=>!n.read).length;
   const activeNav=nav.find(item=>item.id===state.screen);
   const entity=state.organization.entities.find(e=>e.affiliateCode===state.activeAffiliateCode);
@@ -119,7 +121,7 @@ function SandboxApp(){
         </label>
 
         <nav className="sb-nav" aria-label="Assurance OS sandbox">
-          {nav.map(item=>{
+          {visibleNav.map(item=>{
             const count=(counts as Record<string,number>)[item.id];
             return <button key={item.id} className={state.screen===item.id?'is-active':''} onClick={()=>dispatch({type:'NAVIGATE',screen:item.id})} data-tour={item.id}>
               <Icon name={item.icon}/><span>{item.label}</span>{count!=null&&<b>{count>999?'999+':count}</b>}
@@ -172,8 +174,8 @@ function SandboxApp(){
       </section>
 
       <nav className="sb-mobile-tabs" aria-label="Sandbox mobile navigation">
-        {nav.filter(item=>mobileMain.includes(item.id)).map(item=><button key={item.id} className={state.screen===item.id?'is-active':''} onClick={()=>dispatch({type:'NAVIGATE',screen:item.id})}><Icon name={item.icon}/><span>{item.label.replace('Audit ','')}</span></button>)}
-        <div className="sb-popover-wrap"><button className={mobileMain.includes(state.screen)?'':'is-active'} onClick={()=>setMobileMore(v=>!v)}><Icon name="more"/><span>More</span></button>{mobileMore&&<div className="sb-popover sb-mobile-more">{nav.filter(item=>!mobileMain.includes(item.id)).map(item=><button key={item.id} onClick={()=>{dispatch({type:'NAVIGATE',screen:item.id});setMobileMore(false);}}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>}</div>
+        {visibleNav.filter(item=>mobileMain.includes(item.id)).map(item=><button key={item.id} className={state.screen===item.id?'is-active':''} onClick={()=>dispatch({type:'NAVIGATE',screen:item.id})}><Icon name={item.icon}/><span>{item.label.replace('Audit ','')}</span></button>)}
+        <div className="sb-popover-wrap"><button className={mobileMain.includes(state.screen)?'':'is-active'} onClick={()=>setMobileMore(v=>!v)}><Icon name="more"/><span>More</span></button>{mobileMore&&<div className="sb-popover sb-mobile-more">{visibleNav.filter(item=>!mobileMain.includes(item.id)).map(item=><button key={item.id} onClick={()=>{dispatch({type:'NAVIGATE',screen:item.id});setMobileMore(false);}}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>}</div>
       </nav>
     </div>
 
