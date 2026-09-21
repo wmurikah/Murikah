@@ -164,6 +164,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/
 # has the same paths it has in a repository checkout. This prevents Cloudflare
 # image builds from failing when a new test reads an overlay source file.
 COPY tutor/railway /opt/murikah/railway
+COPY tutor/cloudflare/entrypoint.sh /opt/murikah/cloudflare/entrypoint.sh
 COPY tutor/tests /opt/murikah/tests
 RUN python -m unittest discover -s /opt/murikah/tests -v
 
