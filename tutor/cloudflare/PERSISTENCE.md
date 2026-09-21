@@ -158,6 +158,18 @@ Cloudflare dashboard Variables remain authoritative for model/service configurat
 11. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event with zero unregistered durable objects.
 12. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
 
+## Lifecycle acceptance procedure
+
+Use the read-only lifecycle probe immediately before and after each destructive lifecycle test:
+
+```bash
+python tutor/cloudflare/verify_persistence_lifecycle.py --snapshot /tmp/tutor-before.json
+# perform one target lifecycle event: sleep/wake, deploy, forced container replacement, or rollback
+python tutor/cloudflare/verify_persistence_lifecycle.py --verify /tmp/tutor-before.json
+```
+
+The probe never reads learner content and never destroys a container. It fails if the D1 ownership schema is unavailable, any R2 manifest row lacks a D1 ownership record, or durable object/account/learning counts regress across the lifecycle event. For the two-user isolation acceptance test, create independent conversations/files/Memory/Knowledge Base data under two test accounts before taking the baseline, then verify each account through the normal Tutor UI after the lifecycle event; direct R2 access remains private and unavailable to learners.
+
 ## Acceptance conditions
 
 Persistence is not complete merely because the bindings exist. Production cutover is blocked until:
