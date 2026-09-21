@@ -1,0 +1,36 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe("Tutor invite sharing", () => {
+  it("offers copy, email and WhatsApp without exposing conversation state", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(<MurikahInviteFriends />);
+    fireEvent.click(screen.getByRole("button", { name: "Invite friends" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Invite friends to Murikah Tutor" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/conversations and account data are never included/i),
+    ).toBeVisible();
+
+    const email = screen.getByRole("link", { name: "Email" });
+    const whatsapp = screen.getByRole("link", { name: "WhatsApp" });
+    expect(email.getAttribute("href")).toMatch(/^mailto:/);
+    expect(whatsapp.getAttribute("href")).toMatch(/^https:\/\/wa\.me\//);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/$/));
+  });
+});
