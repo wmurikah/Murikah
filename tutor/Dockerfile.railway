@@ -29,6 +29,7 @@ COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.p
 COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py
 COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py
 COPY tutor/railway/share_admin_models.py /opt/murikah/share_admin_models.py
+COPY tutor/railway/harden_admin_controls.py /opt/murikah/harden_admin_controls.py
 COPY tutor/railway/harden_guest_completion.py /opt/murikah/harden_guest_completion.py
 COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py
@@ -80,6 +81,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/apply_workspace_access.py /src/DeepTutor \
     && python /opt/murikah/harden_member_runtime.py /src/DeepTutor \
     && python /opt/murikah/share_admin_models.py /src/DeepTutor \
+    && python /opt/murikah/harden_admin_controls.py /src/DeepTutor \
     && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
@@ -150,6 +152,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/services/auth.py /app/deeptu
 COPY --from=branded-source /src/DeepTutor/deeptutor/multi_user/model_access.py /app/deeptutor/multi_user/model_access.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/app/service.py /app/deeptutor/app/service.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/main.py /app/deeptutor/api/main.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/settings.py /app/deeptutor/api/routers/settings.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
