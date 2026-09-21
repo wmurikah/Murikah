@@ -181,6 +181,7 @@ test('theme colour, anchor offset, reduced motion and print rules are shared', a
   assert.match(base, /<meta name="theme-color" content="#071D35" \/>/);
   assert.match(css, /scroll-padding-top: var\(--header-height\)/);
   assert.match(css, /scroll-margin-top: var\(--header-height\)/);
+  assert.match(css, /\.skip-link[\s\S]*?z-index: calc\(var\(--header-z\) \+ 10\)/);
   assert.match(header, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(header, /@media print[\s\S]*?\.site-header[\s\S]*?display: none !important/);
 });
