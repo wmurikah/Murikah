@@ -20,6 +20,22 @@ class GuestEntryTests(unittest.TestCase):
         self.assertIn("response.status < 500", source)
         self.assertIn('cache: "no-store"', source)
 
+    def test_guest_workspace_keeps_voluntary_account_actions(self):
+        access = (ROOT / "railway/MurikahGuestAccess.tsx.txt").read_text(encoding="utf-8")
+        patch = (ROOT / "railway/apply_workspace_access.py").read_text(encoding="utf-8")
+        guest_chat = (ROOT / "railway/MurikahGuestChatV2.tsx.txt").read_text(encoding="utf-8")
+
+        self.assertIn('status.username?.startsWith("guest_")', access)
+        self.assertIn('const SIGN_IN = "/login?next=%2Fchat"', access)
+        self.assertIn('const SIGN_UP = "/register?next=%2Fchat"', access)
+        self.assertIn("MurikahGuestAccess", patch)
+        self.assertIn("<MurikahGuestAccess />", patch)
+        self.assertIn('username?: string', guest_chat)
+        self.assertIn(
+            'auth?.authenticated && !auth.username?.startsWith("guest_")',
+            guest_chat,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
