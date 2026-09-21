@@ -158,7 +158,7 @@ test('homepage navigation alone overlays hero and turns solid after 24px', async
   const css = await readFile(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
   const page = await readFile(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
 
-  assert.match(header, /const isHome = path === '\/'/);
+  assert.ok(header.includes("const isHome = path === '/'"));
   assert.match(header, /site-header--home fixed inset-x-0/);
   assert.match(header, /murikah-logo-transparent\.png/);
   assert.match(header, /NAV\.map/);
