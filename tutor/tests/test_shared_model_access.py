@@ -13,7 +13,7 @@ class SharedModelAccessTests(unittest.TestCase):
         self.assertIn("def deployment_llm_rows(", overlay)
         self.assertIn("inherited = deployment_llm_rows(catalog)", overlay)
         self.assertIn("if active is None and options:", overlay)
-        self.assertIn("is_owner_bound(effective)", overlay)
+        self.assertIn("is_owner_bound(profile)", overlay)
         self.assertIn("deployment model configuration is admin-only", overlay)
 
     def test_installed_runtime_exposes_shareable_models_and_excludes_owner_bound(self):
