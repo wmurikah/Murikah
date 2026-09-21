@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V5"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V6"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -32,15 +32,20 @@ from deeptutor.murikah_fast_lane import (
     configured_gemini_model,
     configured_nvidia_fast_model,
     configured_qwen_fast_model,
+    continuation_messages,
+    finish_reason_needs_continuation,
     gemini_configured,
     gemini_stream,
     latency_ms,
+    likely_incomplete_answer,
     nvidia_configured,
     nvidia_stream,
+    parse_finish_signal,
     portable_chat_messages,
     qwen_configured,
     qwen_stream,
     race_first_visible,
+    trim_continuation_overlap,
 )
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
@@ -49,10 +54,18 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V5
+# MURIKAH_DUAL_LANE_CHAT_V6
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, "") or default)
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
@@ -68,7 +81,13 @@ _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
 )
 _FAST_TURN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 60.0
+    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 300.0
+)
+_FAST_OUTPUT_TOKENS = _positive_int(
+    "MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 4096
+)
+_MAX_CONTINUATIONS = min(
+    4, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 3)
 )
 '''
 
@@ -194,7 +213,7 @@ NEW_RUN = '''    @staticmethod
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 ),
@@ -216,7 +235,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.0,
                     factory=lambda: gemini_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -227,7 +246,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.55 if gemini_on else 0.0,
                     factory=lambda: nvidia_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -238,7 +257,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=1.1 if (gemini_on or nvidia_on) else 0.0,
                     factory=lambda: qwen_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -293,7 +312,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: gemini_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
@@ -304,7 +323,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: nvidia_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
@@ -315,7 +334,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: qwen_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
@@ -386,51 +405,267 @@ NEW_RUN = '''    @staticmethod
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
         context.metadata["murikah_model"] = winner_model
         context.metadata["murikah_first_token_ms"] = winner.first_token_ms
-        turn_deadline = request_started + max(15.0, _FAST_TURN_TIMEOUT_SECONDS)
 
-        in_think = False
-        try:
-            while True:
-                remaining = turn_deadline - time.perf_counter()
-                if remaining <= 0:
-                    raise asyncio.TimeoutError
-                try:
-                    chunk = await asyncio.wait_for(
-                        winner.stream.__anext__(),
-                        timeout=min(_STREAM_IDLE_TIMEOUT_SECONDS, remaining),
-                    )
-                except StopAsyncIteration:
-                    break
-                text = str(chunk or "")
-                if text == "<think>":
-                    in_think = True
-                    continue
-                if text == "</think>":
-                    in_think = False
-                    continue
-                if in_think or not text:
-                    continue
-                answer_parts.append(text)
-                await stream.content(text, source="chat", stage="responding", metadata=chunk_meta)
-        except asyncio.TimeoutError as exc:
-            logger.warning(
-                "MURIKAH_LATENCY route=fast event=terminal_stream_timeout provider=%s elapsed_ms=%s",
-                winner.name,
-                latency_ms(request_started),
-            )
-            raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
-        except Exception as exc:
-            logger.warning(
-                "MURIKAH_LATENCY route=fast event=terminal_stream_error provider=%s elapsed_ms=%s type=%s",
-                winner.name,
-                latency_ms(request_started),
-                type(exc).__name__,
-            )
-            raise RuntimeError("Murikah could not complete that response. Please try again.") from exc
-        finally:
-            await close_stream(winner.stream)
+        async def collect_remaining(
+            active_winner: Any,
+            *,
+            publish: bool,
+            metadata: dict[str, Any],
+        ) -> tuple[str, str, str]:
+            """Return visible text, provider finish reason, and recoverable failure kind."""
+            segment_parts: list[str] = []
+            finish_reason = ""
+            failure_kind = ""
+            in_think = False
+            segment_deadline = time.perf_counter() + max(60.0, _FAST_TURN_TIMEOUT_SECONDS)
+            try:
+                while True:
+                    remaining = segment_deadline - time.perf_counter()
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError
+                    try:
+                        chunk = await asyncio.wait_for(
+                            active_winner.stream.__anext__(),
+                            timeout=min(_STREAM_IDLE_TIMEOUT_SECONDS, remaining),
+                        )
+                    except StopAsyncIteration:
+                        break
+                    text = str(chunk or "")
+                    reason = parse_finish_signal(text)
+                    if reason is not None:
+                        finish_reason = reason
+                        continue
+                    if text == "<think>":
+                        in_think = True
+                        continue
+                    if text == "</think>":
+                        in_think = False
+                        continue
+                    if in_think or not text:
+                        continue
+                    segment_parts.append(text)
+                    if publish:
+                        await stream.content(
+                            text,
+                            source="chat",
+                            stage="responding",
+                            metadata=metadata,
+                        )
+            except asyncio.TimeoutError:
+                failure_kind = "stream_timeout"
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=stream_recovery_needed provider=%s reason=timeout elapsed_ms=%s",
+                    active_winner.name,
+                    latency_ms(request_started),
+                )
+            except Exception as exc:
+                failure_kind = "stream_error"
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=stream_recovery_needed provider=%s reason=%s elapsed_ms=%s",
+                    active_winner.name,
+                    type(exc).__name__,
+                    latency_ms(request_started),
+                )
+            finally:
+                await close_stream(active_winner.stream)
+            return "".join(segment_parts), finish_reason, failure_kind
 
+        initial_tail, finish_reason, stream_failure = await collect_remaining(
+            winner,
+            publish=True,
+            metadata=chunk_meta,
+        )
+        answer_parts.append(initial_tail)
         answer = "".join(answer_parts).strip()
+
+        def should_continue(current_answer: str, reason: str, failure: str) -> bool:
+            if failure:
+                return True
+            if finish_reason_needs_continuation(reason):
+                return True
+            if not reason and likely_incomplete_answer(current_answer):
+                return True
+            return False
+
+        continuation_count = 0
+        continuation_providers: list[str] = []
+        incomplete = should_continue(answer, finish_reason, stream_failure)
+
+        while incomplete and continuation_count < _MAX_CONTINUATIONS:
+            continuation_count += 1
+            await stream.progress(
+                "Continuing response…",
+                source="chat",
+                stage="responding",
+                metadata=merge_trace_metadata(
+                    trace_meta,
+                    {
+                        "trace_kind": "call_status",
+                        "call_state": "running",
+                        "call_role": "continuation",
+                        "murikah_lane": "fast",
+                        "continuation": continuation_count,
+                    },
+                ),
+            )
+
+            recovery_messages = continuation_messages(messages, answer)
+            recovery_hedges: list[HedgeCandidate] = []
+            if gemini_on:
+                recovery_hedges.append(
+                    HedgeCandidate(
+                        name=f"gemini-continuation:{gemini_model}",
+                        delay_seconds=0.0,
+                        factory=lambda recovery_messages=recovery_messages: gemini_stream(
+                            recovery_messages,
+                            max_tokens=min(
+                                _FAST_OUTPUT_TOKENS,
+                                prompt_pipeline.respond_max_tokens,
+                            ),
+                        ),
+                    )
+                )
+            if nvidia_on:
+                recovery_hedges.append(
+                    HedgeCandidate(
+                        name=f"nvidia-continuation:{nvidia_model}",
+                        delay_seconds=0.0,
+                        factory=lambda recovery_messages=recovery_messages: nvidia_stream(
+                            recovery_messages,
+                            max_tokens=min(
+                                _FAST_OUTPUT_TOKENS,
+                                prompt_pipeline.respond_max_tokens,
+                            ),
+                        ),
+                    )
+                )
+            if qwen_on:
+                recovery_hedges.append(
+                    HedgeCandidate(
+                        name=f"qwen-continuation:{qwen_model}",
+                        delay_seconds=0.0,
+                        factory=lambda recovery_messages=recovery_messages: qwen_stream(
+                            recovery_messages,
+                            max_tokens=min(
+                                _FAST_OUTPUT_TOKENS,
+                                prompt_pipeline.respond_max_tokens,
+                            ),
+                        ),
+                    )
+                )
+            if fallback_configs:
+                recovery_config = fallback_configs[0]
+                recovery_name = (
+                    f"{recovery_config.provider_name or recovery_config.binding or 'provider'}:"
+                    f"{recovery_config.model}"
+                )
+                recovery_hedges.append(
+                    HedgeCandidate(
+                        name=f"catalog-continuation:{recovery_name}",
+                        delay_seconds=0.75,
+                        factory=lambda config=recovery_config, recovery_messages=recovery_messages: llm_factory.stream(
+                            prompt="",
+                            system_prompt="",
+                            model=config.model,
+                            api_key=config.api_key,
+                            base_url=config.effective_url or config.base_url,
+                            api_version=config.api_version,
+                            binding=config.provider_name or config.binding,
+                            messages=recovery_messages,
+                            max_retries=1,
+                            reasoning_effort=config.reasoning_effort,
+                            extra_headers=config.extra_headers,
+                            temperature=prompt_pipeline._chat_temperature,
+                            max_tokens=min(
+                                _FAST_OUTPUT_TOKENS,
+                                prompt_pipeline.respond_max_tokens,
+                            ),
+                            stream_coalesce_chars=24,
+                            stream_coalesce_seconds=0.02,
+                        ),
+                    )
+                )
+
+            recovery_started = time.perf_counter()
+            recovery_winner = await race_first_visible(
+                recovery_hedges,
+                request_started=recovery_started,
+                first_token_timeout=min(8.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
+                overall_timeout=min(10.0, _OVERALL_FIRST_TOKEN_SECONDS),
+            )
+            if recovery_winner is None:
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=continuation_unavailable attempt=%s elapsed_ms=%s",
+                    continuation_count,
+                    latency_ms(request_started),
+                )
+                break
+
+            continuation_providers.append(recovery_winner.name)
+            recovery_meta = merge_trace_metadata(
+                trace_meta,
+                {
+                    "trace_kind": "llm_chunk",
+                    "murikah_lane": "fast",
+                    "provider": recovery_winner.name,
+                    "continuation": continuation_count,
+                },
+            )
+            recovery_tail, recovery_finish_reason, recovery_failure = await collect_remaining(
+                recovery_winner,
+                publish=False,
+                metadata=recovery_meta,
+            )
+            raw_continuation = recovery_winner.first_chunk + recovery_tail
+            continuation_text = trim_continuation_overlap(answer, raw_continuation)
+            if answer and continuation_text and not continuation_text[0].isspace():
+                if (
+                    answer[-1:].isalnum()
+                    and continuation_text[0].isalnum()
+                ) or (
+                    answer[-1:] in ",;:.!?)]}"
+                    and continuation_text[0].isalnum()
+                ):
+                    continuation_text = " " + continuation_text
+
+            if continuation_text:
+                answer += continuation_text
+                await stream.content(
+                    continuation_text,
+                    source="chat",
+                    stage="responding",
+                    metadata=recovery_meta,
+                )
+
+            finish_reason = recovery_finish_reason
+            stream_failure = recovery_failure
+            incomplete = should_continue(answer, finish_reason, stream_failure)
+            logger.info(
+                "MURIKAH_LATENCY route=fast event=continuation_complete provider=%s attempt=%s finish_reason=%s failure=%s total_ms=%s",
+                recovery_winner.name,
+                continuation_count,
+                finish_reason or "unknown",
+                stream_failure or "none",
+                latency_ms(request_started),
+            )
+
+        context.metadata["murikah_finish_reason"] = finish_reason
+        context.metadata["murikah_continuations"] = continuation_count
+        if continuation_providers:
+            context.metadata["murikah_continuation_providers"] = continuation_providers
+
+        if incomplete:
+            logger.warning(
+                "MURIKAH_LATENCY route=fast event=terminal_incomplete_response finish_reason=%s failure=%s continuations=%s elapsed_ms=%s",
+                finish_reason or "unknown",
+                stream_failure or "none",
+                continuation_count,
+                latency_ms(request_started),
+            )
+            raise RuntimeError(
+                "Murikah could not finish this response right now. Please try again."
+            )
+
         context.capability_output.agent_output = answer
         context.capability_output.answer_published = True
         total_ms = latency_ms(request_started)
@@ -464,7 +699,7 @@ NEW_RUN = '''    @staticmethod
                 "response": answer,
                 "completed": True,
                 "engine": "murikah_fast_chat",
-                "rounds": 1,
+                "rounds": 1 + continuation_count,
                 "tool_steps": 0,
                 "provider": winner.name,
                 "first_token_ms": winner.first_token_ms,

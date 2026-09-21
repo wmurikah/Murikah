@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v26"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v27"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -445,12 +445,17 @@ def main() -> int:
             'trust_env=False',
             'async def race_first_visible(',
             'MURIKAH_LATENCY route=fast',
+            'FINISH_SIGNAL_PREFIX = "\\x00MURIKAH_FINISH:"',
+            'def finish_reason_needs_continuation(',
+            'def likely_incomplete_answer(',
+            'def continuation_messages(',
+            'def trim_continuation_overlap(',
         ),
     )
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V5',
+            'MURIKAH_DUAL_LANE_CHAT_V6',
             'def _agent_reason(',
             'force_agentic_chat',
             'race_first_visible(',
@@ -462,6 +467,11 @@ def main() -> int:
             'gemini-retry:',
             'terminal_first_token_timeout',
             '_FAST_TURN_TIMEOUT_SECONDS',
+            'MURIKAH_CHAT_FAST_OUTPUT_TOKENS',
+            'MURIKAH_CHAT_MAX_CONTINUATIONS',
+            'Continuing response…',
+            'terminal_incomplete_response',
+            'finish_reason_needs_continuation',
             'route=deep_agent',
             'route=fast',
         ),
@@ -667,6 +677,8 @@ def main() -> int:
     print(" - readiness is determined by the real Tutor /health route")
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
     print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
+    print(" - provider finish reasons are tracked and token-limited/interrupted answers continue invisibly before completion")
+    print(" - active fast-chat streams have a 4096-token segment budget, a 300s segment ceiling, and up to three hidden continuation passes")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
