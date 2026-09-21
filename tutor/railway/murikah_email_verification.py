@@ -22,6 +22,7 @@ from fastapi import HTTPException, Request
 _EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,189}\.[^@\s]{2,63}$")
 _BLOCKLIST_PATH = Path(__file__).with_name("disposable_email_domains.txt")
 _DNS_ENDPOINT = "https://cloudflare-dns.com/dns-query"
+MURIKAH_VERIFIED_EMAIL_V1 = True
 
 # Consumer providers are accepted without a network DNS lookup. Unknown
 # corporate, school and university domains are accepted when they publish MX.
@@ -131,7 +132,7 @@ async def validate_signup_email(value: str) -> str:
             and any(
                 isinstance(answer, dict)
                 and int(answer.get("type") or 0) == 15
-                and str(answer.get("data") or "").strip().rstrip(".") not in {"", "0 ."}
+                and str(answer.get("data") or "").strip() not in {"", "0 .", "0"}
                 for answer in answers
             )
         ):
