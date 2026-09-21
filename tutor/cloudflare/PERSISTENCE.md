@@ -51,6 +51,40 @@ A record becomes `training_eligible=1` only when the learner has explicitly opte
 
 Binary uploads, diagrams, books and other large objects remain in private R2; D1 stores their ownership/metadata references. This avoids abusing a relational database as blob storage while ensuring no durable user object depends on the Container filesystem.
 
+## D1/R2 ownership model (v29)
+
+Murikah now treats **D1 as the ownership/control plane**, **R2 as the durable object plane**, and the container filesystem as a disposable compatibility cache.
+
+`0004_tutor_object_ownership.sql` adds:
+
+- `tutor_objects`: one D1 ownership row for every durable R2-backed object, including owner kind/id, object type, runtime path, R2 object key, checksum, size and content type;
+- `tutor_accounts`: non-secret account identity, role, status and authentication-provider metadata;
+- `tutor_access_audit`: security events for denied deployment-configuration changes.
+
+Every new/changed `/app/data` object is classified server-side by the Worker. Per-user DeepTutor paths such as `users/<uid>/...` are registered to that user in D1 and written to canonical private R2 keys of the form:
+
+`users/<uid>/<object-type>/<stable-object-id>`
+
+Partner, administrator and system objects have explicit non-user ownership classes rather than being left unowned. Existing legacy `runtime/...` R2 objects are **not destructively renamed during rollout**. They are reconciled into `tutor_objects` on startup and continue to restore normally; the next changed write moves that path to its canonical ownership key. This compatibility-first migration prevents the ownership upgrade from risking existing conversations, Memory, Knowledge Bases or files.
+
+The Worker derives ownership from the validated runtime path and verifies any ownership metadata sent by the container. The Linux container cannot claim another owner merely by changing an HTTP header. R2 remains private and is reachable only through the HMAC-authenticated persistence bridge.
+
+On every Cloudflare container start, Tutor:
+
+1. restores the existing R2-backed compatibility tree;
+2. rebuilds normal runtime/model settings exactly as before;
+3. reconciles all existing manifest objects into the D1 ownership registry;
+4. reconciles non-secret existing account metadata into D1;
+5. checkpoints the bootstrapped baseline and resumes the existing background sync loop.
+
+This order intentionally preserves the response-time, follow-up, stream-continuation, guest handoff, diagram, Math Animator and other reliability fixes already in production. The v29 work changes persistence metadata and authorization boundaries; it does not replace the current chat execution paths.
+
+### Administrator versus learner controls
+
+Deployment-wide model/provider configuration is administrator-owned at both UI and API layers. Ordinary learners cannot add, remove or reconfigure LLMs, provider URLs/keys, model discovery/tests or personal provider credentials such as Codex OAuth. Direct non-admin attempts receive HTTP 403 and are recorded in the D1 access audit when available.
+
+Learners retain only user-scoped choices such as their own conversations/files and permitted learning preferences, appearance, language and use of tools/capabilities that the administrator has made available. Provider credentials remain Cloudflare Secrets or protected administrator runtime configuration; they are never copied into learner-owned D1/R2 records.
+
 ## What DeepTutor currently places in `/app/data`
 
 The pinned DeepTutor runtime uses the tree for runtime settings and credentials, accounts/auth state, sessions/chat history, per-user workspaces, Memory, Books/Reading/Notebooks, Knowledge Bases, parse caches, generated outputs and logs. Some of that state is file/JSON oriented and some is SQLite-backed.
@@ -117,10 +151,24 @@ Cloudflare dashboard Variables remain authoritative for model/service configurat
 4. **Externalise file stores** to private R2 checkpoints with a D1 manifest. Implemented in code.
 5. **Externalise the guest quota ledger** into D1 and safely checkpoint SQLite-backed runtime state. Implemented in code.
 6. **Journal learner turns directly in D1** before generation/completion, including prompts, final answers, summaries, status, performance metadata and consent gating. Implemented in v21.
-7. **Import** an existing snapshot only when one exists. The current production resources are empty, so the first successful checkpoint becomes the baseline.
-8. **Run staging/production verification** through sleep/wake, redeploy and one deliberate forced container replacement.
-9. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event.
-10. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
+7. **Register every durable R2 object in D1 with explicit ownership/type metadata** and reconcile legacy manifest rows without destructive rekeying. Implemented in v29.
+8. **Reconcile non-secret account role/status metadata into D1** while keeping credentials in Cloudflare Secrets/protected auth storage. Implemented in v29.
+9. **Import** an existing snapshot only when one exists. Existing runtime objects are preserved and ownership-registered in place.
+10. **Run staging/production verification** through sleep/wake, redeploy and one deliberate forced container replacement.
+11. **Verify** users, sessions, guest handoff, conversations, Knowledge Bases, Memory, uploads and generated outputs survive every lifecycle event with zero unregistered durable objects.
+12. **Cut over to multi-container sharding** only after the durability tests pass; keep a rollback checkpoint until acceptance is complete.
+
+## Lifecycle acceptance procedure
+
+Use the read-only lifecycle probe immediately before and after each destructive lifecycle test:
+
+```bash
+python tutor/cloudflare/verify_persistence_lifecycle.py --snapshot /tmp/tutor-before.json
+# perform one target lifecycle event: sleep/wake, deploy, forced container replacement, or rollback
+python tutor/cloudflare/verify_persistence_lifecycle.py --verify /tmp/tutor-before.json
+```
+
+The probe never reads learner content and never destroys a container. It fails if the D1 ownership schema is unavailable, any R2 manifest row lacks a D1 ownership record, or durable object/account/learning counts regress across the lifecycle event. For the two-user isolation acceptance test, create independent conversations/files/Memory/Knowledge Base data under two test accounts before taking the baseline, then verify each account through the normal Tutor UI after the lifecycle event; direct R2 access remains private and unavailable to learners.
 
 ## Acceptance conditions
 

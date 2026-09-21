@@ -157,8 +157,86 @@ function safePersistencePath(url: URL): string | null {
   return parts.join('/');
 }
 
-function persistenceObjectKey(path: string): string {
-  return 'runtime/' + path.split('/').map((part) => encodeURIComponent(part)).join('/');
+type PersistenceOwnership = {
+  ownerKind: 'user' | 'partner' | 'admin' | 'system';
+  ownerId: string;
+  objectType: string;
+};
+
+function objectTypeForPath(path: string): string {
+  const parts = path.toLowerCase().split('/');
+  const joined = '/' + parts.join('/') + '/';
+  if (joined.includes('/knowledge') || joined.includes('/kb/') || joined.includes('/rag/')) {
+    return 'knowledge';
+  }
+  if (joined.includes('/book') || joined.includes('/reading') || joined.includes('/notebook')) {
+    return 'learning_asset';
+  }
+  if (joined.includes('/memory')) return 'memory';
+  if (
+    joined.includes('/session') ||
+    joined.includes('/chat') ||
+    joined.includes('/conversation')
+  ) {
+    return 'conversation';
+  }
+  if (
+    joined.includes('/upload') ||
+    joined.includes('/attachment') ||
+    joined.includes('/document') ||
+    joined.includes('/files/')
+  ) {
+    return 'upload';
+  }
+  if (
+    joined.includes('/diagram') ||
+    joined.includes('/visual') ||
+    joined.includes('/generated') ||
+    joined.includes('/output') ||
+    joined.includes('/math_animator')
+  ) {
+    return 'generated';
+  }
+  if (joined.includes('/settings/')) return 'settings';
+  if (joined.includes('/auth/') || joined.includes('/grant')) return 'control';
+  return 'workspace';
+}
+
+function persistenceOwnership(path: string): PersistenceOwnership {
+  const parts = path.split('/');
+  const first = parts[0] || '';
+  const second = parts[1] || '';
+  if (first === 'users' && validPersistenceId(second)) {
+    return { ownerKind: 'user', ownerId: second, objectType: objectTypeForPath(path) };
+  }
+  if (first === 'partners' && validPersistenceId(second)) {
+    return { ownerKind: 'partner', ownerId: second, objectType: objectTypeForPath(path) };
+  }
+  if (first === 'user') {
+    return { ownerKind: 'admin', ownerId: 'admin', objectType: objectTypeForPath(path) };
+  }
+  return { ownerKind: 'system', ownerId: 'system', objectType: objectTypeForPath(path) };
+}
+
+function persistenceObjectKey(ownership: PersistenceOwnership, objectId: string): string {
+  const root =
+    ownership.ownerKind === 'user'
+      ? 'users'
+      : ownership.ownerKind === 'partner'
+        ? 'partners'
+        : ownership.ownerKind;
+  return [
+    root,
+    encodeURIComponent(ownership.ownerId),
+    encodeURIComponent(ownership.objectType),
+    objectId,
+  ].join('/');
+}
+
+function safeContentType(value: string | null): string {
+  const text = String(value || 'application/octet-stream').trim();
+  if (!text || text.length > 128 || /[\r\n]/.test(text)) return 'application/octet-stream';
+  return text;
 }
 
 function validPersistenceId(value: unknown): string {
@@ -505,6 +583,137 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     }
   }
 
+  if (route === '/account/upsert' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const username = learningText(body.username, 254);
+    const role = learningText(body.role || 'member', 16);
+    const authProvider = learningText(body.auth_provider || 'local', 32);
+    if (!actorId || !['guest', 'member', 'admin'].includes(role) || !authProvider) {
+      return persistenceJson({ error: 'invalid_account_metadata' }, 400);
+    }
+    try {
+      await upsertLearningActor(
+        env,
+        actorId,
+        role === 'member' ? 'member' : role,
+        role === 'guest' ? '' : username,
+        role === 'guest' ? actorId : '',
+        now,
+      );
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_accounts(actor_id, username, role, account_status, auth_provider, created_at, updated_at) ' +
+          "VALUES (?, ?, ?, 'active', ?, ?, ?) " +
+          'ON CONFLICT(actor_id) DO UPDATE SET username = excluded.username, role = excluded.role, ' +
+          "account_status = 'active', auth_provider = excluded.auth_provider, updated_at = excluded.updated_at",
+      )
+        .bind(actorId, username, role, authProvider, now, now)
+        .run();
+      return persistenceJson({ ok: true });
+    } catch (error) {
+      console.error('Tutor D1 account upsert failed', error);
+      return persistenceJson({ error: 'account_upsert_failed' }, 503);
+    }
+  }
+
+  if (route === '/audit' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = learningText(body.actor_id, 128);
+    const actorRole = learningText(body.actor_role, 16);
+    const action = learningText(body.action, 96);
+    const resource = learningText(body.resource, 192);
+    const outcome = learningText(body.outcome, 16);
+    const detail = learningText(body.detail, 500);
+    if (!action || !resource || !['allowed', 'denied', 'error'].includes(outcome)) {
+      return persistenceJson({ error: 'invalid_audit_event' }, 400);
+    }
+    const auditId = crypto.randomUUID().replace(/-/g, '');
+    await env.TUTOR_DB.prepare(
+      'INSERT INTO tutor_access_audit(audit_id, actor_id, actor_role, action, resource, outcome, detail, created_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+      .bind(auditId, actorId, actorRole, action, resource, outcome, detail, now)
+      .run();
+    return persistenceJson({ ok: true, audit_id: auditId });
+  }
+
+  if (route === '/ownership/reconcile' && request.method === 'POST') {
+    try {
+      const result = await env.TUTOR_DB.prepare(
+        'SELECT path, object_key, sha256, size_bytes, updated_at FROM persistence_objects ORDER BY path',
+      ).all<{
+        path: string;
+        object_key: string;
+        sha256: string;
+        size_bytes: number;
+        updated_at: number;
+      }>();
+      const rows = result.results || [];
+      let registered = 0;
+      for (let offset = 0; offset < rows.length; offset += 40) {
+        const statements: PersistenceStatement[] = [];
+        for (const row of rows.slice(offset, offset + 40)) {
+          const probe = new URL('https://persist.invalid/');
+          probe.searchParams.set('path', row.path);
+          const path = safePersistencePath(probe);
+          if (!path) continue;
+          const ownership = persistenceOwnership(path);
+          const objectId = await textSha256(path);
+          statements.push(
+            env.TUTOR_DB.prepare(
+              'INSERT INTO tutor_objects(object_id, owner_kind, owner_id, object_type, runtime_path, object_key, sha256, size_bytes, content_type, created_at, updated_at, deleted_at) ' +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'application/octet-stream', ?, ?, NULL) " +
+                'ON CONFLICT(runtime_path) DO UPDATE SET owner_kind = excluded.owner_kind, owner_id = excluded.owner_id, ' +
+                'object_type = excluded.object_type, object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+                'size_bytes = excluded.size_bytes, updated_at = excluded.updated_at, deleted_at = NULL',
+            ).bind(
+              objectId,
+              ownership.ownerKind,
+              ownership.ownerId,
+              ownership.objectType,
+              path,
+              row.object_key,
+              row.sha256,
+              Number(row.size_bytes || 0),
+              Number(row.updated_at || now),
+              now,
+            ),
+          );
+        }
+        if (statements.length) {
+          await env.TUTOR_DB.batch(statements);
+          registered += statements.length;
+        }
+      }
+      return persistenceJson({ ok: true, registered });
+    } catch (error) {
+      console.error('Tutor object ownership reconciliation failed', error);
+      return persistenceJson({ error: 'ownership_reconcile_failed' }, 503);
+    }
+  }
+
+  if (route === '/ownership/status' && request.method === 'GET') {
+    try {
+      const counts = await env.TUTOR_DB.prepare(
+        'SELECT ' +
+          '(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL) AS objects, ' +
+          "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'user') AS user_objects, " +
+          "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'partner') AS partner_objects, " +
+          "(SELECT COUNT(*) FROM tutor_accounts WHERE account_status = 'active') AS accounts, " +
+          '(SELECT COUNT(*) FROM persistence_objects p LEFT JOIN tutor_objects o ON o.runtime_path = p.path WHERE o.object_id IS NULL) AS unregistered',
+      ).first<{
+        objects: number;
+        user_objects: number;
+        partner_objects: number;
+        accounts: number;
+        unregistered: number;
+      }>();
+      return persistenceJson({ ok: true, ...(counts || {}) });
+    } catch (error) {
+      return persistenceJson({ ok: false, error: 'ownership_status_unavailable' }, 503);
+    }
+  }
+
   if (route === '/manifest' && request.method === 'GET') {
     const result = await env.TUTOR_DB.prepare(
       'SELECT path, sha256, size_bytes, mtime_ms, updated_at FROM persistence_objects ORDER BY path',
@@ -548,6 +757,13 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       const generation = request.headers.get('x-murikah-object-generation') || '';
       const mtime = Number(request.headers.get('x-murikah-object-mtime-ms') || '0');
       const size = Number(request.headers.get('x-murikah-object-size') || '0');
+      const ownership = persistenceOwnership(path);
+      const suppliedOwnerKind = request.headers.get('x-murikah-object-owner-kind') || '';
+      const suppliedOwnerId = request.headers.get('x-murikah-object-owner-id') || '';
+      const suppliedObjectType = request.headers.get('x-murikah-object-type') || '';
+      const suppliedObjectId = request.headers.get('x-murikah-object-id') || '';
+      const contentType = safeContentType(request.headers.get('x-murikah-object-content-type'));
+      const objectId = await textSha256(path);
       if (
         !/^[0-9a-f]{64}$/i.test(sha) ||
         sha !== signedContentSha ||
@@ -555,25 +771,61 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         !Number.isSafeInteger(mtime) ||
         mtime < 0 ||
         !Number.isSafeInteger(size) ||
-        size < 0
+        size < 0 ||
+        (suppliedOwnerKind && suppliedOwnerKind !== ownership.ownerKind) ||
+        (suppliedOwnerId && suppliedOwnerId !== ownership.ownerId) ||
+        (suppliedObjectType && suppliedObjectType !== ownership.objectType) ||
+        (suppliedObjectId && suppliedObjectId !== objectId)
       ) {
         return persistenceJson({ error: 'invalid_object_metadata' }, 400);
       }
-      const key = persistenceObjectKey(path);
+      const key = persistenceObjectKey(ownership, objectId);
       await env.TUTOR_FILES.put(key, request.body || new ArrayBuffer(0), {
-        customMetadata: { path, sha256: sha },
+        customMetadata: {
+          path,
+          sha256: sha,
+          object_id: objectId,
+          owner_kind: ownership.ownerKind,
+          owner_id: ownership.ownerId,
+          object_type: ownership.objectType,
+        },
       });
-      await env.TUTOR_DB.prepare(
-        'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, mtime_ms, generation, updated_at) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
-          'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, mtime_ms = excluded.mtime_ms, ' +
-          'generation = excluded.generation, ' +
-          'updated_at = excluded.updated_at',
-      )
-        .bind(path, key, sha, size, mtime, mtime, generation, now)
-        .run();
-      return persistenceJson({ ok: true });
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          'INSERT INTO persistence_objects(path, object_key, sha256, size_bytes, mtime_ns, mtime_ms, generation, updated_at) ' +
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
+            'ON CONFLICT(path) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+            'size_bytes = excluded.size_bytes, mtime_ns = excluded.mtime_ns, mtime_ms = excluded.mtime_ms, ' +
+            'generation = excluded.generation, updated_at = excluded.updated_at',
+        ).bind(path, key, sha, size, mtime, mtime, generation, now),
+        env.TUTOR_DB.prepare(
+          'INSERT INTO tutor_objects(object_id, owner_kind, owner_id, object_type, runtime_path, object_key, sha256, size_bytes, content_type, created_at, updated_at, deleted_at) ' +
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) ' +
+            'ON CONFLICT(runtime_path) DO UPDATE SET ' +
+            'object_id = excluded.object_id, owner_kind = excluded.owner_kind, owner_id = excluded.owner_id, ' +
+            'object_type = excluded.object_type, object_key = excluded.object_key, sha256 = excluded.sha256, ' +
+            'size_bytes = excluded.size_bytes, content_type = excluded.content_type, updated_at = excluded.updated_at, deleted_at = NULL',
+        ).bind(
+          objectId,
+          ownership.ownerKind,
+          ownership.ownerId,
+          ownership.objectType,
+          path,
+          key,
+          sha,
+          size,
+          contentType,
+          now,
+          now,
+        ),
+      ]);
+      return persistenceJson({
+        ok: true,
+        object_id: objectId,
+        owner_kind: ownership.ownerKind,
+        owner_id: ownership.ownerId,
+        object_type: ownership.objectType,
+      });
     }
   }
 
@@ -1089,12 +1341,32 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
     const learningTurns = await env.TUTOR_DB.prepare(
       'SELECT COUNT(*) AS count FROM tutor_turns',
     ).first<{ count: number }>();
+    const ownershipSchema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'ownership_schema_version'",
+    ).first<{ value: string }>();
+    const ownershipCounts = await env.TUTOR_DB.prepare(
+      'SELECT ' +
+        '(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL) AS owned_objects, ' +
+        "(SELECT COUNT(*) FROM tutor_objects WHERE deleted_at IS NULL AND owner_kind = 'user') AS user_objects, " +
+        "(SELECT COUNT(*) FROM tutor_accounts WHERE account_status = 'active') AS active_accounts, " +
+        '(SELECT COUNT(*) FROM persistence_objects p LEFT JOIN tutor_objects o ON o.runtime_path = p.path WHERE o.object_id IS NULL) AS unregistered_objects',
+    ).first<{
+      owned_objects: number;
+      user_objects: number;
+      active_accounts: number;
+      unregistered_objects: number;
+    }>();
     return persistenceJson({
       ok: true,
       schemaVersion: schema?.value || '',
       learningJournalSchemaVersion: learningSchema?.value || '',
+      ownershipSchemaVersion: ownershipSchema?.value || '',
       learningTurnCount: learningTurns?.count || 0,
       durableObjectCount: objects?.count || 0,
+      ownedObjectCount: ownershipCounts?.owned_objects || 0,
+      userOwnedObjectCount: ownershipCounts?.user_objects || 0,
+      activeAccountCount: ownershipCounts?.active_accounts || 0,
+      unregisteredObjectCount: ownershipCounts?.unregistered_objects || 0,
       activeGuestSessions: guests?.count || 0,
       lastCheckpointAt: checkpoint?.updated_at || null,
       r2PrivateBindingConfigured: Boolean(env.TUTOR_FILES),

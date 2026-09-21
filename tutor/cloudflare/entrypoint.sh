@@ -107,6 +107,12 @@ from deeptutor.services.setup import init_user_directories
 init_user_directories(Path('/app'))
 PY
 
+# D1 is the durable ownership/control plane. Reconcile legacy R2 manifest rows
+# and non-secret account metadata before the application begins serving users.
+# These operations are idempotent and do not rewrite learner content.
+python -m deeptutor.murikah_persistence reconcile-ownership
+python -m deeptutor.murikah_persistence reconcile-accounts
+
 eval "$(python - <<'PY'
 import shlex
 from deeptutor.services.config import export_runtime_settings_to_env
