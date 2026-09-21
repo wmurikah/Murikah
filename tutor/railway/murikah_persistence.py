@@ -14,6 +14,7 @@ import hmac
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path, PurePosixPath
 import secrets
 import signal
@@ -473,9 +474,17 @@ def object_ownership(rel: str) -> tuple[str, str, str, str]:
     """Return owner kind/id, object type and stable object id for a cache path."""
     normalized = _valid_relpath(rel)
     parts = PurePosixPath(normalized).parts
-    if len(parts) >= 2 and parts[0] == "users":
+    if (
+        len(parts) >= 2
+        and parts[0] == "users"
+        and re.fullmatch(r"[A-Za-z0-9_-]{3,128}", parts[1])
+    ):
         owner_kind, owner_id = "user", parts[1]
-    elif len(parts) >= 2 and parts[0] == "partners":
+    elif (
+        len(parts) >= 2
+        and parts[0] == "partners"
+        and re.fullmatch(r"[A-Za-z0-9_-]{3,128}", parts[1])
+    ):
         owner_kind, owner_id = "partner", parts[1]
     elif parts and parts[0] == "user":
         owner_kind, owner_id = "admin", "admin"
