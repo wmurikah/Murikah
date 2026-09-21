@@ -517,6 +517,10 @@ def main() -> int:
         (
             'const SIGN_UP =',
             'import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";',
+            'const isGuestSession = guest?.guest === true;',
+            'guest?.guest === false',
+            'guest?.authenticated === true',
+            'if (isMemberSession)',
         ),
     )
     require_markers(
