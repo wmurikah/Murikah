@@ -175,8 +175,6 @@ def patch_settings_navigation(root: Path) -> None:
     before, model_block, after = text[:start], text[start:end], text[end:]
 
     keys = (
-        "voice",
-        "multimodal",
         "connections",
         "llm",
         "task-models",
