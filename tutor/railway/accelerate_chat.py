@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V5"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V6"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -32,15 +32,20 @@ from deeptutor.murikah_fast_lane import (
     configured_gemini_model,
     configured_nvidia_fast_model,
     configured_qwen_fast_model,
+    continuation_messages,
+    finish_reason_needs_continuation,
     gemini_configured,
     gemini_stream,
     latency_ms,
+    likely_incomplete_answer,
     nvidia_configured,
     nvidia_stream,
+    parse_finish_signal,
     portable_chat_messages,
     qwen_configured,
     qwen_stream,
     race_first_visible,
+    trim_continuation_overlap,
 )
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
@@ -49,10 +54,18 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V5
+# MURIKAH_DUAL_LANE_CHAT_V6
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, "") or default)
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
@@ -68,7 +81,13 @@ _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
 )
 _FAST_TURN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 60.0
+    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 300.0
+)
+_FAST_OUTPUT_TOKENS = _positive_int(
+    "MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 4096
+)
+_MAX_CONTINUATIONS = min(
+    4, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 3)
 )
 '''
 
@@ -194,7 +213,7 @@ NEW_RUN = '''    @staticmethod
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                    max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 ),
@@ -216,7 +235,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.0,
                     factory=lambda: gemini_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -227,7 +246,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.55 if gemini_on else 0.0,
                     factory=lambda: nvidia_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -238,7 +257,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=1.1 if (gemini_on or nvidia_on) else 0.0,
                     factory=lambda: qwen_stream(
                         messages,
-                        max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                     ),
                 )
             )
@@ -293,7 +312,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: gemini_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
@@ -304,7 +323,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: nvidia_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
@@ -315,7 +334,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: qwen_stream(
                             messages,
-                            max_tokens=min(2400, prompt_pipeline.respond_max_tokens),
+                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
                         ),
                     )
                 )
