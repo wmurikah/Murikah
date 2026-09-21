@@ -25,6 +25,16 @@ DEFAULT_FAST_HISTORY_CHARS = 60000
 DEFAULT_HEDGE_DELAY_SECONDS = 2.5
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 12.0
 DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 20.0
+FINISH_SIGNAL_PREFIX = "\x00MURIKAH_FINISH:"
+TRUNCATING_FINISH_REASONS = frozenset(
+    {
+        "length",
+        "max_tokens",
+        "max_output_tokens",
+        "model_length",
+        "token_limit",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +54,77 @@ class HedgeWinner:
 
 def latency_ms(started_at: float) -> int:
     return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def finish_signal(reason: str) -> str:
+    normalized = str(reason or "").strip().lower()
+    return f"{FINISH_SIGNAL_PREFIX}{normalized}" if normalized else ""
+
+
+def parse_finish_signal(value: Any) -> str | None:
+    text = str(value or "")
+    if not text.startswith(FINISH_SIGNAL_PREFIX):
+        return None
+    return text[len(FINISH_SIGNAL_PREFIX):].strip().lower()
+
+
+def finish_reason_needs_continuation(reason: str | None) -> bool:
+    return str(reason or "").strip().lower() in TRUNCATING_FINISH_REASONS
+
+
+def likely_incomplete_answer(text: str) -> bool:
+    """Conservative EOF check used only when a provider gives no finish reason."""
+    value = str(text or "").rstrip()
+    if not value:
+        return True
+    if value.count("~~~") % 2:
+        return True
+    if value[-1] in ",;:—–-([{/\":
+        return True
+    words = value.lower().split()
+    if not words:
+        return True
+    return words[-1].strip("*_()[]{}.,!?") in {
+        "a", "an", "and", "are", "as", "because", "but", "can", "could",
+        "for", "if", "in", "is", "of", "or", "so", "that", "the", "then",
+        "to", "was", "were", "which", "will", "with", "would",
+    }
+
+
+def continuation_messages(
+    messages: list[dict[str, Any]],
+    partial_answer: str,
+) -> list[dict[str, str]]:
+    """Build a provider-portable hidden continuation turn."""
+    base = portable_chat_messages(messages)
+    partial = str(partial_answer or "").strip()
+    if partial:
+        base.append({"role": "assistant", "content": partial})
+    base.append(
+        {
+            "role": "user",
+            "content": (
+                "Continue the assistant answer exactly from where it stopped. "
+                "Do not restart, repeat, summarize, apologize, or mention a cutoff. "
+                "Complete the unfinished sentence first, then finish the requested answer. "
+                "Return only the continuation text."
+            ),
+        }
+    )
+    return base
+
+
+def trim_continuation_overlap(existing: str, continuation: str) -> str:
+    """Remove an exact repeated prefix when a recovery model restates the tail."""
+    left = str(existing or "").rstrip()
+    right = str(continuation or "").lstrip()
+    if not left or not right:
+        return right
+    max_overlap = min(len(left), len(right), 1200)
+    for size in range(max_overlap, 15, -1):
+        if left[-size:].casefold() == right[:size].casefold():
+            return right[size:].lstrip()
+    return right
 
 
 def configured_gemini_model() -> str:
@@ -202,6 +283,16 @@ def _gemini_text(event: dict[str, Any]) -> str:
     return "".join(chunks)
 
 
+def _gemini_finish_reason(event: dict[str, Any]) -> str:
+    for candidate in event.get("candidates", []) or []:
+        if not isinstance(candidate, dict):
+            continue
+        reason = candidate.get("finishReason") or candidate.get("finish_reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip().lower()
+    return ""
+
+
 async def gemini_stream(
     messages: list[dict[str, Any]],
     *,
@@ -250,6 +341,9 @@ async def gemini_stream(
                 text = _gemini_text(event)
                 if text:
                     yield text
+                reason = _gemini_finish_reason(event)
+                if reason:
+                    yield finish_signal(reason)
 
 
 def _openai_chat_payload(
@@ -331,15 +425,20 @@ async def _openai_compatible_stream(
                     continue
                 if event.get("error"):
                     raise RuntimeError("Tutor provider is temporarily unavailable.")
+                finish_reason = ""
                 for choice in event.get("choices", []) or []:
                     if not isinstance(choice, dict):
                         continue
                     delta = choice.get("delta") or {}
-                    if not isinstance(delta, dict):
-                        continue
-                    text = delta.get("content")
-                    if isinstance(text, str) and text:
-                        yield text
+                    if isinstance(delta, dict):
+                        text = delta.get("content")
+                        if isinstance(text, str) and text:
+                            yield text
+                    reason = choice.get("finish_reason") or choice.get("finishReason")
+                    if isinstance(reason, str) and reason.strip():
+                        finish_reason = reason.strip().lower()
+                if finish_reason:
+                    yield finish_signal(finish_reason)
 
 
 async def nvidia_stream(
@@ -404,6 +503,8 @@ async def _next_visible(stream: AsyncIterator[str]) -> str:
     in_think = False
     async for chunk in stream:
         text = str(chunk or "")
+        if parse_finish_signal(text) is not None:
+            continue
         if text == "<think>":
             in_think = True
             continue
