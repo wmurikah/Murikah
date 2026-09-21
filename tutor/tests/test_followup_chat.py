@@ -24,9 +24,15 @@ def assigned_string(source: str, name: str) -> str:
 class FollowupChatTests(unittest.TestCase):
     def test_fast_lane_never_recovers_into_agent_loop(self):
         source = (ROOT / "railway/accelerate_chat.py").read_text(encoding="utf-8")
-        self.assertIn("MURIKAH_DUAL_LANE_CHAT_V5", source)
+        self.assertIn("MURIKAH_DUAL_LANE_CHAT_V6", source)
         self.assertIn("terminal_first_token_timeout", source)
         self.assertIn("_FAST_TURN_TIMEOUT_SECONDS", source)
+        self.assertIn("MURIKAH_CHAT_FAST_OUTPUT_TOKENS", source)
+        self.assertIn("MURIKAH_CHAT_MAX_CONTINUATIONS", source)
+        self.assertIn("Continuing response…", source)
+        self.assertIn("finish_reason_needs_continuation", source)
+        self.assertIn("continuation_messages", source)
+        self.assertIn("terminal_incomplete_response", source)
         self.assertIn("nvidia-fast:", source)
         self.assertIn("qwen-fast:", source)
         self.assertIn("qwen-retry:", source)
