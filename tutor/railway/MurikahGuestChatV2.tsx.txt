@@ -47,7 +47,7 @@ import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AuthStatusResponse = { authenticated?: boolean };
-type GuestStatusResponse = { remaining?: number; requires_auth?: boolean };
+type GuestStatusResponse = { guest?: boolean; authenticated?: boolean; remaining?: number; requires_auth?: boolean };
 type GuestChatResponse = {
   answer?: string;
   remaining?: number;
@@ -734,11 +734,22 @@ export default function MurikahGuestChat() {
       .then(([auth, guest, models]) => {
         if (!alive) return;
         if (Array.isArray(models?.options)) setModelOptions(models.options);
-        if (auth?.authenticated) {
+        // Guest workspaces intentionally carry a valid DeepTutor auth token so
+        // they can use the normal Tutor surface. /api/auth/status therefore
+        // reports them as authenticated. Only leave the guest surface when the
+        // access endpoint explicitly says this is a non-guest authenticated
+        // member; otherwise the Sign in / Sign up entry points would flash and
+        // disappear as soon as the guest session cookie is established.
+        const isGuestSession = guest?.guest === true;
+        const isMemberSession =
+          auth?.authenticated === true &&
+          guest?.guest === false &&
+          guest?.authenticated === true;
+        if (isMemberSession) {
           router.replace(messages.length ? RESUME_NEXT : "/chat");
           return;
         }
-        if (guest) {
+        if (isGuestSession) {
           setRemaining(Math.max(0, Number(guest.remaining ?? 7)));
           setAuthNeeded(Boolean(guest.requires_auth));
         }
