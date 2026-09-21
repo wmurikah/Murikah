@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v30"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v31"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -287,6 +287,9 @@ def main() -> int:
             'python /opt/murikah/share_admin_models.py /src/DeepTutor',
             'COPY tutor/railway/harden_admin_controls.py /opt/murikah/harden_admin_controls.py',
             'python /opt/murikah/harden_admin_controls.py /src/DeepTutor',
+            'COPY tutor/railway/harden_math_animator.py /opt/murikah/harden_math_animator.py',
+            'python /opt/murikah/harden_math_animator.py /src/DeepTutor',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/agents/math_animator /app/deeptutor/agents/math_animator',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/multi_user/model_access.py /app/deeptutor/multi_user/model_access.py',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/settings.py /app/deeptutor/api/routers/settings.py',
             'COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx',
@@ -399,6 +402,19 @@ def main() -> int:
             'MURIKAH_FAST_CHAT_MODEL',
             '"api_format": "openai_chat"',
             'deep-task LLM selection preserved',
+        ),
+    )
+    require_markers(
+        "tutor/railway/harden_math_animator.py",
+        (
+            "MURIKAH_MATH_ANIMATOR_STRUCTURED_V1",
+            "direct_structured_payload",
+            "request_structured_payload",
+            "MURIKAH_MATH_STRUCTURED_TIMEOUT_SECONDS",
+            "MURIKAH_MATH_PRIMARY_TIMEOUT_SECONDS",
+            "Your math animation is ready.",
+            "Murikah could not prepare animation code after bounded retries.",
+            "Provider/backend details belong in server logs",
         ),
     )
     require_markers(
@@ -766,6 +782,8 @@ def main() -> int:
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
     print(" - sign-in and sign-up tabs have explicit active-state contrast")
     print(" - Math Animator dependencies are installed and smoke-tested in the production image")
+    print(" - Math Animator planning/summary JSON stages use bounded multi-provider recovery with deterministic fallbacks")
+    print(" - Math Animator code generation gets an independent provider fallback and raw JSON/provider errors stay out of learner UI")
     print(" - Diagram Design has a real page scroller and renders its SVG before explanation")
     print(" - Deep Solve performs one hidden final repair before surfacing an empty-answer failure")
     print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
