@@ -26,6 +26,7 @@ COPY tutor/railway/refine_guest_experience.py /opt/murikah/refine_guest_experien
 COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
+COPY tutor/railway/add_virtual_internship_placeholder.py /opt/murikah/add_virtual_internship_placeholder.py
 COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py
 COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py
 COPY tutor/railway/share_admin_models.py /opt/murikah/share_admin_models.py
@@ -63,6 +64,7 @@ COPY tutor/railway/MurikahGuestResume.tsx.txt /opt/murikah/MurikahGuestResume.ts
 COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButtons.tsx
 COPY tutor/railway/MurikahDiagramStudio.tsx.txt /opt/murikah/MurikahDiagramStudio.tsx
 COPY tutor/railway/murikah-diagram-page.tsx.txt /opt/murikah/murikah-diagram-page.tsx
+COPY tutor/railway/murikah-virtual-internship-page.tsx.txt /opt/murikah/murikah-virtual-internship-page.tsx
 COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.tsx
 COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
@@ -78,6 +80,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/polish_guest_shell.py /src/DeepTutor \
     && python /opt/murikah/render_guest_markdown.py /src/DeepTutor \
     && python /opt/murikah/enhance_guest_diagram.py /src/DeepTutor \
+    && python /opt/murikah/add_virtual_internship_placeholder.py /src/DeepTutor /opt/murikah/murikah-virtual-internship-page.tsx \
     && python /opt/murikah/harden_guest_completion.py /src/DeepTutor \
     && python /opt/murikah/accelerate_chat.py /src/DeepTutor \
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
