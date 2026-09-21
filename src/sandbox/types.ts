@@ -302,4 +302,5 @@ export type SandboxAction =
   | { type: 'MARK_NOTIFICATION'; id: string }
   | { type: 'DISMISS_TOUR' }
   | { type: 'UNDO_LAST' }
+  | { type: 'CLEAR_UNDO' }
   | { type: 'RESET'; state: SandboxState };
