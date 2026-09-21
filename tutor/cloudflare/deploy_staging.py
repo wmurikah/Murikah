@@ -194,6 +194,22 @@ def validate_runtime_report(report: dict[str,Any]) -> None:
     if "Traceback (most recent call last):" in log and port_probe!="http-200":
         raise RuntimeError(f"fresh Tutor image failed during startup:\n{safe_failure_detail(log)}")
 
+def refreshed_failure_detail(expected_revision: str) -> str:
+    """Capture diagnostics after a readiness failure, not from an earlier image probe."""
+    try:
+        report,_=diagnostic_report(expected_revision,timeout_seconds=75)
+        log=safe_failure_detail(startup_log(report))
+        runtime=report.get("runtime") if isinstance(report.get("runtime"),dict) else {}
+        port_probe=str(runtime.get("port3782","")) if isinstance(runtime,dict) else ""
+        parts=[]
+        if port_probe:
+            parts.append(f"diagnostic port3782={port_probe}")
+        if log:
+            parts.append(log)
+        return "\n".join(parts)
+    except Exception as exc:
+        return f"diagnostics refresh failed: {type(exc).__name__}: {exc}"
+
 def main() -> int:
     expected_revision=expected_image_revision()
     apply_persistence_migrations()
@@ -211,7 +227,7 @@ def main() -> int:
             return 0
         fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
         if not fresh:
-            detail=safe_failure_detail(startup_log(report))
+            detail=refreshed_failure_detail(expected_revision)
             raise RuntimeError("freshly-created Tutor application did not become healthy or expose image "+expected_revision+"; application was preserved for inspection"+(f"\n{detail}" if detail else ""))
 
     elif not fresh:
