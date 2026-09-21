@@ -291,6 +291,7 @@ export type SandboxAction =
   | { type: 'SELECT_WORK_PAPER'; workPaperId: string | null }
   | { type: 'RESCHEDULE_ENGAGEMENT'; engagementId: string; quarter: Engagement['quarter'] }
   | { type: 'UPDATE_ACTION_STATUS'; actionPlanId: string; status: ActionPlanStatus }
+  | { type: 'ADD_ACTION_EVIDENCE'; actionPlanId: string; name: string; typeName: string; sizeKb: number }
   | { type: 'UPDATE_FINDING'; findingId: string; patch: Partial<Finding>; reason?: string }
   | { type: 'SET_FINDING_DRAFT'; patch: Partial<FindingDraft> }
   | { type: 'CREATE_FINDING_FROM_DRAFT' }
