@@ -147,13 +147,25 @@ jobs:
       - name: Build production site
         run: pnpm build
 
-      - name: Start preview server
+      - name: Start static acceptance server
         shell: bash
         run: |
           set -euo pipefail
-          pnpm preview --host 127.0.0.1 --port 4321 >/tmp/murikah-preview.log 2>&1 &
+          if [ -f dist/client/index.html ]; then
+            ACCEPTANCE_ROOT=dist/client
+          elif [ -f dist/index.html ]; then
+            ACCEPTANCE_ROOT=dist
+          else
+            echo "Could not find the prerendered marketing homepage."
+            find dist -maxdepth 3 -type f | head -80
+            exit 1
+          fi
+
+          python3 -m http.server 4321 --bind 127.0.0.1 --directory "$ACCEPTANCE_ROOT" \
+            >/tmp/murikah-preview.log 2>&1 &
           echo $! >/tmp/murikah-preview.pid
-          for attempt in {1..40}; do
+
+          for attempt in {1..20}; do
             if curl --silent --fail http://127.0.0.1:4321/ >/dev/null; then
               exit 0
             fi
