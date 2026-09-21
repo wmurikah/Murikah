@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSandbox } from '@/sandbox/store';
 import type { ScreenId } from '@/sandbox/types';
+import { canAccessScreen } from '@/sandbox/permissions';
 import { Icon } from './Icon';
 import { useFocusTrap } from './Ui';
 
@@ -25,16 +26,17 @@ export default function CommandPalette({ open, onClose }: { open:boolean; onClos
   const results=useMemo(()=>{
     const q=query.trim().toLowerCase();
     const screens=screenCommands
+      .filter(x=>canAccessScreen(state.activeRoleCode, x.screen))
       .filter(x=>!q || (x.label + ' ' + x.keywords).toLowerCase().includes(q))
       .map(x=>({kind:'screen' as const,id:x.screen,label:x.label,detail:'Open screen'}));
-    const findings=state.findings
+    const findings=canAccessScreen(state.activeRoleCode, 'findings') ? state.findings
       .filter(f=>!q || (f.id + ' ' + f.observationTitle + ' ' + f.process).toLowerCase().includes(q))
       .slice(0,6)
-      .map(f=>({kind:'finding' as const,id:f.id,label:f.id + ' · ' + f.observationTitle,detail:f.riskRating}));
-    const engagements=state.engagements
+      .map(f=>({kind:'finding' as const,id:f.id,label:f.id + ' · ' + f.observationTitle,detail:f.riskRating})) : [];
+    const engagements=canAccessScreen(state.activeRoleCode, 'engagements') ? state.engagements
       .filter(e=>!q || (e.engagementId + ' ' + e.title + ' ' + e.process).toLowerCase().includes(q))
       .slice(0,4)
-      .map(e=>({kind:'engagement' as const,id:e.engagementId,label:e.title,detail:e.status}));
+      .map(e=>({kind:'engagement' as const,id:e.engagementId,label:e.title,detail:e.status})) : [];
     return [...screens,...findings,...engagements].slice(0,14);
   },[query,state]);
 
