@@ -42,7 +42,7 @@ jobs:
             'https://upload.wikimedia.org/wikipedia/commons/4/40/Modern_office_building%2C_Theresienh%C3%B6he%2C_M%C3%BCnchen.jpg' \
             --output /tmp/hero-building-source.jpg
 
-          node <<'NODE'
+          node --input-type=commonjs <<'NODE'
           const fs = require('node:fs/promises');
           const sharp = require('sharp');
 
