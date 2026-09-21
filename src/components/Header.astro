@@ -263,7 +263,6 @@ const idFor = (label: string, index: number) =>
       group.addEventListener('pointerleave', () => {
         if (pointerHover.matches) scheduleClose(group);
       });
-      group.addEventListener('focusin', () => openMenu(group));
       group.addEventListener('focusout', (event) => {
         const next = event.relatedTarget;
         if (!(next instanceof Node) || !group.contains(next)) scheduleClose(group);
