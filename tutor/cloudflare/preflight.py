@@ -81,6 +81,23 @@ def validate_persistence_migration_fixture() -> None:
     if "SCHEMA_VERSION" not in normalized:
         failures.append(f"{relative} missing schema_version marker")
 
+def validate_resend_deploy_policy() -> None:
+    """Resend must gate signup, not the entire Worker deployment."""
+    relative = "tutor/cloudflare/wrangler.toml"
+    content = require(relative)
+    if not content:
+        return
+    try:
+        required_block = content.split("[secrets]", 1)[1].split("[[d1_databases]]", 1)[0]
+    except IndexError:
+        failures.append(f"{relative} is missing the expected [secrets] section")
+        return
+    if '"RESEND_API_KEY"' in required_block:
+        failures.append(
+            f"{relative} makes RESEND_API_KEY deploy-required; keep email verification fail-closed at runtime instead"
+        )
+
+
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
     bootstrap_path = ROOT / "tutor/railway/bootstrap_runtime.py"
@@ -850,6 +867,7 @@ def main() -> int:
         ),
     )
     validate_persistence_migration_fixture()
+    validate_resend_deploy_policy()
     validate_bootstrap_fixture()
 
     if failures:
