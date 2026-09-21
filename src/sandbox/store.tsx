@@ -230,6 +230,8 @@ export function sandboxReducer(state: SandboxState, action: SandboxAction): Sand
       return { ...state, notifications: state.notifications.map((item) => item.id === action.id ? { ...item, read: true } : item) };
     case 'DISMISS_TOUR':
       return { ...state, tourDismissed: true };
+    case 'CLEAR_UNDO':
+      return { ...state, undo: null };
     case 'UNDO_LAST': {
       if (!state.undo) return state;
       if (state.undo.actionPlanId && state.undo.previousActionStatus) {
