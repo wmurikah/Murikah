@@ -51,10 +51,10 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 DIRECT_TIMEOUT_SECONDS = max(
-    8.0, float(os.environ.get("MURIKAH_MATH_STRUCTURED_TIMEOUT_SECONDS", "24") or 24)
+    8.0, float(os.environ.get("MURIKAH_MATH_STRUCTURED_TIMEOUT_SECONDS", "18") or 18)
 )
 PRIMARY_TIMEOUT_SECONDS = max(
-    8.0, float(os.environ.get("MURIKAH_MATH_PRIMARY_TIMEOUT_SECONDS", "24") or 24)
+    8.0, float(os.environ.get("MURIKAH_MATH_PRIMARY_TIMEOUT_SECONDS", "18") or 18)
 )
 
 
@@ -223,7 +223,12 @@ async def request_structured_payload(
             return direct
 
     repair = _json_instruction(model_cls.__name__)
-    for attempt in range(2):
+    # Text-only stages already tried the independent direct provider pool, so
+    # one bounded configured-model attempt is enough before deterministic
+    # recovery. Multimodal analysis gets two attempts because the direct pool
+    # intentionally does not discard image attachments.
+    primary_attempts = 2 if attachments else 1
+    for attempt in range(primary_attempts):
         prompt = user_prompt + (repair if attempt else "")
         try:
             response = await asyncio.wait_for(
