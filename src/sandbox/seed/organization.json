@@ -1,0 +1,18 @@
+{
+  "organizationId": "ORG-KILIMA",
+  "organizationName": "Kilima Savings and Credit Cooperative Ltd",
+  "sector": "SACCO",
+  "currency": "KES",
+  "entities": [
+    {
+      "affiliateCode": "HO",
+      "affiliateName": "Head Office",
+      "isGroup": true
+    },
+    {
+      "affiliateCode": "NKR",
+      "affiliateName": "Nakuru Branch",
+      "isGroup": false
+    }
+  ]
+}
