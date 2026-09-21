@@ -1166,10 +1166,10 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 ### Phase 0 — product contract and placeholder
 
 - [x] Write canonical Virtual Internship + Competency Passport specification.
-- [ ] Add authenticated Tutor sidebar entry.
-- [ ] Add authenticated `/virtual-internship` placeholder route.
-- [ ] Add guest-visible Virtual Internship entry.
-- [ ] Add build/preflight checks protecting the placeholder and specification.
+- [x] Add authenticated Tutor sidebar entry.
+- [x] Add authenticated `/virtual-internship` placeholder route.
+- [x] Add guest-visible Virtual Internship entry.
+- [x] Add build/preflight checks protecting the placeholder and specification.
 
 ### Phase 1 — persistence foundation
 
