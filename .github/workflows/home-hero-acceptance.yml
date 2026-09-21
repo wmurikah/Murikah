@@ -148,6 +148,16 @@ jobs:
 
           ls -lh public/images/hero
 
+      - name: Commit generated hero assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/images/hero
+          git commit -m 'Generate homepage hero assets from uploaded source'
+          git push origin HEAD:fix/use-uploaded-building-hero
+
       - name: Build production site
         run: pnpm build
 
