@@ -332,7 +332,6 @@ async def _login_or_verify_redirect(
         path="/",
     )
     response.delete_cookie(_STATE_COOKIE, path="/api/auth/oauth")
-    response.delete_cookie(_PENDING_COOKIE, path="/")
     return response
 
 
@@ -340,6 +339,7 @@ def _error_redirect(message: str) -> RedirectResponse:
     safe = urlencode({"oauth_error": message[:160]})
     response = RedirectResponse(url=f"{_public_base()}/login?{safe}", status_code=303)
     response.delete_cookie(_STATE_COOKIE, path="/api/auth/oauth")
+    response.delete_cookie(_PENDING_COOKIE, path="/")
     return response
 
 
