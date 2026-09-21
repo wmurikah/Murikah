@@ -697,7 +697,7 @@ NEW_RUN = '''    @staticmethod
                 "response": answer,
                 "completed": True,
                 "engine": "murikah_fast_chat",
-                "rounds": 1,
+                "rounds": 1 + continuation_count,
                 "tool_steps": 0,
                 "provider": winner.name,
                 "first_token_ms": winner.first_token_ms,
