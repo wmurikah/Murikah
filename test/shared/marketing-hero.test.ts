@@ -135,8 +135,7 @@ test('desktop hero and photo geometry match the reference specification', async 
   assert.match(page, /height: min\(100svh, 900px\)/);
   assert.match(page, /min-height: 640px/);
   assert.match(page, /--home-hero-gutter: clamp\(1\.5rem, 8\.33vw, 7\.5rem\)/);
-  assert.match(page, /inset: 0 0 0 45%/);
-  assert.match(page, /width: 55%/);
+  assert.match(page, /\.home-hero__media \{[\s\S]*?inset: 0;[\s\S]*?width: 100%/);
   assert.match(page, /max-width: 640px/);
   assert.match(page, /font-family: var\(--font-display\)/);
   assert.match(page, /font-size: clamp\(44px, 6vw, 84px\)/);
@@ -148,7 +147,7 @@ test('desktop hero and photo geometry match the reference specification', async 
   assert.match(page, /max-width: 34em/);
   assert.match(
     page,
-    /linear-gradient\([\s\S]*?90deg,[\s\S]*?var\(--color-navy\) 0%,[\s\S]*?var\(--color-navy\) 38%,[\s\S]*?rgba\(7, 29, 53, 0\.65\) 60%,[\s\S]*?rgba\(7, 29, 53, 0\) 100%/,
+    /linear-gradient\([\s\S]*?90deg,[\s\S]*?var\(--color-navy\) 0%,[\s\S]*?var\(--color-navy\) 27%,[\s\S]*?rgba\(7, 29, 53, 0\.92\) 34%,[\s\S]*?rgba\(7, 29, 53, 0\.74\) 44%,[\s\S]*?rgba\(7, 29, 53, 0\.48\) 56%,[\s\S]*?rgba\(7, 29, 53, 0\.2\) 68%,[\s\S]*?rgba\(7, 29, 53, 0\) 78%/,
   );
   assert.match(
     page,
