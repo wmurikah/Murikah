@@ -24,6 +24,7 @@
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
     scroll-padding-top: var(--header-height);
+    scrollbar-gutter: stable;
   }
 
   :where([id]) {
