@@ -303,4 +303,5 @@ export type SandboxAction =
   | { type: 'DISMISS_TOUR' }
   | { type: 'UNDO_LAST' }
   | { type: 'CLEAR_UNDO' }
+  | { type: 'LOG_EVENT'; action: string; entityType: string; entityId: string; details: string }
   | { type: 'RESET'; state: SandboxState };
