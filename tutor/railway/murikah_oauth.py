@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import secrets
 import threading
+import time
 from urllib.parse import urlencode
 
 import httpx
@@ -210,11 +211,34 @@ def _social_username(provider: str, subject: str, email: str) -> str:
         return candidate
 
 
+def _persist_social_account(username: str, provider: str, info: dict[str, object]) -> None:
+    if not _env("MURIKAH_TUTOR_RUNTIME").startswith("cloudflare-container"):
+        return
+    from deeptutor import murikah_persistence
+
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            murikah_persistence.account_upsert(
+                str(info.get("id") or ""),
+                username=username,
+                role="admin" if str(info.get("role") or "").lower() == "admin" else "member",
+                auth_provider=provider,
+            )
+            return
+        except murikah_persistence.PersistenceError as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.2)
+    raise RuntimeError("Social account storage is temporarily unavailable.") from last_error
+
+
 def _login_redirect(provider: str, subject: str, email: str, next_path: str) -> RedirectResponse:
     username = _social_username(provider, subject, email)
     info = get_user_info(username)
     if not info:
         raise RuntimeError("Social account could not be created")
+    _persist_social_account(username, provider, info)
     token = create_token(username, role=str(info.get("role") or "user"), user_id=str(info.get("id") or ""))
     response = RedirectResponse(url=f"{_public_base()}{_safe_next(next_path)}", status_code=303)
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
