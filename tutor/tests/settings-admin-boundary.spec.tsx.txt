@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import { visibleSettingsPages } from "@/features/settings/navigation/settings-pages";
+
+const member = {
+  resolved: true,
+  hideAdminOnly: true,
+  showLearnerOnly: false,
+  showGuardianOnly: true,
+};
+
+const admin = {
+  resolved: true,
+  hideAdminOnly: false,
+  showLearnerOnly: false,
+  showGuardianOnly: false,
+};
+
+const modelSettings = [
+  "voice",
+  "multimodal",
+  "connections",
+  "llm",
+  "task-models",
+  "embedding",
+  "search",
+  "tts",
+  "stt",
+  "imagegen",
+  "videogen",
+];
+
+describe("Murikah Tutor settings boundary", () => {
+  it("hides deployment model configuration from ordinary members", () => {
+    const keys = new Set(visibleSettingsPages(member).map((page) => page.key));
+    for (const key of modelSettings) expect(keys.has(key)).toBe(false);
+  });
+
+  it("keeps deployment model configuration available to administrators", () => {
+    const keys = new Set(visibleSettingsPages(admin).map((page) => page.key));
+    for (const key of modelSettings) expect(keys.has(key)).toBe(true);
+  });
+
+  it("keeps member-owned preferences visible", () => {
+    const keys = new Set(visibleSettingsPages(member).map((page) => page.key));
+    expect(keys.has("general")).toBe(true);
+    expect(keys.has("tools")).toBe(true);
+    expect(keys.has("appearance")).toBe(true);
+  });
+});
