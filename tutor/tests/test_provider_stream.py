@@ -146,6 +146,14 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             if previous is not None:
                 fast.os.environ["MURIKAH_FAST_CHAT_QWEN_MODEL"] = previous
 
+    async def test_finish_signal_is_not_coalesced_into_buffered_json(self):
+        signal = fast.finish_signal("length")
+        items = [
+            item
+            async for item in fast.validated_stream(stream('{"answer":', signal))
+        ]
+        self.assertEqual(items, ['{"answer":', signal])
+
     async def test_finish_signal_is_not_a_visible_first_token(self):
         signal = fast.finish_signal("length")
         visible = await fast._next_visible(stream(signal, "Continuation starts here."))
