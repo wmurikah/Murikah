@@ -618,13 +618,15 @@ NEW_RUN = '''    @staticmethod
             )
             raw_continuation = recovery_winner.first_chunk + recovery_tail
             continuation_text = trim_continuation_overlap(answer, raw_continuation)
-            if (
-                answer
-                and continuation_text
-                and answer[-1:].isalnum()
-                and continuation_text[0].isalnum()
-            ):
-                continuation_text = " " + continuation_text
+            if answer and continuation_text and not continuation_text[0].isspace():
+                if (
+                    answer[-1:].isalnum()
+                    and continuation_text[0].isalnum()
+                ) or (
+                    answer[-1:] in ",;:.!?)]}"
+                    and continuation_text[0].isalnum()
+                ):
+                    continuation_text = " " + continuation_text
 
             if continuation_text:
                 answer += continuation_text
