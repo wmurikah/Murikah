@@ -129,7 +129,7 @@ def main() -> None:
             "icon: Workflow",
             'href: "/virtual-internship"',
             'label: "Virtual Internship"',
-            "icon: Briefcase",
+            "icon: GraduationCap",
             'A 3+ month simulated workplace with evidence-based competency tracking',
             'requires: "llm"',
         ),
