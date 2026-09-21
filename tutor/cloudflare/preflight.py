@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v29"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v30"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -239,6 +239,8 @@ def main() -> int:
             '"/__muri/runtime-status"',
             'ModuleNotFoundError: No module named \'deeptutor\'',
             'port 3782 healthy',
+            'def refreshed_failure_detail(',
+            'diagnostics refresh failed:',
         ),
     )
     require_markers(
@@ -254,7 +256,8 @@ def main() -> int:
             'python /app/murikah-fast-lane-bootstrap.py',
             'python -m deeptutor.murikah_persistence reconcile-ownership',
             'python -m deeptutor.murikah_persistence reconcile-accounts',
-            'python -m deeptutor.murikah_persistence sync-once',
+            'Persistence metadata reconciliation attempt',
+            'Persistence metadata reconciliation complete.',
             'python -m deeptutor.murikah_persistence sync-loop &',
             'MURIKAH_FAST_CHAT_MODEL',
             'export BACKEND_HOST=127.0.0.1',
@@ -557,6 +560,9 @@ def main() -> int:
             'ownershipSchemaVersion',
             'unregisteredObjectCount',
             'every durable manifest object has a D1 ownership record',
+            'MURIKAH_TUTOR_OWNERSHIP_TIMEOUT',
+            'wait_for_ownership_reconciliation',
+            'ownership reconciliation',
             '"/__muri/runtime-status"',
             '"/__muri/container-diagnostics"',
             'MURIKAH_TUTOR_SMOKE_TIMEOUT',
@@ -750,6 +756,8 @@ def main() -> int:
     print(" - deployment model/provider settings are hidden from members and remain admin-managed")
     print(" - personal provider credential lifecycle is also admin-only; learners keep personal learning preferences only")
     print(" - every durable R2 object has explicit D1 owner/type metadata, with existing manifest objects reconciled on startup")
+    print(" - Tutor opens backend/frontend ports before ownership/account reconciliation or checkpoint maintenance can block readiness")
+    print(" - deploy failures refresh isolated startup diagnostics after the actual readiness timeout")
     print(" - new user-owned R2 writes use canonical users/<user-id>/<object-type>/<object-id> keys")
     print(" - non-secret account role/status metadata is reconciled into D1 while credentials remain in Cloudflare Secrets/protected auth storage")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
