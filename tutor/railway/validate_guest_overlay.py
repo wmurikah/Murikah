@@ -186,6 +186,17 @@ def main() -> None:
         ),
     )
     require_markers(
+        root / "web/components/auth/MurikahGuestAccess.tsx",
+        (
+            'status.username?.startsWith("guest_")',
+            'href={SIGN_IN}',
+            'href={SIGN_UP}',
+            "Guest account access",
+            "Sign in",
+            "Sign up",
+        ),
+    )
+    require_markers(
         root / "web/components/auth/MurikahSocialButtons.tsx",
         (
             "resolveNext?: () => string | Promise<string>",
@@ -253,6 +264,8 @@ def main() -> None:
         (
             "overflow-y-auto overscroll-y-contain touch-pan-y",
             'data-chat-scroll-root="true"',
+            'import MurikahGuestAccess from "@/components/auth/MurikahGuestAccess";',
+            "<MurikahGuestAccess />",
         ),
     )
     require_markers(
