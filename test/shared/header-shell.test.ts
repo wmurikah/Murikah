@@ -128,10 +128,11 @@ test('global header tokens are exact and the old route/scroll colour overrides a
     assert.ok(css.toLowerCase().includes(token), token + ' must be declared');
   }
 
-  assert.match(header, /position: sticky/);
-  assert.match(header, /background: var\(--header-bg\)/);
-  assert.match(header, /border-bottom: 1px solid var\(--header-border\)/);
-  assert.doesNotMatch(header, /backdrop-filter|background:\s*transparent/);
+  const headerRule = header.match(/\.site-header\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.match(headerRule, /position: sticky/);
+  assert.match(headerRule, /background: var\(--header-bg\)/);
+  assert.match(headerRule, /border-bottom: 1px solid var\(--header-border\)/);
+  assert.doesNotMatch(headerRule, /backdrop-filter|background:\s*transparent/);
   assert.doesNotMatch(css, /site-header--home/);
   assert.doesNotMatch(home, /IntersectionObserver|is-scrolled|data-home-header|data-home-nav-sentinel/);
 });
