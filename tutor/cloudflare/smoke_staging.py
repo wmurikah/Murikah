@@ -89,13 +89,14 @@ def main() -> int:
         config_code != 200
         or config.get("adminPasswordConfigured") is not True
         or config.get("authSecretConfigured") is not True
+        or config.get("verificationEmailConfigured") is not True
         or config.get("persistenceConfigured") is not True
     ):
         print("Murikah Tutor staging smoke test: FAILED - required Worker secrets or persistence bindings are not visible at runtime")
         print(f"Worker config status: HTTP {config_code} {config_body[:1000]}")
         return 1
 
-    print(" - Worker runtime can see the required admin/auth secrets and D1/R2 persistence bindings")
+    print(" - Worker runtime can see required admin/auth/email secrets and D1/R2 persistence bindings")
     try:
         persistence_code, persistence_body = get("/__muri/persistence-status")
         persistence = parse_json(persistence_body)
@@ -108,11 +109,12 @@ def main() -> int:
         or persistence.get("schemaVersion") != "1"
         or persistence.get("learningJournalSchemaVersion") != "1"
         or persistence.get("ownershipSchemaVersion") != "1"
+        or persistence.get("emailVerificationSchemaVersion") != "1"
     ):
-        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning/ownership schema is not ready")
+        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning/ownership/email-verification schema is not ready")
         print(f"Persistence status: HTTP {persistence_code} {persistence_body[:1000]}")
         return 1
-    print(" - D1 persistence, learning journal and ownership schemas v1 are ready")
+    print(" - D1 persistence, learning journal, ownership and email-verification schemas v1 are ready")
     started = time.monotonic()
     last: dict = {}
 
