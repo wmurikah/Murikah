@@ -1,0 +1,20 @@
+[
+  {
+    "id": "N-1",
+    "title": "3 action plans due within 7 days",
+    "kind": "action",
+    "offsetMinutes": -18
+  },
+  {
+    "id": "N-2",
+    "title": "2 work papers awaiting your review",
+    "kind": "review",
+    "offsetMinutes": -46
+  },
+  {
+    "id": "N-3",
+    "title": "Quarterly committee pack is ready to generate",
+    "kind": "report",
+    "offsetMinutes": -95
+  }
+]
