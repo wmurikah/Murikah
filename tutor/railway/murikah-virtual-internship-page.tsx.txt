@@ -1,21 +1,21 @@
 import Link from "next/link";
 import {
+  BookOpen,
   Brain,
-  Briefcase,
-  Calendar,
-  FileText,
-  ShieldCheck,
+  CheckCircle2,
+  GraduationCap,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 const HIGHLIGHTS = [
   {
-    icon: Calendar,
+    icon: GraduationCap,
     title: "3+ months",
     copy: "A qualifying internship will run for at least 90 calendar days, with persistent work, milestones and reviews.",
   },
   {
-    icon: Briefcase,
+    icon: Users,
     title: "Real work patterns",
     copy: "Assignments, inbox messages, meetings, deadlines, changing priorities, stakeholder requests and workplace dynamics.",
   },
@@ -25,12 +25,12 @@ const HIGHLIGHTS = [
     copy: "Supervisors, colleagues, clients and a separate Murikah Mentor will use role-specific AI behavior without replacing canonical scenario facts.",
   },
   {
-    icon: FileText,
+    icon: BookOpen,
     title: "Evidence-based work",
     copy: "Reports, analyses, code, presentations and other artifacts will feed traceable competency evidence rather than unsupported scores.",
   },
   {
-    icon: ShieldCheck,
+    icon: CheckCircle2,
     title: "Competency Passport",
     copy: "The Passport will show what was demonstrated, the evidence behind it, how much assistance was used and where the skill transferred.",
   },
