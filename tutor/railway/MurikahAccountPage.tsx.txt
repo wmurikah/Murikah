@@ -313,6 +313,27 @@ function AccountForm({ signup }: { signup: boolean }) {
           <a href="/">Continue as guest</a>
         </p>
       )}
+      <p className="mt-5 text-center text-xs leading-5 text-[var(--muted-foreground)]">
+        By continuing, you agree to the{" "}
+        <a
+          href="https://murikah.com/terms"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium underline underline-offset-2"
+        >
+          Terms of Service
+        </a>{" "}
+        and acknowledge the{" "}
+        <a
+          href="https://murikah.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium underline underline-offset-2"
+        >
+          Privacy Policy
+        </a>
+        .
+      </p>
     </div>
   );
 }
