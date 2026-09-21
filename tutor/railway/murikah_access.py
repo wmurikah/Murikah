@@ -237,11 +237,11 @@ async def guest_session(request: Request, response: Response):
             )
             # D1 represents a guest by its opaque workspace/session subject,
             # never by the internal compatibility username shown by DeepTutor.
-            durable.learning_actor(
+            durable.account_upsert(
                 uid,
-                "guest",
                 username="",
-                guest_session_id=uid,
+                role="guest",
+                auth_provider="guest",
             )
         except durable.PersistenceError as exc:
             raise HTTPException(503, "Guest access is temporarily unavailable. Please retry.") from exc
@@ -290,11 +290,11 @@ async def signup(body: Signup, request: Request, response: Response):
         durable_identity = _durable_guest_store()
         if durable_identity is not None:
             try:
-                durable_identity.learning_actor(
+                durable_identity.account_upsert(
                     record["id"],
-                    "member",
                     username=username,
-                    guest_session_id="",
+                    role="member",
+                    auth_provider="local",
                 )
             except durable_identity.PersistenceError as exc:
                 raise HTTPException(
