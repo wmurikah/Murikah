@@ -1,0 +1,65 @@
+import { describe, expect, it } from "vitest";
+import {
+  SETTINGS_CATEGORIES,
+  isSettingsCategoryVisible,
+  visibleSettingsChildren,
+} from "@/features/settings/navigation/settings-nav";
+
+const member = {
+  resolved: true,
+  hideAdminOnly: true,
+  showLearnerOnly: false,
+  showGuardianOnly: true,
+};
+
+const admin = {
+  resolved: true,
+  hideAdminOnly: false,
+  showLearnerOnly: false,
+  showGuardianOnly: false,
+};
+
+const modelSettings = [
+  "connections",
+  "llm",
+  "task-models",
+  "embedding",
+  "search",
+  "tts",
+  "stt",
+  "imagegen",
+  "videogen",
+];
+
+describe("Murikah Tutor settings boundary", () => {
+  it("hides deployment model configuration from ordinary members", () => {
+    const keys = visibleSettingsChildren("models", member).map((leaf) => leaf.key);
+    expect(keys).toEqual([]);
+    const models = SETTINGS_CATEGORIES.find((category) => category.key === "models");
+    expect(models).toBeDefined();
+    expect(isSettingsCategoryVisible(models!, member)).toBe(false);
+  });
+
+  it("keeps deployment model configuration available to administrators", () => {
+    const keys = visibleSettingsChildren("models", admin).map((leaf) => leaf.key);
+    expect(keys).toEqual(modelSettings);
+    const models = SETTINGS_CATEGORIES.find((category) => category.key === "models");
+    expect(isSettingsCategoryVisible(models!, admin)).toBe(true);
+  });
+
+  it("keeps ordinary learner preferences and tools visible", () => {
+    const chat = visibleSettingsChildren("chat", member).map((leaf) => leaf.key);
+    expect(chat).toContain("tools");
+    expect(chat).toContain("capabilities");
+    expect(chat).toContain("starters");
+
+    const appearance = SETTINGS_CATEGORIES.find(
+      (category) => category.key === "appearance",
+    );
+    const workspace = SETTINGS_CATEGORIES.find(
+      (category) => category.key === "workspace",
+    );
+    expect(isSettingsCategoryVisible(appearance!, member)).toBe(true);
+    expect(isSettingsCategoryVisible(workspace!, member)).toBe(true);
+  });
+});
