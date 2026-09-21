@@ -1,0 +1,254 @@
+[
+  {
+    "engagementId": "ENG-2026-01",
+    "title": "Identity and access management review",
+    "process": "ICT",
+    "status": "Review",
+    "affiliateCode": "HO",
+    "startOffsetDays": -42,
+    "endOffsetDays": 18,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-AM",
+    "quarter": "Q1",
+    "budgetDays": 18,
+    "progress": 72,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether identity and access management review controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-02",
+    "title": "Treasury and liquidity management",
+    "process": "Finance",
+    "status": "Fieldwork",
+    "affiliateCode": "HO",
+    "startOffsetDays": -28,
+    "endOffsetDays": 31,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q1",
+    "budgetDays": 22,
+    "progress": 54,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether treasury and liquidity management controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-03",
+    "title": "Credit underwriting and collections",
+    "process": "Credit",
+    "status": "Reporting",
+    "affiliateCode": "HO",
+    "startOffsetDays": -66,
+    "endOffsetDays": -5,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-AM",
+    "quarter": "Q1",
+    "budgetDays": 26,
+    "progress": 88,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether credit underwriting and collections controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-04",
+    "title": "Core banking change management",
+    "process": "ICT",
+    "status": "Planned",
+    "affiliateCode": "HO",
+    "startOffsetDays": 18,
+    "endOffsetDays": 61,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q2",
+    "budgetDays": 16,
+    "progress": 12,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether core banking change management controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-05",
+    "title": "Branch cash and till controls",
+    "process": "Operations",
+    "status": "Fieldwork",
+    "affiliateCode": "NKR",
+    "startOffsetDays": -14,
+    "endOffsetDays": 26,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q2",
+    "budgetDays": 20,
+    "progress": 46,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether branch cash and till controls controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-06",
+    "title": "Procurement and vendor management",
+    "process": "Procurement",
+    "status": "Closed",
+    "affiliateCode": "HO",
+    "startOffsetDays": -118,
+    "endOffsetDays": -72,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-AM",
+    "quarter": "Q2",
+    "budgetDays": 14,
+    "progress": 100,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether procurement and vendor management controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-07",
+    "title": "Regulatory returns and capital adequacy",
+    "process": "Finance",
+    "status": "Review",
+    "affiliateCode": "HO",
+    "startOffsetDays": -35,
+    "endOffsetDays": 12,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-CAE",
+    "quarter": "Q3",
+    "budgetDays": 18,
+    "progress": 68,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether regulatory returns and capital adequacy controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-08",
+    "title": "Member onboarding and KYC",
+    "process": "Operations",
+    "status": "Planned",
+    "affiliateCode": "NKR",
+    "startOffsetDays": 34,
+    "endOffsetDays": 76,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q3",
+    "budgetDays": 20,
+    "progress": 8,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether member onboarding and kyc controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-09",
+    "title": "Business continuity and disaster recovery",
+    "process": "ICT",
+    "status": "Reporting",
+    "affiliateCode": "HO",
+    "startOffsetDays": -75,
+    "endOffsetDays": -3,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-AM",
+    "quarter": "Q3",
+    "budgetDays": 21,
+    "progress": 92,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether business continuity and disaster recovery controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-10",
+    "title": "Payroll and staff benefits",
+    "process": "HR",
+    "status": "Closed",
+    "affiliateCode": "HO",
+    "startOffsetDays": -135,
+    "endOffsetDays": -95,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q4",
+    "budgetDays": 12,
+    "progress": 100,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether payroll and staff benefits controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-11",
+    "title": "Loan system access and maker-checker",
+    "process": "Credit",
+    "status": "Planned",
+    "affiliateCode": "HO",
+    "startOffsetDays": 72,
+    "endOffsetDays": 112,
+    "leadAuditorId": "USR-SA",
+    "reviewerId": "USR-AM",
+    "quarter": "Q4",
+    "budgetDays": 18,
+    "progress": 5,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether loan system access and maker-checker controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  },
+  {
+    "engagementId": "ENG-2026-12",
+    "title": "Nakuru branch operations review",
+    "process": "Operations",
+    "status": "Planned",
+    "affiliateCode": "NKR",
+    "startOffsetDays": 106,
+    "endOffsetDays": 146,
+    "leadAuditorId": "USR-AUD",
+    "reviewerId": "USR-SA",
+    "quarter": "Q4",
+    "budgetDays": 15,
+    "progress": 3,
+    "scope": [
+      "Governance and policy design",
+      "Control design and operating effectiveness",
+      "Evidence of management review",
+      "Issue ownership and remediation"
+    ],
+    "objectives": "Assess whether nakuru branch operations review controls are designed, operating and evidenced in line with the approved risk-based audit plan."
+  }
+]

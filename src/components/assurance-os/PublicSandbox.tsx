@@ -1,319 +1,194 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { SandboxProvider, useSandbox } from '@/sandbox/store';
+import type { ScreenId } from '@/sandbox/types';
+import { canAccessScreen } from '@/sandbox/permissions';
+import { Icon, type IconName } from './sandbox/Icon';
+import { LoadingRows } from './sandbox/Ui';
+import CommandPalette from './sandbox/CommandPalette';
+import GuidedTour from './sandbox/GuidedTour';
+import './sandbox/Sandbox.css';
 
-type Tab = 'overview' | 'findings' | 'actions' | 'report';
-type ActionStatus = 'Open' | 'In progress' | 'Closed';
+const DashboardScreen = lazy(() => import('./sandbox/screens/DashboardScreen'));
+const PlanScreen = lazy(() => import('./sandbox/screens/PlanScreen'));
+const EngagementsScreen = lazy(() => import('./sandbox/screens/EngagementsScreen'));
+const FindingsScreen = lazy(() => import('./sandbox/screens/FindingsScreen'));
+const ActionsScreen = lazy(() => import('./sandbox/screens/ActionsScreen'));
+const RisksScreen = lazy(() => import('./sandbox/screens/RisksScreen'));
+const ReportsScreen = lazy(() => import('./sandbox/screens/ReportsScreen'));
+const AuditLogScreen = lazy(() => import('./sandbox/screens/AuditLogScreen'));
 
-const findings = [
-  {
-    id: 'F-014',
-    title: 'User access reviews need documented approval',
-    risk: 'High',
-    area: 'Identity & access',
-    owner: 'Head of ICT',
-  },
-  {
-    id: 'F-021',
-    title: 'Backup restore evidence is not retained consistently',
-    risk: 'Medium',
-    area: 'Resilience',
-    owner: 'Infrastructure Lead',
-  },
-  {
-    id: 'F-027',
-    title: 'Vendor access recertification is overdue',
-    risk: 'Medium',
-    area: 'Third-party access',
-    owner: 'Application Owner',
-  },
+const nav: Array<{id:ScreenId;label:string;icon:IconName}> = [
+  {id:'dashboard',label:'Dashboard',icon:'dashboard'},
+  {id:'plan',label:'Audit plan',icon:'calendar'},
+  {id:'engagements',label:'Engagements',icon:'briefcase'},
+  {id:'findings',label:'Findings',icon:'finding'},
+  {id:'actions',label:'Actions',icon:'check'},
+  {id:'risks',label:'Risk register',icon:'risk'},
+  {id:'reports',label:'Reports',icon:'report'},
+  {id:'audit-log',label:'Audit log',icon:'history'},
 ];
 
-const actionSeed = [
-  {
-    id: 'A-041',
-    finding: 'F-014',
-    action: 'Complete the quarterly access review and retain signed approval.',
-    owner: 'Head of ICT',
-    due: '30 Sep 2026',
-    status: 'In progress' as ActionStatus,
-  },
-  {
-    id: 'A-052',
-    finding: 'F-021',
-    action: 'Run a restore test and retain the recovery evidence.',
-    owner: 'Infrastructure Lead',
-    due: '15 Oct 2026',
-    status: 'Open' as ActionStatus,
-  },
-  {
-    id: 'A-063',
-    finding: 'F-027',
-    action: 'Recertify vendor accounts and remove access no longer required.',
-    owner: 'Application Owner',
-    due: '20 Sep 2026',
-    status: 'Open' as ActionStatus,
-  },
-];
+const mobileMain: ScreenId[] = ['dashboard','plan','findings','actions'];
 
-const tabs: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'findings', label: 'Findings' },
-  { id: 'actions', label: 'Actions' },
-  { id: 'report', label: 'Board pack' },
-];
-
-function StatusPill({ status }: { status: ActionStatus }) {
-  return (
-    <span className="inline-flex rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-navy ring-1 ring-hairline">
-      {status}
-    </span>
-  );
+export default function PublicSandbox(){
+  return <SandboxProvider><SandboxApp/></SandboxProvider>;
 }
 
-export default function PublicSandbox() {
-  const [active, setActive] = useState<Tab>('overview');
-  const [statuses, setStatuses] = useState<Record<string, ActionStatus>>(
-    Object.fromEntries(actionSeed.map((item) => [item.id, item.status])),
-  );
+function SandboxApp(){
+  const {state,dispatch,reset}=useSandbox();
+  const [palette,setPalette]=useState(false);
+  const [notificationsOpen,setNotificationsOpen]=useState(false);
+  const [avatarOpen,setAvatarOpen]=useState(false);
+  const [shortcutsOpen,setShortcutsOpen]=useState(false);
+  const [mobileMore,setMobileMore]=useState(false);
+  const [fullScreen,setFullScreen]=useState(false);
+  const [hydrated,setHydrated]=useState(false);
 
-  const closed = useMemo(
-    () => Object.values(statuses).filter((status) => status === 'Closed').length,
-    [statuses],
-  );
-  const openActions = actionSeed.length - closed;
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>setHydrated(true),180);
+    return()=>window.clearTimeout(timer);
+  },[]);
 
-  const rotateStatus = (id: string) => {
-    setStatuses((current) => {
-      const next: Record<ActionStatus, ActionStatus> = {
-        Open: 'In progress',
-        'In progress': 'Closed',
-        Closed: 'Open',
-      };
-      return { ...current, [id]: next[current[id] ?? 'Open'] };
-    });
-  };
+  useEffect(()=>{
+    const handler=(event:KeyboardEvent)=>{
+      const target=event.target as HTMLElement | null;
+      const typing=target && ['INPUT','TEXTAREA','SELECT'].includes(target.tagName);
+      if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPalette(true);return;}
+      if(!typing&&event.key==='?'){event.preventDefault();setShortcutsOpen(true);}
+    };
+    window.addEventListener('keydown',handler);
+    return()=>window.removeEventListener('keydown',handler);
+  },[]);
 
-  return (
-    <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-card ring-1 ring-hairline">
-      <div className="flex flex-col gap-3 border-b border-hairline bg-paper px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-navy">Assurance OS public sandbox</p>
-          <p className="mt-1 text-xs text-slate">
-            Fictional sample data only. Changes stay in this browser session and reset on refresh.
-          </p>
-        </div>
-        <span className="w-fit rounded-full bg-surface px-3 py-1 text-xs font-semibold text-gold ring-1 ring-hairline">
-          No sign-in
-        </span>
-      </div>
+  useEffect(()=>{
+    document.documentElement.classList.toggle('sandbox-fullscreen',fullScreen);
+    return()=>document.documentElement.classList.remove('sandbox-fullscreen');
+  },[fullScreen]);
 
-      <div
-        role="tablist"
-        aria-label="Assurance OS sample workspace"
-        className="flex gap-1 overflow-x-auto border-b border-hairline bg-paper px-3 py-2"
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={active === tab.id}
-            aria-controls={`sandbox-panel-${tab.id}`}
-            id={`sandbox-tab-${tab.id}`}
-            onClick={() => setActive(tab.id)}
-            className={[
-              'min-h-11 shrink-0 rounded-btn px-4 text-sm font-medium transition-colors',
-              active === tab.id
-                ? 'bg-navy text-paper'
-                : 'bg-transparent text-navy hover:bg-surface',
-            ].join(' ')}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+  useEffect(()=>{
+    if(!state.undo) return;
+    const timer=window.setTimeout(()=>dispatch({type:'CLEAR_UNDO'}),7000);
+    return()=>window.clearTimeout(timer);
+  },[state.undo,dispatch]);
 
-      <div className="p-5 sm:p-6">
-        {active === 'overview' && (
-          <section
-            id="sandbox-panel-overview"
-            role="tabpanel"
-            aria-labelledby="sandbox-tab-overview"
-          >
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-card bg-paper p-5 ring-1 ring-hairline">
-                <p className="text-xs font-semibold tracking-[0.1em] text-slate uppercase">
-                  Engagements
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-navy">6</p>
-                <p className="mt-2 text-sm text-slate">2 fieldwork · 1 review · 3 planned</p>
-              </div>
-              <div className="rounded-card bg-paper p-5 ring-1 ring-hairline">
-                <p className="text-xs font-semibold tracking-[0.1em] text-slate uppercase">
-                  Open findings
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-navy">{findings.length}</p>
-                <p className="mt-2 text-sm text-slate">1 high · 2 medium</p>
-              </div>
-              <div className="rounded-card bg-paper p-5 ring-1 ring-hairline">
-                <p className="text-xs font-semibold tracking-[0.1em] text-slate uppercase">
-                  Open actions
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-navy">{openActions}</p>
-                <p className="mt-2 text-sm text-slate">{closed} closed in this sandbox session</p>
-              </div>
-            </div>
+  const counts=useMemo(()=>({
+    plan:state.engagements.length,
+    engagements:state.engagements.filter(e=>e.status!=='Closed').length,
+    findings:state.findings.filter(f=>f.status!=='Closed').length,
+    actions:state.actionPlans.filter(a=>!['Closed','Verified'].includes(a.status)).length,
+    risks:state.risks.length,
+    reports:1,
+    'audit-log':state.auditLog.length,
+  }),[state]);
 
-            <div className="mt-5 rounded-card bg-paper p-5 ring-1 ring-hairline">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold tracking-[0.1em] text-gold uppercase">
-                    Current engagement
-                  </p>
-                  <h3 className="mt-2 text-xl text-navy">Identity and access management review</h3>
-                  <p className="mt-2 max-w-2xl text-sm text-slate">
-                    The sample shows the evidence chain from fieldwork through finding, owned action
-                    and committee reporting.
-                  </p>
-                </div>
-                <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-navy ring-1 ring-hairline">
-                  Review
-                </span>
-              </div>
-              <ol className="mt-5 grid gap-3 sm:grid-cols-4">
-                {['Scope agreed', 'Evidence tested', 'Finding reviewed', 'Action tracked'].map(
-                  (step, index) => (
-                    <li key={step} className="flex items-center gap-2 text-sm text-navy">
-                      <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface text-xs font-semibold text-gold ring-1 ring-hairline">
-                        {index + 1}
-                      </span>
-                      {step}
-                    </li>
-                  ),
-                )}
-              </ol>
-            </div>
-          </section>
-        )}
+  const activeUser=state.users.find(u=>u.userId===state.activeUserId) ?? state.users[0];
+  const visibleNav = nav.filter(item => canAccessScreen(state.activeRoleCode, item.id));
+  const unread=state.notifications.filter(n=>!n.read).length;
+  const activeNav=nav.find(item=>item.id===state.screen);
+  const entity=state.organization.entities.find(e=>e.affiliateCode===state.activeAffiliateCode);
 
-        {active === 'findings' && (
-          <section
-            id="sandbox-panel-findings"
-            role="tabpanel"
-            aria-labelledby="sandbox-tab-findings"
-          >
-            <div className="overflow-x-auto">
-              <table className="min-w-[46rem] w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-hairline">
-                    <th className="px-3 py-3 text-xs font-semibold tracking-[0.08em] text-slate uppercase">
-                      Finding
-                    </th>
-                    <th className="px-3 py-3 text-xs font-semibold tracking-[0.08em] text-slate uppercase">
-                      Area
-                    </th>
-                    <th className="px-3 py-3 text-xs font-semibold tracking-[0.08em] text-slate uppercase">
-                      Risk
-                    </th>
-                    <th className="px-3 py-3 text-xs font-semibold tracking-[0.08em] text-slate uppercase">
-                      Owner
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {findings.map((finding) => (
-                    <tr key={finding.id} className="border-b border-hairline last:border-0">
-                      <td className="px-3 py-4">
-                        <p className="text-xs font-medium text-gold">{finding.id}</p>
-                        <p className="mt-1 font-medium text-navy">{finding.title}</p>
-                      </td>
-                      <td className="px-3 py-4 text-sm text-slate">{finding.area}</td>
-                      <td className="px-3 py-4">
-                        <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-navy ring-1 ring-hairline">
-                          {finding.risk}
-                        </span>
-                      </td>
-                      <td className="px-3 py-4 text-sm text-slate">{finding.owner}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
+  const screen=<Suspense fallback={<div className="sb-screen"><LoadingRows rows={9}/></div>}>
+    {state.screen==='dashboard'&&<DashboardScreen/>}
+    {state.screen==='plan'&&<PlanScreen/>}
+    {state.screen==='engagements'&&<EngagementsScreen/>}
+    {state.screen==='findings'&&<FindingsScreen/>}
+    {state.screen==='actions'&&<ActionsScreen/>}
+    {state.screen==='risks'&&<RisksScreen/>}
+    {state.screen==='reports'&&<ReportsScreen/>}
+    {state.screen==='audit-log'&&<AuditLogScreen/>}
+  </Suspense>;
 
-        {active === 'actions' && (
-          <section
-            id="sandbox-panel-actions"
-            role="tabpanel"
-            aria-labelledby="sandbox-tab-actions"
-          >
-            <p className="mb-4 text-sm text-slate">
-              Select a status button to move a sample action through Open → In progress → Closed.
-            </p>
-            <div className="grid gap-4">
-              {actionSeed.map((item) => (
-                <article key={item.id} className="rounded-card bg-paper p-5 ring-1 ring-hairline">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-gold">
-                        {item.id} · linked to {item.finding}
-                      </p>
-                      <h3 className="mt-2 text-lg text-navy">{item.action}</h3>
-                      <p className="mt-2 text-sm text-slate">
-                        {item.owner} · Due {item.due}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => rotateStatus(item.id)}
-                      className="min-h-11 shrink-0 rounded-btn bg-surface px-4 text-sm font-medium text-navy ring-1 ring-hairline hover:bg-paper-shade"
-                      aria-label={`Change status for ${item.id}. Current status ${statuses[item.id]}`}
-                    >
-                      <StatusPill status={statuses[item.id] ?? 'Open'} />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-slate" aria-live="polite">
-              {closed} of {actionSeed.length} sample actions closed.
-            </p>
-          </section>
-        )}
-
-        {active === 'report' && (
-          <section
-            id="sandbox-panel-report"
-            role="tabpanel"
-            aria-labelledby="sandbox-tab-report"
-          >
-            <div className="rounded-card bg-paper p-5 ring-1 ring-hairline">
-              <p className="text-xs font-semibold tracking-[0.1em] text-gold uppercase">
-                Audit & Risk Committee · sample pack
-              </p>
-              <h3 className="mt-3 text-2xl text-navy">Q3 assurance summary</h3>
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <div>
-                  <p className="text-sm font-semibold text-navy">What changed</p>
-                  <ul className="mt-2 grid gap-2 text-sm text-slate">
-                    <li>• Identity and access review moved to reviewer sign-off.</li>
-                    <li>• Three findings remain open in the sample portfolio.</li>
-                    <li>• {closed} remediation action{closed === 1 ? '' : 's'} closed in this session.</li>
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-navy">Committee attention</p>
-                  <ul className="mt-2 grid gap-2 text-sm text-slate">
-                    <li>• High-risk access-review finding remains open.</li>
-                    <li>• One action is at its sample due date.</li>
-                    <li>• Follow-up status is generated from the same action records.</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-      </div>
+  return <div className="sb-root" data-nosnippet>
+    <div className="sb-demo-banner">
+      <span>Fictional sample data. Changes stay in your browser.</span>
+      <span className="sb-demo-banner__privacy">Nothing you type leaves your browser.</span>
+      <button onClick={()=>{if(window.confirm('Reset all sandbox changes to the original sample data?')) reset();}}>Reset</button>
+      <a href="/contact?intent=call">Book a call</a>
     </div>
-  );
+
+    <div className="sb-app" aria-label="Assurance OS sample workspace">
+      <aside className="sb-sidebar">
+        <div className="sb-sidebar__brand">
+          <img src="/images/murikah-logo-dark.png" alt="Murikah" width="875" height="155"/>
+          <span>Assurance OS</span>
+        </div>
+
+        <label className="sb-workspace">
+          <span>Workspace</span>
+          <select value={state.activeAffiliateCode} onChange={e=>dispatch({type:'SWITCH_ENTITY',affiliateCode:e.target.value})}>
+            {state.organization.entities.map(item=><option key={item.affiliateCode} value={item.affiliateCode}>{item.affiliateName}</option>)}
+          </select>
+        </label>
+
+        <nav className="sb-nav" aria-label="Assurance OS sandbox">
+          {visibleNav.map(item=>{
+            const count=(counts as Record<string,number>)[item.id];
+            return <button key={item.id} className={state.screen===item.id?'is-active':''} onClick={()=>dispatch({type:'NAVIGATE',screen:item.id})} data-tour={item.id}>
+              <Icon name={item.icon}/><span>{item.label}</span>{count!=null&&<b>{count>999?'999+':count}</b>}
+            </button>;
+          })}
+        </nav>
+
+        <div className="sb-sidebar__foot">
+          <button onClick={()=>setFullScreen(v=>!v)}><Icon name="expand"/><span>{fullScreen?'Exit full screen':'Open full screen'}</span></button>
+          <button onClick={()=>setShortcutsOpen(true)}><span className="sb-key">?</span><span>Keyboard shortcuts</span></button>
+        </div>
+      </aside>
+
+      <section className="sb-main">
+        <header className="sb-topbar">
+          <div className="sb-breadcrumb"><span>Assurance OS</span><i>/</i><strong>{activeNav?.label}</strong>{entity&&<><i>/</i><span>{entity.affiliateName}</span></>}</div>
+
+          <button className="sb-global-search" onClick={()=>setPalette(true)} aria-label="Search and command palette">
+            <Icon name="search"/><span>Search or jump to…</span><kbd>⌘K</kbd>
+          </button>
+
+          <div className="sb-topbar__actions">
+            <div className="sb-popover-wrap">
+              <button className="sb-icon-btn" aria-label={'Notifications, '+unread+' unread'} onClick={()=>setNotificationsOpen(v=>!v)}>
+                <Icon name="bell"/>{unread>0&&<b className="sb-notification-dot">{unread}</b>}
+              </button>
+              {notificationsOpen&&<div className="sb-popover sb-notifications">
+                <header><strong>Notifications</strong><span>{unread} unread</span></header>
+                {state.notifications.map(n=><button key={n.id} onClick={()=>dispatch({type:'MARK_NOTIFICATION',id:n.id})} className={n.read?'is-read':''}><span>{n.title}</span><small>{n.read?'Read':'New'}</small></button>)}
+              </div>}
+            </div>
+
+            <label className="sb-role-switch" data-tour="roles">
+              <span className="sb-visually-hidden">Acting role</span>
+              <select value={state.activeUserId} onChange={e=>dispatch({type:'SWITCH_ROLE',userId:e.target.value})}>
+                {state.users.map(user=><option value={user.userId} key={user.userId}>{user.roleLabel}</option>)}
+              </select>
+            </label>
+
+            <div className="sb-popover-wrap">
+              <button className="sb-avatar" onClick={()=>setAvatarOpen(v=>!v)} aria-label="User menu">{activeUser.avatar}</button>
+              {avatarOpen&&<div className="sb-popover sb-user-menu"><strong>{activeUser.fullName}</strong><span>{activeUser.roleLabel}</span><span>{activeUser.email}</span><hr/><span>Browser-only sandbox session</span></div>}
+            </div>
+          </div>
+        </header>
+
+        <main className="sb-content">
+          {!hydrated?<div className="sb-screen"><div className="sb-page-head"><div className="sb-skeleton sb-skeleton--title"/><div className="sb-skeleton sb-skeleton--small"/></div><LoadingRows rows={9}/></div>:screen}
+        </main>
+      </section>
+
+      <nav className="sb-mobile-tabs" aria-label="Sandbox mobile navigation">
+        {visibleNav.filter(item=>mobileMain.includes(item.id)).map(item=><button key={item.id} className={state.screen===item.id?'is-active':''} onClick={()=>dispatch({type:'NAVIGATE',screen:item.id})}><Icon name={item.icon}/><span>{item.label.replace('Audit ','')}</span></button>)}
+        <div className="sb-popover-wrap"><button className={mobileMain.includes(state.screen)?'':'is-active'} onClick={()=>setMobileMore(v=>!v)}><Icon name="more"/><span>More</span></button>{mobileMore&&<div className="sb-popover sb-mobile-more">{visibleNav.filter(item=>!mobileMain.includes(item.id)).map(item=><button key={item.id} onClick={()=>{dispatch({type:'NAVIGATE',screen:item.id});setMobileMore(false);}}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>}</div>
+      </nav>
+    </div>
+
+    <CommandPalette open={palette} onClose={()=>setPalette(false)}/>
+    <GuidedTour/>
+
+    {shortcutsOpen&&<div className="sb-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShortcutsOpen(false);}}>
+      <div className="sb-shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <header><strong>Keyboard shortcuts</strong><button className="sb-icon-btn" onClick={()=>setShortcutsOpen(false)} aria-label="Close"><Icon name="x"/></button></header>
+        <dl><div><dt>Search / command palette</dt><dd><kbd>⌘/Ctrl</kbd> + <kbd>K</kbd></dd></div><div><dt>Move in findings list</dt><dd><kbd>J</kbd> / <kbd>K</kbd></dd></div><div><dt>Open selected row</dt><dd><kbd>Enter</kbd></dd></div><div><dt>Close drawer / dialog</dt><dd><kbd>Esc</kbd></dd></div><div><dt>Show shortcuts</dt><dd><kbd>?</kbd></dd></div></dl>
+      </div>
+    </div>}
+
+    {state.undo&&<div className="sb-toast" role="status" aria-live="polite"><span>{state.undo.label}</span><button onClick={()=>dispatch({type:'UNDO_LAST'})}>Undo</button><button aria-label="Dismiss" onClick={()=>dispatch({type:'CLEAR_UNDO'})}><Icon name="x" size={14}/></button></div>}
+  </div>;
 }

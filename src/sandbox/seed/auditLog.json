@@ -1,0 +1,4642 @@
+[
+  {
+    "auditId": "LOG-0001",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -12,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0002",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -49,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "work paper updated for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0003",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -86,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "work paper submitted for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0004",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -123,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "work paper reviewed for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0005",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -160,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0006",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -197,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "action plan created for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0007",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -234,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "action plan status changed for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0008",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -271,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "evidence attached for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0009",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -308,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0010",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -345,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "report viewed for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0011",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -382,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "role switched for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0012",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -419,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "work paper created for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0013",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -456,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0014",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -493,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "work paper submitted for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0015",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -530,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "work paper reviewed for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0016",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -567,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "finding updated for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0017",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -604,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0018",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -641,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "action plan status changed for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0019",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -678,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "evidence attached for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0020",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -715,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "review note added for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0021",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -752,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0022",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -789,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "role switched for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0023",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -826,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "work paper created for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0024",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -863,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "work paper updated for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0025",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -900,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0026",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -937,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "work paper reviewed for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0027",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -974,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "finding updated for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0028",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -1011,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "action plan created for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0029",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -1048,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0030",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -1085,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "evidence attached for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0031",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -1122,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "review note added for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0032",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -1159,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "report viewed for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0033",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -1196,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0034",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -1233,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "work paper created for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0035",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -1270,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "work paper updated for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0036",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -1307,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "work paper submitted for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0037",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -1344,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0038",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -1381,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "finding updated for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0039",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -1418,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "action plan created for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0040",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -1455,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "action plan status changed for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0041",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -1492,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0042",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -1529,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "review note added for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0043",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -1566,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "report viewed for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0044",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -1603,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "role switched for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0045",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -1640,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0046",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -1677,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "work paper updated for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0047",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -1714,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "work paper submitted for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0048",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -1751,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "work paper reviewed for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0049",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -1788,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0050",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-050",
+    "offsetMinutes": -1825,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "action plan created for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0051",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-051",
+    "offsetMinutes": -1862,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "action plan status changed for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0052",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -1899,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "evidence attached for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0053",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -1936,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0054",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -1973,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "report viewed for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0055",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -2010,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "role switched for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0056",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -2047,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "work paper created for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0057",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -2084,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0058",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -2121,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "work paper submitted for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0059",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -2158,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "work paper reviewed for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0060",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -2195,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "finding updated for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0061",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -2232,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0062",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -2269,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "action plan status changed for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0063",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -2306,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "evidence attached for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0064",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -2343,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "review note added for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0065",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -2380,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0066",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -2417,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "role switched for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0067",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -2454,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "work paper created for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0068",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -2491,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "work paper updated for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0069",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -2528,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0070",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -2565,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "work paper reviewed for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0071",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -2602,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "finding updated for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0072",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -2639,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "action plan created for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0073",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -2676,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0074",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -2713,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "evidence attached for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0075",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -2750,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "review note added for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0076",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -2787,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "report viewed for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0077",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -2824,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0078",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -2861,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "work paper created for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0079",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -2898,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "work paper updated for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0080",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -2935,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "work paper submitted for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0081",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -2972,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0082",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -3009,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "finding updated for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0083",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -3046,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "action plan created for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0084",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -3083,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "action plan status changed for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0085",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -3120,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0086",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -3157,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "review note added for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0087",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -3194,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "report viewed for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0088",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -3231,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "role switched for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0089",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -3268,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0090",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -3305,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "work paper updated for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0091",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -3342,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "work paper submitted for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0092",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -3379,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "work paper reviewed for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0093",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -3416,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0094",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -3453,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "action plan created for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0095",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -3490,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "action plan status changed for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0096",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -3527,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "evidence attached for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0097",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -3564,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0098",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -3601,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "report viewed for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0099",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -3638,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "role switched for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0100",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -3675,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "work paper created for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0101",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -3712,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0102",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -3749,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "work paper submitted for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0103",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -3786,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "work paper reviewed for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0104",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -3823,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "finding updated for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0105",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-050",
+    "offsetMinutes": -3860,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0106",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-051",
+    "offsetMinutes": -3897,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "action plan status changed for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0107",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -3934,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "evidence attached for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0108",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -3971,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "review note added for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0109",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -4008,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0110",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -4045,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "role switched for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0111",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -4082,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "work paper created for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0112",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -4119,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "work paper updated for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0113",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -4156,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0114",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -4193,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "work paper reviewed for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0115",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -4230,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "finding updated for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0116",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -4267,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "action plan created for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0117",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -4304,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0118",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -4341,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "evidence attached for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0119",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -4378,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "review note added for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0120",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -4415,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "report viewed for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0121",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -4452,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0122",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -4489,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "work paper created for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0123",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -4526,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "work paper updated for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0124",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -4563,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "work paper submitted for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0125",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -4600,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0126",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -4637,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "finding updated for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0127",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -4674,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "action plan created for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0128",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -4711,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "action plan status changed for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0129",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -4748,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0130",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -4785,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "review note added for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0131",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -4822,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "report viewed for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0132",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -4859,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "role switched for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0133",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -4896,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0134",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -4933,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "work paper updated for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0135",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -4970,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "work paper submitted for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0136",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -5007,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "work paper reviewed for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0137",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -5044,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0138",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -5081,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "action plan created for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0139",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -5118,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "action plan status changed for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0140",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -5155,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "evidence attached for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0141",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -5192,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0142",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -5229,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "report viewed for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0143",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -5266,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "role switched for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0144",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -5303,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "work paper created for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0145",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -5340,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0146",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -5377,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "work paper submitted for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0147",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -5414,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "work paper reviewed for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0148",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -5451,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "finding updated for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0149",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -5488,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0150",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -5525,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "action plan status changed for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0151",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -5562,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "evidence attached for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0152",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -5599,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "review note added for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0153",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -5636,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0154",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -5673,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "role switched for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0155",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -5710,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "work paper created for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0156",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -5747,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "work paper updated for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0157",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -5784,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0158",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -5821,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "work paper reviewed for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0159",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -5858,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "finding updated for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0160",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-050",
+    "offsetMinutes": -5895,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "action plan created for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0161",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-051",
+    "offsetMinutes": -5932,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0162",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -5969,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "evidence attached for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0163",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -6006,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "review note added for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0164",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -6043,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "report viewed for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0165",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -6080,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0166",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -6117,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "work paper created for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0167",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -6154,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "work paper updated for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0168",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -6191,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "work paper submitted for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0169",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -6228,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0170",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -6265,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "finding updated for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0171",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -6302,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "action plan created for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0172",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -6339,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "action plan status changed for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0173",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -6376,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0174",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -6413,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "review note added for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0175",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -6450,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "report viewed for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0176",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -6487,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "role switched for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0177",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -6524,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0178",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -6561,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "work paper updated for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0179",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -6598,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "work paper submitted for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0180",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -6635,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "work paper reviewed for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0181",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -6672,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0182",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -6709,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "action plan created for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0183",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -6746,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "action plan status changed for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0184",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -6783,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "evidence attached for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0185",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -6820,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0186",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -6857,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "report viewed for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0187",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -6894,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "role switched for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0188",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -6931,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "work paper created for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0189",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -6968,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0190",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -7005,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "work paper submitted for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0191",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -7042,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "work paper reviewed for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0192",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -7079,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "finding updated for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0193",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -7116,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0194",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -7153,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "action plan status changed for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0195",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -7190,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "evidence attached for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0196",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -7227,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "review note added for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0197",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -7264,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0198",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -7301,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "role switched for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0199",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -7338,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "work paper created for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0200",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -7375,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "work paper updated for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0201",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -7412,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0202",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -7449,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "work paper reviewed for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0203",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -7486,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "finding updated for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0204",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -7523,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "action plan created for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0205",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -7560,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0206",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -7597,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "evidence attached for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0207",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -7634,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "review note added for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0208",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -7671,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "report viewed for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0209",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -7708,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0210",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -7745,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "work paper created for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0211",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -7782,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "work paper updated for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0212",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -7819,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "work paper submitted for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0213",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -7856,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0214",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -7893,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "finding updated for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0215",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-050",
+    "offsetMinutes": -7930,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "action plan created for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0216",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-051",
+    "offsetMinutes": -7967,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "action plan status changed for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0217",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -8004,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0218",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -8041,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "review note added for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0219",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -8078,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "report viewed for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0220",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -8115,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "role switched for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0221",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -8152,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0222",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -8189,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "work paper updated for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0223",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -8226,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "work paper submitted for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0224",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -8263,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "work paper reviewed for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0225",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -8300,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0226",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -8337,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "action plan created for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0227",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -8374,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "action plan status changed for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0228",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -8411,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "evidence attached for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0229",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -8448,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0230",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -8485,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "report viewed for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0231",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -8522,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "role switched for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0232",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -8559,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "work paper created for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0233",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -8596,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0234",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -8633,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "work paper submitted for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0235",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -8670,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "work paper reviewed for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0236",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -8707,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "finding updated for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0237",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -8744,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0238",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -8781,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "action plan status changed for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0239",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -8818,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "evidence attached for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0240",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -8855,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "review note added for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0241",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-001",
+    "offsetMinutes": -8892,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0242",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-002",
+    "offsetMinutes": -8929,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "role switched for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0243",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -8966,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "work paper created for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0244",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -9003,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "work paper updated for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0245",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -9040,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0246",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -9077,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "work paper reviewed for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0247",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -9114,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "finding updated for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0248",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -9151,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "action plan created for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0249",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -9188,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0250",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -9225,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "evidence attached for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0251",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -9262,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "review note added for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0252",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-012",
+    "offsetMinutes": -9299,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "report viewed for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0253",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-013",
+    "offsetMinutes": -9336,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0254",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -9373,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "work paper created for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0255",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -9410,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "work paper updated for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0256",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -9447,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "work paper submitted for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0257",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -9484,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0258",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -9521,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "finding updated for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0259",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -9558,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "action plan created for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0260",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -9595,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "action plan status changed for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0261",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -9632,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0262",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -9669,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "review note added for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0263",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-023",
+    "offsetMinutes": -9706,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "report viewed for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0264",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-024",
+    "offsetMinutes": -9743,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "role switched for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0265",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -9780,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0266",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -9817,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "work paper updated for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0267",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -9854,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "work paper submitted for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0268",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -9891,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "work paper reviewed for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0269",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -9928,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0270",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-050",
+    "offsetMinutes": -9965,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "action plan created for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0271",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-051",
+    "offsetMinutes": -10002,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "action plan status changed for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0272",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -10039,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "evidence attached for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0273",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -10076,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0274",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-034",
+    "offsetMinutes": -10113,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "report viewed for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0275",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-035",
+    "offsetMinutes": -10150,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "role switched for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0276",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -10187,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "work paper created for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0277",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -10224,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper updated for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0278",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -10261,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "work paper submitted for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0279",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -10298,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "work paper reviewed for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0280",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -10335,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "finding updated for AUD-2026-040."
+  },
+  {
+    "auditId": "LOG-0281",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-006",
+    "offsetMinutes": -10372,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan created for AUD-2026-001."
+  },
+  {
+    "auditId": "LOG-0282",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-007",
+    "offsetMinutes": -10409,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-002"
+    },
+    "details": "action plan status changed for AUD-2026-002."
+  },
+  {
+    "auditId": "LOG-0283",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-003",
+    "offsetMinutes": -10446,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-003"
+    },
+    "details": "evidence attached for AUD-2026-003."
+  },
+  {
+    "auditId": "LOG-0284",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-004",
+    "offsetMinutes": -10483,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-004"
+    },
+    "details": "review note added for AUD-2026-004."
+  },
+  {
+    "auditId": "LOG-0285",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-005",
+    "offsetMinutes": -10520,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "report viewed for AUD-2026-005."
+  },
+  {
+    "auditId": "LOG-0286",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-006",
+    "offsetMinutes": -10557,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-006"
+    },
+    "details": "role switched for AUD-2026-006."
+  },
+  {
+    "auditId": "LOG-0287",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-007",
+    "offsetMinutes": -10594,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-007"
+    },
+    "details": "work paper created for AUD-2026-007."
+  },
+  {
+    "auditId": "LOG-0288",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-008",
+    "offsetMinutes": -10631,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-008"
+    },
+    "details": "work paper updated for AUD-2026-008."
+  },
+  {
+    "auditId": "LOG-0289",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-009",
+    "offsetMinutes": -10668,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper submitted for AUD-2026-009."
+  },
+  {
+    "auditId": "LOG-0290",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-010",
+    "offsetMinutes": -10705,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-010"
+    },
+    "details": "work paper reviewed for AUD-2026-010."
+  },
+  {
+    "auditId": "LOG-0291",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-011",
+    "offsetMinutes": -10742,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-011"
+    },
+    "details": "finding updated for AUD-2026-011."
+  },
+  {
+    "auditId": "LOG-0292",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-017",
+    "offsetMinutes": -10779,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-012"
+    },
+    "details": "action plan created for AUD-2026-012."
+  },
+  {
+    "auditId": "LOG-0293",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-018",
+    "offsetMinutes": -10816,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "action plan status changed for AUD-2026-013."
+  },
+  {
+    "auditId": "LOG-0294",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-014",
+    "offsetMinutes": -10853,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-014"
+    },
+    "details": "evidence attached for AUD-2026-014."
+  },
+  {
+    "auditId": "LOG-0295",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-015",
+    "offsetMinutes": -10890,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-015"
+    },
+    "details": "review note added for AUD-2026-015."
+  },
+  {
+    "auditId": "LOG-0296",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-016",
+    "offsetMinutes": -10927,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-016"
+    },
+    "details": "report viewed for AUD-2026-016."
+  },
+  {
+    "auditId": "LOG-0297",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-017",
+    "offsetMinutes": -10964,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "role switched for AUD-2026-017."
+  },
+  {
+    "auditId": "LOG-0298",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-018",
+    "offsetMinutes": -11001,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-018"
+    },
+    "details": "work paper created for AUD-2026-018."
+  },
+  {
+    "auditId": "LOG-0299",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-019",
+    "offsetMinutes": -11038,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-019"
+    },
+    "details": "work paper updated for AUD-2026-019."
+  },
+  {
+    "auditId": "LOG-0300",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-020",
+    "offsetMinutes": -11075,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-020"
+    },
+    "details": "work paper submitted for AUD-2026-020."
+  },
+  {
+    "auditId": "LOG-0301",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-021",
+    "offsetMinutes": -11112,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper reviewed for AUD-2026-021."
+  },
+  {
+    "auditId": "LOG-0302",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-022",
+    "offsetMinutes": -11149,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-022"
+    },
+    "details": "finding updated for AUD-2026-022."
+  },
+  {
+    "auditId": "LOG-0303",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-028",
+    "offsetMinutes": -11186,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-023"
+    },
+    "details": "action plan created for AUD-2026-023."
+  },
+  {
+    "auditId": "LOG-0304",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-029",
+    "offsetMinutes": -11223,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-024"
+    },
+    "details": "action plan status changed for AUD-2026-024."
+  },
+  {
+    "auditId": "LOG-0305",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-025",
+    "offsetMinutes": -11260,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "evidence attached for AUD-2026-025."
+  },
+  {
+    "auditId": "LOG-0306",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-026",
+    "offsetMinutes": -11297,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-026"
+    },
+    "details": "review note added for AUD-2026-026."
+  },
+  {
+    "auditId": "LOG-0307",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-027",
+    "offsetMinutes": -11334,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-027"
+    },
+    "details": "report viewed for AUD-2026-027."
+  },
+  {
+    "auditId": "LOG-0308",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-028",
+    "offsetMinutes": -11371,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-028"
+    },
+    "details": "role switched for AUD-2026-028."
+  },
+  {
+    "auditId": "LOG-0309",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-029",
+    "offsetMinutes": -11408,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "work paper created for AUD-2026-029."
+  },
+  {
+    "auditId": "LOG-0310",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "WORK_PAPER_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-030",
+    "offsetMinutes": -11445,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-030"
+    },
+    "details": "work paper updated for AUD-2026-030."
+  },
+  {
+    "auditId": "LOG-0311",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "WORK_PAPER_SUBMITTED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-031",
+    "offsetMinutes": -11482,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-031"
+    },
+    "details": "work paper submitted for AUD-2026-031."
+  },
+  {
+    "auditId": "LOG-0312",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "WORK_PAPER_REVIEWED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-032",
+    "offsetMinutes": -11519,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-032"
+    },
+    "details": "work paper reviewed for AUD-2026-032."
+  },
+  {
+    "auditId": "LOG-0313",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "FINDING_UPDATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-033",
+    "offsetMinutes": -11556,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "finding updated for AUD-2026-033."
+  },
+  {
+    "auditId": "LOG-0314",
+    "actorUserId": "USR-FIN",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_CREATED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-039",
+    "offsetMinutes": -11593,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-034"
+    },
+    "details": "action plan created for AUD-2026-034."
+  },
+  {
+    "auditId": "LOG-0315",
+    "actorUserId": "USR-ICT",
+    "actorRole": "UNIT_MANAGER",
+    "action": "ACTION_PLAN_STATUS_CHANGED",
+    "entityType": "action_plan",
+    "entityId": "AP-2026-040",
+    "offsetMinutes": -11630,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-035"
+    },
+    "details": "action plan status changed for AUD-2026-035."
+  },
+  {
+    "auditId": "LOG-0316",
+    "actorUserId": "USR-CAE",
+    "actorRole": "HEAD_OF_AUDIT",
+    "action": "EVIDENCE_ATTACHED",
+    "entityType": "attachment",
+    "entityId": "WP-2026-036",
+    "offsetMinutes": -11667,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-036"
+    },
+    "details": "evidence attached for AUD-2026-036."
+  },
+  {
+    "auditId": "LOG-0317",
+    "actorUserId": "USR-AM",
+    "actorRole": "AUDIT_MANAGER",
+    "action": "REVIEW_NOTE_ADDED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-037",
+    "offsetMinutes": -11704,
+    "before": {
+      "status": "Pending"
+    },
+    "after": {
+      "status": "In Progress"
+    },
+    "details": "review note added for AUD-2026-037."
+  },
+  {
+    "auditId": "LOG-0318",
+    "actorUserId": "USR-SA",
+    "actorRole": "SENIOR_AUDITOR",
+    "action": "REPORT_VIEWED",
+    "entityType": "report",
+    "entityId": "WP-2026-038",
+    "offsetMinutes": -11741,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-038"
+    },
+    "details": "report viewed for AUD-2026-038."
+  },
+  {
+    "auditId": "LOG-0319",
+    "actorUserId": "USR-AUD",
+    "actorRole": "AUDITOR",
+    "action": "ROLE_SWITCHED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-039",
+    "offsetMinutes": -11778,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-039"
+    },
+    "details": "role switched for AUD-2026-039."
+  },
+  {
+    "auditId": "LOG-0320",
+    "actorUserId": "USR-BOARD",
+    "actorRole": "BOARD_MEMBER",
+    "action": "WORK_PAPER_CREATED",
+    "entityType": "work_paper",
+    "entityId": "WP-2026-040",
+    "offsetMinutes": -11815,
+    "before": null,
+    "after": {
+      "reference": "AUD-2026-040"
+    },
+    "details": "work paper created for AUD-2026-040."
+  }
+]

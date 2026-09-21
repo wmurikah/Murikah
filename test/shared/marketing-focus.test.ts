@@ -53,7 +53,7 @@ test('Services is a comparison page rather than a duplicate service-card list', 
   assert.match(page, /comparison\[service\.slug\]/);
 });
 
-test('Assurance OS has a no-sign-in public sample-data sandbox', async () => {
+test('Assurance OS has a no-sign-in browser-only sample-data sandbox', async () => {
   await access(new URL('../../src/pages/assurance-os/sandbox.astro', import.meta.url));
   await access(new URL('../../src/components/assurance-os/PublicSandbox.tsx', import.meta.url));
 
@@ -66,9 +66,10 @@ test('Assurance OS has a no-sign-in public sample-data sandbox', async () => {
     'utf8',
   );
 
-  assert.match(page, /No sign-in/);
-  assert.match(page, /fictional sample audit data|fictional findings/i);
-  assert.match(component, /No sign-in/);
-  assert.match(component, /reset on refresh/);
+  assert.match(page, /No sign-in/i);
+  assert.match(page, /fictional SACCO audit portfolio|fictional sample data/i);
+  assert.match(component, /Fictional sample data/);
+  assert.match(component, /Changes stay in your browser/);
+  assert.match(component, /Nothing you type leaves your browser/);
   assert.doesNotMatch(component, /fetch\(|\/api\//);
 });
