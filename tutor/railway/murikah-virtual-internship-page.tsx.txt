@@ -1,0 +1,103 @@
+import Link from "next/link";
+import {
+  Brain,
+  Briefcase,
+  Calendar,
+  FileText,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+
+const HIGHLIGHTS = [
+  {
+    icon: Calendar,
+    title: "3+ months",
+    copy: "A qualifying internship will run for at least 90 calendar days, with persistent work, milestones and reviews.",
+  },
+  {
+    icon: Briefcase,
+    title: "Real work patterns",
+    copy: "Assignments, inbox messages, meetings, deadlines, changing priorities, stakeholder requests and workplace dynamics.",
+  },
+  {
+    icon: Brain,
+    title: "AI workplace actors",
+    copy: "Supervisors, colleagues, clients and a separate Murikah Mentor will use role-specific AI behavior without replacing canonical scenario facts.",
+  },
+  {
+    icon: FileText,
+    title: "Evidence-based work",
+    copy: "Reports, analyses, code, presentations and other artifacts will feed traceable competency evidence rather than unsupported scores.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Competency Passport",
+    copy: "The Passport will show what was demonstrated, the evidence behind it, how much assistance was used and where the skill transferred.",
+  },
+] as const;
+
+export default function VirtualInternshipPage() {
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">
+          <Sparkles size={14} />
+          Foundation preview
+        </div>
+
+        <div className="mt-4 max-w-3xl">
+          <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
+            Virtual Internship
+          </h1>
+          <p className="mt-4 text-base leading-7 text-[var(--muted-foreground)] sm:text-lg">
+            A persistent simulated workplace where you will work in a real role for at least three months,
+            produce assessed work, deal with realistic workplace situations and build a Competency Passport
+            backed by evidence.
+          </p>
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-[#A9822E]/25 bg-[#A9822E]/[0.06] p-5 sm:p-6">
+          <div className="text-sm font-semibold">This workspace is being built in stages.</div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+            The navigation anchor is live, but internship records, assignments, assessment and Passport evidence
+            are not enabled yet. Murikah will not create placeholder completion records or fake competency evidence.
+          </p>
+        </div>
+
+        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Virtual Internship planned capabilities">
+          {HIGHLIGHTS.map(({ icon: Icon, title, copy }) => (
+            <article
+              key={title}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
+            >
+              <span className="inline-flex rounded-xl bg-[#A9822E]/10 p-2 text-[#A9822E]">
+                <Icon size={19} />
+              </span>
+              <h2 className="mt-4 text-base font-semibold">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">What the full experience will track</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+            Work assignments, artifacts, deadlines, feedback, revisions, mentor support, meetings, workplace
+            decisions, weekly learning reflections, competency evidence, midpoint performance and final review.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/chat"
+              className="rounded-lg bg-[#1E2A30] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              Back to Tutor
+            </Link>
+            <span className="rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)]">
+              Start internship — coming later
+            </span>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
