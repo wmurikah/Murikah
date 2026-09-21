@@ -240,7 +240,7 @@ def main() -> None:
         (
             "def deployment_llm_rows(",
             "inherited = deployment_llm_rows(catalog)",
-            "inherited_keys = {",
+            "unique: list[dict[str, Any]] = []",
             "if active is None and options:",
             "is_owner_bound(effective)",
             '"source": "admin"',
