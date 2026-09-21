@@ -6,6 +6,9 @@ on:
       - fix/home-hero-building-reference
     paths:
       - .github/workflows/home-hero-acceptance.yml
+      - src/pages/index.astro
+      - src/components/Header.astro
+      - src/styles/global.css
 
 permissions:
   contents: write
