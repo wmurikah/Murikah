@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v28"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v29"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -252,6 +252,8 @@ def main() -> int:
             'python -m deeptutor.murikah_persistence restore',
             'python /app/murikah-tutor-bootstrap.py',
             'python /app/murikah-fast-lane-bootstrap.py',
+            'python -m deeptutor.murikah_persistence reconcile-ownership',
+            'python -m deeptutor.murikah_persistence reconcile-accounts',
             'python -m deeptutor.murikah_persistence sync-once',
             'python -m deeptutor.murikah_persistence sync-loop &',
             'MURIKAH_FAST_CHAT_MODEL',
@@ -277,7 +279,10 @@ def main() -> int:
             'python /opt/murikah/harden_member_runtime.py /src/DeepTutor',
             'COPY tutor/railway/share_admin_models.py /opt/murikah/share_admin_models.py',
             'python /opt/murikah/share_admin_models.py /src/DeepTutor',
+            'COPY tutor/railway/harden_admin_controls.py /opt/murikah/harden_admin_controls.py',
+            'python /opt/murikah/harden_admin_controls.py /src/DeepTutor',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/multi_user/model_access.py /app/deeptutor/multi_user/model_access.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/settings.py /app/deeptutor/api/routers/settings.py',
             'COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx',
             'tests/integration/settings-admin-boundary.spec.tsx',
             '"manim>=0.19.0,<0.20"',
@@ -604,6 +609,22 @@ def main() -> int:
         ("CREATE TRIGGER",),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0004_tutor_object_ownership.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS tutor_objects",
+            "owner_kind TEXT NOT NULL",
+            "owner_id TEXT NOT NULL",
+            "runtime_path TEXT NOT NULL UNIQUE",
+            "CREATE TABLE IF NOT EXISTS tutor_accounts",
+            "CREATE TABLE IF NOT EXISTS tutor_access_audit",
+            "ownership_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0004_tutor_object_ownership.sql",
+        ("CREATE TRIGGER",),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "/learning/actor",
@@ -618,6 +639,15 @@ def main() -> int:
         "tutor/cloudflare/src/index.ts",
         (
             "x-murikah-object-mtime-ms",
+            "x-murikah-object-owner-kind",
+            "persistenceOwnership(path)",
+            "tutor_objects",
+            "/ownership/reconcile",
+            "/ownership/status",
+            "/account/upsert",
+            "/audit",
+            "ownershipSchemaVersion",
+            "unregisteredObjectCount",
             "mtime_ms",
             "INSERT OR IGNORE INTO guest_prompts",
             "s.used_count + COUNT(p.request_id) AS used_count",
@@ -633,6 +663,12 @@ def main() -> int:
             "def restore()",
             "def sync_once()",
             "def sync_loop()",
+            "def object_ownership(",
+            "def account_upsert(",
+            "def access_audit(",
+            "def reconcile_ownership(",
+            "def reconcile_accounts(",
+            "x-murikah-object-owner-kind",
             "def guest_reserve(",
             "def guest_status(",
             "def learning_actor(",
@@ -698,6 +734,10 @@ def main() -> int:
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
     print(" - every ordinary account inherits all shareable admin-configured LLMs dynamically; owner-bound admin OAuth models stay private")
     print(" - deployment model/provider settings are hidden from members and remain admin-managed")
+    print(" - personal provider credential lifecycle is also admin-only; learners keep personal learning preferences only")
+    print(" - every durable R2 object has explicit D1 owner/type metadata, with existing manifest objects reconciled on startup")
+    print(" - new user-owned R2 writes use canonical users/<user-id>/<object-type>/<object-id> keys")
+    print(" - non-secret account role/status metadata is reconciled into D1 while credentials remain in Cloudflare Secrets/protected auth storage")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
     print(" - sign-in and sign-up tabs have explicit active-state contrast")
     print(" - Math Animator dependencies are installed and smoke-tested in the production image")
