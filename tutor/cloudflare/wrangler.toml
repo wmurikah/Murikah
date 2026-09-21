@@ -18,12 +18,14 @@ pattern = "tutor.murikah.com"
 custom_domain = true
 
 # Fail closed before deployment if essential production secrets are not actually
-# configured on the Worker. SSO provider secrets and Gemini fast-chat remain
-# optional until enabled in the dashboard.
+# configured on the Worker. Google SSO is now part of the production account
+# experience; Microsoft/Apple and Gemini fast-chat remain optional.
 [secrets]
 required = [
   "MURIKAH_TUTOR_ADMIN_PASSWORD",
   "MURIKAH_TUTOR_AUTH_SECRET",
+  "MURIKAH_GOOGLE_CLIENT_ID",
+  "MURIKAH_GOOGLE_CLIENT_SECRET",
   "MURIKAH_NVIDIA_NIM_API_KEY",
   "MURIKAH_DASHSCOPE_API_KEY",
   "MURIKAH_TAVILY_API_KEY",
@@ -46,8 +48,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v25 adds persistent member sessions, Math Animator runtime support, first-attempt Solve repair, and definitive scroll ownership.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v25" }
+# v26 makes Google SSO a production requirement and clarifies the account-access UI.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v26" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4

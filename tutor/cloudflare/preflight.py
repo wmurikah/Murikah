@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v25"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-20-v26"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -214,6 +214,8 @@ def main() -> int:
             '[secrets]',
             '"MURIKAH_TUTOR_ADMIN_PASSWORD"',
             '"MURIKAH_TUTOR_AUTH_SECRET"',
+            '"MURIKAH_GOOGLE_CLIENT_ID"',
+            '"MURIKAH_GOOGLE_CLIENT_SECRET"',
             '"MURIKAH_NVIDIA_NIM_API_KEY"',
             '"MURIKAH_DASHSCOPE_API_KEY"',
             '"MURIKAH_TAVILY_API_KEY"',
@@ -281,6 +283,8 @@ def main() -> int:
             'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py',
             'COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py',
             'COPY tutor/railway /opt/murikah/railway',
+            'COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx',
+            'tests/integration/auth-sso.spec.tsx',
             'COPY tutor/tests /opt/murikah/tests',
             'RUN python -m unittest discover -s /opt/murikah/tests -v',
             'COPY tutor/railway/bootstrap_fast_lane.py /app/murikah-fast-lane-bootstrap.py',
@@ -403,7 +407,23 @@ def main() -> int:
         "tutor/railway/MurikahSocialButtons.tsx.txt",
         (
             "google: 0",
+            'data-google-logo="true"',
+            'fill="#4285F4"',
+            'fill="#34A853"',
+            'fill="#FBBC05"',
+            'fill="#EA4335"',
+            "Single sign-on",
             "Continue with {provider.label}",
+            'data-provider={provider.id}',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahAccountPage.tsx.txt",
+        (
+            'aria-label="Account access"',
+            'aria-current={!isSignup ? "page" : undefined}',
+            'aria-current={isSignup ? "page" : undefined}',
+            '"bg-[#1E2A30] text-white shadow-md ring-1 ring-[#1E2A30]"',
         ),
     )
     require_markers(
@@ -649,6 +669,8 @@ def main() -> int:
     print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
+    print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
+    print(" - sign-in and sign-up tabs have explicit active-state contrast")
     print(" - Math Animator dependencies are installed and smoke-tested in the production image")
     print(" - Diagram Design has a real page scroller and renders its SVG before explanation")
     print(" - Deep Solve performs one hidden final repair before surfacing an empty-answer failure")

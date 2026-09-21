@@ -201,16 +201,25 @@ function AccountForm({ signup }: { signup: boolean }) {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-1">
+      <div
+        className="mb-6 grid grid-cols-2 gap-1.5 rounded-2xl border border-[var(--border)] bg-[#F3F4F6] p-1.5 shadow-inner dark:bg-white/5"
+        aria-label="Account access"
+      >
         <a
           href={`/login?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`}
-          className={`rounded-lg px-3 py-2 text-center text-sm font-semibold ${!isSignup ? "bg-[var(--card)] shadow-sm" : "text-[var(--muted-foreground)]"}`}
+          aria-current={!isSignup ? "page" : undefined}
+          className={`rounded-xl px-4 py-3 text-center text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]/50 ${!isSignup
+            ? "bg-[#1E2A30] text-white shadow-md ring-1 ring-[#1E2A30]"
+            : "text-[#4B5563] hover:bg-white hover:text-[#111827] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"}`}
         >
           Sign in
         </a>
         <a
           href={`/register?guest_exhausted=${guestExhausted ? "1" : "0"}&next=${encodeURIComponent(next)}`}
-          className={`rounded-lg px-3 py-2 text-center text-sm font-semibold ${isSignup ? "bg-[var(--card)] shadow-sm" : "text-[var(--muted-foreground)]"}`}
+          aria-current={isSignup ? "page" : undefined}
+          className={`rounded-xl px-4 py-3 text-center text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]/50 ${isSignup
+            ? "bg-[#1E2A30] text-white shadow-md ring-1 ring-[#1E2A30]"
+            : "text-[#4B5563] hover:bg-white hover:text-[#111827] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"}`}
         >
           Sign up
         </a>
@@ -229,10 +238,6 @@ function AccountForm({ signup }: { signup: boolean }) {
         next={next}
         resolveNext={continuationForAccountChange}
       />
-
-      <div className="my-5 flex items-center gap-3 text-xs text-[var(--muted-foreground)] before:h-px before:flex-1 before:bg-[var(--border)] after:h-px after:flex-1 after:bg-[var(--border)]">
-        or continue with email or username
-      </div>
 
       <form
         onSubmit={submit}
