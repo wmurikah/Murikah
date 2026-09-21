@@ -206,7 +206,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v27"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v28"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -275,6 +275,11 @@ def main() -> int:
             'python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor',
             'COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py',
             'python /opt/murikah/harden_member_runtime.py /src/DeepTutor',
+            'COPY tutor/railway/share_admin_models.py /opt/murikah/share_admin_models.py',
+            'python /opt/murikah/share_admin_models.py /src/DeepTutor',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/multi_user/model_access.py /app/deeptutor/multi_user/model_access.py',
+            'COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx',
+            'tests/integration/settings-admin-boundary.spec.tsx',
             '"manim>=0.19.0,<0.20"',
             'texlive-latex-base',
             'dvisvgm',
@@ -383,6 +388,16 @@ def main() -> int:
             'MURIKAH_FAST_CHAT_MODEL',
             '"api_format": "openai_chat"',
             'deep-task LLM selection preserved',
+        ),
+    )
+    require_markers(
+        "tutor/railway/share_admin_models.py",
+        (
+            "def deployment_llm_rows(",
+            "inherited = deployment_llm_rows(catalog)",
+            "if active is None and options:",
+            "is_owner_bound(effective)",
+            "deployment model configuration is admin-only",
         ),
     )
     require_markers(
@@ -681,6 +696,8 @@ def main() -> int:
     print(" - active fast-chat streams have a 4096-token segment budget, a 300s segment ceiling, and up to three hidden continuation passes")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
+    print(" - every ordinary account inherits all shareable admin-configured LLMs dynamically; owner-bound admin OAuth models stay private")
+    print(" - deployment model/provider settings are hidden from members and remain admin-managed")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
     print(" - sign-in and sign-up tabs have explicit active-state contrast")
     print(" - Math Animator dependencies are installed and smoke-tested in the production image")
