@@ -107,7 +107,7 @@ test('functional form borders do not use the decorative hairline token', async (
   assert.doesNotMatch(subscribe, /placeholder:text-slate\/60/);
 });
 
-test('public chrome stays light while navy remains the primary-action colour', async () => {
+test('non-home public chrome stays light while the homepage may opt into its dark hero header', async () => {
   const cta = await readFile(
     new URL('../../src/components/primitives/CtaSection.astro', import.meta.url),
     'utf8',
@@ -122,7 +122,7 @@ test('public chrome stays light while navy remains the primary-action colour', a
   );
 
   assert.match(header, /bg-paper\/95/);
-  assert.doesNotMatch(header, /\bon-dark\b/);
+  assert.match(header, /site-header--home/);
   assert.doesNotMatch(header, /bg-header-bg/);
   assert.match(header, /murikah-logo-dark\.png/);
   assert.match(cta, /<Section tone="paper"/);
