@@ -69,15 +69,28 @@ jobs:
       - name: Start local Cloudflare preview
         shell: bash
         run: |
-          pnpm exec wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 4321 > /tmp/header-wrangler.log 2>&1 &
+          pnpm exec wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 8787 > /tmp/header-wrangler.log 2>&1 &
           echo $! > /tmp/header-wrangler.pid
           for attempt in $(seq 1 90); do
+            if curl --silent --fail -H 'Host: murikah.com' http://127.0.0.1:8787/ > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              cat /tmp/header-wrangler.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          node test/header/marketing-proxy.cjs > /tmp/header-proxy.log 2>&1 &
+          echo $! > /tmp/header-proxy.pid
+          for attempt in $(seq 1 30); do
             if curl --silent --fail http://127.0.0.1:4321/ > /dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/header-wrangler.log
+          cat /tmp/header-proxy.log
           exit 1
 
       - name: Run route-wide Playwright and Axe header suite
@@ -145,4 +158,6 @@ jobs:
 
       - name: Show preview log on failure
         if: failure()
-        run: cat /tmp/header-wrangler.log || true
+        run: |
+          cat /tmp/header-wrangler.log || true
+          cat /tmp/header-proxy.log || true
