@@ -20,6 +20,7 @@ BASE_URL = os.environ.get(
     "https://murikah-tutor-container-staging.hasspe.workers.dev",
 ).rstrip("/")
 DEADLINE_SECONDS = int(os.environ.get("MURIKAH_TUTOR_SMOKE_TIMEOUT", "300"))
+OWNERSHIP_DEADLINE_SECONDS = int(os.environ.get("MURIKAH_TUTOR_OWNERSHIP_TIMEOUT", "180"))
 
 
 def get(path: str, timeout: float = 8.0) -> tuple[int, str]:
@@ -40,6 +41,36 @@ def parse_json(body: str) -> dict:
     except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def wait_for_ownership_reconciliation() -> tuple[bool, dict]:
+    started = time.monotonic()
+    last: dict = {}
+    while time.monotonic() - started < OWNERSHIP_DEADLINE_SECONDS:
+        try:
+            code, body = get("/__muri/persistence-status")
+            current = parse_json(body)
+            if current:
+                last = current
+            remaining = int(current.get("unregisteredObjectCount") or 0) if current else -1
+            if (
+                code == 200
+                and current.get("ownershipSchemaVersion") == "1"
+                and remaining == 0
+            ):
+                return True, current
+            elapsed = int(time.monotonic() - started)
+            print(
+                f" - ownership reconciliation {elapsed:>3}s "
+                f"unregistered={remaining if remaining >= 0 else 'unknown'}"
+            )
+        except Exception as exc:
+            print(
+                " - ownership reconciliation probe retry: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        time.sleep(2)
+    return False, last
 
 
 def main() -> int:
@@ -105,20 +136,16 @@ def main() -> int:
                 if parsed.get("ready") is True:
                     health_code, health_body = get("/health")
                     if health_code == 200:
-                        ownership_code, ownership_body = get("/__muri/persistence-status")
-                        ownership = parse_json(ownership_body)
-                        if (
-                            ownership_code != 200
-                            or ownership.get("ownershipSchemaVersion") != "1"
-                            or int(ownership.get("unregisteredObjectCount") or 0) != 0
-                        ):
+                        ownership_ready, ownership = wait_for_ownership_reconciliation()
+                        if not ownership_ready:
                             print(
                                 "Murikah Tutor staging smoke test: FAILED - "
-                                "durable object ownership reconciliation is incomplete"
+                                "durable object ownership reconciliation did not converge "
+                                f"within {OWNERSHIP_DEADLINE_SECONDS}s"
                             )
                             print(
-                                f"Persistence status: HTTP {ownership_code} "
-                                f"{ownership_body[:1000]}"
+                                "Last persistence status: "
+                                f"{json.dumps(ownership, sort_keys=True)[:1000]}"
                             )
                             return 1
                         print("Murikah Tutor staging smoke test: PASS")
