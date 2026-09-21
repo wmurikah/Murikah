@@ -80,8 +80,8 @@ def main() -> None:
             'shrink-0 bg-[var(--background)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-3',
             'const SIGN_UP =',
             '<MurikahInviteFriends',
-            '>Sign in<',
-            '>Sign up<',
+            'href={USERNAME_SIGN_IN}',
+            'href={SIGN_UP}',
         ),
     )
     forbid_markers(
