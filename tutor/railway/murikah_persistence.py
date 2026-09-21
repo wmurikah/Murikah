@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import mimetypes
 import os
 from pathlib import Path, PurePosixPath
 import secrets
@@ -179,6 +180,104 @@ def _selection_fields(value: Any) -> tuple[str, str]:
     return profile[:128], model[:256]
 
 
+def account_upsert(
+    actor_id: str,
+    *,
+    username: str,
+    role: str,
+    auth_provider: str = "local",
+) -> None:
+    if not enabled():
+        return
+    _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/account/upsert",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "username": "" if role == "guest" else _learning_text(username, 254),
+            "role": _learning_text(role, 16),
+            "auth_provider": _learning_text(auth_provider or "local", 32),
+        },
+    )
+
+
+def access_audit(
+    *,
+    actor_id: str = "",
+    actor_role: str = "",
+    action: str,
+    resource: str,
+    outcome: str,
+    detail: str = "",
+) -> None:
+    if not enabled():
+        return
+    _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/audit",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "actor_role": _learning_text(actor_role, 16),
+            "action": _learning_text(action, 96),
+            "resource": _learning_text(resource, 192),
+            "outcome": _learning_text(outcome, 16),
+            "detail": _learning_text(detail, 500),
+        },
+    )
+
+
+def reconcile_ownership() -> int:
+    if not enabled():
+        return 0
+    result = _json_request("POST", f"{PERSIST_PREFIX}/ownership/reconcile", {})
+    count = max(0, int(result.get("registered") or 0))
+    print(f"[Murikah Tutor] D1 ownership registry reconciled for {count} durable objects.")
+    return count
+
+
+def reconcile_accounts() -> int:
+    """Mirror non-secret DeepTutor account metadata into D1 after restore."""
+    if not enabled():
+        return 0
+    try:
+        from deeptutor.multi_user import identity
+        from deeptutor.services.auth import get_user_info
+    except Exception as exc:
+        raise PersistenceError("Tutor account metadata could not be loaded.") from exc
+
+    rows: dict[str, dict[str, Any]] = {}
+    for username, record in (identity.load_users() or {}).items():
+        if isinstance(record, dict) and record.get("id"):
+            rows[str(username)] = record
+
+    try:
+        bootstrap_name, _ = identity._env_bootstrap_admin()
+        info = get_user_info(bootstrap_name)
+        if info and info.get("id"):
+            rows.setdefault(str(bootstrap_name), dict(info))
+    except Exception:
+        pass
+
+    reconciled = 0
+    for username, record in rows.items():
+        role_value = str(record.get("role") or "user").lower()
+        if username.startswith("guest_"):
+            role = "guest"
+        elif role_value == "admin":
+            role = "admin"
+        else:
+            role = "member"
+        account_upsert(
+            str(record.get("id") or ""),
+            username=username,
+            role=role,
+            auth_provider="local",
+        )
+        reconciled += 1
+    print(f"[Murikah Tutor] D1 account metadata reconciled for {reconciled} accounts.")
+    return reconciled
+
+
 def learning_actor(
     actor_id: str,
     actor_type: str,
@@ -343,6 +442,50 @@ def _valid_relpath(value: str) -> str:
     return path.as_posix()
 
 
+def _object_type_for_relpath(rel: str) -> str:
+    value = "/" + _valid_relpath(rel).lower() + "/"
+    if "/knowledge" in value or "/kb/" in value or "/rag/" in value:
+        return "knowledge"
+    if "/book" in value or "/reading" in value or "/notebook" in value:
+        return "learning_asset"
+    if "/memory" in value:
+        return "memory"
+    if "/session" in value or "/chat" in value or "/conversation" in value:
+        return "conversation"
+    if "/upload" in value or "/attachment" in value or "/document" in value or "/files/" in value:
+        return "upload"
+    if (
+        "/diagram" in value
+        or "/visual" in value
+        or "/generated" in value
+        or "/output" in value
+        or "/math_animator" in value
+    ):
+        return "generated"
+    if "/settings/" in value:
+        return "settings"
+    if "/auth/" in value or "/grant" in value:
+        return "control"
+    return "workspace"
+
+
+def object_ownership(rel: str) -> tuple[str, str, str, str]:
+    """Return owner kind/id, object type and stable object id for a cache path."""
+    normalized = _valid_relpath(rel)
+    parts = PurePosixPath(normalized).parts
+    if len(parts) >= 2 and parts[0] == "users":
+        owner_kind, owner_id = "user", parts[1]
+    elif len(parts) >= 2 and parts[0] == "partners":
+        owner_kind, owner_id = "partner", parts[1]
+    elif parts and parts[0] == "user":
+        owner_kind, owner_id = "admin", "admin"
+    else:
+        owner_kind, owner_id = "system", "system"
+    object_type = _object_type_for_relpath(normalized)
+    object_id = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return owner_kind, owner_id, object_type, object_id
+
+
 def _skip(rel: str) -> bool:
     rel = _valid_relpath(rel)
     if rel in SKIP_PATHS:
@@ -391,6 +534,8 @@ def _object_path(rel: str) -> str:
 
 def _upload(rel: str, data: bytes, *, mtime_ns: int, generation: str) -> None:
     sha = hashlib.sha256(data).hexdigest()
+    owner_kind, owner_id, object_type, object_id = object_ownership(rel)
+    guessed_type = mimetypes.guess_type(rel)[0] or "application/octet-stream"
     # JavaScript/D1 INTEGER values are transported through IEEE-754 numbers.
     # Epoch nanoseconds exceed Number.MAX_SAFE_INTEGER, so persist milliseconds.
     mtime_ms = max(0, int(mtime_ns) // 1_000_000)
@@ -404,6 +549,11 @@ def _upload(rel: str, data: bytes, *, mtime_ns: int, generation: str) -> None:
             "x-murikah-object-mtime-ms": str(mtime_ms),
             "x-murikah-object-generation": generation,
             "x-murikah-object-size": str(len(data)),
+            "x-murikah-object-owner-kind": owner_kind,
+            "x-murikah-object-owner-id": owner_id,
+            "x-murikah-object-type": object_type,
+            "x-murikah-object-id": object_id,
+            "x-murikah-object-content-type": guessed_type,
         },
         timeout=max(20.0, min(120.0, len(data) / (1024 * 1024) * 4.0 + 20.0)),
     )
@@ -533,7 +683,17 @@ def sync_loop() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("restore", "sync-once", "sync-loop", "status"))
+    parser.add_argument(
+        "command",
+        choices=(
+            "restore",
+            "sync-once",
+            "sync-loop",
+            "reconcile-ownership",
+            "reconcile-accounts",
+            "status",
+        ),
+    )
     args = parser.parse_args()
     if args.command == "restore":
         restore()
@@ -541,6 +701,10 @@ def main() -> int:
         sync_once()
     elif args.command == "sync-loop":
         sync_loop()
+    elif args.command == "reconcile-ownership":
+        reconcile_ownership()
+    elif args.command == "reconcile-accounts":
+        reconcile_accounts()
     else:
         print(json.dumps({"enabled": enabled(), "manifest_items": len(_manifest()) if enabled() else 0}))
     return 0
