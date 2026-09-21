@@ -51,7 +51,7 @@ def main() -> int:
     virtual_entry = '''  {
     href: "/virtual-internship",
     label: "Virtual Internship",
-    icon: Briefcase,
+    icon: GraduationCap,
     tooltipKey: "A 3+ month simulated workplace with evidence-based competency tracking",
     requires: "llm",
   },
