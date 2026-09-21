@@ -31,11 +31,32 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
   titleFull="Internal audit and Assurance OS | Murikah"
   description="Internal audit and Assurance OS for teams accountable to boards, regulators and customers. Plan, evidence, report and follow up in one connected workflow."
 >
+  <link
+    slot="head"
+    rel="preload"
+    as="image"
+    type="image/avif"
+    href="/images/hero/hero-building-1280.avif"
+    imagesrcset="/images/hero/hero-building-768.avif 768w, /images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
+    imagesizes="(min-width: 1024px) 55vw, 100vw"
+    fetchpriority="high"
+  />
+
   <section id="hero" class="home-hero on-dark" aria-labelledby="home-title">
     <span class="home-hero__nav-sentinel" data-home-nav-sentinel aria-hidden="true"></span>
 
     <div class="home-hero__media" aria-hidden="true">
       <picture class="home-hero__picture">
+        <source
+          media="(max-width: 639px)"
+          type="image/avif"
+          srcset="/images/hero/hero-building-768.avif"
+        />
+        <source
+          media="(max-width: 639px)"
+          type="image/webp"
+          srcset="/images/hero/hero-building-768.webp"
+        />
         <source
           type="image/avif"
           srcset="/images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
