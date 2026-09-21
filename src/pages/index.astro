@@ -417,8 +417,7 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
 
     .home-hero__picture {
       --hero-image-opacity: 1;
-      opacity: 0;
-      animation: home-hero-image-fade 900ms var(--ease-out-soft) forwards;
+      opacity: var(--hero-image-opacity);
     }
 
     .home-hero__picture img {
@@ -428,12 +427,22 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
       animation: home-hero-image-scale 8s var(--ease-out-soft) forwards;
     }
 
+    .home-hero__media::before,
     .home-hero__media::after {
       content: '';
       position: absolute;
       inset: 0;
-      z-index: 1;
       pointer-events: none;
+    }
+
+    .home-hero__media::before {
+      z-index: 2;
+      background: var(--color-navy);
+      animation: home-hero-image-fade 900ms var(--ease-out-soft) forwards;
+    }
+
+    .home-hero__media::after {
+      z-index: 1;
       background:
         linear-gradient(0deg, var(--color-navy) 0%, transparent 25%),
         linear-gradient(
@@ -646,7 +655,7 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
 
     @keyframes home-hero-image-fade {
       to {
-        opacity: var(--hero-image-opacity);
+        opacity: 0;
       }
     }
 
@@ -760,6 +769,11 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
 
       .home-hero__picture {
         opacity: var(--hero-image-opacity);
+      }
+
+      .home-hero__media::before {
+        opacity: 0;
+        animation: none !important;
       }
     }
   </style>
