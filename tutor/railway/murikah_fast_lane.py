@@ -22,6 +22,7 @@ DEFAULT_NVIDIA_API_ROOT = "https://integrate.api.nvidia.com/v1"
 DEFAULT_QWEN_FAST_MODEL = "qwen3.8-flash"
 DEFAULT_DASHSCOPE_OPENAI_ROOT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_FAST_HISTORY_CHARS = 16000
+MURIKAH_VISIBLE_STYLE_RULE = "Do not use em dashes. Use commas, periods, colons or semicolons instead."
 DEFAULT_HEDGE_DELAY_SECONDS = 0.4
 DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS = 8.0
 DEFAULT_OVERALL_FIRST_TOKEN_SECONDS = 10.0
@@ -200,10 +201,19 @@ def portable_chat_messages(
         used += size
     selected.reverse()
 
+    sys_budget = min(20000, max(4000, budget // 3))
+    style_suffix = "\n\n[Visible style]\n" + MURIKAH_VISIBLE_STYLE_RULE
     if system:
-        sys_budget = min(20000, max(4000, budget // 3))
         latest = system[-1]["content"]
-        system = [{"role": "system", "content": latest[:sys_budget]}]
+        content_budget = max(0, sys_budget - len(style_suffix))
+        system = [
+            {
+                "role": "system",
+                "content": latest[:content_budget] + style_suffix,
+            }
+        ]
+    else:
+        system = [{"role": "system", "content": MURIKAH_VISIBLE_STYLE_RULE}]
     return [*system, *selected]
 
 
