@@ -1280,7 +1280,7 @@ Focused regression files:
 
 `tutor/cloudflare/preflight.py` protects stable Phase 1 identifiers: the migration filename/tables/indexes, duration constant, lifecycle routes, canonical R2 helper, adapter methods, test files and this implementation record. The checks intentionally use function/constant/table/route names instead of line-wrapped prose.
 
-No new Python runtime module was introduced, so the established Docker copies for `murikah_access.py` and `murikah_persistence.py` remain the runtime packaging path; both already reach the final `/app/deeptutor` image. Phase 1 does not require a Dockerfile copy-path change.
+No new Python runtime module was introduced, so the established Docker copies for `murikah_access.py` and `murikah_persistence.py` remain the runtime packaging path; both already reach the final `/app/deeptutor` image. The Dockerfile additionally copies `tutor/cloudflare/src` and `tutor/cloudflare/migrations` into `/opt/murikah/cloudflare` in the final image solely as regression-test fixtures, because the production Docker test command runs from `/opt/murikah/tests`.
 
 Current limitation: Phase 1 is persistence/security/versioning only. It deliberately does not implement task/event graphs, workplace actors, Mentor, simulated supervisors/colleagues/clients, workplace politics engine, assignments, inbox/work UI, artifact submission, rubrics, assessors, competency evidence/Passport scoring, midpoint/final reviews, report generation or completion letters. Phase 2 remains unimplemented.
 
