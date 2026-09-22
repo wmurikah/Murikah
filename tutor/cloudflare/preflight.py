@@ -197,6 +197,69 @@ def validate_bootstrap_fixture() -> None:
                 os.environ[key] = value
 
 
+
+def validate_personalization_fixture() -> None:
+    """Behaviorally validate preferred-name derivation and visible-text sanitization."""
+    modules = (
+        ("tutor/railway/murikah_personalization.py", "muri_personalization_preflight"),
+        ("tutor/railway/murikah_visible_text.py", "muri_visible_text_preflight"),
+    )
+    loaded = {}
+    for relative, module_name in modules:
+        module_path = ROOT / relative
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            failures.append(f"could not import {relative}")
+            continue
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as exc:
+            failures.append(f"{relative} import failed: {exc}")
+            continue
+        loaded[module_name] = module
+
+    personalization = loaded.get("muri_personalization_preflight")
+    if personalization is not None:
+        cases = {
+            "wilberforce.murikah@example.com": "Wilberforce",
+            "mary_jane@example.com": "Mary",
+            "peter-kimani@example.com": "Peter",
+        }
+        for email, expected in cases.items():
+            if personalization.derive_human_name(email, "") != expected:
+                failures.append(f"preferred-name fallback failed for {email}")
+        for email in ("123456@example.com", "user347293@example.com", "noreply@example.com"):
+            if personalization.derive_human_name(email, ""):
+                failures.append(f"machine-like preferred-name fallback was accepted for {email}")
+        if personalization.resolve_preferred_name(
+            preferred_name="Will",
+            email="wilberforce@example.com",
+            username="wilberforce",
+        ) != "Will":
+            failures.append("explicit preferred_name does not override derived fallback")
+
+    visible = loaded.get("muri_visible_text_preflight")
+    if visible is not None:
+        sample = "A — B &mdash; C &#8212; D &#x2014; E"
+        result = visible.sanitize_murikah_visible_text(sample)
+        lowered = result.lower()
+        if "—" in result or "&mdash;" in lowered or "&#8212;" in lowered or "&#x2014;" in lowered:
+            failures.append("visible-text sanitizer leaks an em dash representation")
+        if visible.sanitize_murikah_visible_text("well-known 10–20") != "well-known 10–20":
+            failures.append("visible-text sanitizer changes hyphen-minus or en dash")
+
+    runtime_sources = (
+        "tutor/railway/MurikahGuestChatV2.tsx.txt",
+        "tutor/railway/murikah-virtual-internship-page.tsx.txt",
+        "tutor/railway/murikah_er.py",
+    )
+    for relative in runtime_sources:
+        content = require(relative)
+        if content and "—" in content:
+            failures.append(f"{relative} contains a source-controlled runtime em dash")
+
+
 def main() -> int:
     require_markers(
         "tutor/cloudflare/package.json",
@@ -1021,9 +1084,80 @@ def main() -> int:
             "No file contents were read beyond the 16-byte SQLite signature check.",
         ),
     )
+    require_markers(
+        "tutor/cloudflare/migrations/0007_tutor_preferred_name.sql",
+        (
+            "preferred_name TEXT",
+            "preferred_name_decided_at INTEGER",
+            "tutor_personalization_schema_version",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "normalizePreferredName(",
+            "/account/personalization",
+            "/account/preferred-name",
+            "preferred_name_decided_at",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def account_personalization(",
+            "def account_preferred_name_update(",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_personalization.py",
+        (
+            "def normalize_preferred_name(",
+            "def derive_human_name(",
+            "def resolve_preferred_name(",
+            "def personalization_for_actor(",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_visible_text.py",
+        (
+            "def sanitize_murikah_visible_text(",
+            "MURIKAH_VISIBLE_STYLE_RULE",
+        ),
+    )
+    require_markers(
+        "tutor/railway/apply_tutor_personalization.py",
+        (
+            "def patch_chat_display_sanitizer(",
+            "def patch_stream_and_persistence(",
+            "def validate_no_em_dash_in_runtime_ui(",
+            "sanitize_runtime_web_source(root)",
+        ),
+    )
+    require_markers(
+        "tutor/Dockerfile.railway",
+        (
+            "apply_tutor_personalization.py /src/DeepTutor /opt/murikah",
+            "personalization.spec.tsx",
+            "murikah_personalization.py /app/deeptutor/murikah_personalization.py",
+            "murikah_visible_text.py /app/deeptutor/murikah_visible_text.py",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_tutor_personalization.py",
+        ("class TutorPersonalizationTests",),
+    )
+    require_markers(
+        "tutor/tests/test_tutor_visible_text.py",
+        ("class TutorVisibleTextTests",),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        ("Learner naming and visible-language contract",),
+    )
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
     validate_bootstrap_fixture()
+    validate_personalization_fixture()
 
     if failures:
         print("Murikah Tutor Cloudflare migration preflight: FAILED")
