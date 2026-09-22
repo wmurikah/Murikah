@@ -1228,7 +1228,7 @@ The effective minimum is snapshotted to `internship_instances.minimum_duration_d
 
 `handlePersistence(..., clock = utcNowSeconds)` provides the injectable-clock seam. Production uses real UTC epoch seconds; deterministic tests cover 89 days, 89d 23:59:59, exactly 90 days, later than 90 days, longer scenario duration, month/year boundaries and a leap-year boundary. Africa/Nairobi or browser time is not used for qualification.
 
-Status exposes `duration_requirement_met` separately from completion and always returns `final_completion_available=false` and `pending_future_completion_gates=true` in Phase 1. Reaching day 90 does not complete an internship and creates no report, letter, credential or Competency Passport evidence.
+Status exposes `duration_requirement_met` separately from completion and always returns `final_completion_available=false` and `pending_future_completion_gates=true` in Phase 1. For an active record the duration clock is current server time; after withdrawal it is frozen at `stopped_at`, so an internship stopped before its target can never age into duration compliance later. Reaching day 90 does not complete an internship and creates no report, letter, credential or Competency Passport evidence.
 
 ### Idempotency and actor-bound persistence
 
