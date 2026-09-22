@@ -44,8 +44,7 @@ def _human_token(value: Any) -> str:
         return ""
     local = raw.split("@", 1)[0]
     for part in _TOKEN_SPLIT.split(local):
-        token = part.strip(" 	
-'\"~!#$%^&*()={}[]|\\:;,<>?/")
+        token = part.strip().strip("'\\\"~!#$%^&*()={}[]|\\\\:;,<>?/")
         if not token:
             continue
         folded = token.casefold()
