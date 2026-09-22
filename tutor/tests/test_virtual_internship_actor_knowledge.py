@@ -28,9 +28,18 @@ class ActorKnowledgeTests(unittest.TestCase):
         state=complete_task(self.pack,state,"task_reconcile_sample")
         state,fired=evaluate_events(self.pack,state,1_000_000,1_000_000)
         self.assertIn("event_disclose_exception",fired)
+        self.assertIn("event_management_pressure",fired)
         learner=learner_fact_view(self.pack,state["facts"])
         self.assertIn("fact_control_exception",learner)
-        self.assertNotIn("fact_future_request",learner)
+        self.assertIn("fact_future_request",learner)
+    def test_private_actor_fact_can_be_known_without_leaking_to_learner(self):
+        pack=validate_pack(SCENARIOS_ROOT/"demo"/"data-analyst")
+        facts=initial_runtime_facts(pack)
+        engineer=actor_fact_view(pack,facts,"actor_data_engineer")
+        learner=learner_fact_view(pack,facts)
+        self.assertIn("fact_hidden_null_issue",engineer)
+        self.assertNotIn("fact_hidden_null_issue",learner)
+
     def test_future_event_fact_does_not_leak_merely_because_pack_contains_it(self):
         for actor in [a["actor_id"] for a in self.pack["actors"]]:
             self.assertNotIn("fact_future_request",actor_fact_view(self.pack,self.facts,actor))
