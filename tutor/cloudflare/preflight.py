@@ -124,6 +124,113 @@ def validate_image_revision_alignment() -> None:
         )
 
 
+def validate_deploy_gate_fixture() -> None:
+    """Exercise rollout classification without network or Cloudflare credentials."""
+    path = ROOT / "tutor/cloudflare/deploy_staging.py"
+    spec = importlib.util.spec_from_file_location("murikah_tutor_deploy_gate_fixture", path)
+    if spec is None or spec.loader is None:
+        failures.append("could not import tutor/cloudflare/deploy_staging.py")
+        return
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        failures.append(f"deploy_staging.py import failed: {exc}")
+        return
+
+    original_run = module.run_wrangler
+    original_sleep = module.time.sleep
+    original_expected = module.expected_image_revision
+    original_migrate = module.apply_persistence_migrations
+    original_deploy = module.deploy
+    original_wait = module.wait_for_expected_runtime
+    original_diag = module.one_failure_diagnostic
+
+    class FakeResult:
+        returncode = 0
+        stdout = "registry warning: no such manifest: still propagating"
+        stderr = ""
+        args = ["wrangler", "deploy"]
+
+    try:
+        calls = {"deploy": 0}
+
+        def fake_run(*_args, **_kwargs):
+            calls["deploy"] += 1
+            return FakeResult()
+
+        module.run_wrangler = fake_run
+        module.time.sleep = lambda _seconds: None
+        module.deploy(attempts=3)
+        if calls["deploy"] != 1:
+            failures.append(
+                "deploy_staging.py replayed a successful Wrangler deploy instead of observing rollout"
+            )
+
+        module.expected_image_revision = lambda: "fixture-v34"
+        module.apply_persistence_migrations = lambda: None
+        module.deploy = lambda: ""
+        module.one_failure_diagnostic = lambda: "fixture diagnostic"
+
+        # Normal Cloudflare rollout lag must not turn a successful publish into
+        # a failed build. The Worker keeps stale images fail-closed meanwhile.
+        module.wait_for_expected_runtime = lambda *_args, **_kwargs: {
+            "converged": False,
+            "status": {
+                "running": True,
+                "ready": False,
+                "httpStatus": 200,
+                "imageRevision": "fixture-v33",
+                "state": {"status": "running"},
+            },
+            "base": module.VERIFY_BASES[0],
+            "hadStatus": True,
+            "sawExpectedRevision": False,
+            "lastError": "",
+        }
+        if module.main() != 0:
+            failures.append("deploy_staging.py did not accept bounded asynchronous rollout lag")
+
+        # If the expected image itself is observed and still cannot become
+        # healthy, that is a real release failure and must remain fail-closed.
+        module.wait_for_expected_runtime = lambda *_args, **_kwargs: {
+            "converged": False,
+            "status": {
+                "running": True,
+                "ready": False,
+                "httpStatus": 503,
+                "imageRevision": "fixture-v34",
+                "state": {"status": "running"},
+                "error": "fixture startup failure",
+            },
+            "base": module.VERIFY_BASES[0],
+            "hadStatus": True,
+            "sawExpectedRevision": True,
+            "lastError": "",
+        }
+        try:
+            module.main()
+        except RuntimeError as exc:
+            if "real startup failure" not in str(exc):
+                failures.append(
+                    "deploy_staging.py real-image failure did not preserve the expected classification"
+                )
+        else:
+            failures.append(
+                "deploy_staging.py accepted an unhealthy expected image instead of failing closed"
+            )
+    except Exception as exc:
+        failures.append(f"deploy rollout fixture raised unexpectedly: {type(exc).__name__}: {exc}")
+    finally:
+        module.run_wrangler = original_run
+        module.time.sleep = original_sleep
+        module.expected_image_revision = original_expected
+        module.apply_persistence_migrations = original_migrate
+        module.deploy = original_deploy
+        module.wait_for_expected_runtime = original_wait
+        module.one_failure_diagnostic = original_diag
+
+
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
     bootstrap_path = ROOT / "tutor/railway/bootstrap_runtime.py"
@@ -1009,6 +1116,7 @@ def main() -> int:
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
     validate_image_revision_alignment()
+    validate_deploy_gate_fixture()
     validate_bootstrap_fixture()
 
     if failures:
