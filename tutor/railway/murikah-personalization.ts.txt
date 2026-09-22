@@ -99,18 +99,18 @@ export function composerPlaceholderForIndex(choiceIndex: number): string {
   ];
 }
 
-const ENTITY_RE = /&mdash;|&#8212;|&#x0*2014;/gi;
+const EM_DASH = String.fromCodePoint(0x2014);\nconst ENTITY_RE = /&mdash;|&#8212;|&#x0*2014;/gi;
 const CODE_RE = /```[sS]*?```|`[^`
 ]*`/g;
 const URL_RE = /https?://[^s<>()]+/gi;
 
 function sanitizeCode(value: string): string {
-  return value.replaceAll("—", "\u2014").replace(ENTITY_RE, "\u2014");
+  return value.replaceAll(EM_DASH, "\u2014").replace(ENTITY_RE, "\u2014");
 }
 
 function sanitizeUrl(value: string): string {
   return value
-    .replaceAll("—", "%E2%80%94")
+    .replaceAll(EM_DASH, "%E2%80%94")
     .replace(/&mdash;/gi, "%26mdash%3B")
     .replace(/&#8212;/gi, "%26%238212%3B")
     .replace(/&#x0*2014;/gi, "%26%23x2014%3B");
@@ -118,8 +118,8 @@ function sanitizeUrl(value: string): string {
 
 function sanitizePlain(value: string): string {
   return value
-    .replaceAll(" — ", "; ")
-    .replaceAll("—", ", ")
+    .replaceAll(` ${EM_DASH} `, "; ")
+    .replaceAll(EM_DASH, ", ")
     .replace(ENTITY_RE, "; ");
 }
 
