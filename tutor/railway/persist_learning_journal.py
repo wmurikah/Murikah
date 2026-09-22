@@ -155,6 +155,20 @@ def main() -> int:
                 total_ms=_murikah_total_ms,
                 error_text=str(_murikah_outcome_error or ""),
                 retryable=_murikah_finish_status != "completed",
+                lane=str(context.metadata.get("murikah_lane") or ""),
+                route_reason=str(context.metadata.get("murikah_route_reason") or ""),
+                turn_number=int(context.metadata.get("murikah_turn_number") or 1),
+                is_followup=bool(context.metadata.get("murikah_is_followup")),
+                history_chars=int(context.metadata.get("murikah_history_chars") or 0),
+                history_messages=int(context.metadata.get("murikah_history_messages") or 0),
+                context_packet_chars=int(context.metadata.get("murikah_context_packet_chars") or 0),
+                context_build_ms=int(context.metadata.get("murikah_context_build_ms") or 0),
+                output_token_budget=int(context.metadata.get("murikah_output_token_budget") or 0),
+                first_token_deadline_ms=int(context.metadata.get("murikah_first_token_deadline_ms") or 0),
+                stream_idle_timeout_ms=int(context.metadata.get("murikah_stream_idle_timeout_ms") or 0),
+                stream_ms=int(context.metadata.get("murikah_stream_ms") or 0),
+                continuation_count=int(context.metadata.get("murikah_continuations") or 0),
+                incomplete=bool(context.metadata.get("murikah_incomplete")),
             )
             murikah_journal_terminal = True
 
