@@ -271,6 +271,15 @@ function normalizeEmail(value: unknown): string {
   return email;
 }
 
+function normalizePreferredName(value: unknown): string | null {
+  if (value === null || value === undefined) return '';
+  const raw = String(value);
+  if (/[\u0000-\u001f\u007f]/.test(raw)) return null;
+  const normalized = raw.trim().replace(/\s+/g, ' ');
+  if (normalized.length > 64) return null;
+  return normalized;
+}
+
 function verificationRequesterHash(value: unknown): string {
   const text = learningText(value, 64).trim().toLowerCase();
   return /^[0-9a-f]{64}$/.test(text) ? text : '';
@@ -1219,6 +1228,80 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       provider: row.provider,
       verified_at: now,
     });
+  }
+
+  if (route === '/account/personalization' && request.method === 'GET') {
+    const actorId = validPersistenceId(url.searchParams.get('actor_id'));
+    if (!actorId) return persistenceJson({ error: 'invalid_account' }, 400);
+    try {
+      const row = await env.TUTOR_DB.prepare(
+        'SELECT actor_id, username, role, account_status, email, email_verified_at, ' +
+          'preferred_name, preferred_name_decided_at ' +
+          'FROM tutor_accounts WHERE actor_id = ? LIMIT 1',
+      )
+        .bind(actorId)
+        .first<{
+          actor_id: string;
+          username: string;
+          role: string;
+          account_status: string;
+          email: string;
+          email_verified_at: number | null;
+          preferred_name: string | null;
+          preferred_name_decided_at: number | null;
+        }>();
+      if (!row) return persistenceJson({ error: 'account_not_found' }, 404);
+      return persistenceJson({
+        actor_id: row.actor_id,
+        username: row.username,
+        role: row.role,
+        account_status: row.account_status,
+        email: row.email,
+        email_verified_at: row.email_verified_at || 0,
+        preferred_name: row.preferred_name || null,
+        preferred_name_decided_at: row.preferred_name_decided_at || 0,
+      });
+    } catch (error) {
+      console.error('Tutor D1 account personalization read failed', error);
+      return persistenceJson({ error: 'account_personalization_failed' }, 503);
+    }
+  }
+
+  if (route === '/account/preferred-name' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const preferredName = normalizePreferredName(body.preferred_name);
+    if (!actorId || preferredName === null) {
+      return persistenceJson({ error: 'invalid_preferred_name' }, 400);
+    }
+    try {
+      const account = await env.TUTOR_DB.prepare(
+        'SELECT role, account_status FROM tutor_accounts WHERE actor_id = ? LIMIT 1',
+      )
+        .bind(actorId)
+        .first<{ role: string; account_status: string }>();
+      if (
+        !account ||
+        !['member', 'admin'].includes(account.role) ||
+        account.account_status !== 'active'
+      ) {
+        return persistenceJson({ error: 'account_not_available' }, 403);
+      }
+      await env.TUTOR_DB.prepare(
+        'UPDATE tutor_accounts SET preferred_name = ?, preferred_name_decided_at = ?, updated_at = ? ' +
+          'WHERE actor_id = ?',
+      )
+        .bind(preferredName || null, now, now, actorId)
+        .run();
+      return persistenceJson({
+        ok: true,
+        preferred_name: preferredName || null,
+        preferred_name_decided_at: now,
+      });
+    } catch (error) {
+      console.error('Tutor D1 preferred name update failed', error);
+      return persistenceJson({ error: 'account_preferred_name_failed' }, 503);
+    }
   }
 
   if (route === '/account/upsert' && request.method === 'POST') {

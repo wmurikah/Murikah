@@ -1,0 +1,158 @@
+export type GreetingCategory =
+  | "time"
+  | "conversational"
+  | "returning"
+  | "curiosity"
+  | "task"
+  | "minimal";
+
+export type GreetingContext = {
+  name?: string | null;
+  localHour: number;
+  returningUser?: boolean;
+};
+
+type GreetingTemplate = {
+  category: GreetingCategory;
+  named: string;
+  generic: string;
+  timeBucket?: "morning" | "afternoon" | "evening" | "late";
+};
+
+const GREETINGS: GreetingTemplate[] = [
+  { category: "time", timeBucket: "morning", named: "Morning, {name}. What's on your mind?", generic: "Morning. What's on your mind?" },
+  { category: "time", timeBucket: "morning", named: "Good morning, {name}. What should we work through?", generic: "Good morning. What should we work through?" },
+  { category: "time", timeBucket: "afternoon", named: "Afternoon, {name}. What's on your mind?", generic: "Afternoon. What's on your mind?" },
+  { category: "time", timeBucket: "afternoon", named: "Good afternoon, {name}. What are we figuring out?", generic: "Good afternoon. What are we figuring out?" },
+  { category: "time", timeBucket: "evening", named: "Evening, {name}. What shall we explore?", generic: "Evening. What shall we explore?" },
+  { category: "time", timeBucket: "evening", named: "Good evening, {name}. What's on your mind?", generic: "Good evening. What's on your mind?" },
+  { category: "time", timeBucket: "late", named: "Still thinking, {name}? What's on your mind?", generic: "Still thinking? What's on your mind?" },
+  { category: "time", timeBucket: "late", named: "Late one, {name}. What are we working through?", generic: "Late one. What are we working through?" },
+
+  { category: "conversational", named: "Hey {name}. What's up?", generic: "Hey. What's up?" },
+  { category: "conversational", named: "Hi {name}. Thoughts?", generic: "Hi. Thoughts?" },
+  { category: "conversational", named: "Howdy, {name}. What are we working on?", generic: "Howdy. What are we working on?" },
+  { category: "conversational", named: "{name}, what's on your mind?", generic: "What's on your mind?" },
+  { category: "conversational", named: "Good to see you, {name}. What's the question?", generic: "Good to see you. What's the question?" },
+
+  { category: "returning", named: "Welcome back, {name}. What are we working on?", generic: "Welcome back. What are we working on?" },
+  { category: "returning", named: "Back for more, {name}? Where should we start?", generic: "Back for more? Where should we start?" },
+  { category: "returning", named: "Good to have you back, {name}. What should we tackle?", generic: "Good to have you back. What should we tackle?" },
+
+  { category: "curiosity", named: "What has your attention today, {name}?", generic: "What has your attention today?" },
+  { category: "curiosity", named: "What's interesting you today, {name}?", generic: "What's interesting you today?" },
+  { category: "curiosity", named: "{name}, what are you curious about?", generic: "What are you curious about?" },
+  { category: "curiosity", named: "What are we figuring out, {name}?", generic: "What are we figuring out?" },
+
+  { category: "task", named: "Ready when you are, {name}. What should we tackle?", generic: "Ready when you are. What should we tackle?" },
+  { category: "task", named: "Let's get into it, {name}. Where do we start?", generic: "Let's get into it. Where do we start?" },
+  { category: "task", named: "What are we solving today, {name}?", generic: "What are we solving today?" },
+  { category: "task", named: "{name}, what should we work through?", generic: "What should we work through?" },
+
+  { category: "minimal", named: "Hi, {name}.", generic: "Hi." },
+  { category: "minimal", named: "Hey, {name}. Thoughts?", generic: "Thoughts?" },
+  { category: "minimal", named: "Ready, {name}?", generic: "Ready?" },
+  { category: "minimal", named: "What's on your mind, {name}?", generic: "What's on your mind?" },
+];
+
+export const COMPOSER_PLACEHOLDERS = [
+  "What are you working on?",
+  "Ask anything.",
+  "What should we figure out?",
+  "What do you want to explore?",
+  "Where should we start?",
+  "What's the question?",
+  "Tell me what you're working through.",
+] as const;
+
+function bucketForHour(hour: number): GreetingTemplate["timeBucket"] {
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 17) return "afternoon";
+  if (hour >= 17 && hour < 22) return "evening";
+  return "late";
+}
+
+export function greetingTemplatesForContext(
+  context: GreetingContext,
+): GreetingTemplate[] {
+  const bucket = bucketForHour(context.localHour);
+  return GREETINGS.filter(
+    (template) =>
+      (template.category !== "time" || template.timeBucket === bucket) &&
+      (template.category !== "returning" || context.returningUser !== false),
+  );
+}
+
+export function greetingForContext(
+  context: GreetingContext,
+  choiceIndex: number,
+): string {
+  const pool = greetingTemplatesForContext(context);
+  const template = pool[Math.abs(Math.trunc(choiceIndex)) % pool.length];
+  const name = String(context.name || "").trim();
+  return (name ? template.named.replaceAll("{name}", name) : template.generic).trim();
+}
+
+export function composerPlaceholderForIndex(choiceIndex: number): string {
+  return COMPOSER_PLACEHOLDERS[
+    Math.abs(Math.trunc(choiceIndex)) % COMPOSER_PLACEHOLDERS.length
+  ];
+}
+
+const EM_DASH = String.fromCodePoint(0x2014);
+const ENTITY_RE = /&mdash;|&#8212;|&#x0*2014;/gi;
+const CODE_RE = /\x60\x60\x60[\s\S]*?\x60\x60\x60|\x60[^\x60\n]*\x60/g;
+const URL_RE = /https?:\/\/[^\s<>()]+/gi;
+
+function sanitizeCode(value: string): string {
+  return value.replaceAll(EM_DASH, "\\u2014").replace(ENTITY_RE, "\\u2014");
+}
+
+function sanitizeUrl(value: string): string {
+  return value
+    .replaceAll(EM_DASH, "%E2%80%94")
+    .replace(/&mdash;/gi, "%26mdash%3B")
+    .replace(/&#8212;/gi, "%26%238212%3B")
+    .replace(/&#x0*2014;/gi, "%26%23x2014%3B");
+}
+
+function sanitizePlain(value: string): string {
+  return value
+    .replaceAll(` ${EM_DASH} `, "; ")
+    .replaceAll(EM_DASH, ", ")
+    .replace(ENTITY_RE, "; ");
+}
+
+function sanitizePlainWithUrls(value: string): string {
+  let output = "";
+  let cursor = 0;
+  for (const match of value.matchAll(URL_RE)) {
+    const matchStart = match.index ?? 0;
+    output += sanitizePlain(value.slice(cursor, matchStart));
+    output += sanitizeUrl(match[0]);
+    cursor = matchStart + match[0].length;
+  }
+  return output + sanitizePlain(value.slice(cursor));
+}
+
+export function sanitizeTutorVisibleText(value: string): string {
+  let output = "";
+  let cursor = 0;
+  for (const match of value.matchAll(CODE_RE)) {
+    const matchStart = match.index ?? 0;
+    output += sanitizePlainWithUrls(value.slice(cursor, matchStart));
+    output += sanitizeCode(match[0]);
+    cursor = matchStart + match[0].length;
+  }
+  return output + sanitizePlainWithUrls(value.slice(cursor));
+}
+
+export const GREETING_TEMPLATE_COUNT = GREETINGS.length;
+export const GREETING_CATEGORIES = [
+  "time",
+  "conversational",
+  "returning",
+  "curiosity",
+  "task",
+  "minimal",
+] as const;

@@ -1,0 +1,142 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  GREETING_CATEGORIES,
+  GREETING_TEMPLATE_COUNT,
+  composerPlaceholderForIndex,
+  greetingForContext,
+  sanitizeTutorVisibleText,
+} from "@/lib/murikah-personalization";
+import { MurikahNamePrompt } from "@/components/auth/MurikahPreferredName";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  window.sessionStorage.clear();
+});
+
+describe("Murikah Tutor personalization", () => {
+  it("has deterministic varied greeting categories with local-time options", () => {
+    expect(GREETING_TEMPLATE_COUNT).toBeGreaterThanOrEqual(20);
+    expect(GREETING_TEMPLATE_COUNT).toBeLessThanOrEqual(30);
+    expect(new Set(GREETING_CATEGORIES)).toEqual(
+      new Set(["time", "conversational", "returning", "curiosity", "task", "minimal"]),
+    );
+
+    expect(
+      greetingForContext({ name: "Wilberforce", localHour: 8, returningUser: true }, 0),
+    ).toContain("Wilberforce");
+    expect(
+      greetingForContext({ name: "Wilberforce", localHour: 13, returningUser: true }, 0),
+    ).toMatch(/Afternoon|Good afternoon/);
+    expect(
+      greetingForContext({ name: "Wilberforce", localHour: 19, returningUser: true }, 0),
+    ).toMatch(/Evening|Good evening/);
+    expect(
+      greetingForContext({ name: "Wilberforce", localHour: 1, returningUser: true }, 0),
+    ).toMatch(/Still thinking|Late one/);
+
+    const conversational = greetingForContext(
+      { name: "Wilberforce", localHour: 8, returningUser: true },
+      2,
+    );
+    expect(conversational).not.toMatch(/^Morning|^Good morning/);
+    expect(composerPlaceholderForIndex(4)).toBe("Where should we start?");
+  });
+
+  it("produces clean no-name greetings and never puts an em dash in templates", () => {
+    for (let i = 0; i < GREETING_TEMPLATE_COUNT * 2; i += 1) {
+      const named = greetingForContext(
+        { name: "Wilberforce", localHour: 14, returningUser: true },
+        i,
+      );
+      const generic = greetingForContext(
+        { localHour: 14, returningUser: false },
+        i,
+      );
+      expect(named).not.toContain(String.fromCodePoint(0x2014));
+      expect(generic).not.toContain(String.fromCodePoint(0x2014));
+      expect(generic).not.toContain("{name}");
+      expect(generic).not.toMatch(/,\s*[?.]/);
+    }
+  });
+
+  it("sanitizes assistant-visible em dash forms without altering hyphen or en dash", () => {
+    const em = String.fromCodePoint(0x2014);
+    for (const input of [
+      `Hello ${em} what are you learning?`,
+      `A ${em} B ${em} C`,
+      "Hello &mdash; world",
+      "Hello &#8212; world",
+      "Hello &#x2014; world",
+      "Hello &#X02014; world",
+    ]) {
+      const output = sanitizeTutorVisibleText(input);
+      expect(output).not.toContain(em);
+      expect(output.toLowerCase()).not.toContain("&mdash;");
+      expect(output.toLowerCase()).not.toContain("&#8212;");
+      expect(output.toLowerCase()).not.toMatch(/&#x0*2014;/);
+    }
+    expect(sanitizeTutorVisibleText("well-known – still valid")).toContain(
+      "well-known – still valid",
+    );
+    expect(
+      sanitizeTutorVisibleText("Hello &md" + "ash; world"),
+    ).not.toContain("&mdash;");
+  });
+
+  it("asks once non-blockingly and saves the current member preference", async () => {
+    const onSaved = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            preferred_name: "Will",
+            derived_name: "Wilberforce",
+            needs_name_prompt: false,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    render(
+      <MurikahNamePrompt
+        userId="u_member_1"
+        derivedName="Wilberforce"
+        needsPrompt
+        onSaved={onSaved}
+      />,
+    );
+
+    expect(screen.getByText("What should I call you?")).toBeVisible();
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("Wilberforce");
+    fireEvent.change(input, { target: { value: "Will" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Will"));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/murikah/access/preferences",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
+  it("keeps Not now session-scoped instead of permanently mutating the account", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(
+      <MurikahNamePrompt
+        userId="u_member_2"
+        derivedName="Mary"
+        needsPrompt
+        onSaved={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(
+      window.sessionStorage.getItem("murikah:name-prompt-dismissed:u_member_2"),
+    ).toBe("1");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

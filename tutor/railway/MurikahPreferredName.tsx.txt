@@ -1,0 +1,239 @@
+"use client";
+
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import { invalidateAuthStatusCache } from "@/lib/auth";
+
+export type MurikahPersonalization = {
+  preferred_name: string | null;
+  derived_name: string | null;
+  needs_name_prompt: boolean;
+};
+
+async function savePreferredName(value: string): Promise<MurikahPersonalization> {
+  const response = await fetch("/api/murikah/access/preferences", {
+    method: "PUT",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preferred_name: value }),
+  });
+  const body = (await response.json().catch(() => ({}))) as Partial<MurikahPersonalization> & {
+    detail?: unknown;
+  };
+  if (!response.ok) {
+    throw new Error(
+      typeof body.detail === "string"
+        ? body.detail
+        : "Your preferred name could not be saved. Please try again.",
+    );
+  }
+  invalidateAuthStatusCache();
+  return {
+    preferred_name:
+      typeof body.preferred_name === "string" && body.preferred_name.trim()
+        ? body.preferred_name
+        : null,
+    derived_name:
+      typeof body.derived_name === "string" && body.derived_name.trim()
+        ? body.derived_name
+        : null,
+    needs_name_prompt: Boolean(body.needs_name_prompt),
+  };
+}
+
+export function MurikahNamePrompt({
+  userId,
+  derivedName,
+  needsPrompt,
+  onSaved,
+}: {
+  userId: string | null;
+  derivedName: string | null;
+  needsPrompt: boolean;
+  onSaved: (name: string | null) => void;
+}) {
+  const inputId = useId();
+  const errorId = useId();
+  const dismissalKey = useMemo(
+    () => (userId ? `murikah:name-prompt-dismissed:${userId}` : ""),
+    [userId],
+  );
+  const [visible, setVisible] = useState(false);
+  const [value, setValue] = useState(derivedName || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!needsPrompt || !userId || !dismissalKey) {
+      setVisible(false);
+      return;
+    }
+    let dismissed = false;
+    try {
+      dismissed = window.sessionStorage.getItem(dismissalKey) === "1";
+    } catch {
+      dismissed = false;
+    }
+    setValue(derivedName || "");
+    setVisible(!dismissed);
+  }, [derivedName, dismissalKey, needsPrompt, userId]);
+
+  if (!visible) return null;
+
+  const dismiss = () => {
+    try {
+      window.sessionStorage.setItem(dismissalKey, "1");
+    } catch {
+      // Same-page state still prevents repeated prompting when storage is unavailable.
+    }
+    setVisible(false);
+    setError("");
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await savePreferredName(value);
+      setVisible(false);
+      onSaved(saved.preferred_name || saved.derived_name);
+    } catch {
+      setError("Your preferred name could not be saved. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") dismiss();
+      }}
+      className="mx-auto mt-5 w-full max-w-xl rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-sm"
+    >
+      <label htmlFor={inputId} className="text-sm font-semibold text-[var(--foreground)]">
+        What should I call you?
+      </label>
+      <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+        I'll use this in greetings and personal Tutor messages.
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          id={inputId}
+          autoFocus
+          autoComplete="nickname"
+          maxLength={64}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          aria-describedby={error ? errorId : undefined}
+          className="min-h-10 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]/40"
+        />
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={busy}
+            className="min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            disabled={busy}
+            className="min-h-10 rounded-lg border border-[var(--border)] px-4 text-sm font-medium"
+          >
+            Not now
+          </button>
+        </div>
+      </div>
+      {error && (
+        <p id={errorId} role="alert" className="mt-2 text-xs text-red-600">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function MurikahPreferredNameSettings({
+  initialPreferredName,
+  initialDerivedName,
+}: {
+  initialPreferredName?: string | null;
+  initialDerivedName?: string | null;
+}) {
+  const inputId = useId();
+  const [value, setValue] = useState(initialPreferredName || "");
+  const [derivedName, setDerivedName] = useState(initialDerivedName || "");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    setValue(initialPreferredName || "");
+    setDerivedName(initialDerivedName || "");
+  }, [initialDerivedName, initialPreferredName]);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setStatus("saving");
+    try {
+      const result = await savePreferredName(value);
+      setValue(result.preferred_name || "");
+      setDerivedName(result.derived_name || "");
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <form
+      onSubmit={save}
+      className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm"
+    >
+      <label htmlFor={inputId} className="text-sm font-semibold text-[var(--foreground)]">
+        Preferred name
+      </label>
+      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+        Used in greetings and other personal Tutor messages.
+      </p>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <input
+          id={inputId}
+          autoComplete="nickname"
+          maxLength={64}
+          value={value}
+          placeholder={derivedName || "What should Murikah call you?"}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setStatus("idle");
+          }}
+          className="min-h-10 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]/40"
+        />
+        <button
+          type="submit"
+          disabled={status === "saving"}
+          className="min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          Save
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+        Clear the field and save to return to the name Murikah can derive from your account.
+      </p>
+      {status === "saved" && <p className="mt-2 text-xs">Saved.</p>}
+      {status === "error" && (
+        <p role="alert" className="mt-2 text-xs text-red-600">
+          Your preferred name could not be saved. Please try again.
+        </p>
+      )}
+    </form>
+  );
+}
