@@ -462,6 +462,13 @@ NEW_RUN = '''    @staticmethod
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
         context.metadata["murikah_model"] = winner_model
         context.metadata["murikah_first_token_ms"] = winner.first_token_ms
+        stream_started = time.perf_counter()
+        turn_timeout_seconds = (
+            _LONG_FAST_TURN_TIMEOUT_SECONDS
+            if output_token_budget > _FAST_OUTPUT_TOKENS
+            else _FAST_TURN_TIMEOUT_SECONDS
+        )
+        turn_deadline = request_started + turn_timeout_seconds
 
         async def collect_remaining(
             active_winner: Any,
@@ -474,10 +481,9 @@ NEW_RUN = '''    @staticmethod
             finish_reason = ""
             failure_kind = ""
             in_think = False
-            segment_deadline = time.perf_counter() + max(60.0, _FAST_TURN_TIMEOUT_SECONDS)
             try:
                 while True:
-                    remaining = segment_deadline - time.perf_counter()
+                    remaining = turn_deadline - time.perf_counter()
                     if remaining <= 0:
                         raise asyncio.TimeoutError
                     try:
