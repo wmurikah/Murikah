@@ -75,8 +75,11 @@ class TutorVisibleTextTests(unittest.TestCase):
         self.assertIn("def patch_chat_display_sanitizer(", overlay)
         self.assertIn("stream accumulated display sanitizer", overlay)
         self.assertIn("sanitizeTutorVisibleText(normalizeMarkdownForDisplay(raw))", overlay)
-        self.assertIn("guest accumulated stream sanitizer", overlay)
-        self.assertIn("guest accumulated tail sanitizer", overlay)
+        self.assertIn("visible_answer_count != 2", overlay)
+        self.assertIn(
+            'const visibleAnswer = sanitizeTutorVisibleText(answer);',
+            overlay,
+        )
 
     def test_overlay_does_not_rewrite_user_input(self):
         overlay = source("railway/apply_tutor_personalization.py")
