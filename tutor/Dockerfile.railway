@@ -198,8 +198,8 @@ COPY tutor/virtual-internship /opt/murikah/virtual-internship
 COPY tutor/scripts/validate_virtual_internship_scenarios.py /opt/murikah/scripts/validate_virtual_internship_scenarios.py
 COPY tutor/cloudflare/entrypoint.sh /opt/murikah/cloudflare/entrypoint.sh
 COPY tutor/tests /opt/murikah/tests
-RUN python /opt/murikah/scripts/validate_virtual_internship_scenarios.py \
-    && python -m unittest discover -s /opt/murikah/tests -v
+RUN python /opt/murikah/scripts/validate_virtual_internship_scenarios.py
+RUN python -m unittest discover -s /opt/murikah/tests -v
 
 RUN rm -rf /app/web && mkdir -p /app/web
 COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
