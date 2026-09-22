@@ -52,8 +52,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v32 requires verified email for new accounts and exposes voluntary auth/invite actions to guests.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v32" }
+# v33 adds Follow-up Fast Path V2: compact durable context, bounded latency, provider affinity and telemetry.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
