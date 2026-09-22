@@ -258,7 +258,7 @@ def main() -> int:
             'def wait_for_runtime_revision(',
             '"/__muri/runtime-revision"',
             'Main runtime image check:',
-            'Recycling the stale/indeterminate container application once',
+            'Recycling the stale/indeterminate container ',
             'wait_for_runtime_revision(expected_revision,timeout_seconds=180)',
             'wait_until_ready(base,timeout_seconds=300)',
             'def apply_persistence_migrations()',
