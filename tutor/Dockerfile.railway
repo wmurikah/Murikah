@@ -39,6 +39,7 @@ COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py
 COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
+COPY tutor/railway/virtual_internship /src/DeepTutor/deeptutor/virtual_internship
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
@@ -185,6 +186,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/agents/loop/pipeline.py /app
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_context_packet.py /app/deeptutor/murikah_context_packet.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/virtual_internship /app/deeptutor/virtual_internship
 
 # The Python regression suite intentionally validates both installed runtime
 # modules and repository overlay sources. Copy the complete non-secret railway
@@ -192,9 +194,12 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/
 # has the same paths it has in a repository checkout. This prevents Cloudflare
 # image builds from failing when a new test reads an overlay source file.
 COPY tutor/railway /opt/murikah/railway
+COPY tutor/virtual-internship /opt/murikah/virtual-internship
+COPY tutor/scripts/validate_virtual_internship_scenarios.py /opt/murikah/scripts/validate_virtual_internship_scenarios.py
 COPY tutor/cloudflare/entrypoint.sh /opt/murikah/cloudflare/entrypoint.sh
 COPY tutor/tests /opt/murikah/tests
-RUN python -m unittest discover -s /opt/murikah/tests -v
+RUN python /opt/murikah/scripts/validate_virtual_internship_scenarios.py \
+    && python -m unittest discover -s /opt/murikah/tests -v
 
 RUN rm -rf /app/web && mkdir -p /app/web
 COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
