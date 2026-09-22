@@ -99,13 +99,13 @@ export function composerPlaceholderForIndex(choiceIndex: number): string {
   ];
 }
 
-const EM_DASH = String.fromCodePoint(0x2014);\nconst ENTITY_RE = /&mdash;|&#8212;|&#x0*2014;/gi;
-const CODE_RE = /```[sS]*?```|`[^`
-]*`/g;
-const URL_RE = /https?://[^s<>()]+/gi;
+const EM_DASH = String.fromCodePoint(0x2014);
+const ENTITY_RE = /&mdash;|&#8212;|&#x0*2014;/gi;
+const CODE_RE = /\x60\x60\x60[\s\S]*?\x60\x60\x60|\x60[^\x60\n]*\x60/g;
+const URL_RE = /https?:\/\/[^\s<>()]+/gi;
 
 function sanitizeCode(value: string): string {
-  return value.replaceAll(EM_DASH, "\u2014").replace(ENTITY_RE, "\u2014");
+  return value.replaceAll(EM_DASH, "\\u2014").replace(ENTITY_RE, "\\u2014");
 }
 
 function sanitizeUrl(value: string): string {
@@ -118,7 +118,7 @@ function sanitizeUrl(value: string): string {
 
 function sanitizePlain(value: string): string {
   return value
-    .replaceAll(` ${EM_DASH} `, "; ")
+    .replaceAll(\` \${EM_DASH} \`, "; ")
     .replaceAll(EM_DASH, ", ")
     .replace(ENTITY_RE, "; ");
 }
@@ -127,10 +127,10 @@ function sanitizePlainWithUrls(value: string): string {
   let output = "";
   let cursor = 0;
   for (const match of value.matchAll(URL_RE)) {
-    const start = match.index ?? 0;
-    output += sanitizePlain(value.slice(cursor, start));
+    const matchStart = match.index ?? 0;
+    output += sanitizePlain(value.slice(cursor, matchStart));
     output += sanitizeUrl(match[0]);
-    cursor = start + match[0].length;
+    cursor = matchStart + match[0].length;
   }
   return output + sanitizePlain(value.slice(cursor));
 }
@@ -139,10 +139,10 @@ export function sanitizeTutorVisibleText(value: string): string {
   let output = "";
   let cursor = 0;
   for (const match of value.matchAll(CODE_RE)) {
-    const start = match.index ?? 0;
-    output += sanitizePlainWithUrls(value.slice(cursor, start));
+    const matchStart = match.index ?? 0;
+    output += sanitizePlainWithUrls(value.slice(cursor, matchStart));
     output += sanitizeCode(match[0]);
-    cursor = start + match[0].length;
+    cursor = matchStart + match[0].length;
   }
   return output + sanitizePlainWithUrls(value.slice(cursor));
 }
