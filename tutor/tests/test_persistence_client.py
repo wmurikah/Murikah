@@ -136,7 +136,7 @@ class PersistenceClientTests(unittest.TestCase):
 
         persistence._json_request = fake_json
         try:
-            persistence.learning_turn_start(
+            result = persistence.learning_turn_start(
                 turn_id="turn_1",
                 conversation_id="conv_1",
                 actor_id="u_1",
@@ -155,6 +155,57 @@ class PersistenceClientTests(unittest.TestCase):
         self.assertEqual(captured["payload"]["prompt"], "Teach me regression. I am a beginner.")
         self.assertTrue(captured["payload"]["prompt_summary"])
         self.assertEqual(captured["payload"]["model_id"], "model")
+        self.assertEqual(result, {"ok": True})
+
+    def test_learning_turn_finish_carries_followup_latency_metrics(self):
+        captured = {}
+        original_enabled = persistence.enabled
+        original_json = persistence._json_request
+        persistence.enabled = lambda: True
+
+        def fake_json(method, path, payload=None):
+            captured.update(method=method, path=path, payload=payload)
+            return {"ok": True}
+
+        persistence._json_request = fake_json
+        try:
+            persistence.learning_turn_finish(
+                turn_id="turn_2",
+                response="A concise follow-up.",
+                provider="gemini:flash",
+                model_id="flash",
+                first_token_ms=820,
+                total_ms=4100,
+                lane="fast",
+                route_reason="ordinary_chat",
+                turn_number=2,
+                is_followup=True,
+                history_chars=11800,
+                history_messages=6,
+                context_packet_chars=4200,
+                context_build_ms=14,
+                output_token_budget=1600,
+                first_token_deadline_ms=10000,
+                stream_idle_timeout_ms=14000,
+                stream_ms=3200,
+                continuation_count=0,
+                incomplete=False,
+            )
+        finally:
+            persistence.enabled = original_enabled
+            persistence._json_request = original_json
+
+        payload = captured["payload"]
+        self.assertEqual(captured["path"], "/__muri/persist/learning/turn/finish")
+        self.assertEqual(payload["lane"], "fast")
+        self.assertEqual(payload["route_reason"], "ordinary_chat")
+        self.assertEqual(payload["turn_number"], 2)
+        self.assertTrue(payload["is_followup"])
+        self.assertEqual(payload["history_chars"], 11800)
+        self.assertEqual(payload["context_packet_chars"], 4200)
+        self.assertEqual(payload["first_token_deadline_ms"], 10000)
+        self.assertEqual(payload["stream_idle_timeout_ms"], 14000)
+        self.assertEqual(payload["continuation_count"], 0)
 
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
