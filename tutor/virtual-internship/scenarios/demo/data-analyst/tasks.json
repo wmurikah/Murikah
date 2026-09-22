@@ -1,0 +1,127 @@
+[
+  {
+    "task_id": "task_inspect_dataset",
+    "authored_sequence": 1,
+    "title": "Inspect dataset description",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_analytics_manager",
+    "business_context": "Understand grain and documented fields.",
+    "learner_objective": "Identify analysis constraints.",
+    "brief": "Review the fictional data dictionary.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 3
+    },
+    "expected_effort": "1 hour",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_engineer"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted engine transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_data_understanding"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "analysis_plan"
+    ]
+  },
+  {
+    "task_id": "task_define_metric",
+    "authored_sequence": 2,
+    "title": "Define retention metric",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_analytics_manager",
+    "business_context": "Stakeholders need one explicit definition.",
+    "learner_objective": "Define a reproducible metric.",
+    "brief": "Write the metric definition and assumptions.",
+    "dependencies": [
+      "task_inspect_dataset"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 6
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_product_stakeholder"
+    ],
+    "event_references": [
+      "event_requirement_change"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted engine transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_metric_definition"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "analysis_plan"
+    ]
+  },
+  {
+    "task_id": "task_quality_plan",
+    "authored_sequence": 3,
+    "title": "Prepare data-quality plan",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_analytics_manager",
+    "business_context": "A quality issue must be assessed before analysis.",
+    "learner_objective": "Plan quality checks and escalation.",
+    "brief": "Prepare a short quality-check plan.",
+    "dependencies": [
+      "task_define_metric"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 9
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_data_engineer"
+    ],
+    "event_references": [
+      "event_quality_disclosure"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted engine transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_data_quality"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "analysis_plan"
+    ]
+  }
+]

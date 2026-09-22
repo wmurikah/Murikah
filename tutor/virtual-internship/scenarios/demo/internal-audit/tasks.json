@@ -1,0 +1,171 @@
+[
+  {
+    "task_id": "task_review_process",
+    "authored_sequence": 1,
+    "title": "Review inventory process background",
+    "category": "review",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "Understand the fictional inventory control flow before testing.",
+    "learner_objective": "Identify the process and control points.",
+    "brief": "Review supplied process facts and prepare a concise control map.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 4
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only; no artifact submission."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "issue_summary"
+    ]
+  },
+  {
+    "task_id": "task_reconcile_sample",
+    "authored_sequence": 2,
+    "title": "Reconcile an inventory sample",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A sample requires source-to-ledger tracing.",
+    "learner_objective": "Apply a repeatable reconciliation approach.",
+    "brief": "Reconcile the supplied fictional sample and note discrepancies.",
+    "dependencies": [
+      "task_review_process"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 8
+    },
+    "expected_effort": "3 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_finance_manager",
+      "actor_vendor_rep"
+    ],
+    "event_references": [
+      "event_disclose_exception"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_reconciliation"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "spreadsheet"
+    ]
+  },
+  {
+    "task_id": "task_investigate_variance",
+    "authored_sequence": 3,
+    "title": "Investigate the discrepancy",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A variance may indicate a control exception.",
+    "learner_objective": "Separate evidence from assumptions.",
+    "brief": "Investigate only facts that have been disclosed.",
+    "dependencies": [
+      "task_reconcile_sample"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_operations_manager",
+      "actor_finance_manager"
+    ],
+    "event_references": [
+      "event_management_pressure"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_investigation"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "issue_summary"
+    ]
+  },
+  {
+    "task_id": "task_draft_issue",
+    "authored_sequence": 4,
+    "title": "Draft issue summary",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "Summarize the issue for review.",
+    "learner_objective": "Communicate evidence and uncertainty clearly.",
+    "brief": "Draft a factual issue summary using disclosed evidence only.",
+    "dependencies": [
+      "task_investigate_variance"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 15
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_written_communication"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "memo"
+    ]
+  }
+]
