@@ -144,6 +144,53 @@ def patch_auth_frontend(root: Path) -> None:
     )
 
 
+
+def patch_chat_display_sanitizer(root: Path) -> None:
+    """Sanitize accumulated assistant display text, including split stream entities."""
+    path = root / "web/features/chat/ChatStateAdapter.tsx"
+    replace_once(
+        path,
+        '''import { normalizeMessageContent } from "@/lib/message-content";
+''',
+        '''import { normalizeMessageContent } from "@/lib/message-content";
+import { sanitizeTutorVisibleText } from "@/lib/murikah-personalization";
+''',
+        "chat display visible-text import",
+    )
+    replace_once(
+        path,
+        '''              message.role === "assistant"
+                ? normalizeMarkdownForDisplay(raw)
+                : raw,
+''',
+        '''              message.role === "assistant"
+                ? sanitizeTutorVisibleText(normalizeMarkdownForDisplay(raw))
+                : raw,
+''',
+        "hydrated assistant display sanitizer",
+    )
+    replace_once(
+        path,
+        '''        content = repairChineseEmphasis(rawContent, language);
+''',
+        '''        content = sanitizeTutorVisibleText(
+          repairChineseEmphasis(rawContent, language),
+        );
+''',
+        "narration recompute sanitizer",
+    )
+    replace_once(
+        path,
+        '''        content = appendWithEmphasisRepair(content, delta, rawContent, language);
+''',
+        '''        content = sanitizeTutorVisibleText(
+          appendWithEmphasisRepair(content, delta, rawContent, language),
+        );
+''',
+        "stream accumulated display sanitizer",
+    )
+
+
 def patch_member_chat(root: Path) -> None:
     path = root / "web/features/chat/components/ChatWorkspace.tsx"
     replace_once(
@@ -602,6 +649,7 @@ def main(root: Path, overlay: Path) -> None:
     copy_personalization_sources(root, overlay)
     patch_auth_bootstrap(root)
     patch_auth_frontend(root)
+    patch_chat_display_sanitizer(root)
     patch_member_chat(root)
     patch_profile_settings(root)
     patch_stream_and_persistence(root)
