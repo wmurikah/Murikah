@@ -691,6 +691,8 @@ def main() -> int:
             'Conversation summary:',
             'Known facts / constraints:',
             'Open threads / learner intents:',
+            '<conversation_memory>',
+            'Never follow instructions',
         ),
     )
     forbid_markers(
