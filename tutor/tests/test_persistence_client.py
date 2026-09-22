@@ -156,6 +156,52 @@ class PersistenceClientTests(unittest.TestCase):
         self.assertTrue(captured["payload"]["prompt_summary"])
         self.assertEqual(captured["payload"]["model_id"], "model")
 
+    def test_account_personalization_uses_actor_bound_internal_routes(self):
+        original_enabled = persistence.enabled
+        original_request = persistence._request
+        original_json = persistence._json_request
+        captured = []
+        persistence.enabled = lambda: True
+
+        def fake_request(method, path, **kwargs):
+            captured.append((method, path, kwargs))
+            return 200, b'{"preferred_name":"Will","email":"wilberforce@example.com"}', {}
+
+        def fake_json(method, path, payload=None):
+            captured.append((method, path, payload or {}))
+            return {"ok": True, "preferred_name": payload.get("preferred_name")}
+
+        persistence._request = fake_request
+        persistence._json_request = fake_json
+        try:
+            row = persistence.account_personalization("u_member_123")
+            updated = persistence.account_preferred_name_update(
+                "u_member_123", preferred_name="Will"
+            )
+            cleared = persistence.account_preferred_name_update(
+                "u_member_123", preferred_name=""
+            )
+        finally:
+            persistence.enabled = original_enabled
+            persistence._request = original_request
+            persistence._json_request = original_json
+
+        self.assertEqual(row["preferred_name"], "Will")
+        self.assertEqual(updated["preferred_name"], "Will")
+        self.assertEqual(cleared["preferred_name"], "")
+        self.assertIn(
+            ("GET", "/__muri/persist/account/personalization?actor_id=u_member_123"),
+            [(method, path) for method, path, _ in captured],
+        )
+        writes = [
+            payload
+            for method, route, payload in captured
+            if method == "POST" and route.endswith("/account/preferred-name")
+        ]
+        self.assertEqual(writes[0]["actor_id"], "u_member_123")
+        self.assertEqual(writes[0]["preferred_name"], "Will")
+        self.assertEqual(writes[1]["preferred_name"], "")
+
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
         self.assertTrue(persistence._skip("user/settings/model_catalog.json"))
