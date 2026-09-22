@@ -302,6 +302,7 @@ def main() -> int:
             'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
             'COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py',
             'cp /opt/murikah/murikah_context_packet.py /src/DeepTutor/deeptutor/murikah_context_packet.py',
+            'COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_context_packet.py /app/deeptutor/murikah_context_packet.py',
             'COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py',
             'COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py',
             'COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt',
