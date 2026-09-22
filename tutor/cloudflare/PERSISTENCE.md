@@ -57,6 +57,17 @@ A record becomes `training_eligible=1` only when the learner has explicitly opte
 
 Binary uploads, diagrams, books and other large objects remain in private R2; D1 stores their ownership/metadata references. This avoids abusing a relational database as blob storage while ensuring no durable user object depends on the Container filesystem.
 
+## Follow-up context packets and latency telemetry
+
+`0006_followup_fast_path.sql` upgrades the learning journal to schema v2 and adds two durable structures used by ordinary chat:
+
+- `tutor_conversation_context` stores a compact packet prepared when a turn finishes: rolling summary, extracted facts, unresolved/incomplete threads, the newest exact user/assistant messages, and the last successful provider/model. The next turn receives this packet during the existing `/learning/turn/start` request, so no extra persistence round trip is added to the first-token path.
+- `tutor_turn_metrics` stores the route and latency envelope for each turn: first-turn/follow-up status, fast/deep lane, route reason, compact-history size, packet size, context-build time, output-token budget, first-token deadline, stream-idle timeout, winning provider/model, first-token time, stream time, continuation count, total time and whether the answer ended incomplete.
+
+The packet is deliberately bounded and does not replace the full D1 message journal. Full prompts and final answers remain available as durable learning records, while the interactive fast lane receives only the compact packet plus the newest exchanges. Provider affinity is therefore durable without making the full transcript part of every provider request.
+
+Packet preparation occurs as part of the already-required turn-finish journal write, after the learner-visible answer has been generated. This pre-computes the next follow-up context without adding another model call to the current response path.
+
 ## D1/R2 ownership model (v29)
 
 Murikah now treats **D1 as the ownership/control plane**, **R2 as the durable object plane**, and the container filesystem as a disposable compatibility cache.
