@@ -615,9 +615,11 @@ async function internshipStatusForActor(
     .first<InternshipStatusRecord>();
   if (!row) return null;
 
-  const elapsedSeconds = Math.max(0, now - Number(row.started_at));
+  const durationClock =
+    row.stopped_at == null ? now : Number(row.stopped_at);
+  const elapsedSeconds = Math.max(0, durationClock - Number(row.started_at));
   const durationRequirementMet =
-    Number(row.qualifying) === 1 && now >= Number(row.target_end_at);
+    Number(row.qualifying) === 1 && durationClock >= Number(row.target_end_at);
   return {
     internship_id: row.id,
     status: row.status,
