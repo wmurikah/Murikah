@@ -115,6 +115,39 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(set(item) == {"role", "content"} for item in portable))
         self.assertEqual(portable[-1]["content"], "Proceed")
 
+    async def test_portable_history_never_replaces_primary_system_with_summary(self):
+        messages = [
+            {"role": "system", "content": "PRIMARY TUTOR POLICY"},
+            {"role": "system", "content": "[Conversation summary]\nold context"},
+            {"role": "user", "content": "Follow up"},
+        ]
+        portable = fast.portable_chat_messages(messages, max_chars=8000)
+        systems = [item["content"] for item in portable if item["role"] == "system"]
+        self.assertGreaterEqual(len(systems), 1)
+        self.assertEqual(systems[0], "PRIMARY TUTOR POLICY")
+        self.assertIn("old context", "\n".join(systems))
+        self.assertEqual(portable[-1]["content"], "Follow up")
+
+    async def test_openai_payload_keeps_primary_system_and_context_packet(self):
+        window = fast.build_fast_context_window(
+            [
+                {"role": "system", "content": "PRIMARY TUTOR POLICY"},
+                {"role": "system", "content": "legacy summary must not replace policy"},
+                {"role": "user", "content": "Follow up"},
+            ],
+            context_packet={"summary": "Earlier learning context."},
+        )
+        payload = fast._openai_chat_payload(
+            window.messages,
+            model="test",
+            max_tokens=128,
+            thinking=False,
+        )
+        systems = [item["content"] for item in payload["messages"] if item["role"] == "system"]
+        self.assertTrue(systems)
+        self.assertEqual(systems[0], "PRIMARY TUTOR POLICY")
+        self.assertIn("conversation_memory", "\n".join(systems))
+
     async def test_portable_history_keeps_latest_turn_under_budget(self):
         messages = [
             {"role": "system", "content": "System instruction"},
