@@ -184,6 +184,7 @@ def wait_for_runtime_revision(
     last_base=""
     last_error=""
     last_revision=""
+    stale_observations=0
     while time.monotonic()<deadline:
         for base in VERIFY_BASES:
             try:
@@ -201,6 +202,15 @@ def wait_for_runtime_revision(
                 last_revision=revision
                 if revision==expected_revision:
                     return True,payload,base
+                if revision:
+                    stale_observations += 1
+                    # A concrete wrong revision is authoritative evidence that
+                    # the warm application did not roll to the deployed image.
+                    # Two observations avoid a one-off read during transition
+                    # without wasting the full timeout before deterministic
+                    # recreation.
+                    if stale_observations >= 2:
+                        return False,payload,base
             except (HTTPError,URLError,TimeoutError,OSError,ValueError,RuntimeError) as exc:
                 last_error=f"{type(exc).__name__}: {exc}"
         time.sleep(4)
