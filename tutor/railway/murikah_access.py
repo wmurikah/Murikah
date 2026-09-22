@@ -294,7 +294,7 @@ async def guest_session(request: Request, response: Response):
 
 
 class PreferredNameUpdate(BaseModel):
-    preferred_name: str | None = Field(default=None, max_length=128)
+    preferred_name: str | None = Field(default=None, max_length=64)
 
 
 class SignupStart(BaseModel):
