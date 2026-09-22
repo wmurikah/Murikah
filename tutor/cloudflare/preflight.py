@@ -1137,9 +1137,19 @@ def main() -> int:
         "tutor/Dockerfile.railway",
         (
             "apply_tutor_personalization.py /src/DeepTutor /opt/murikah",
+            "personalization-visible-text.spec.tsx",
             "personalization.spec.tsx",
             "murikah_personalization.py /app/deeptutor/murikah_personalization.py",
             "murikah_visible_text.py /app/deeptutor/murikah_visible_text.py",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahPreferredName.tsx.txt",
+        (
+            "What should I call you?",
+            "Not now",
+            "Preferred name",
+            "/api/murikah/access/preferences",
         ),
     )
     require_markers(
