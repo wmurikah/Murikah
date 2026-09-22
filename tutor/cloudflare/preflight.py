@@ -267,6 +267,16 @@ def main() -> int:
             '"d1", "migrations", "apply", "murikah-tutor-prod", "--remote"',
         ),
     )
+    forbid_markers(
+        "tutor/cloudflare/deploy_staging.py",
+        (
+            "recycle_tutor_application",
+            '"containers", "delete"',
+            "runtime image revision is still unknown after deployment",
+            "REGISTRY_PROPAGATION_MARKERS",
+            "recover_fresh_but_unready_runtime",
+        ),
+    )
     require_markers(
         "tutor/cloudflare/entrypoint.sh",
         (
