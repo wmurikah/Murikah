@@ -450,6 +450,143 @@ def learning_turn_fail(
     )
 
 
+def _internship_value(value: Any, limit: int = 128) -> str:
+    text = _learning_text(value, limit).strip()
+    if not text or not re.fullmatch(r"[A-Za-z0-9_-]{3,128}", text):
+        raise PersistenceError("Virtual Internship identifier is invalid.")
+    return text
+
+
+def scenario_version_resolve(
+    actor_id: str,
+    *,
+    scenario_pack_id: str = "",
+    scenario_slug: str = "",
+    version: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "actor_id": _internship_value(actor_id),
+        "scenario_pack_id": _learning_text(scenario_pack_id, 128).strip(),
+        "scenario_slug": _learning_text(scenario_slug, 128).strip(),
+    }
+    if version is not None:
+        payload["version"] = max(1, int(version))
+    return _json_request("POST", f"{PERSIST_PREFIX}/scenario-version/resolve", payload)
+
+
+def scenario_version_get(actor_id: str, scenario_version_id: str) -> dict[str, Any]:
+    query = urlencode(
+        {
+            "actor_id": _internship_value(actor_id),
+            "scenario_version_id": _internship_value(scenario_version_id),
+        }
+    )
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/scenario-version?{query}")
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise PersistenceError("Scenario version response is invalid.")
+    return parsed
+
+
+def internship_start(
+    actor_id: str,
+    *,
+    request_id: str,
+    scenario_pack_id: str = "",
+    scenario_slug: str = "",
+    scenario_version: int | None = None,
+) -> dict[str, Any]:
+    """Start one qualifying internship for the server-authenticated actor.
+
+    actor_id is supplied only by the Tutor server after decoding its signed
+    session. Browser-supplied learner/owner identifiers are never forwarded.
+    """
+    payload: dict[str, Any] = {
+        "actor_id": _internship_value(actor_id),
+        "request_id": _internship_value(request_id),
+        "scenario_pack_id": _learning_text(scenario_pack_id, 128).strip(),
+        "scenario_slug": _learning_text(scenario_slug, 128).strip(),
+    }
+    if scenario_version is not None:
+        payload["scenario_version"] = max(1, int(scenario_version))
+    return _json_request("POST", f"{PERSIST_PREFIX}/internships/start", payload)
+
+
+def internship_status(actor_id: str, internship_id: str) -> dict[str, Any]:
+    query = urlencode(
+        {
+            "actor_id": _internship_value(actor_id),
+            "internship_id": _internship_value(internship_id),
+        }
+    )
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/internships/status?{query}")
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise PersistenceError("Internship status response is invalid.")
+    return parsed
+
+
+def internship_get(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return internship_status(actor_id, internship_id)
+
+
+def internship_duration_status(actor_id: str, internship_id: str) -> dict[str, Any]:
+    status = internship_status(actor_id, internship_id)
+    return {
+        "internship_id": status.get("internship_id"),
+        "current_server_time": status.get("current_server_time"),
+        "minimum_duration_days": status.get("minimum_duration_days"),
+        "started_at": status.get("started_at"),
+        "target_end_at": status.get("target_end_at"),
+        "elapsed_duration": status.get("elapsed_duration"),
+        "duration_requirement_met": bool(status.get("duration_requirement_met", False)),
+        "final_completion_available": False,
+        "pending_future_completion_gates": True,
+    }
+
+
+def internship_stop(
+    actor_id: str,
+    internship_id: str,
+    *,
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/stop",
+        {
+            "actor_id": _internship_value(actor_id),
+            "internship_id": _internship_value(internship_id),
+            "request_id": _internship_value(request_id),
+        },
+    )
+
+
+def internship_object_key(
+    actor_id: str,
+    internship_id: str,
+    *,
+    object_type: str,
+    object_id: str,
+) -> str:
+    """Return an owner-validated canonical future R2 key; create no object."""
+    result = _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/object-key",
+        {
+            "actor_id": _internship_value(actor_id),
+            "internship_id": _internship_value(internship_id),
+            "object_type": _learning_text(object_type, 32).strip(),
+            "object_id": _learning_text(object_id, 128).strip(),
+        },
+    )
+    key = str(result.get("object_key") or "")
+    expected = f"users/{_internship_value(actor_id)}/virtual-internships/{_internship_value(internship_id)}/"
+    if not key.startswith(expected):
+        raise PersistenceError("Internship object-key response is invalid.")
+    return key
+
+
 def guest_create(uid: str, expires: float, *, used: int = 0, prompt_limit: int = 7) -> None:
     _json_request(
         "POST",
