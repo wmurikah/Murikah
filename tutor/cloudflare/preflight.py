@@ -693,6 +693,7 @@ def main() -> int:
             'DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"',
             'DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"',
             'def portable_chat_messages(',
+            'MURIKAH_VISIBLE_STYLE_RULE',
             'DEFAULT_QWEN_FAST_MODEL = "qwen3.8-flash"',
             'def configured_qwen_fast_model(',
             'def qwen_configured(',
