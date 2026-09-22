@@ -52,8 +52,8 @@ bucket_name = "murikah-tutor-files-prod"
 class_name = "TutorContainer"
 image = "../Dockerfile.railway"
 image_build_context = "../.."
-# v33 adds Follow-up Fast Path V2: compact context packets, sticky hedging, tighter SLAs, and one live continuation.
-image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33" }
+# v34 makes rollout verification non-destructive and revision-aware through the live Tutor health path.
+image_vars = { MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v34" }
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
@@ -70,6 +70,7 @@ tag = "v1"
 new_sqlite_classes = ["TutorContainer"]
 
 [vars]
+MURIKAH_EXPECTED_IMAGE_REV = "2026-09-22-v34"
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
 MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
 MURIKAH_GUEST_PROMPT_LIMIT = "7"
