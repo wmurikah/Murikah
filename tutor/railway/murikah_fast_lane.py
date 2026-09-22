@@ -172,15 +172,15 @@ def portable_chat_messages(
     *,
     max_chars: int = DEFAULT_FAST_HISTORY_CHARS,
 ) -> list[dict[str, str]]:
-    """Keep only portable chat fields and a bounded recent conversation window.
+    """Keep role/content only while preserving the authoritative first system prompt.
 
-    DeepTutor history can carry provider-private state on assistant messages.
-    Passing those extra fields into another OpenAI-compatible provider makes
-    failover fragile, especially on follow-up turns. The fast lane needs only
-    role/content. Keep system instructions plus the newest conversational
-    messages within a predictable payload budget.
+    DeepTutor may append conversation summaries as later system messages.
+    Keeping only the *last* system message accidentally discarded Murikah's
+    primary teaching/system instruction on follow-ups. Preserve the first
+    system prompt, then bounded auxiliary system context, then the newest
+    conversation turns inside one total payload budget.
     """
-    system: list[dict[str, str]] = []
+    systems: list[dict[str, str]] = []
     conversation: list[dict[str, str]] = []
     for item in messages:
         if not isinstance(item, dict):
@@ -193,29 +193,41 @@ def portable_chat_messages(
             continue
         row = {"role": role, "content": content}
         if role == "system":
-            system.append(row)
+            systems.append(row)
         else:
             conversation.append(row)
 
-    budget = max(8000, int(max_chars))
+    budget = max(8000, min(int(max_chars), MAX_FAST_HISTORY_CHARS))
+    system_budget = min(12000, max(6000, int(budget * 0.66)))
+    selected_systems: list[dict[str, str]] = []
+    system_used = 0
+    for index, item in enumerate(systems):
+        remaining = system_budget - system_used
+        if remaining <= 0:
+            break
+        # The first system prompt is authoritative and gets priority. Later
+        # system rows are compacted auxiliary context only.
+        floor = min(remaining, 4500 if index == 0 else 1200)
+        limit = remaining if index == 0 else max(floor, remaining)
+        content = _clip_middle(item["content"], limit)
+        selected_systems.append({"role": "system", "content": content})
+        system_used += len(content)
+
+    conversation_budget = max(1200, budget - system_used)
     selected: list[dict[str, str]] = []
     used = 0
     for item in reversed(conversation):
-        size = len(item["content"])
-        if selected and used + size > budget:
+        content = item["content"]
+        size = len(content)
+        if selected and used + size > conversation_budget:
             break
-        if not selected and size > budget:
-            item = {**item, "content": item["content"][-budget:]}
-            size = len(item["content"])
-        selected.append(item)
+        if not selected and size > conversation_budget:
+            content = _clip_middle(content, conversation_budget)
+            size = len(content)
+        selected.append({"role": item["role"], "content": content})
         used += size
     selected.reverse()
-
-    if system:
-        sys_budget = min(20000, max(4000, budget // 3))
-        latest = system[-1]["content"]
-        system = [{"role": "system", "content": latest[:sys_budget]}]
-    return [*system, *selected]
+    return [*selected_systems, *selected]
 
 
 def _clip_middle(text: str, limit: int) -> str:
@@ -340,7 +352,7 @@ def build_fast_context_window(
 
     system_budget = min(6000, max(3500, budget // 3))
     system_message = (
-        {"role": "system", "content": _clip_middle(systems[-1]["content"], system_budget)}
+        {"role": "system", "content": _clip_middle(systems[0]["content"], system_budget)}
         if systems
         else None
     )
