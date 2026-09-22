@@ -1184,15 +1184,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 2 — scenario engine
 
-- [ ] Define scenario-pack JSON schemas.
-- [ ] Build schema validation.
-- [ ] Build canonical scenario-state service.
-- [ ] Build actor knowledge boundaries.
-- [ ] Build task graph.
-- [ ] Build event graph.
-- [ ] Build deterministic event triggers.
-- [ ] Add demo scenario fixtures.
-- [ ] Ensure AI cannot silently overwrite canonical truth.
+- [x] Define scenario-pack JSON schemas.
+- [x] Build schema validation.
+- [x] Build canonical scenario-state service.
+- [x] Build actor knowledge boundaries.
+- [x] Build task graph.
+- [x] Build event graph.
+- [x] Build deterministic event triggers.
+- [x] Add demo scenario fixtures.
+- [x] Ensure AI cannot silently overwrite canonical truth.
 
 ### Phase 3 — AI orchestration
 
@@ -1683,6 +1683,252 @@ Phase 1 deliberately does **not** implement scenario task/event schemas, company
 Those remain Phase 2+ work.
 
 ---
+
+## Phase 2 Implementation Record
+
+Phase 2 implements the deterministic scenario engine only. It does not implement Phase 3 AI orchestration, workplace actor dialogue, the Murikah Mentor, assessor models, workplace UI, artifact submission, competency scoring, reports, completion letters or final completion.
+
+### Canonical scenario format
+
+The single schema authority is:
+
+`tutor/virtual-internship/schema/v1/scenario-pack.schema.json`
+
+It is portable JSON Schema using draft 2020-12. Phase 2 uses:
+
+`scenario_schema_version = 1`
+
+This is different from the authored scenario content version. A pack may therefore have scenario schema version 1 and scenario content version 3.
+
+The strict core components are:
+
+- `manifest.json`
+- `company.json`
+- `facts.json`
+- `actors.json`
+- `tasks.json`
+- `events.json`
+- `decisions.json`
+
+Core schema objects use `additionalProperties: false`. Stable machine IDs are used for actors, facts, tasks, events and decisions. The Phase 2 hard limits are 64 actors, 128 facts, 128 tasks, 128 events, 64 decisions, 16 dependencies or trigger conditions where the schema applies them, 1 MiB canonical JSON and a maximum deterministic event cascade depth of 16.
+
+The offline validator is:
+
+`python tutor/scripts/validate_virtual_internship_scenarios.py`
+
+It performs JSON Schema validation plus semantic validation for references, duplicate IDs, task DAGs, prior-event cycles, trigger fields, typed mutations, immutable facts, decision options, qualifying-duration rules and content hashes. It requires no network and no model provider.
+
+### Immutable definition snapshot and hash
+
+The canonical content hash is SHA-256 over UTF-8 canonical JSON with:
+
+- object keys sorted recursively;
+- array order preserved because authored array order is semantic where sequence is explicit;
+- compact JSON separators;
+- `manifest.content_hash` blanked before hashing;
+- no filesystem timestamps, deployment timestamps or environment-specific paths.
+
+Equivalent JSON key ordering therefore produces the same hash. A semantic content change produces a different hash.
+
+For an engine-ready version, the existing Phase 1 fields remain authoritative:
+
+- `scenario_versions.content_hash` stores the SHA-256 digest;
+- `scenario_versions.manifest_ref` is `d1:scenario-version-content/<scenario-version-id>`.
+
+The referenced immutable snapshot is stored in `scenario_version_content`. The Worker verifies that the snapshot hash and `manifest_ref` still match the pinned `scenario_versions` row before initialization or definition retrieval. Published definitions cannot be silently replaced. Draft versions may be installed once through the private HMAC persistence boundary and later published by a controlled release process.
+
+The historical `sv_foundation_knowledge_work_v1` remains unchanged and still has no Phase 2 graph.
+
+### Phase 2 D1 model
+
+Migration:
+
+`tutor/cloudflare/migrations/0008_virtual_internship_phase2.sql`
+
+Immutable authored-definition tables:
+
+- `scenario_version_content`
+- `scenario_actors`
+- `scenario_facts`
+- `scenario_actor_knowledge`
+- `scenario_task_definitions`
+- `scenario_task_dependencies`
+- `scenario_event_definitions`
+- `scenario_event_triggers`
+- `scenario_decision_options`
+
+Per-internship runtime tables:
+
+- `internship_scenario_state`
+- `internship_scenario_facts`
+- `internship_tasks`
+- `internship_event_state`
+- `internship_decisions`
+- `internship_event_firings`
+- `internship_state_changes`
+
+`internship_activity` remains the Phase 1 lifecycle audit. Scenario task/event changes use dedicated Phase 2 tables so lifecycle events and simulation events do not become one overloaded vocabulary.
+
+No Phase 2 table creates a second learner/owner authority. Runtime rows link to `internship_id`, and member reads/writes resolve ownership through `internship_instances.learner_id`.
+
+### Initialization and start integration
+
+An engine-ready internship is initialized from the exact pinned `scenario_version_id`. Initialization creates:
+
+- one ready runtime state row;
+- initial runtime fact values and reveal flags;
+- one runtime task row per authored task;
+- `available` state for dependency-free tasks;
+- `locked` state for tasks with unresolved dependencies;
+- one zero-fired runtime row per authored event;
+- revision 0 `scenario_initialized` audit history.
+
+The existing Phase 1 `POST /__muri/persist/internships/start` is not replaced. When its selected scenario version has a validated D1 snapshot, the Worker adds the Phase 2 initialization statements to the same D1 batch as the Phase 1 internship, membership and lifecycle insertions. This prevents an engine-ready start from being reported healthy with half-created scenario state.
+
+The recovery initializer is idempotent and returns the existing ready state when initialization has already completed. It does not use process memory as authority.
+
+### Canonical state service and persistence operations
+
+The server-side facade is:
+
+`tutor/railway/virtual_internship/state.py`
+
+It exposes typed operations for definition lookup, initialization, canonical state, actor view, learner view, task transition, bounded decision recording and deterministic event evaluation. Durable operations are implemented through `tutor/railway/murikah_persistence.py` and the existing HMAC-protected `/__muri/persist/*` Worker boundary.
+
+There is no generic `patch_state`, arbitrary JSON merge, client-set fact or public event-fire API.
+
+Canonical raw state is a server/internal view. Later learner UI must consume the learner-safe view, not the canonical truth table.
+
+### Revision, idempotency and concurrency
+
+`internship_scenario_state.revision` is monotonically increasing.
+
+Every accepted state-changing transition writes an append-only `internship_state_changes` row with a unique `(internship_id, revision)` primary key and a unique logical request ID. D1 batches combine the audit row, state mutation and revision update. Concurrent attempts starting from the same revision therefore compete for the same next revision; one can commit and the other fails closed with a revision conflict rather than silently overwriting state.
+
+Once-only authored events also use `PRIMARY KEY (internship_id, event_id)` in `internship_event_firings`, giving D1-backed exactly-once protection across retries and container replacement.
+
+### Task graph
+
+Phase 2 task states are deliberately smaller than the later full workflow:
+
+`locked -> available -> in_progress -> completed`
+
+Trusted internal cancellation is also allowed from `available` or `in_progress`.
+
+Only the deterministic engine may unlock a `locked` task. A task with dependencies remains locked until all dependencies are completed, unless an authored event explicitly performs a validated `unlock_task` or `assign_task` mutation.
+
+The validator rejects self-dependencies, duplicate dependencies, missing tasks and cycles. Topological ordering is deterministic.
+
+Task completion exists only through the trusted HMAC persistence operation for engine/testing integration. There is no learner-facing mark-complete UI and no artifact/review bypass.
+
+### Actor and learner knowledge boundaries
+
+Actor views combine:
+
+- the pinned canonical scenario version;
+- the selected actor definition;
+- explicit `scenario_actor_knowledge` grants;
+- public facts;
+- the current runtime fact values;
+- reveal state for future-only facts.
+
+An actor does not receive the complete fact table or future event definitions. A `future_only` fact is withheld until an authored transition reveals it.
+
+The learner-safe view contains only facts whose runtime `learner_revealed` flag is true, current task information and events that have already fired. It does not include the hidden answer key, unrevealed future events, actor-private grants or raw assessor/Mentor state.
+
+Future Mentor, assessor, scenario-director and workplace-actor contexts must remain separate views rather than reusing one universal context.
+
+### Event engine
+
+Phase 2 supports six deterministic trigger types:
+
+1. `time_elapsed_days`, evaluated from the Phase 1 server UTC `started_at`;
+2. `task_state`;
+3. `all_dependencies_completed`;
+4. `fact_equals`;
+5. `prior_event`;
+6. `decision`, which accepts only a validated authored decision and option ID.
+
+Multiple triggers on one event use AND semantics.
+
+Eligible events are ordered deterministically by:
+
+1. priority descending;
+2. authored sequence ascending;
+3. event ID ascending.
+
+The evaluator applies one event at a time, persists it, then re-evaluates so fact reveals, task changes and prior-event dependencies can form deterministic cascades. The maximum cascade depth is 16. Prior-event graph cycles are rejected during validation, and Phase 2 supports once-only events only. Repeatable events and bounded random variation are explicitly deferred.
+
+Supported typed mutations are:
+
+- `reveal_fact`
+- `set_mutable_fact`
+- `unlock_task`
+- `assign_task`
+- `adjust_deadline`
+- `record_decision`
+
+Unknown mutation types are rejected. `set_mutable_fact` is rejected for authored immutable facts. Callers cannot submit arbitrary keys to rewrite canonical truth.
+
+### AI authority boundary
+
+Phase 2 makes no live model calls. The scenario validator, initializer, task dependency resolver, actor knowledge resolver, event trigger evaluator and state mutation path are deterministic.
+
+Future AI may receive bounded views and may later propose known event IDs or authored decision options, but it must not own canonical state. The normal state service does not expose the definition-install operation or an arbitrary state-patch operation.
+
+No fields for chain-of-thought, reasoning scratchpads or model-private reasoning are added to the canonical scenario model.
+
+### Demo fixtures
+
+The committed demo/test packs are:
+
+- Internal Audit Intern at fictional Meridian Energy Services;
+- Data Analyst Intern at fictional Northstar Analytics Cooperative;
+- Software Engineering Intern at fictional Pineforge Software Studio.
+
+They are deliberately small, fictional, `classification: demo`, `qualifying: false`, and remain outside the published qualifying catalog. They exercise different career families, bounded actor knowledge, hidden facts, task dependencies, time/task/fact/prior-event/decision triggers, priority changes and deterministic state mutations.
+
+They do not award competencies, create Passport evidence, grade rubrics, create artifacts, generate messages, produce reports or create completion records.
+
+### Phase 2 tests and release protection
+
+Focused coverage lives in:
+
+- `tutor/tests/test_virtual_internship_scenario_schema.py`
+- `tutor/tests/test_virtual_internship_scenario_state.py`
+- `tutor/tests/test_virtual_internship_actor_knowledge.py`
+- `tutor/tests/test_virtual_internship_task_graph.py`
+- `tutor/tests/test_virtual_internship_event_engine.py`
+
+Cloudflare preflight validates the committed packs and protects the migration, schema, engine routes, persistence adapter, demo manifests and test files. The pinned Tutor Docker build also runs the scenario validator before the complete Python regression suite.
+
+### Phase 2 limitations
+
+Deliberately deferred:
+
+- repeatable scenario events;
+- bounded seeded random variation;
+- Phase 3 workplace-actor or Mentor model calls;
+- workplace inbox/chat/UI;
+- learner artifact submission and R2 artifact workflow;
+- competency evidence and Passport scoring;
+- rubric/assessor scoring;
+- reports and completion letters;
+- final internship completion.
+
+Phase 3 remains unchecked in the build sequence.
+
+## SUBSEQUENT SCENARIO DEVELOPMENT REQUIREMENT
+
+Before Phase 3 or any later Virtual Internship feature reads or mutates simulation truth, read both the **Phase 1 Implementation Record** and **Phase 2 Implementation Record** in full.
+
+Reuse:
+
+- the Phase 1 authenticated ownership, pinned scenario version, duration and R2 contracts;
+- the Phase 2 schema/version hash, immutable snapshot, state revision, task/event and bounded-view contracts;
+- `ScenarioStateService` and its typed persistence operations for canonical state.
+
+Do not create a second scenario-state store, a second learner ownership field, an unvalidated actor prompt as hidden truth, a generic AI state patch, or a UI that reads raw canonical facts.
 
 ## Tutor AI Runtime / Fast-Path Compatibility
 

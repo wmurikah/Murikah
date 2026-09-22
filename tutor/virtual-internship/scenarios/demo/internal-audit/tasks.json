@@ -77,7 +77,7 @@
     "competency_refs": [
       "comp_reconciliation"
     ],
-    "initial_state": "available",
+    "initial_state": "locked",
     "deliverable_types": [
       "spreadsheet"
     ]
@@ -122,7 +122,7 @@
     "competency_refs": [
       "comp_investigation"
     ],
-    "initial_state": "available",
+    "initial_state": "locked",
     "deliverable_types": [
       "issue_summary"
     ]
@@ -163,7 +163,7 @@
     "competency_refs": [
       "comp_written_communication"
     ],
-    "initial_state": "available",
+    "initial_state": "locked",
     "deliverable_types": [
       "memo"
     ]

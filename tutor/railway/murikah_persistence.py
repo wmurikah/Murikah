@@ -372,6 +372,156 @@ def internship_object_key(
     return key
 
 
+
+def scenario_definition_install(
+    scenario_version_id: str,
+    canonical_definition: dict[str, Any],
+    *,
+    content_hash: str,
+) -> dict[str, Any]:
+    """Install one validated immutable definition through the private HMAC bridge."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/scenario-definition/install",
+        {
+            "scenario_version_id": _learning_text(scenario_version_id, 128),
+            "content_hash": _learning_text(content_hash, 64),
+            "canonical_definition": canonical_definition,
+        },
+    )
+
+
+def _scenario_get(route: str, actor_id: str, internship_id: str, **params: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    query = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+    }
+    query.update({key: _learning_text(value, 128) for key, value in params.items()})
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}{route}?{urlencode(query)}")
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise PersistenceError("Virtual Internship scenario response is invalid.")
+    return parsed
+
+
+def scenario_definition_get(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _scenario_get("/internships/scenario/definition", actor_id, internship_id)
+
+
+def scenario_initialize(
+    actor_id: str,
+    internship_id: str,
+    *,
+    request_id: str = "",
+) -> dict[str, Any]:
+    """Idempotently initialize an engine-ready pinned scenario for the current actor."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/scenario/initialize",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "request_id": _learning_text(request_id or uuid.uuid4().hex, 128),
+        },
+    )
+
+
+def scenario_state_get(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Return owner-bound canonical server state. UI code should use learner_view instead."""
+    return _scenario_get("/internships/scenario/state", actor_id, internship_id)
+
+
+def scenario_actor_view(
+    actor_id: str,
+    internship_id: str,
+    scenario_actor_id: str,
+) -> dict[str, Any]:
+    return _scenario_get(
+        "/internships/scenario/actor-view",
+        actor_id,
+        internship_id,
+        scenario_actor_id=scenario_actor_id,
+    )
+
+
+def scenario_learner_view(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _scenario_get("/internships/scenario/learner-view", actor_id, internship_id)
+
+
+def scenario_task_transition(
+    actor_id: str,
+    internship_id: str,
+    task_id: str,
+    target_status: str,
+    *,
+    request_id: str = "",
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Trusted server-only task transition. There is no browser learner completion route."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    payload: dict[str, Any] = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+        "task_id": _learning_text(task_id, 128),
+        "target_status": _learning_text(target_status, 32),
+        "request_id": _learning_text(request_id or uuid.uuid4().hex, 128),
+    }
+    if expected_revision is not None:
+        payload["expected_revision"] = int(expected_revision)
+    return _json_request("POST", f"{PERSIST_PREFIX}/internships/scenario/task-transition", payload)
+
+
+def scenario_record_decision(
+    actor_id: str,
+    internship_id: str,
+    decision_id: str,
+    option_id: str,
+    *,
+    request_id: str = "",
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Record one authored bounded option, never arbitrary prose/canonical state."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    payload: dict[str, Any] = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+        "decision_id": _learning_text(decision_id, 128),
+        "option_id": _learning_text(option_id, 128),
+        "request_id": _learning_text(request_id or uuid.uuid4().hex, 128),
+    }
+    if expected_revision is not None:
+        payload["expected_revision"] = int(expected_revision)
+    return _json_request("POST", f"{PERSIST_PREFIX}/internships/scenario/decision", payload)
+
+
+def scenario_evaluate(
+    actor_id: str,
+    internship_id: str,
+    *,
+    request_id: str = "",
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Evaluate deterministic authored triggers using Worker/server time."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship scenario persistence is unavailable.")
+    payload: dict[str, Any] = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+        "request_id": _learning_text(request_id or uuid.uuid4().hex, 128),
+    }
+    if expected_revision is not None:
+        payload["expected_revision"] = int(expected_revision)
+    return _json_request("POST", f"{PERSIST_PREFIX}/internships/scenario/evaluate", payload)
+
+
 def email_verification_start(
     email: str,
     *,
