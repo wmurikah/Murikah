@@ -56,6 +56,17 @@ class ScenarioStateTests(unittest.TestCase):
             self.assertIn(f"def {name}(",persistence)
         self.assertNotIn("def scenario_patch_state(",persistence)
 
+    def test_phase2_engine_has_no_live_model_or_random_authority(self):
+        sources=[
+            (ROOT/"cloudflare/src/virtual_internship_phase2.ts").read_text(),
+            *[(ROOT/"railway/virtual_internship"/name).read_text() for name in ("validator.py","task_graph.py","knowledge.py","event_engine.py","state.py")],
+        ]
+        combined="\n".join(sources)
+        for marker in ("random.random(", "Math.random(", "OpenAI(", "Anthropic(", "Gemini(", "Qwen(", "NVIDIA("):
+            self.assertNotIn(marker,combined)
+        for marker in ("chain_of_thought", "scratchpad"):
+            self.assertNotIn(marker,combined)
+
     def test_phase1_semantics_remain_protected(self):
         worker=(ROOT/"cloudflare/src/index.ts").read_text()
         migration=(ROOT/"cloudflare/migrations/0006_virtual_internship_phase1.sql").read_text()
