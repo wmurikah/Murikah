@@ -1308,6 +1308,7 @@ export class TutorContainer extends Container<TutorEnv> {
   sleepAfter = '30m';
   enableInternet = true;
   entrypoint = [CLOUDFLARE_ENTRYPOINT];
+  private nextRevisionRestartAt = 0;
 
   onStop(stopParams: unknown): void {
     console.log('Murikah Tutor container stopped', JSON.stringify(stopParams));
@@ -1339,7 +1340,38 @@ export class TutorContainer extends Container<TutorEnv> {
 
     if (this.ctx.container.running) {
       const current = await this.runtimeStatus(expectedRevision);
-      return { ...current, workerSecretConfigured: true };
+      const staleRevision =
+        Boolean(expectedRevision) &&
+        current.httpStatus === 200 &&
+        current.imageRevision !== expectedRevision;
+      if (!staleRevision) {
+        return { ...current, workerSecretConfigured: true };
+      }
+
+      if (Date.now() < this.nextRevisionRestartAt) {
+        return { ...current, workerSecretConfigured: true };
+      }
+
+      this.nextRevisionRestartAt = Date.now() + 30_000;
+      try {
+        this.ctx.container.destroy('Replacing stale Murikah Tutor image revision');
+      } catch (error) {
+        return {
+          ...current,
+          error: `Could not recycle stale Tutor image: ${errorText(error)}`,
+          workerSecretConfigured: true,
+        };
+      }
+      for (let attempt = 0; attempt < 30 && this.ctx.container.running; attempt += 1) {
+        await delay(100);
+      }
+      if (this.ctx.container.running) {
+        return {
+          ...current,
+          error: 'Waiting for stale Tutor container instance to stop.',
+          workerSecretConfigured: true,
+        };
+      }
     }
 
     let startError = '';
@@ -1715,7 +1747,13 @@ async function safeStatus(
   try {
     const expectedRevision = (runtimeEnv.MURIKAH_EXPECTED_IMAGE_REV || '').trim();
     let status = await tutor.runtimeStatus(expectedRevision);
-    if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+    const staleRevision =
+      Boolean(expectedRevision) &&
+      status.httpStatus === 200 &&
+      status.imageRevision !== expectedRevision;
+    if (!status.running || staleRevision) {
+      status = await tutor.ensureStarted(runtimeEnv);
+    }
     return { ...status, workerSecretConfigured: true };
   } catch (error) {
     console.error('Murikah Tutor runtime RPC failed', error);
