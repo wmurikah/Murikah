@@ -37,6 +37,7 @@ COPY tutor/railway/accelerate_chat.py /opt/murikah/accelerate_chat.py
 COPY tutor/railway/persist_learning_journal.py /opt/murikah/persist_learning_journal.py
 COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
+COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py
 COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
@@ -70,6 +71,7 @@ COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.ts
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
 COPY docs/images/murikah_6.png /opt/murikah/murikah-logo.png
 RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_lane.py \
+    && cp /opt/murikah/murikah_context_packet.py /src/DeepTutor/deeptutor/murikah_context_packet.py \
     && cp /opt/murikah/murikah_persistence.py /src/DeepTutor/deeptutor/murikah_persistence.py \
     && cp /opt/murikah/murikah_diagram.py /src/DeepTutor/deeptutor/murikah_diagram.py \
     && cp /opt/murikah/murikah_er.py /src/DeepTutor/deeptutor/murikah_er.py \
@@ -168,6 +170,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /a
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/math_animator /app/deeptutor/agents/math_animator
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_context_packet.py /app/deeptutor/murikah_context_packet.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
 
 # The Python regression suite intentionally validates both installed runtime

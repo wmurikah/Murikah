@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V6"
+MARKER = "MURIKAH_DUAL_LANE_CHAT_V7"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -26,6 +26,11 @@ from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapabilit
 from deeptutor.core.context import UnifiedContext
 from deeptutor.core.trace import build_trace_metadata, merge_trace_metadata, new_call_id
 from deeptutor.multi_user.model_access import allowed_llm_options
+from deeptutor.murikah_context_packet import (
+    context_packet_for_turn,
+    provider_affinity,
+    schedule_next_context,
+)
 from deeptutor.murikah_fast_lane import (
     HedgeCandidate,
     close_stream,
@@ -54,7 +59,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V6
+# MURIKAH_DUAL_LANE_CHAT_V7
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
@@ -75,19 +80,22 @@ _FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 8.0
 )
 _OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 12.0
+    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 10.0
 )
 _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
+    "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 15.0
 )
 _FAST_TURN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 300.0
+    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 45.0
 )
 _FAST_OUTPUT_TOKENS = _positive_int(
-    "MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 4096
+    "MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 1800
 )
 _MAX_CONTINUATIONS = min(
-    4, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 3)
+    1, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 1)
+)
+_FAST_CONTEXT_CHARS = _positive_int(
+    "MURIKAH_CHAT_CONTEXT_CHARS", 16000
 )
 '''
 
@@ -98,30 +106,29 @@ OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus)
 
 NEW_RUN = '''    @staticmethod
     def _agent_reason(context: UnifiedContext) -> str:
-        """Return why this turn genuinely needs the full DeepTutor agent lane.
+        """Return why the *current* turn needs the full DeepTutor agent lane.
 
-        Tool availability alone is deliberately not a reason. DeepTutor can expose
-        optional tools on ordinary Chat by default; routing every such turn through
-        the agent loop is what made simple prompts take minutes.
+        Ordinary Chat is fast by default. Persistent metadata from a previous
+        answer must never silently promote a follow-up into the agent loop.
+        Current-turn promotion is explicit through murikah_current_turn_flags.
         """
         metadata = context.metadata or {}
         if context.knowledge_bases:
             return "knowledge_base"
         if context.attachments:
             return "attachments"
-        # Source metadata can persist from the previous answer. It must not
-        # promote an ordinary follow-up into the multi-agent lane by itself.
-        for key in (
-            "mastery_mode",
-            "immersive_reading_mode",
-            "question_bank_context",
-            "deep_mode",
-            "research_mode",
-            "force_agentic_chat",
-            "tool_execution_requested",
-        ):
-            if metadata.get(key):
-                return key
+        current = metadata.get("murikah_current_turn_flags")
+        if isinstance(current, (list, tuple, set)):
+            allowed = {
+                "deep_mode",
+                "research_mode",
+                "force_agentic_chat",
+                "tool_execution_requested",
+            }
+            for key in current:
+                value = str(key or "").strip()
+                if value in allowed:
+                    return value
         return ""
 
     @staticmethod
@@ -159,6 +166,9 @@ NEW_RUN = '''    @staticmethod
 
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
         request_started = time.perf_counter()
+        logger.info(
+            "MURIKAH_LATENCY event=lane selected_lane=fast routing_reason=ordinary_chat"
+        )
         prompt_pipeline = AgenticChatPipeline(language=context.language)
         messages = prompt_pipeline._build_loop_messages(
             context=context,
@@ -166,9 +176,64 @@ NEW_RUN = '''    @staticmethod
             include_tool_manifest=False,
         )
 
-        # Remove provider-private replay fields and bound recent history so
-        # follow-ups can move cleanly between Gemini and NVIDIA.
-        messages = portable_chat_messages(messages)
+        # Build a compact conversation packet for every ordinary follow-up.
+        # Older transcript is summarized and only the newest turns stay verbatim,
+        # so turn 20 is not forced to replay tens of thousands of characters.
+        conversation_id = str(getattr(context, "session_id", "") or "")
+        raw_history_chars = sum(
+            len(str(item.get("content") or ""))
+            for item in messages
+            if isinstance(item, dict)
+        )
+        context_build_started = time.perf_counter()
+        messages, context_cache_hit = context_packet_for_turn(
+            conversation_id,
+            messages,
+            max_chars=_FAST_CONTEXT_CHARS,
+            recent_turns=4,
+        )
+        packet_chars = sum(len(str(item.get("content") or "")) for item in messages)
+        context_build_ms = latency_ms(context_build_started)
+        follow_up = sum(1 for item in messages if item.get("role") == "user") > 1
+        latest_user_text = next(
+            (
+                str(item.get("content") or "")
+                for item in reversed(messages)
+                if item.get("role") == "user"
+            ),
+            "",
+        ).lower()
+        long_answer_requested = any(
+            marker in latest_user_text
+            for marker in (
+                "detailed",
+                "comprehensive",
+                "in depth",
+                "in-depth",
+                "long answer",
+                "long explanation",
+                "deep explanation",
+                "word essay",
+                "words essay",
+                "3000 words",
+                "2500 words",
+                "2000 words",
+            )
+        )
+        turn_output_tokens = min(
+            3000 if long_answer_requested else _FAST_OUTPUT_TOKENS,
+            prompt_pipeline.respond_max_tokens,
+        )
+        logger.info(
+            "MURIKAH_LATENCY route=fast event=context_packet conversation=%s follow_up=%s cache_hit=%s raw_history_chars=%s packet_chars=%s context_build_ms=%s output_tokens=%s",
+            conversation_id or "unknown",
+            follow_up,
+            context_cache_hit,
+            raw_history_chars,
+            packet_chars,
+            context_build_ms,
+            turn_output_tokens,
+        )
 
         resolved: list[Any] = []
         seen: set[tuple[str, str]] = set()
@@ -190,16 +255,14 @@ NEW_RUN = '''    @staticmethod
 
         gemini_model = configured_gemini_model()
         gemini_on = gemini_configured()
-        selected_is_gemini = bool(
-            resolved and str(getattr(resolved[0], "model", "")) == gemini_model
-        )
         hedges: list[HedgeCandidate] = []
 
         def deep_candidate(config: Any, delay_seconds: float) -> HedgeCandidate:
             name = f"{config.provider_name or config.binding or 'provider'}:{config.model}"
+            effective_delay = 0.0 if provider_affinity(conversation_id) == name else delay_seconds
             return HedgeCandidate(
                 name=name,
-                delay_seconds=delay_seconds,
+                delay_seconds=effective_delay,
                 factory=lambda config=config: llm_factory.stream(
                     prompt="",
                     system_prompt="",
@@ -213,7 +276,7 @@ NEW_RUN = '''    @staticmethod
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                    max_tokens=turn_output_tokens,
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 ),
@@ -227,15 +290,16 @@ NEW_RUN = '''    @staticmethod
         nvidia_on = nvidia_configured()
         qwen_model = configured_qwen_fast_model()
         qwen_on = qwen_configured()
+        preferred_provider = provider_affinity(conversation_id)
 
         if gemini_on:
             hedges.append(
                 HedgeCandidate(
                     name=f"gemini:{gemini_model}",
-                    delay_seconds=0.0,
+                    delay_seconds=0.0 if preferred_provider.startswith("gemini") or not preferred_provider else 0.8,
                     factory=lambda: gemini_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -243,10 +307,10 @@ NEW_RUN = '''    @staticmethod
             hedges.append(
                 HedgeCandidate(
                     name=f"nvidia-fast:{nvidia_model}",
-                    delay_seconds=0.55 if gemini_on else 0.0,
+                    delay_seconds=0.0 if preferred_provider.startswith("nvidia") else (0.4 if gemini_on else 0.0),
                     factory=lambda: nvidia_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -254,10 +318,10 @@ NEW_RUN = '''    @staticmethod
             hedges.append(
                 HedgeCandidate(
                     name=f"qwen-fast:{qwen_model}",
-                    delay_seconds=1.1 if (gemini_on or nvidia_on) else 0.0,
+                    delay_seconds=0.0 if preferred_provider.startswith("qwen") else (0.8 if (gemini_on or nvidia_on) else 0.0),
                     factory=lambda: qwen_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -268,7 +332,7 @@ NEW_RUN = '''    @staticmethod
             if str(getattr(config, "model", "")) not in {gemini_model, nvidia_model, qwen_model}
         ]
         if fallback_configs:
-            hedges.append(deep_candidate(fallback_configs[0], 1.8))
+            hedges.append(deep_candidate(fallback_configs[0], 1.2))
 
         if not hedges:
             logger.error("MURIKAH_LATENCY route=fast event=no_candidates")
@@ -290,7 +354,16 @@ NEW_RUN = '''    @staticmethod
             stage="responding",
             metadata=merge_trace_metadata(
                 trace_meta,
-                {"trace_kind": "call_status", "call_state": "running", "murikah_lane": "fast"},
+                {
+                    "trace_kind": "call_status",
+                    "call_state": "running",
+                    "murikah_lane": "fast",
+                    "follow_up": follow_up,
+                    "history_chars": raw_history_chars,
+                    "context_packet_chars": packet_chars,
+                    "context_build_ms": context_build_ms,
+                    "context_cache_hit": context_cache_hit,
+                },
             ),
         )
 
@@ -300,54 +373,6 @@ NEW_RUN = '''    @staticmethod
             first_token_timeout=_FIRST_TOKEN_TIMEOUT_SECONDS,
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
-        if winner is None:
-            # One transparent reconnect race before the learner sees any error.
-            # Start every direct provider at once; shared trial capacity or a
-            # transient regional connection must not kill an ordinary follow-up.
-            retry_hedges: list[HedgeCandidate] = []
-            if gemini_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"gemini-retry:{gemini_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: gemini_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if nvidia_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"nvidia-retry:{nvidia_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: nvidia_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if qwen_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"qwen-retry:{qwen_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: qwen_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if fallback_configs:
-                retry_hedges.append(deep_candidate(fallback_configs[0], 0.0))
-            if retry_hedges:
-                winner = await race_first_visible(
-                    retry_hedges,
-                    request_started=request_started,
-                    first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                    overall_timeout=min(7.0, _OVERALL_FIRST_TOKEN_SECONDS),
-                )
-
         if winner is None:
             elapsed = latency_ms(request_started)
             context.metadata["murikah_provider"] = ""
@@ -395,16 +420,17 @@ NEW_RUN = '''    @staticmethod
         )
 
         context.metadata["murikah_provider"] = winner.name
-        if winner.name.startswith(("gemini:", "gemini-retry:")):
+        if winner.name.startswith("gemini:"):
             winner_model = gemini_model
-        elif winner.name.startswith(("nvidia-fast:", "nvidia-retry:")):
+        elif winner.name.startswith("nvidia-fast:"):
             winner_model = nvidia_model
-        elif winner.name.startswith(("qwen-fast:", "qwen-retry:")):
+        elif winner.name.startswith("qwen-fast:"):
             winner_model = qwen_model
         else:
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
         context.metadata["murikah_model"] = winner_model
         context.metadata["murikah_first_token_ms"] = winner.first_token_ms
+        turn_deadline = request_started + _FAST_TURN_TIMEOUT_SECONDS
 
         async def collect_remaining(
             active_winner: Any,
@@ -417,7 +443,7 @@ NEW_RUN = '''    @staticmethod
             finish_reason = ""
             failure_kind = ""
             in_think = False
-            segment_deadline = time.perf_counter() + max(60.0, _FAST_TURN_TIMEOUT_SECONDS)
+            segment_deadline = turn_deadline
             try:
                 while True:
                     remaining = segment_deadline - time.perf_counter()
@@ -518,10 +544,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: gemini_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -532,10 +555,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: nvidia_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -546,10 +566,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: qwen_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -576,22 +593,34 @@ NEW_RUN = '''    @staticmethod
                             reasoning_effort=config.reasoning_effort,
                             extra_headers=config.extra_headers,
                             temperature=prompt_pipeline._chat_temperature,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                             stream_coalesce_chars=24,
                             stream_coalesce_seconds=0.02,
                         ),
                     )
                 )
 
+            remaining_for_recovery = turn_deadline - time.perf_counter()
+            if remaining_for_recovery <= 2.5:
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=continuation_skipped reason=turn_deadline elapsed_ms=%s",
+                    latency_ms(request_started),
+                )
+                break
             recovery_started = time.perf_counter()
+            recovery_first_timeout = min(
+                4.0,
+                max(1.0, remaining_for_recovery - 1.5),
+            )
+            recovery_overall_timeout = min(
+                5.0,
+                max(1.5, remaining_for_recovery - 0.5),
+            )
             recovery_winner = await race_first_visible(
                 recovery_hedges,
                 request_started=recovery_started,
-                first_token_timeout=min(8.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                overall_timeout=min(10.0, _OVERALL_FIRST_TOKEN_SECONDS),
+                first_token_timeout=recovery_first_timeout,
+                overall_timeout=recovery_overall_timeout,
             )
             if recovery_winner is None:
                 logger.warning(
@@ -611,13 +640,10 @@ NEW_RUN = '''    @staticmethod
                     "continuation": continuation_count,
                 },
             )
-            recovery_tail, recovery_finish_reason, recovery_failure = await collect_remaining(
-                recovery_winner,
-                publish=False,
-                metadata=recovery_meta,
+            continuation_text = trim_continuation_overlap(
+                answer,
+                recovery_winner.first_chunk,
             )
-            raw_continuation = recovery_winner.first_chunk + recovery_tail
-            continuation_text = trim_continuation_overlap(answer, raw_continuation)
             if answer and continuation_text and not continuation_text[0].isspace():
                 if (
                     answer[-1:].isalnum()
@@ -627,7 +653,6 @@ NEW_RUN = '''    @staticmethod
                     and continuation_text[0].isalnum()
                 ):
                     continuation_text = " " + continuation_text
-
             if continuation_text:
                 answer += continuation_text
                 await stream.content(
@@ -636,7 +661,12 @@ NEW_RUN = '''    @staticmethod
                     stage="responding",
                     metadata=recovery_meta,
                 )
-
+            recovery_tail, recovery_finish_reason, recovery_failure = await collect_remaining(
+                recovery_winner,
+                publish=True,
+                metadata=recovery_meta,
+            )
+            answer += recovery_tail
             finish_reason = recovery_finish_reason
             stream_failure = recovery_failure
             incomplete = should_continue(answer, finish_reason, stream_failure)
@@ -656,14 +686,27 @@ NEW_RUN = '''    @staticmethod
 
         if incomplete:
             logger.warning(
-                "MURIKAH_LATENCY route=fast event=terminal_incomplete_response finish_reason=%s failure=%s continuations=%s elapsed_ms=%s",
+                "MURIKAH_LATENCY route=fast event=partial_response_preserved finish_reason=%s failure=%s continuations=%s elapsed_ms=%s",
                 finish_reason or "unknown",
                 stream_failure or "none",
                 continuation_count,
                 latency_ms(request_started),
             )
-            raise RuntimeError(
-                "Murikah could not finish this response right now. Please try again."
+            # The learner already has useful streamed text. Do not hold the whole
+            # turn open for another long hidden repair cycle.
+            await stream.progress(
+                "Response was interrupted. Ask me to continue if you need the rest.",
+                source="chat",
+                stage="responding",
+                metadata=merge_trace_metadata(
+                    trace_meta,
+                    {
+                        "trace_kind": "call_status",
+                        "call_state": "partial",
+                        "retryable": True,
+                        "murikah_lane": "fast",
+                    },
+                ),
             )
 
         context.capability_output.agent_output = answer
@@ -671,10 +714,22 @@ NEW_RUN = '''    @staticmethod
         total_ms = latency_ms(request_started)
         context.metadata["murikah_total_ms"] = total_ms
         logger.info(
-            "MURIKAH_LATENCY route=fast event=complete provider=%s first_token_ms=%s total_ms=%s",
+            "MURIKAH_LATENCY route=fast event=complete provider=%s first_token_ms=%s total_ms=%s history_chars=%s packet_chars=%s context_build_ms=%s continuations=%s",
             winner.name,
             winner.first_token_ms,
             total_ms,
+            raw_history_chars,
+            packet_chars,
+            context_build_ms,
+            continuation_count,
+        )
+        # Prepare the next follow-up packet after the answer is complete. This
+        # is intentionally outside the learner-facing generation critical path.
+        schedule_next_context(
+            conversation_id,
+            messages,
+            answer,
+            winner.name,
         )
         await stream.progress(
             "",
@@ -711,6 +766,10 @@ NEW_RUN = '''    @staticmethod
         reason = self._agent_reason(context)
         if reason:
             started = time.perf_counter()
+            logger.info(
+                "MURIKAH_LATENCY event=lane selected_lane=deep_agent routing_reason=%s",
+                reason,
+            )
             logger.info(
                 "MURIKAH_LATENCY route=deep_agent event=start reason=%s enabled_tools=%s",
                 reason,
