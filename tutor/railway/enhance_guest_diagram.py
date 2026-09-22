@@ -122,13 +122,13 @@ function DiagramMessage({ content }: { content: string }) {
     text = replace_once(
         text,
         '          typeof data.detail === "string" ? data.detail : "Tutor could not answer that prompt.",',
-        '          typeof data.detail === "string" ? data.detail : "Tutor is temporarily unavailable. Your prompt is still here — please try again.",',
+        '          typeof data.detail === "string" ? data.detail : "Tutor is temporarily unavailable. Your prompt is still here. Please try again.",',
         "guest response fallback",
     )
     text = replace_once(
         text,
         '    } catch (cause) {\n      setError(cause instanceof Error ? cause.message : "Tutor could not answer that prompt.");\n    } finally {',
-        '    } catch (cause) {\n      setDraft(prompt);\n      setError(cause instanceof Error ? cause.message : "We lost the connection before Tutor replied. Your prompt is still here — please try again.");\n    } finally {',
+        '    } catch (cause) {\n      setDraft(prompt);\n      setError(cause instanceof Error ? cause.message : "We lost the connection before Tutor replied. Your prompt is still here. Please try again.");\n    } finally {',
         "guest retryable prompt preservation",
     )
 
