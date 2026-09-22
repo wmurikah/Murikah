@@ -1089,10 +1089,15 @@ def main() -> int:
         "tutor/virtual-internship/README.md",
         (
             "Phase 1 Implementation Record",
+            "Phase 2 Implementation Record",
+            "SUBSEQUENT SCENARIO DEVELOPMENT REQUIREMENT",
             "Tutor AI Runtime / Fast-Path Compatibility",
             "SUBSEQUENT VIRTUAL INTERNSHIP AI DEVELOPMENT REQUIREMENT",
             "SUBSEQUENT DEVELOPMENT REQUIREMENT",
             "0006_virtual_internship_phase1.sql",
+            "0008_virtual_internship_phase2.sql",
+            "d1:scenario-version-content/<scenario-version-id>",
+            "SCENARIO_MAX_CASCADE_DEPTH",
         ),
     )
     require_markers(
