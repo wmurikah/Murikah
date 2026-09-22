@@ -80,7 +80,7 @@ _FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 8.0
 )
 _OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 12.0
+    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 10.0
 )
 _STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
     "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 15.0
@@ -166,6 +166,9 @@ NEW_RUN = '''    @staticmethod
 
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
         request_started = time.perf_counter()
+        logger.info(
+            "MURIKAH_LATENCY event=lane selected_lane=fast routing_reason=ordinary_chat"
+        )
         prompt_pipeline = AgenticChatPipeline(language=context.language)
         messages = prompt_pipeline._build_loop_messages(
             context=context,
@@ -259,9 +262,10 @@ NEW_RUN = '''    @staticmethod
 
         def deep_candidate(config: Any, delay_seconds: float) -> HedgeCandidate:
             name = f"{config.provider_name or config.binding or 'provider'}:{config.model}"
+            effective_delay = 0.0 if provider_affinity(conversation_id) == name else delay_seconds
             return HedgeCandidate(
                 name=name,
-                delay_seconds=delay_seconds,
+                delay_seconds=effective_delay,
                 factory=lambda config=config: llm_factory.stream(
                     prompt="",
                     system_prompt="",
@@ -373,54 +377,6 @@ NEW_RUN = '''    @staticmethod
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
         if winner is None:
-            # One transparent reconnect race before the learner sees any error.
-            # Start every direct provider at once; shared trial capacity or a
-            # transient regional connection must not kill an ordinary follow-up.
-            retry_hedges: list[HedgeCandidate] = []
-            if gemini_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"gemini-retry:{gemini_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: gemini_stream(
-                            messages,
-                            max_tokens=turn_output_tokens,
-                        ),
-                    )
-                )
-            if nvidia_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"nvidia-retry:{nvidia_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: nvidia_stream(
-                            messages,
-                            max_tokens=turn_output_tokens,
-                        ),
-                    )
-                )
-            if qwen_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"qwen-retry:{qwen_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: qwen_stream(
-                            messages,
-                            max_tokens=turn_output_tokens,
-                        ),
-                    )
-                )
-            if fallback_configs:
-                retry_hedges.append(deep_candidate(fallback_configs[0], 0.0))
-            if retry_hedges:
-                winner = await race_first_visible(
-                    retry_hedges,
-                    request_started=request_started,
-                    first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                    overall_timeout=min(7.0, _OVERALL_FIRST_TOKEN_SECONDS),
-                )
-
-        if winner is None:
             elapsed = latency_ms(request_started)
             context.metadata["murikah_provider"] = ""
             context.metadata["murikah_model"] = ""
@@ -477,6 +433,7 @@ NEW_RUN = '''    @staticmethod
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
         context.metadata["murikah_model"] = winner_model
         context.metadata["murikah_first_token_ms"] = winner.first_token_ms
+        turn_deadline = request_started + _FAST_TURN_TIMEOUT_SECONDS
 
         async def collect_remaining(
             active_winner: Any,
@@ -489,7 +446,7 @@ NEW_RUN = '''    @staticmethod
             finish_reason = ""
             failure_kind = ""
             in_think = False
-            segment_deadline = time.perf_counter() + max(20.0, _FAST_TURN_TIMEOUT_SECONDS)
+            segment_deadline = turn_deadline
             try:
                 while True:
                     remaining = segment_deadline - time.perf_counter()
@@ -809,6 +766,10 @@ NEW_RUN = '''    @staticmethod
         reason = self._agent_reason(context)
         if reason:
             started = time.perf_counter()
+            logger.info(
+                "MURIKAH_LATENCY event=lane selected_lane=deep_agent routing_reason=%s",
+                reason,
+            )
             logger.info(
                 "MURIKAH_LATENCY route=deep_agent event=start reason=%s enabled_tools=%s",
                 reason,
