@@ -43,6 +43,8 @@ class FollowupChatTests(unittest.TestCase):
         self.assertIn("_PROVIDER_HEDGE_DELAYS = (0.0, 0.4, 0.8)", source)
         self.assertIn("preferred_provider", source)
         self.assertIn("first_token_remaining", source)
+        self.assertIn("murikah_pre_model_ms", source)
+        self.assertIn("context_breakdown", source)
         self.assertIn("hard_deadline=True", source)
         self.assertNotIn("retry_hedges", source)
         self.assertNotIn("gemini-retry:", source)
