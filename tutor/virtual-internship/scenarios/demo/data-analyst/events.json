@@ -1,0 +1,98 @@
+[
+  {
+    "event_id": "event_quality_disclosure",
+    "authored_sequence": 1,
+    "event_type": "quality_disclosure",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_define_metric",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_quality_status",
+        "value": "quality_issue_confirmed"
+      },
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_quality_status"
+      },
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_hidden_null_issue"
+      }
+    ],
+    "message_template_id": "msg_quality_issue",
+    "actor_ids": [
+      "actor_data_engineer"
+    ],
+    "once": true,
+    "audit_label": "Data quality issue disclosed",
+    "learning_objective": "Adjust analysis planning when data quality changes."
+  },
+  {
+    "event_id": "event_requirement_change",
+    "authored_sequence": 2,
+    "event_type": "requirement_change",
+    "priority": 30,
+    "triggers": [
+      {
+        "trigger_type": "all_dependencies_completed",
+        "task_id": "task_quality_plan"
+      },
+      {
+        "trigger_type": "fact_equals",
+        "fact_id": "fact_quality_status",
+        "expected": "quality_issue_confirmed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_product_priority",
+        "value": "weekly segmented retention"
+      },
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_future_requirement"
+      }
+    ],
+    "message_template_id": "msg_requirement_change",
+    "actor_ids": [
+      "actor_product_stakeholder"
+    ],
+    "once": true,
+    "audit_label": "Stakeholder requirement changed",
+    "learning_objective": "Handle a bounded scope change after dependencies are satisfied."
+  },
+  {
+    "event_id": "event_day10_deadline",
+    "authored_sequence": 3,
+    "event_type": "deadline_change",
+    "priority": 20,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 10
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "adjust_deadline",
+        "task_id": "task_quality_plan",
+        "offset_days": 2
+      }
+    ],
+    "message_template_id": "msg_deadline_shift",
+    "actor_ids": [
+      "actor_analytics_manager"
+    ],
+    "once": true,
+    "audit_label": "Analysis deadline adjusted",
+    "learning_objective": "Replan work after an authored deadline change."
+  }
+]
