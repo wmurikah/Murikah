@@ -139,6 +139,45 @@ def provider_affinity(conversation_id: str) -> str:
     return str((cached or {}).get("provider") or "")
 
 
+def context_packet_for_turn(
+    conversation_id: str,
+    messages: list[dict[str, Any]],
+    *,
+    max_chars: int = DEFAULT_PACKET_CHARS,
+    recent_turns: int = DEFAULT_RECENT_TURNS,
+) -> tuple[list[dict[str, str]], bool]:
+    """Use the pre-built previous packet and append only the current learner turn.
+
+    Returns (packet, cache_hit). If the process restarted or there is no packet,
+    rebuild deterministically from the current DeepTutor history.
+    """
+    cleaned = _clean_messages(messages)
+    cached = get_cached_packet(conversation_id)
+    if cached and isinstance(cached.get("messages"), list):
+        latest_user = next(
+            (item for item in reversed(cleaned) if item["role"] == "user"),
+            None,
+        )
+        base = [
+            item
+            for item in cached["messages"]
+            if isinstance(item, dict)
+            and item.get("role") in {"system", "user", "assistant"}
+            and isinstance(item.get("content"), str)
+        ]
+        if latest_user is not None:
+            if not base or base[-1] != latest_user:
+                base.append(latest_user)
+        return (
+            build_context_packet(base, max_chars=max_chars, recent_turns=recent_turns),
+            True,
+        )
+    return (
+        build_context_packet(cleaned, max_chars=max_chars, recent_turns=recent_turns),
+        False,
+    )
+
+
 def remember_completed_turn(
     conversation_id: str,
     messages: list[dict[str, Any]],
@@ -163,6 +202,9 @@ def remember_completed_turn(
             _packets.popitem(last=False)
 
 
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
 async def prepare_next_context(
     conversation_id: str,
     messages: list[dict[str, Any]],
@@ -177,3 +219,17 @@ async def prepare_next_context(
         answer,
         provider,
     )
+
+
+def schedule_next_context(
+    conversation_id: str,
+    messages: list[dict[str, Any]],
+    answer: str,
+    provider: str,
+) -> None:
+    """Schedule preparation and keep a strong task reference until completion."""
+    task = asyncio.create_task(
+        prepare_next_context(conversation_id, messages, answer, provider)
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
