@@ -300,6 +300,8 @@ def main() -> int:
             'ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev',
             'LABEL com.murikah.tutor.cloudflare-image-rev=',
             'COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py',
+            'COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py',
+            'cp /opt/murikah/murikah_context_packet.py /src/DeepTutor/deeptutor/murikah_context_packet.py',
             'COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py',
             'COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py',
             'COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt',
@@ -642,12 +644,15 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V6',
+            'MURIKAH_DUAL_LANE_CHAT_V7',
             'def _agent_reason(',
-            'force_agentic_chat',
+            'murikah_current_turn_flags',
             'race_first_visible(',
             'nvidia-fast:',
-            'portable_chat_messages',
+            'build_context_packet',
+            'prepare_next_context',
+            'provider_affinity',
+            'MURIKAH_CHAT_CONTEXT_CHARS',
             'qwen-fast:',
             'qwen-retry:',
             'nvidia-retry:',
@@ -657,10 +662,24 @@ def main() -> int:
             'MURIKAH_CHAT_FAST_OUTPUT_TOKENS',
             'MURIKAH_CHAT_MAX_CONTINUATIONS',
             'Continuing response…',
-            'terminal_incomplete_response',
+            'partial_response_preserved',
             'finish_reason_needs_continuation',
+            'context_packet',
+            'history_chars',
+            'context_build_ms',
             'route=deep_agent',
             'route=fast',
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_context_packet.py",
+        (
+            'DEFAULT_PACKET_CHARS = 16000',
+            'DEFAULT_RECENT_TURNS = 4',
+            'def build_context_packet(',
+            'def provider_affinity(',
+            'async def prepare_next_context(',
+            'Conversation summary:',
         ),
     )
     forbid_markers(
