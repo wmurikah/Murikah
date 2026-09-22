@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
+"""Deploy Murikah Tutor without treating Cloudflare's asynchronous rollout as a failure.
+
+Cloudflare activates Worker code before every container instance is replaced.
+The deployment gate therefore verifies the live application instance through
+/__muri/runtime-status, which reports the revision from the actual container
+health route. It never deletes/recreates the container application merely
+because a diagnostic instance is temporarily stale or unknown.
+"""
 from __future__ import annotations
-import json, os, re, shutil, subprocess, sys, time
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -8,8 +23,10 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / "wrangler.toml"
-APP_NAME = "murikah-tutor-container-staging-TutorContainer"
-VERIFY_BASES = ("https://murikah-tutor-container-staging.hasspe.workers.dev","https://tutor.murikah.com")
+VERIFY_BASES = (
+    "https://murikah-tutor-container-staging.hasspe.workers.dev",
+    "https://tutor.murikah.com",
+)
 APPLICATION_NOT_FOUND = "APPLICATION_NOT_FOUND"
 CREATE_TEMPORARILY_UNAVAILABLE = "can't create application at this time"
 TRANSIENT_DEPLOY_ERRORS = (
@@ -18,11 +35,11 @@ TRANSIENT_DEPLOY_ERRORS = (
     "application is being deleted",
     "application is currently being deleted",
     "try again later",
-)
-REGISTRY_PROPAGATION_MARKERS = (
     "no such manifest:",
     "manifest unknown",
 )
+DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS = 360
+
 
 def wrangler_path() -> str:
     local = ROOT / "node_modules" / ".bin" / "wrangler"
@@ -33,293 +50,311 @@ def wrangler_path() -> str:
         return found
     raise RuntimeError("wrangler executable was not found")
 
+
 def expected_image_revision() -> str:
     text = CONFIG.read_text(encoding="utf-8")
-    match = re.search(r'MURIKAH_CLOUDFLARE_IMAGE_REV\s*=\s*"([^"]+)"', text)
-    if not match:
+    image_match = re.search(
+        r'MURIKAH_CLOUDFLARE_IMAGE_REV\s*=\s*"([^"]+)"',
+        text,
+    )
+    worker_match = re.search(
+        r'MURIKAH_EXPECTED_IMAGE_REV\s*=\s*"([^"]+)"',
+        text,
+    )
+    if not image_match:
         raise RuntimeError("MURIKAH_CLOUDFLARE_IMAGE_REV is missing from wrangler.toml")
-    return match.group(1)
+    if not worker_match:
+        raise RuntimeError("MURIKAH_EXPECTED_IMAGE_REV is missing from wrangler.toml")
+    image_revision = image_match.group(1).strip()
+    worker_revision = worker_match.group(1).strip()
+    if not image_revision or image_revision != worker_revision:
+        raise RuntimeError(
+            "Cloudflare image build revision and Worker expected revision must match"
+        )
+    return image_revision
 
-def run_wrangler(*args: str, capture: bool=False, check: bool=True) -> subprocess.CompletedProcess[str]:
+
+def run_wrangler(
+    *args: str,
+    capture: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
     command = [wrangler_path(), *args, "--config", str(CONFIG)]
     environment = os.environ.copy()
     environment["CI"] = "true"
-    return subprocess.run(command, cwd=ROOT, env=environment, check=check, text=True,
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        env=environment,
+        check=check,
+        text=True,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.PIPE if capture else None)
+        stderr=subprocess.PIPE if capture else None,
+    )
+
 
 def emit_completed_process(result: subprocess.CompletedProcess[str]) -> None:
     if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n", flush=True)
     if result.stderr:
-        print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
+        print(
+            result.stderr,
+            end="" if result.stderr.endswith("\n") else "\n",
+            file=sys.stderr,
+            flush=True,
+        )
+
 
 def apply_persistence_migrations() -> None:
-    print("[Murikah Tutor] Applying version-controlled D1 persistence migrations.")
+    print(
+        "[Murikah Tutor] Applying version-controlled D1 persistence migrations.",
+        flush=True,
+    )
     result = run_wrangler(
-        "d1", "migrations", "apply", "murikah-tutor-prod", "--remote",
-        capture=True, check=False,
+        "d1",
+        "migrations",
+        "apply",
+        "murikah-tutor-prod",
+        "--remote",
+        capture=True,
+        check=False,
     )
     emit_completed_process(result)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, result.args, output=result.stdout, stderr=result.stderr
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
         )
+
 
 def is_transient_deploy_error(output: str) -> bool:
     folded = output.casefold()
     return any(marker in folded for marker in TRANSIENT_DEPLOY_ERRORS)
 
-def deploy(*, attempts: int=8) -> str:
-    delays = (5,8,13,20,30,45,60)
+
+def deploy(*, attempts: int = 6) -> str:
+    """Run one logical deploy, retrying only a command that actually failed.
+
+    Wrangler may mention a transient registry/control-plane condition while
+    still exiting 0 after successfully publishing the Worker and target
+    container configuration. Re-running a successful deploy creates needless
+    rollout churn, so exit code 0 is authoritative here.
+    """
+    delays = (8, 13, 20, 30, 45)
     last_output = ""
-    for attempt in range(1, attempts+1):
-        result = run_wrangler("deploy","--containers-rollout=immediate",capture=True,check=False)
+    for attempt in range(1, attempts + 1):
+        result = run_wrangler(
+            "deploy",
+            "--containers-rollout=immediate",
+            capture=True,
+            check=False,
+        )
         emit_completed_process(result)
         last_output = f"{result.stdout or ''}\n{result.stderr or ''}"
-        folded = last_output.casefold()
-        registry_pending = any(marker in folded for marker in REGISTRY_PROPAGATION_MARKERS)
-        if result.returncode == 0 and not registry_pending:
-            return last_output
-        if result.returncode == 0 and registry_pending:
-            if attempt >= attempts:
-                raise RuntimeError(
-                    "Cloudflare accepted the deploy command but the container registry "
-                    "manifest was still unavailable after all propagation retries."
-                )
-            delay = max(20, delays[min(attempt-1,len(delays)-1)])
+        if result.returncode == 0:
             print(
-                "[Murikah Tutor] Cloudflare accepted the Worker deploy before the "
-                f"container manifest became readable; retrying after {delay}s "
-                f"({attempt}/{attempts})."
+                "[Murikah Tutor] Wrangler accepted the Worker + container target; "
+                "observing the asynchronous container rollout.",
+                flush=True,
             )
-            time.sleep(delay)
-            continue
+            return last_output
         if attempt >= attempts or not is_transient_deploy_error(last_output):
-            raise subprocess.CalledProcessError(result.returncode,result.args,output=result.stdout,stderr=result.stderr)
-        delay = delays[min(attempt-1,len(delays)-1)]
-        print(f"[Murikah Tutor] Cloudflare container control plane is still converging; retrying deploy in {delay}s ({attempt}/{attempts}).")
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                result.args,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
+        delay = delays[min(attempt - 1, len(delays) - 1)]
+        print(
+            "[Murikah Tutor] Cloudflare deploy command failed with a transient "
+            f"control-plane/registry condition; retrying in {delay}s "
+            f"({attempt}/{attempts}).",
+            flush=True,
+        )
         time.sleep(delay)
     raise RuntimeError("Tutor deploy retry loop exhausted unexpectedly")
 
-def parse_json_output(raw: str) -> Any:
-    text = raw.strip()
-    try: return json.loads(text)
-    except json.JSONDecodeError:
-        starts=[p for p in (text.find("["),text.find("{")) if p>=0]
-        if not starts: raise
-        start=min(starts)
-        for end_char in ("]","}"):
-            end=text.rfind(end_char)
-            if end>=start:
-                try: return json.loads(text[start:end+1])
-                except json.JSONDecodeError: continue
-        raise
 
-def list_tutor_applications() -> list[dict[str,Any]]:
-    result = run_wrangler("containers","list","--json",capture=True)
-    applications = parse_json_output(result.stdout)
-    if not isinstance(applications,list):
-        raise RuntimeError("wrangler containers list did not return a JSON list")
-    return [app for app in applications if isinstance(app,dict) and str(app.get("name","")).casefold()==APP_NAME.casefold() and app.get("id")]
-
-def wait_for_application_absent(*, timeout_seconds: int=120) -> None:
-    deadline=time.monotonic()+timeout_seconds
-    while time.monotonic()<deadline:
-        if not list_tutor_applications():
-            time.sleep(8)
-            return
-        time.sleep(4)
-    raise RuntimeError(f"container application {APP_NAME!r} still exists after {timeout_seconds}s")
-
-def recycle_tutor_application() -> None:
-    matches=list_tutor_applications()
-    if not matches:
-        print("[Murikah Tutor] Stale container application is already absent; continuing with recreation.")
-        return
-    for app in matches:
-        app_id=str(app["id"])
-        print(f"[Murikah Tutor] Recycling stale Cloudflare container application {APP_NAME}.")
-        run_wrangler("containers","delete",app_id)
-    wait_for_application_absent()
-
-def fetch_json(base: str, path: str, *, timeout: float) -> dict[str,Any]:
-    separator="&" if "?" in path else "?"
-    url=f"{base.rstrip('/')}{path}{separator}deploy_check={time.time_ns()}"
-    request=Request(url,headers={"accept":"application/json","cache-control":"no-cache","user-agent":"Murikah-Tutor-Deploy-Verification/1.0"})
-    with urlopen(request,timeout=timeout) as response:
-        payload=json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload,dict): raise RuntimeError(f"unexpected JSON payload from {base}{path}")
+def fetch_json(base: str, path: str, *, timeout: float) -> dict[str, Any]:
+    separator = "&" if "?" in path else "?"
+    url = f"{base.rstrip('/')}{path}{separator}deploy_check={time.time_ns()}"
+    request = Request(
+        url,
+        headers={
+            "accept": "application/json",
+            "cache-control": "no-cache",
+            "user-agent": "Murikah-Tutor-Deploy-Verification/2.0",
+        },
+    )
+    with urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"unexpected JSON payload from {base}{path}")
     return payload
 
-def image_revision(report: dict[str,Any]) -> str:
-    image=report.get("image")
-    if not isinstance(image,dict): return ""
-    output=str(image.get("output",""))
-    match=re.search(r"(?m)^image-revision=([^\r\n]+)$",output)
-    return match.group(1).strip() if match else ""
 
-def startup_log(report: dict[str,Any]) -> str:
-    value=report.get("startupLog")
-    return str(value.get("output","")) if isinstance(value,dict) else ""
+def runtime_revision(status: dict[str, Any]) -> str:
+    return str(status.get("imageRevision") or "").strip()
 
-def diagnostic_report(expected_revision: str, *, timeout_seconds: int=120) -> tuple[dict[str,Any],str]:
-    deadline=time.monotonic()+timeout_seconds
-    last_error=""
-    last_report=None
-    last_base=""
-    while time.monotonic()<deadline:
+
+def runtime_rollout_timeout() -> int:
+    raw = os.environ.get("MURIKAH_TUTOR_ROLLOUT_TIMEOUT_SECONDS", "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS
+    except ValueError:
+        value = DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS
+    return min(max(value, 120), 600)
+
+
+def wait_for_expected_runtime(
+    expected_revision: str,
+    *,
+    timeout_seconds: int,
+) -> tuple[dict[str, Any], str]:
+    """Wait for the main Tutor instance, not the disposable diagnostic instance.
+
+    The new Worker can become active before Cloudflare replaces the old
+    container image. /__muri/runtime-status is deliberately non-cached and
+    reports the image revision returned by the live container's /health route.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    last_status: dict[str, Any] = {}
+    last_base = VERIFY_BASES[0]
+    last_error = ""
+    last_line = ""
+
+    while time.monotonic() < deadline:
         for base in VERIFY_BASES:
             try:
-                report=fetch_json(base,"/__muri/container-diagnostics",timeout=30)
-                revision=image_revision(report)
-                print(f"[Murikah Tutor] Runtime image check: {revision or 'unknown'} (expected {expected_revision}).")
-                last_report=report; last_base=base
-                if revision==expected_revision: return report,base
-            except (HTTPError,URLError,TimeoutError,OSError,ValueError,RuntimeError) as exc:
-                last_error=f"{type(exc).__name__}: {exc}"
-        time.sleep(4)
-    if last_report is not None: return last_report,last_base
-    raise RuntimeError(f"could not obtain Tutor container diagnostics: {last_error}")
+                status = fetch_json(base, "/__muri/runtime-status", timeout=12)
+                last_status = status
+                last_base = base
+                revision = runtime_revision(status)
+                line = (
+                    "[Murikah Tutor] Live rollout check: "
+                    f"running={bool(status.get('running'))} "
+                    f"ready={bool(status.get('ready'))} "
+                    f"http={status.get('httpStatus', 'unknown')} "
+                    f"image={revision or 'unknown'} "
+                    f"expected={expected_revision}."
+                )
+                if line != last_line:
+                    print(line, flush=True)
+                    last_line = line
 
-def wait_until_ready(base: str, *, timeout_seconds: int=180) -> dict[str,Any]:
-    deadline=time.monotonic()+timeout_seconds
-    last={}
-    while time.monotonic()<deadline:
-        try:
-            last=fetch_json(base,"/__muri/runtime-status",timeout=15)
-            if last.get("ready") is True and last.get("httpStatus")==200: return last
-        except (HTTPError,URLError,TimeoutError,OSError,ValueError,RuntimeError): pass
-        time.sleep(4)
-    return last
+                if status.get("workerSecretConfigured") is False:
+                    raise RuntimeError(
+                        "startup-critical Worker secrets are unavailable at runtime"
+                    )
+
+                if (
+                    status.get("ready") is True
+                    and status.get("httpStatus") == 200
+                    and revision == expected_revision
+                ):
+                    return status, base
+            except RuntimeError:
+                raise
+            except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+        time.sleep(3)
+
+    summary = {
+        "running": last_status.get("running"),
+        "ready": last_status.get("ready"),
+        "httpStatus": last_status.get("httpStatus"),
+        "imageRevision": runtime_revision(last_status) or "unknown",
+        "expectedImageRevision": expected_revision,
+        "error": str(last_status.get("error") or "")[:300],
+    }
+    raise RuntimeError(
+        "Cloudflare accepted the deployment, but the live Tutor instance did not "
+        f"converge to image {expected_revision} within {timeout_seconds}s. "
+        f"Last status={json.dumps(summary, sort_keys=True)}"
+        + (f"; last probe error={last_error}" if last_error else "")
+    )
+
+
+def startup_log(report: dict[str, Any]) -> str:
+    value = report.get("startupLog")
+    return str(value.get("output", "")) if isinstance(value, dict) else ""
+
 
 def safe_failure_detail(log: str) -> str:
-    blocked=("password","secret","token","api_key","client_secret","private_key")
-    lines=[]
+    blocked = ("password", "secret", "token", "api_key", "client_secret", "private_key")
+    lines = []
     for line in log.splitlines():
-        low=line.lower()
+        low = line.lower()
         lines.append("<redacted diagnostic line>" if any(x in low for x in blocked) else line)
     return "\n".join(lines[-24:])
 
-def verify_fresh_runtime(expected_revision: str, *, timeout_seconds: int=120) -> tuple[bool,dict[str,Any],str]:
-    report,base=diagnostic_report(expected_revision,timeout_seconds=timeout_seconds)
-    return image_revision(report)==expected_revision,report,base
 
-def validate_runtime_report(report: dict[str,Any]) -> None:
-    log=startup_log(report)
-    runtime=report.get("runtime") if isinstance(report.get("runtime"),dict) else {}
-    port_probe=str(runtime.get("port3782","")) if isinstance(runtime,dict) else ""
-    if "ModuleNotFoundError: No module named 'deeptutor'" in log:
-        raise RuntimeError("fresh Tutor image still cannot import the bundled deeptutor package")
-    if "Traceback (most recent call last):" in log and port_probe!="http-200":
-        raise RuntimeError(f"fresh Tutor image failed during startup:\n{safe_failure_detail(log)}")
+def one_failure_diagnostic() -> str:
+    """Collect one isolated diagnostic only after rollout verification fails."""
+    last_error = ""
+    for base in VERIFY_BASES:
+        try:
+            report = fetch_json(base, "/__muri/container-diagnostics", timeout=45)
+            image = report.get("image")
+            image_output = (
+                str(image.get("output", "")) if isinstance(image, dict) else ""
+            )
+            revision_match = re.search(
+                r"(?m)^image-revision=([^\r\n]+)$",
+                image_output,
+            )
+            revision = revision_match.group(1).strip() if revision_match else ""
+            runtime = report.get("runtime")
+            port_probe = (
+                str(runtime.get("port3782", ""))
+                if isinstance(runtime, dict)
+                else ""
+            )
+            parts = [
+                f"diagnostic-image={revision or 'unknown'}",
+                f"diagnostic-port3782={port_probe or 'unknown'}",
+            ]
+            log = safe_failure_detail(startup_log(report))
+            if log:
+                parts.append(log)
+            return "\n".join(parts)
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+    return f"diagnostics unavailable: {last_error or 'unknown error'}"
 
-def refreshed_failure_detail(expected_revision: str) -> str:
-    """Capture diagnostics after a readiness failure, not from an earlier image probe."""
-    try:
-        report,_=diagnostic_report(expected_revision,timeout_seconds=75)
-        log=safe_failure_detail(startup_log(report))
-        runtime=report.get("runtime") if isinstance(report.get("runtime"),dict) else {}
-        port_probe=str(runtime.get("port3782","")) if isinstance(runtime,dict) else ""
-        parts=[]
-        if port_probe:
-            parts.append(f"diagnostic port3782={port_probe}")
-        if log:
-            parts.append(log)
-        return "\n".join(parts)
-    except Exception as exc:
-        return f"diagnostics refresh failed: {type(exc).__name__}: {exc}"
-
-
-def recover_fresh_but_unready_runtime(expected_revision: str) -> tuple[dict[str,Any],str]:
-    """Retry one clean application creation after an image/registry readiness race.
-
-    Cloudflare can report a successful Worker deploy while the freshly-pushed
-    container manifest is still propagating. In that state the expected image
-    revision may already be observable through diagnostics even though the
-    long-lived application never opens port 3782. Recreate the application once
-    after propagation has settled instead of failing the whole deployment on
-    that transient first-start race.
-    """
-    before = refreshed_failure_detail(expected_revision)
-    print(
-        "[Murikah Tutor] Expected image is present but port 3782 is still not "
-        "ready; recycling the container application once after registry propagation."
-    )
-    if before:
-        print("[Murikah Tutor] Pre-recycle readiness diagnostics:\n" + before)
-    recycle_tutor_application()
-    time.sleep(20)
-    deploy()
-    fresh, report, base = verify_fresh_runtime(expected_revision, timeout_seconds=180)
-    if not fresh:
-        detail = refreshed_failure_detail(expected_revision)
-        raise RuntimeError(
-            "Tutor readiness recovery recreated the application but the expected "
-            f"image {expected_revision} did not become observable"
-            + (f"\n{detail}" if detail else "")
-        )
-    status = wait_until_ready(base, timeout_seconds=300)
-    validate_runtime_report(report)
-    if status.get("ready") is not True or status.get("httpStatus") != 200:
-        detail = refreshed_failure_detail(expected_revision)
-        raise RuntimeError(
-            "Tutor readiness recovery deployed the expected image but port 3782 "
-            "still did not become healthy"
-            + (f"\n{detail}" if detail else "")
-        )
-    return report, base
 
 def main() -> int:
-    expected_revision=expected_image_revision()
+    expected_revision = expected_image_revision()
     apply_persistence_migrations()
-    application_existed_before=bool(list_tutor_applications())
     deploy()
-    fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=120)
-    observed_revision=image_revision(report)
 
-    if not fresh and not application_existed_before:
-        print("[Murikah Tutor] A fresh container application was created in this deployment. Diagnostics have not confirmed the image revision yet; preserving the new application and extending readiness observation.")
-        status=wait_until_ready(base,timeout_seconds=240)
-        if status.get("ready") is True and status.get("httpStatus")==200:
-            validate_runtime_report(report)
-            print(f"[Murikah Tutor] Deployment verified: freshly-created application for image {expected_revision}, port 3782 healthy.")
-            return 0
-        fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
-        if not fresh:
-            detail=refreshed_failure_detail(expected_revision)
-            raise RuntimeError("freshly-created Tutor application did not become healthy or expose image "+expected_revision+"; application was preserved for inspection"+(f"\n{detail}" if detail else ""))
+    try:
+        _, base = wait_for_expected_runtime(
+            expected_revision,
+            timeout_seconds=runtime_rollout_timeout(),
+        )
+    except RuntimeError as exc:
+        detail = one_failure_diagnostic()
+        raise RuntimeError(f"{exc}\n{detail}") from exc
 
-    elif not fresh:
-        if not observed_revision:
-            status=wait_until_ready(base,timeout_seconds=180)
-            if status.get("ready") is True and status.get("httpStatus")==200:
-                raise RuntimeError("Tutor is healthy but runtime image revision is still unknown; preserving the existing application rather than deleting it.")
-            raise RuntimeError("Tutor runtime image revision is still unknown after deployment; preserving the existing application rather than deleting it.")
-        print(f"[Murikah Tutor] Confirmed stale runtime image {observed_revision}; expected {expected_revision}.")
-        recycle_tutor_application()
-        deploy()
-        fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
-        if not fresh:
-            status=wait_until_ready(base,timeout_seconds=240)
-            if status.get("ready") is True and status.get("httpStatus")==200:
-                validate_runtime_report(report)
-                print(f"[Murikah Tutor] Deployment verified after application recreation: image {expected_revision}, port 3782 healthy.")
-                return 0
-            detail=safe_failure_detail(startup_log(report))
-            raise RuntimeError("Tutor application was recreated but the expected image did not become observable/healthy; the recreated application was preserved"+(f"\n{detail}" if detail else ""))
-
-    validate_runtime_report(report)
-    status=wait_until_ready(base,timeout_seconds=180)
-    if status.get("ready") is not True or status.get("httpStatus")!=200:
-        report,base=recover_fresh_but_unready_runtime(expected_revision)
-
-    print(f"[Murikah Tutor] Deployment verified: image {expected_revision}, port 3782 healthy.")
+    print(
+        "[Murikah Tutor] Deployment verified non-destructively: "
+        f"live image {expected_revision}, port 3782 healthy via {base}.",
+        flush=True,
+    )
     return 0
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except subprocess.CalledProcessError as exc:
-        print(f"Murikah Tutor deployment command failed with exit code {exc.returncode}.",file=sys.stderr)
+        print(
+            f"Murikah Tutor deployment command failed with exit code {exc.returncode}.",
+            file=sys.stderr,
+            flush=True,
+        )
         raise
