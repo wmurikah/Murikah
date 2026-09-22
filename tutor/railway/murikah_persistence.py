@@ -206,6 +206,140 @@ def account_upsert(
     )
 
 
+
+def scenario_version_resolve(
+    *,
+    scenario_pack_id: str = "",
+    scenario_slug: str = "",
+    scenario_version_id: str = "",
+) -> dict[str, Any]:
+    """Resolve one published scenario version through the authenticated persistence bridge."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/scenario-version/resolve",
+        {
+            "scenario_pack_id": _learning_text(scenario_pack_id, 128),
+            "scenario_slug": _learning_text(scenario_slug, 128),
+            "scenario_version_id": _learning_text(scenario_version_id, 128),
+        },
+    )
+
+
+def internship_start(
+    actor_id: str,
+    *,
+    scenario_pack_id: str = "",
+    scenario_slug: str = "",
+    scenario_version_id: str = "",
+    request_id: str = "",
+) -> dict[str, Any]:
+    """Start a qualifying internship for a server-authenticated Tutor actor.
+
+    actor_id must come from Tutor's authenticated server-side user context.
+    Learner/owner IDs are deliberately not accepted as separate inputs.
+    """
+    if not enabled():
+        raise PersistenceError("Virtual Internship persistence is unavailable.")
+    logical_request_id = _learning_text(request_id or uuid.uuid4().hex, 128)
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/start",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "scenario_pack_id": _learning_text(scenario_pack_id, 128),
+            "scenario_slug": _learning_text(scenario_slug, 128),
+            "scenario_version_id": _learning_text(scenario_version_id, 128),
+            "request_id": logical_request_id,
+        },
+    )
+
+
+def internship_status(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Return owner-bound Phase 1 status using server-authenticated actor identity."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship persistence is unavailable.")
+    query = urlencode(
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+        }
+    )
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/internships/status?{query}")
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise PersistenceError("Virtual Internship status response is invalid.")
+    return parsed
+
+
+def internship_stop(
+    actor_id: str,
+    internship_id: str,
+    *,
+    request_id: str = "",
+) -> dict[str, Any]:
+    """Stop/withdraw an owned internship without deleting its durable history."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship persistence is unavailable.")
+    logical_request_id = _learning_text(request_id or uuid.uuid4().hex, 128)
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/stop",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "request_id": logical_request_id,
+        },
+    )
+
+
+def internship_duration_status(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Return the backend-authoritative duration fields from internship status."""
+    result = internship_status(actor_id, internship_id)
+    internship = result.get("internship")
+    if not isinstance(internship, dict):
+        return result
+    return {
+        "internship_id": internship.get("internship_id"),
+        "minimum_duration_days": internship.get("minimum_duration_days"),
+        "started_at": internship.get("started_at"),
+        "target_end_at": internship.get("target_end_at"),
+        "current_server_time": internship.get("current_server_time"),
+        "elapsed_seconds": internship.get("elapsed_seconds"),
+        "elapsed_days": internship.get("elapsed_days"),
+        "duration_requirement_met": internship.get("duration_requirement_met"),
+        "final_completion_available": internship.get("final_completion_available"),
+        "pending_future_completion_gates": internship.get("pending_future_completion_gates"),
+    }
+
+
+def internship_object_key(
+    actor_id: str,
+    internship_id: str,
+    *,
+    object_type: str,
+    object_id: str,
+) -> str:
+    """Return a canonical owner-validated R2 key; callers never supply a final key."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship persistence is unavailable.")
+    result = _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/object-key",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "object_type": _learning_text(object_type, 32),
+            "object_id": _learning_text(object_id, 128),
+        },
+    )
+    key = str(result.get("object_key") or "")
+    if not key:
+        raise PersistenceError("Virtual Internship object key response is invalid.")
+    return key
+
+
 def email_verification_start(
     email: str,
     *,
