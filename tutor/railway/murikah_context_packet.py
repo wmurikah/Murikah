@@ -3,10 +3,13 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import asyncio
+import logging
 import re
 import threading
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 MAX_PACKETS = 512
 DEFAULT_PACKET_CHARS = 16000
@@ -225,6 +228,19 @@ def remember_completed_turn(
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
+def _background_done(task: asyncio.Task[Any]) -> None:
+    _background_tasks.discard(task)
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "MURIKAH_LATENCY route=fast event=context_prepare_failed type=%s",
+            type(exc).__name__,
+        )
+
+
 async def prepare_next_context(
     conversation_id: str,
     messages: list[dict[str, Any]],
@@ -247,9 +263,12 @@ def schedule_next_context(
     answer: str,
     provider: str,
 ) -> None:
-    """Schedule preparation and keep a strong task reference until completion."""
-    task = asyncio.create_task(
-        prepare_next_context(conversation_id, messages, answer, provider)
-    )
+    """Schedule preparation without ever failing an already-completed answer."""
+    try:
+        task = asyncio.create_task(
+            prepare_next_context(conversation_id, messages, answer, provider)
+        )
+    except RuntimeError:
+        return
     _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(_background_done)
