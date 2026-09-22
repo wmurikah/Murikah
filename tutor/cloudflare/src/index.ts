@@ -111,6 +111,16 @@ const EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const EMAIL_RESEND_SECONDS = 60;
 const EMAIL_MAX_ATTEMPTS = 5;
 const EMAIL_MAX_SENDS = 3;
+const STANDARD_MINIMUM_INTERNSHIP_DAYS = 90;
+const INTERNSHIP_DAY_SECONDS = 24 * 60 * 60;
+const INTERNSHIP_OBJECT_TYPES = new Set([
+  'scenario',
+  'documents',
+  'artifacts',
+  'artifact-versions',
+  'exports',
+  'reports',
+]);
 
 let readyCacheUntil = 0;
 let statusInFlight: Promise<RuntimeStatus> | null = null;
@@ -436,12 +446,411 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
+
+type InternshipScenarioVersion = {
+  id: string;
+  scenario_pack_id: string;
+  version: number;
+  schema_version: number;
+  minimum_duration_days: number;
+  pack_slug: string;
+  pack_title: string;
+  career_family: string;
+  role_title: string;
+};
+
+type InternshipStatusRow = {
+  id: string;
+  learner_id: string;
+  status: string;
+  lifecycle_stage: string;
+  qualifying: number;
+  started_at: number;
+  target_end_at: number;
+  minimum_duration_days: number;
+  stopped_at: number | null;
+  completed_at: number | null;
+  scenario_pack_id: string;
+  scenario_version_id: string;
+  pack_slug: string;
+  pack_title: string;
+  career_family: string;
+  role_title: string;
+  scenario_version: number;
+  schema_version: number;
+};
+
+function internshipRequestId(value: unknown): string {
+  const text = learningText(value, 128).trim();
+  return /^[A-Za-z0-9._:-]{3,128}$/.test(text) ? text : '';
+}
+
+function internshipObjectId(value: unknown): string {
+  const text = learningText(value, 128).trim();
+  return /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/.test(text) && text !== '.' && text !== '..'
+    ? text
+    : '';
+}
+
+function newInternshipId(prefix: 'vi' | 'ia'): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
+}
+
+function internshipDurationStatus(
+  row: Pick<InternshipStatusRow, 'started_at' | 'stopped_at' | 'minimum_duration_days'>,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): {
+  elapsed_seconds: number;
+  elapsed_days: number;
+  duration_requirement_met: boolean;
+  final_completion_available: false;
+  pending_future_completion_gates: true;
+} {
+  const effectiveEnd = row.stopped_at === null ? nowSeconds : Math.min(nowSeconds, row.stopped_at);
+  const elapsedSeconds = Math.max(0, effectiveEnd - row.started_at);
+  return {
+    elapsed_seconds: elapsedSeconds,
+    elapsed_days: Math.floor(elapsedSeconds / INTERNSHIP_DAY_SECONDS),
+    duration_requirement_met:
+      elapsedSeconds >= row.minimum_duration_days * INTERNSHIP_DAY_SECONDS,
+    final_completion_available: false,
+    pending_future_completion_gates: true,
+  };
+}
+
+async function internshipActorAccount(
+  env: TutorEnv,
+  actorId: string,
+): Promise<{ role: string; account_status: string; email_verified_at: number } | null> {
+  return env.TUTOR_DB.prepare(
+    'SELECT role, account_status, COALESCE(email_verified_at, 0) AS email_verified_at ' +
+      'FROM tutor_accounts WHERE actor_id = ?',
+  )
+    .bind(actorId)
+    .first<{ role: string; account_status: string; email_verified_at: number }>();
+}
+
+async function resolveScenarioVersion(
+  env: TutorEnv,
+  packSelector: string,
+  explicitVersionId = '',
+): Promise<InternshipScenarioVersion | null> {
+  if (!packSelector) return null;
+  const common =
+    'SELECT sv.id, sv.scenario_pack_id, sv.version, sv.schema_version, sv.minimum_duration_days, ' +
+    'sp.slug AS pack_slug, sp.title AS pack_title, sp.career_family, sp.role_title ' +
+    'FROM scenario_versions sv JOIN scenario_packs sp ON sp.id = sv.scenario_pack_id ' +
+    "WHERE sp.status = 'published' AND sv.status = 'published' AND (sp.id = ? OR sp.slug = ?) ";
+  if (explicitVersionId) {
+    return env.TUTOR_DB.prepare(common + 'AND sv.id = ? LIMIT 1')
+      .bind(packSelector, packSelector, explicitVersionId)
+      .first<InternshipScenarioVersion>();
+  }
+  return env.TUTOR_DB.prepare(common + 'ORDER BY sv.version DESC LIMIT 1')
+    .bind(packSelector, packSelector)
+    .first<InternshipScenarioVersion>();
+}
+
+async function internshipStatusForActor(
+  env: TutorEnv,
+  internshipId: string,
+  actorId: string,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): Promise<Record<string, unknown> | null> {
+  const row = await env.TUTOR_DB.prepare(
+    'SELECT ii.id, ii.learner_id, ii.status, ii.lifecycle_stage, ii.qualifying, ii.started_at, ' +
+      'ii.target_end_at, ii.minimum_duration_days, ii.stopped_at, ii.completed_at, ' +
+      'ii.scenario_pack_id, ii.scenario_version_id, sp.slug AS pack_slug, sp.title AS pack_title, ' +
+      'sp.career_family, sp.role_title, sv.version AS scenario_version, sv.schema_version ' +
+      'FROM internship_instances ii ' +
+      'JOIN scenario_packs sp ON sp.id = ii.scenario_pack_id ' +
+      'JOIN scenario_versions sv ON sv.id = ii.scenario_version_id ' +
+      'WHERE ii.id = ? AND ii.learner_id = ? LIMIT 1',
+  )
+    .bind(internshipId, actorId)
+    .first<InternshipStatusRow>();
+  if (!row) return null;
+  return {
+    internship_id: row.id,
+    status: row.status,
+    lifecycle_stage: row.lifecycle_stage,
+    scenario_pack: {
+      id: row.scenario_pack_id,
+      slug: row.pack_slug,
+      title: row.pack_title,
+      career_family: row.career_family,
+      role_title: row.role_title,
+    },
+    scenario_version: {
+      id: row.scenario_version_id,
+      version: row.scenario_version,
+      schema_version: row.schema_version,
+    },
+    qualifying: row.qualifying === 1,
+    started_at: row.started_at,
+    target_end_at: row.target_end_at,
+    current_server_time: nowSeconds,
+    minimum_duration_days: row.minimum_duration_days,
+    ...internshipDurationStatus(row, nowSeconds),
+    stopped_at: row.stopped_at,
+    completed_at: row.completed_at,
+    can_stop: row.status === 'active',
+  };
+}
+
 async function handlePersistence(request: Request, env: TutorEnv, url: URL): Promise<Response> {
   const denied = await verifyPersistenceRequest(request, env, url);
   if (denied) return denied;
 
   const route = url.pathname.slice(PERSISTENCE_PREFIX.length);
   const now = Math.floor(Date.now() / 1000);
+
+
+  if (route === '/scenario-version/resolve' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const selector =
+      validPersistenceId(body.scenario_pack_id) || learningText(body.scenario_slug, 128).trim();
+    const explicitVersionId = validPersistenceId(body.scenario_version_id);
+    try {
+      const scenario = await resolveScenarioVersion(env, selector, explicitVersionId);
+      if (!scenario) return persistenceJson({ error: 'scenario_version_not_available' }, 404);
+      return persistenceJson({
+        scenario_version: {
+          id: scenario.id,
+          scenario_pack_id: scenario.scenario_pack_id,
+          version: scenario.version,
+          schema_version: scenario.schema_version,
+          minimum_duration_days: scenario.minimum_duration_days,
+        },
+      });
+    } catch (error) {
+      console.error('Virtual Internship scenario resolve failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/start' && request.method === 'POST') {
+    const body = await requestJson(request);
+    if ('learner_id' in body || 'owner_id' in body || 'user_id' in body) {
+      return persistenceJson({ error: 'invalid_actor_override' }, 400);
+    }
+    const actorId = validPersistenceId(body.actor_id);
+    const requestId = internshipRequestId(body.request_id);
+    const selector =
+      validPersistenceId(body.scenario_pack_id) || learningText(body.scenario_slug, 128).trim();
+    const explicitVersionId = validPersistenceId(body.scenario_version_id);
+    if (!actorId) return persistenceJson({ error: 'authentication_required' }, 401);
+    if (!requestId || !selector) return persistenceJson({ error: 'invalid_internship_request' }, 400);
+
+    try {
+      const account = await internshipActorAccount(env, actorId);
+      if (!account) return persistenceJson({ error: 'authentication_required' }, 401);
+      if (
+        account.role !== 'member' ||
+        account.account_status !== 'active' ||
+        Number(account.email_verified_at || 0) <= 0
+      ) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+
+      const replayed = await env.TUTOR_DB.prepare(
+        'SELECT id FROM internship_instances WHERE learner_id = ? AND start_request_id = ? LIMIT 1',
+      )
+        .bind(actorId, requestId)
+        .first<{ id: string }>();
+      if (replayed?.id) {
+        const status = await internshipStatusForActor(env, replayed.id, actorId, now);
+        return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
+      }
+
+      const active = await env.TUTOR_DB.prepare(
+        "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+      )
+        .bind(actorId)
+        .first<{ id: string }>();
+      if (active?.id) {
+        return persistenceJson({ error: 'active_internship_exists' }, 409);
+      }
+
+      const scenario = await resolveScenarioVersion(env, selector, explicitVersionId);
+      if (!scenario) return persistenceJson({ error: 'scenario_version_not_available' }, 404);
+
+      const effectiveMinimumDays = Math.max(
+        STANDARD_MINIMUM_INTERNSHIP_DAYS,
+        Number(scenario.minimum_duration_days || 0),
+      );
+      const targetEndAt = now + effectiveMinimumDays * INTERNSHIP_DAY_SECONDS;
+      const internshipId = newInternshipId('vi');
+      const activityId = newInternshipId('ia');
+
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          'INSERT INTO internship_instances(' +
+            'id, learner_id, scenario_pack_id, scenario_version_id, mode, qualifying, status, lifecycle_stage, ' +
+            'started_at, minimum_duration_days, target_end_at, stopped_at, completed_at, start_request_id, created_at, updated_at' +
+            ") VALUES (?, ?, ?, ?, 'standard', 1, 'active', 'started', ?, ?, ?, NULL, NULL, ?, ?, ?)",
+        ).bind(
+          internshipId,
+          actorId,
+          scenario.scenario_pack_id,
+          scenario.id,
+          now,
+          effectiveMinimumDays,
+          targetEndAt,
+          requestId,
+          now,
+          now,
+        ),
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_memberships(internship_id, actor_id, role, status, created_at, updated_at) VALUES (?, ?, 'learner', 'active', ?, ?)",
+        ).bind(internshipId, actorId, now, now),
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) VALUES (?, ?, ?, 'internship_started', ?, ?, '')",
+        ).bind(activityId, internshipId, actorId, now, requestId),
+      ]);
+
+      const status = await internshipStatusForActor(env, internshipId, actorId, now);
+      return persistenceJson({ ok: true, internship: status }, 201);
+    } catch (error) {
+      try {
+        const replayed = await env.TUTOR_DB.prepare(
+          'SELECT id FROM internship_instances WHERE learner_id = ? AND start_request_id = ? LIMIT 1',
+        )
+          .bind(actorId, requestId)
+          .first<{ id: string }>();
+        if (replayed?.id) {
+          const status = await internshipStatusForActor(env, replayed.id, actorId, now);
+          return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
+        }
+        const active = await env.TUTOR_DB.prepare(
+          "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+        )
+          .bind(actorId)
+          .first<{ id: string }>();
+        if (active?.id) return persistenceJson({ error: 'active_internship_exists' }, 409);
+      } catch {
+        // Return the normalized persistence error below.
+      }
+      console.error('Virtual Internship start failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/status' && request.method === 'GET') {
+    const actorId = validPersistenceId(url.searchParams.get('actor_id'));
+    const internshipId = validPersistenceId(url.searchParams.get('internship_id'));
+    if (!actorId) return persistenceJson({ error: 'authentication_required' }, 401);
+    if (!internshipId) return persistenceJson({ error: 'internship_not_found' }, 404);
+    try {
+      const account = await internshipActorAccount(env, actorId);
+      if (!account || account.role === 'guest' || account.account_status !== 'active') {
+        return persistenceJson({ error: 'authentication_required' }, 401);
+      }
+      const status = await internshipStatusForActor(env, internshipId, actorId, now);
+      if (!status) return persistenceJson({ error: 'internship_not_found' }, 404);
+      return persistenceJson({ ok: true, internship: status });
+    } catch (error) {
+      console.error('Virtual Internship status failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/stop' && request.method === 'POST') {
+    const body = await requestJson(request);
+    if ('learner_id' in body || 'owner_id' in body || 'user_id' in body) {
+      return persistenceJson({ error: 'invalid_actor_override' }, 400);
+    }
+    const actorId = validPersistenceId(body.actor_id);
+    const internshipId = validPersistenceId(body.internship_id);
+    const requestId = internshipRequestId(body.request_id);
+    if (!actorId) return persistenceJson({ error: 'authentication_required' }, 401);
+    if (!internshipId || !requestId) return persistenceJson({ error: 'invalid_internship_request' }, 400);
+
+    try {
+      const account = await internshipActorAccount(env, actorId);
+      if (!account || account.role === 'guest' || account.account_status !== 'active') {
+        return persistenceJson({ error: 'authentication_required' }, 401);
+      }
+      const owned = await env.TUTOR_DB.prepare(
+        'SELECT status FROM internship_instances WHERE id = ? AND learner_id = ? LIMIT 1',
+      )
+        .bind(internshipId, actorId)
+        .first<{ status: string }>();
+      if (!owned) return persistenceJson({ error: 'internship_not_found' }, 404);
+      if (owned.status === 'stopped') {
+        const status = await internshipStatusForActor(env, internshipId, actorId, now);
+        return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
+      }
+      if (owned.status !== 'active') {
+        return persistenceJson({ error: 'internship_not_active' }, 409);
+      }
+
+      const activityId = newInternshipId('ia');
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          "UPDATE internship_instances SET status = 'stopped', lifecycle_stage = 'stopped', stopped_at = ?, updated_at = ? WHERE id = ? AND learner_id = ? AND status = 'active'",
+        ).bind(now, now, internshipId, actorId),
+        env.TUTOR_DB.prepare(
+          "UPDATE internship_memberships SET status = 'stopped', updated_at = ? WHERE internship_id = ? AND actor_id = ? AND role = 'learner'",
+        ).bind(now, internshipId, actorId),
+        env.TUTOR_DB.prepare(
+          "INSERT OR IGNORE INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) VALUES (?, ?, ?, 'internship_stopped', ?, ?, '')",
+        ).bind(activityId, internshipId, actorId, now, requestId),
+      ]);
+      const status = await internshipStatusForActor(env, internshipId, actorId, now);
+      return persistenceJson({ ok: true, internship: status });
+    } catch (error) {
+      try {
+        const status = await internshipStatusForActor(env, internshipId, actorId, now);
+        if (status && status.status === 'stopped') {
+          return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
+        }
+      } catch {
+        // Return the normalized persistence error below.
+      }
+      console.error('Virtual Internship stop failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/object-key' && request.method === 'POST') {
+    const body = await requestJson(request);
+    if ('learner_id' in body || 'owner_id' in body || 'user_id' in body || 'object_key' in body) {
+      return persistenceJson({ error: 'invalid_actor_override' }, 400);
+    }
+    const actorId = validPersistenceId(body.actor_id);
+    const internshipId = validPersistenceId(body.internship_id);
+    const objectType = learningText(body.object_type, 32).trim();
+    const objectId = internshipObjectId(body.object_id);
+    if (!actorId) return persistenceJson({ error: 'authentication_required' }, 401);
+    if (!internshipId || !INTERNSHIP_OBJECT_TYPES.has(objectType) || !objectId) {
+      return persistenceJson({ error: 'invalid_internship_object' }, 400);
+    }
+    try {
+      const account = await internshipActorAccount(env, actorId);
+      if (!account || account.role === 'guest' || account.account_status !== 'active') {
+        return persistenceJson({ error: 'authentication_required' }, 401);
+      }
+      const owned = await env.TUTOR_DB.prepare(
+        'SELECT id FROM internship_instances WHERE id = ? AND learner_id = ? LIMIT 1',
+      )
+        .bind(internshipId, actorId)
+        .first<{ id: string }>();
+      if (!owned) return persistenceJson({ error: 'internship_not_found' }, 404);
+      const objectKey = [
+        'users',
+        actorId,
+        'virtual-internships',
+        internshipId,
+        objectType,
+        objectId,
+      ].join('/');
+      return persistenceJson({ ok: true, object_key: objectKey });
+    } catch (error) {
+      console.error('Virtual Internship object key failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
 
   if (route === '/learning/actor' && request.method === 'POST') {
     const body = await requestJson(request);
