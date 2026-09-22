@@ -180,6 +180,8 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/
 # image builds from failing when a new test reads an overlay source file.
 COPY tutor/railway /opt/murikah/railway
 COPY tutor/cloudflare/entrypoint.sh /opt/murikah/cloudflare/entrypoint.sh
+COPY tutor/cloudflare/src /opt/murikah/cloudflare/src
+COPY tutor/cloudflare/migrations /opt/murikah/cloudflare/migrations
 COPY tutor/tests /opt/murikah/tests
 RUN python -m unittest discover -s /opt/murikah/tests -v
 
