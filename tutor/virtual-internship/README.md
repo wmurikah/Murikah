@@ -1173,14 +1173,14 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 1 — persistence foundation
 
-- [ ] Define internship/scenario D1 schema.
-- [ ] Define R2 artifact paths.
-- [ ] Add migrations.
-- [ ] Add actor-bound persistence adapter methods.
-- [ ] Add ownership/isolation tests.
-- [ ] Add scenario versioning.
-- [ ] Add internship start/stop/status APIs.
-- [ ] Enforce 90-day qualifying-duration rule in backend code.
+- [x] Define internship/scenario D1 schema.
+- [x] Define R2 artifact paths.
+- [x] Add migrations.
+- [x] Add actor-bound persistence adapter methods.
+- [x] Add ownership/isolation tests.
+- [x] Add scenario versioning.
+- [x] Add internship start/stop/status APIs.
+- [x] Enforce 90-day qualifying-duration rule in backend code.
 
 ### Phase 2 — scenario engine
 
@@ -1499,6 +1499,240 @@ The feature reaches its intended baseline when:
 - at least the first three scenario packs pass the common scenario engine tests.
 
 Until then, the sidebar feature may be visible, but the UI must honestly identify incomplete areas.
+
+---
+
+## Phase 1 Implementation Record
+
+Status: **implemented in Phase 1 only**. This record is the canonical implementation reference for persistence, ownership, lifecycle, scenario versioning and duration behavior. Phase 2 remains unimplemented.
+
+### Storage and migration
+
+The Phase 1 migration is:
+
+`tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql`
+
+It creates exactly these Virtual Internship tables:
+
+- `scenario_packs`
+- `scenario_versions`
+- `internship_instances`
+- `internship_memberships`
+- `internship_activity`
+
+D1 remains authoritative for structured internship state. R2 remains reserved for large/private internship objects and uses the existing Tutor `TUTOR_FILES` binding. Phase 1 does not create task, event, artifact, assessment, Passport, report or completion tables.
+
+The migration adds these principal indexes/constraints:
+
+- `UNIQUE (scenario_pack_id, version)` on scenario versions;
+- `UNIQUE (learner_id, start_request_id)` for start idempotency;
+- `idx_scenario_versions_pack_status`;
+- `idx_internship_instances_learner_status`;
+- `idx_internship_instances_scenario_version`;
+- partial unique `idx_internship_one_active_qualifying_per_learner`, enforcing one active qualifying internship per learner at the database layer;
+- `idx_internship_memberships_actor`;
+- `idx_internship_activity_internship_time`;
+- partial unique `idx_internship_activity_request` for retry-safe lifecycle activity;
+- foreign keys from instances to learner account, scenario pack and scenario version;
+- a schema-level `CHECK (completed_at IS NULL)`, so Phase 1 cannot persist a completed transition.
+
+The migration includes one clearly marked minimal published foundation scenario, `foundation-knowledge-work`, version 1. It contains no task graph, event graph, actor engine or fake assignments. Its sole purpose is to make the Phase 1 lifecycle/versioning foundation exercisable end to end.
+
+### Scenario pack and version semantics
+
+`scenario_packs` is the stable conceptual career/internship offering. `scenario_versions` stores immutable published revisions of that offering. Each version has a stable ID, integer version, schema version and minimum-duration policy.
+
+Starting an internship resolves exactly one published scenario version. `internship_instances.scenario_version_id` is written once at creation. No Phase 1 API updates it. Publishing a later version therefore does not mutate historical internships. Existing records continue to resolve their originally pinned scenario version.
+
+Draft or retired scenario versions are not startable through the Phase 1 resolver.
+
+### Internship lifecycle and membership
+
+Phase 1 exposes only these lifecycle states:
+
+- `active`
+- `stopped`
+
+`stopped` means withdrawn/stopped, not completed. Phase 1 exposes no learner-controlled completed transition, creates no completion record and issues no report, letter, credential or Competency Passport evidence.
+
+A learner may start a new qualifying internship after the prior one is stopped. The restriction is one **active** qualifying internship at a time.
+
+`internship_memberships` creates the authorization boundary. Phase 1 supports one membership role, `learner`, tied to the owning Tutor actor. This is the extension point for future supervisor/institution roles without changing the learner ownership rule.
+
+`internship_activity` is append-oriented and currently records `internship_started` and `internship_stopped`; the schema also reserves `completion_duration_checked` for deterministic duration-gate audit without treating status views as business events.
+
+### Authenticated identity and verified-member gate
+
+The persistence bridge remains HMAC-authenticated under `/__muri/persist/*`. Server-side Tutor code supplies the current authenticated actor ID to the persistence adapter. Browser-supplied `learner_id`, `owner_id` or `user_id` fields are explicitly rejected by lifecycle write routes and are never accepted as proof of ownership.
+
+The Worker validates the actor against the existing `tutor_accounts` D1 record. A qualifying start requires:
+
+- `role = 'member'`;
+- `account_status = 'active'`;
+- existing `email_verified_at > 0`.
+
+Guests and unverified accounts cannot start qualifying internships.
+
+### Phase 1 APIs and adapter
+
+Worker routes:
+
+- start: `POST /__muri/persist/internships/start`
+- status: `GET /__muri/persist/internships/status`
+- stop/withdraw: `POST /__muri/persist/internships/stop`
+- scenario resolution: `POST /__muri/persist/scenario-version/resolve`
+- owner-validated future R2 key construction: `POST /__muri/persist/internships/object-key`
+
+The existing persistence client `tutor/railway/murikah_persistence.py` now provides:
+
+- `scenario_version_resolve(...)`
+- `internship_start(...)`
+- `internship_status(...)`
+- `internship_stop(...)`
+- `internship_duration_status(...)`
+- `internship_object_key(...)`
+
+No new persistence service, database, identity store or ownership authority was introduced.
+
+### 90-day qualifying-duration contract
+
+The authoritative constant is:
+
+`STANDARD_MINIMUM_INTERNSHIP_DAYS`
+
+in:
+
+`tutor/cloudflare/src/index.ts`
+
+For a qualifying internship:
+
+`effective_minimum_days = max(STANDARD_MINIMUM_INTERNSHIP_DAYS, scenario_version.minimum_duration_days)`
+
+At start, using the Worker UTC epoch clock:
+
+`started_at = server now`
+
+`target_end_at = started_at + effective_minimum_days * 86,400 seconds`
+
+The effective minimum is snapshotted into `internship_instances.minimum_duration_days`.
+
+Therefore:
+
+- scenario minimum 30 days -> qualifying minimum remains 90 days;
+- scenario minimum 90 days -> qualifying minimum is 90 days;
+- scenario minimum 120 days -> qualifying minimum is 120 days.
+
+The duration helper accepts an injected `nowSeconds` for deterministic tests; production defaults to the Worker UTC clock. It uses elapsed epoch seconds, not Africa/Nairobi midnight or browser time.
+
+For stopped internships, duration stops accruing at `stopped_at`.
+
+`duration_requirement_met` is deliberately distinct from final completion. Phase 1 always returns:
+
+- `final_completion_available: false`
+- `pending_future_completion_gates: true`
+
+even after the minimum duration is met.
+
+### Idempotency and concurrency
+
+Start requires a logical `request_id`. `UNIQUE (learner_id, start_request_id)` makes retry of the same logical start return the already-created internship rather than creating another one.
+
+The one-active rule is enforced both by an indexed pre-check and by the partial unique D1 index `idx_internship_one_active_qualifying_per_learner`, so concurrent starts cannot create two active qualifying internships.
+
+Stop is deterministic and retry-safe: stopping an already stopped owned internship returns the existing stopped status. Lifecycle activity uses a request-scoped unique index so replay does not create duplicate business events.
+
+The existing `persistence_replay` table remains the transport-level HMAC nonce replay defense. Phase 1 does not create a competing generic replay database.
+
+### Ownership and isolation
+
+Every learner-specific read or update is ownership-bound in SQL using both internship ID and learner ID. A foreign internship ID returns the same private `internship_not_found` shape and does not reveal foreign metadata.
+
+The canonical future R2 key contract is:
+
+`users/<learner-id>/virtual-internships/<internship-id>/<object-type>/<object-id>`
+
+Allowed Phase 1 reserved object areas are:
+
+- `scenario`
+- `documents`
+- `artifacts`
+- `artifact-versions`
+- `exports`
+- `reports`
+
+The key helper validates authenticated actor ownership in D1, validates object type and object ID, and never accepts a browser-supplied final R2 key. Traversal/absolute/foreign-prefix construction is therefore not a client capability.
+
+When future phases actually write an internship object to R2, the existing global `tutor_objects` D1 registry remains the authoritative ownership metadata. Phase 1 intentionally does not create a second internship-specific R2 ownership table and does not create empty/fake R2 objects.
+
+### Tests and preflight
+
+Phase 1 regression files:
+
+- `tutor/tests/test_virtual_internship_phase1.py`
+- `tutor/tests/test_virtual_internship_ownership.py`
+- `tutor/tests/test_virtual_internship_duration.py`
+
+They protect migration shape, route presence, actor-bound adapter behavior, owner-bound SQL, verified-member gating, one-active enforcement, idempotency markers, scenario-version pinning, canonical R2 paths and UTC duration boundaries including month/year/leap-date cases.
+
+Cloudflare preflight protects stable semantic identifiers rather than prose wrapping: the migration filename, table/index names, `STANDARD_MINIMUM_INTERNSHIP_DAYS`, lifecycle route names, persistence adapter methods, test filenames and this implementation-record heading.
+
+### Current Phase 1 limitations
+
+Phase 1 deliberately does **not** implement scenario task/event schemas, company-world execution, workplace actors, Mentor workflow, supervisor/colleague/client AI, workplace-politics engine, assignments, inbox/task UI, artifact submission workflow, rubrics, assessor AI, Competency Evidence Records, Competency Passport scoring, midpoint/final review, report generation, completion letters or a completed-internship credential.
+
+Those remain Phase 2+ work.
+
+---
+
+## Tutor AI Runtime / Fast-Path Compatibility
+
+Virtual Internship Phase 1 does not modify ordinary Tutor Fast Path V2. Future internship AI must preserve the solved ordinary-chat latency architecture where applicable.
+
+The current Tutor approach uses:
+
+- bounded compact context packets;
+- recent verbatim turns plus structured older-memory summary;
+- prepared next-turn context;
+- provider affinity;
+- rapid provider hedging;
+- explicit current-turn fast/deep lane selection;
+- bounded first-token, stream-idle and shared turn deadlines;
+- one automatic continuation;
+- partial-answer preservation;
+- model/provider abstraction;
+- `MURIKAH_LATENCY` instrumentation.
+
+### SUBSEQUENT VIRTUAL INTERNSHIP AI DEVELOPMENT REQUIREMENT
+
+Before implementing workplace actors, Mentor conversations, simulated supervisors, inbox conversations, scenario-director AI or other persistent internship conversations, read:
+
+- `tutor/docs/FOLLOWUP_FAST_PATH_V2_AUDIT.md`
+- `tutor/railway/accelerate_chat.py`
+- `tutor/railway/murikah_context_packet.py`
+- `tutor/railway/murikah_fast_lane.py`
+
+Future workplace actors, Mentor chat, supervisor conversations, inbox conversations and scenario-director calls must **not**:
+
+- replay unlimited internship conversation history to models;
+- create an independent unbounded transcript/chat-history architecture;
+- bypass Murikah's provider/model abstraction;
+- inherit stale prior-turn metadata that unexpectedly enters heavy agent mode;
+- introduce multiple long hidden continuation loops;
+- make model output the source of canonical scenario state.
+
+Their context should be assembled from:
+
+`canonical D1/R2 scenario/work state + actor-scoped retrieved state + bounded conversation context + appropriate model role`
+
+AI conversation state must never become authoritative for internship ownership, duration, scenario truth, scenario version, lifecycle state, authorization or completion eligibility.
+
+---
+
+## SUBSEQUENT DEVELOPMENT REQUIREMENT
+
+Before implementing Phase 2 or modifying Virtual Internship persistence, scenario state, artifacts, assessment, Competency Passport, reports, internship APIs or AI interactions, read the **Phase 1 Implementation Record** above.
+
+Reuse its ownership, scenario-versioning, duration, idempotency, R2-key and authenticated-actor contracts. Do not create a competing persistence, ownership or identity model.
 
 ---
 
