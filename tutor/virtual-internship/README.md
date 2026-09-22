@@ -1728,6 +1728,23 @@ AI conversation state must never become authoritative for internship ownership, 
 
 ---
 
+## Learner naming and visible-language contract
+
+Learner naming is Tutor-wide account personalization, not Virtual Internship scenario state. Future Virtual Internship workplace actors, Mentor conversations and other personalized surfaces must reuse the same resolved Murikah account name instead of creating a second preferred-name field.
+
+The contract is:
+
+- `tutor_accounts.preferred_name` is the durable explicit preference;
+- future internship features use the same account resolver and fallback behavior;
+- changing a preferred name does not mutate any legal name, full name, identity record or scenario actor identity;
+- Virtual Internship user-visible copy must not contain the Unicode em dash U+2014;
+- workplace actors, Mentor responses, assessor feedback and future generated reports must use Murikah's shared visible-text policy and assistant-output sanitizer;
+- learner-authored source text remains learner-authored and is not rewritten merely to satisfy Murikah's generated/displayed-text style.
+
+This naming and visible-language contract is cross-cutting infrastructure. Phase 2 must consume it rather than inventing another naming or punctuation system.
+
+---
+
 ## SUBSEQUENT DEVELOPMENT REQUIREMENT
 
 Before implementing Phase 2 or modifying Virtual Internship persistence, scenario state, artifacts, assessment, Competency Passport, reports, internship APIs or AI interactions, read the **Phase 1 Implementation Record** above.
