@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  COMPOSER_PLACEHOLDERS,
+  GREETING_CATEGORIES,
+  GREETING_TEMPLATE_COUNT,
+  composerPlaceholderForIndex,
+  greetingForContext,
+  greetingTemplatesForContext,
+  sanitizeTutorVisibleText,
+} from "@/lib/murikah-personalization";
+
+describe("Murikah personalization", () => {
+  it("provides 28 greetings across all required categories", () => {
+    expect(GREETING_TEMPLATE_COUNT).toBe(28);
+    expect([...GREETING_CATEGORIES]).toEqual([
+      "time",
+      "conversational",
+      "returning",
+      "curiosity",
+      "task",
+      "minimal",
+    ]);
+  });
+
+  it.each([
+    [8, "morning"],
+    [14, "afternoon"],
+    [19, "evening"],
+    [2, "late"],
+  ])("keeps the correct local-time bucket at hour %i", (hour, expected) => {
+    const pool = greetingTemplatesForContext({
+      name: "Wilberforce",
+      localHour: hour,
+      returningUser: true,
+    });
+    expect(
+      pool.some(
+        (template) =>
+          template.category === "time" && template.timeBucket === expected,
+      ),
+    ).toBe(true);
+  });
+
+  it("supports non-time, named and generic deterministic greetings", () => {
+    const context = { name: "Will", localHour: 14, returningUser: true };
+    const first = greetingForContext(context, 9);
+    expect(greetingForContext(context, 9)).toBe(first);
+    expect(first).toContain("Will");
+    const generic = greetingForContext(
+      { localHour: 14, returningUser: false },
+      9,
+    );
+    expect(generic).not.toContain("{name}");
+    expect(
+      greetingTemplatesForContext(context).some(
+        (template) => template.category === "conversational",
+      ),
+    ).toBe(true);
+  });
+
+  it("has concise deterministic composer placeholders", () => {
+    expect(COMPOSER_PLACEHOLDERS).toHaveLength(7);
+    expect(composerPlaceholderForIndex(3)).toBe(COMPOSER_PLACEHOLDERS[3]);
+  });
+
+  it("contains no em dash in greetings or composer copy", () => {
+    const dash = String.fromCodePoint(0x2014);
+    for (let index = 0; index < 100; index += 1) {
+      expect(
+        greetingForContext(
+          { name: "Wilberforce", localHour: index % 24, returningUser: true },
+          index,
+        ),
+      ).not.toContain(dash);
+    }
+    expect(COMPOSER_PLACEHOLDERS.join(" ")).not.toContain(dash);
+  });
+
+  it("sanitizes streamed visible text without touching hyphens or en dashes", () => {
+    const dash = String.fromCodePoint(0x2014);
+    const input =
+      "A " +
+      dash +
+      " B &mdash; C &#8212; D &#x2014; E, well-being, 2025–2026";
+    const output = sanitizeTutorVisibleText(input);
+    expect(output).not.toContain(dash);
+    expect(output.toLowerCase()).not.toContain("&mdash;");
+    expect(output.toLowerCase()).not.toContain("&#8212;");
+    expect(output.toLowerCase()).not.toContain("&#x2014;");
+    expect(output).toContain("well-being");
+    expect(output).toContain("2025–2026");
+  });
+});
