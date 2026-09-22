@@ -97,6 +97,11 @@ def main() -> int:
         return 1
 
     print(" - Worker runtime can see required admin/auth secrets and D1/R2 persistence bindings")
+    expected_image_revision = str(config.get("expectedImageRevision") or "").strip()
+    if not expected_image_revision:
+        print("Murikah Tutor staging smoke test: FAILED - expected image revision is missing from Worker config")
+        return 1
+    print(f" - expected Tutor image revision: {expected_image_revision}")
     if config.get("verificationEmailConfigured") is True:
         print(" - verification email is configured")
     else:
@@ -121,8 +126,26 @@ def main() -> int:
     print(" - D1 persistence, learning journal, ownership and email-verification schemas v1 are ready")
     started = time.monotonic()
     last: dict = {}
+    revision_verified = False
 
     while time.monotonic() - started < DEADLINE_SECONDS:
+        try:
+            revision_code, revision_body = get("/__muri/runtime-revision")
+            revision = parse_json(revision_body)
+            actual_image_revision = str(revision.get("imageRevision") or "").strip()
+            if revision_code == 200 and actual_image_revision == expected_image_revision:
+                if not revision_verified:
+                    print(f" - main runtime is on expected image {actual_image_revision}")
+                revision_verified = True
+            elif actual_image_revision:
+                print(
+                    "Murikah Tutor staging smoke test: FAILED - "
+                    f"main runtime image is {actual_image_revision}, expected {expected_image_revision}"
+                )
+                return 1
+        except Exception as exc:
+            print(f" - runtime revision probe retry: {type(exc).__name__}: {exc}")
+
         try:
             status_code, body = get("/__muri/runtime-status")
             parsed = parse_json(body)
@@ -139,7 +162,7 @@ def main() -> int:
                 if parsed.get("workerSecretConfigured") is False:
                     print("Murikah Tutor staging smoke test: FAILED - Worker secret disappeared during startup")
                     return 1
-                if parsed.get("ready") is True:
+                if parsed.get("ready") is True and revision_verified:
                     health_code, health_body = get("/health")
                     if health_code == 200:
                         ownership_ready, ownership = wait_for_ownership_reconciliation()
