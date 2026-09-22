@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS scenario_versions (
   created_at INTEGER NOT NULL,
   published_at INTEGER,
   FOREIGN KEY (scenario_pack_id) REFERENCES scenario_packs(id) ON DELETE RESTRICT,
-  UNIQUE (scenario_pack_id, version)
+  UNIQUE (scenario_pack_id, version),
+  UNIQUE (scenario_pack_id, id)
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_scenario_versions_pack_status_version
@@ -60,6 +61,8 @@ CREATE TABLE IF NOT EXISTS internship_instances (
   FOREIGN KEY (learner_id) REFERENCES tutor_accounts(actor_id) ON DELETE RESTRICT,
   FOREIGN KEY (scenario_pack_id) REFERENCES scenario_packs(id) ON DELETE RESTRICT,
   FOREIGN KEY (scenario_version_id) REFERENCES scenario_versions(id) ON DELETE RESTRICT,
+  FOREIGN KEY (scenario_pack_id, scenario_version_id)
+    REFERENCES scenario_versions(scenario_pack_id, id) ON DELETE RESTRICT,
   CHECK (mode <> 'demo' OR qualifying = 0),
   CHECK (qualifying = 0 OR minimum_duration_days >= 90),
   CHECK (target_end_at >= started_at + (minimum_duration_days * 86400)),
@@ -96,6 +99,10 @@ CREATE TABLE IF NOT EXISTS internship_memberships (
 
 CREATE INDEX IF NOT EXISTS idx_internship_memberships_actor
   ON internship_memberships(actor_id, status, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_memberships_one_active_learner
+  ON internship_memberships(internship_id)
+  WHERE role = 'learner' AND status = 'active';
 
 CREATE TABLE IF NOT EXISTS internship_activity (
   id TEXT PRIMARY KEY,
