@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-MARKER = "MURIKAH_DUAL_LANE_CHAT_V6"
+MARKER = "MURIKAH_FOLLOWUP_FAST_PATH_V2"
 
 OLD_IMPORTS = '''from deeptutor.agents.chat.agentic_pipeline import CHAT_OPTIONAL_TOOLS, AgenticChatPipeline
 from deeptutor.core.capability_protocol import CapabilityManifest, TurnCapability
@@ -17,6 +17,7 @@ from deeptutor.runtime.stream_bus import StreamBus
 NEW_IMPORTS = '''import asyncio
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -28,6 +29,7 @@ from deeptutor.core.trace import build_trace_metadata, merge_trace_metadata, new
 from deeptutor.multi_user.model_access import allowed_llm_options
 from deeptutor.murikah_fast_lane import (
     HedgeCandidate,
+    build_fast_context_window,
     close_stream,
     configured_gemini_model,
     configured_nvidia_fast_model,
@@ -54,7 +56,7 @@ from deeptutor.services.model_selection.runtime import resolve_llm_config_for_se
 
 logger = logging.getLogger(__name__)
 
-# MURIKAH_DUAL_LANE_CHAT_V6
+# MURIKAH_FOLLOWUP_FAST_PATH_V2
 def _positive_seconds(name: str, default: float) -> float:
     try:
         value = float(os.environ.get(name, "") or default)
@@ -71,24 +73,62 @@ def _positive_int(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
-_FIRST_TOKEN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 8.0
+_FIRST_TOKEN_TIMEOUT_SECONDS = min(
+    8.0, _positive_seconds("MURIKAH_CHAT_FIRST_TOKEN_TIMEOUT_SECONDS", 8.0)
 )
-_OVERALL_FIRST_TOKEN_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 12.0
+_OVERALL_FIRST_TOKEN_SECONDS = min(
+    10.0, _positive_seconds("MURIKAH_CHAT_OVERALL_FIRST_TOKEN_SECONDS", 10.0)
 )
-_STREAM_IDLE_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 45.0
+_STREAM_IDLE_TIMEOUT_SECONDS = min(
+    15.0, _positive_seconds("MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS", 14.0)
 )
-_FAST_TURN_TIMEOUT_SECONDS = _positive_seconds(
-    "MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 300.0
+_FAST_TURN_TIMEOUT_SECONDS = min(
+    45.0, _positive_seconds("MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS", 45.0)
 )
-_FAST_OUTPUT_TOKENS = _positive_int(
-    "MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 4096
+_LONG_FAST_TURN_TIMEOUT_SECONDS = min(
+    60.0, _positive_seconds("MURIKAH_CHAT_LONG_TURN_TIMEOUT_SECONDS", 60.0)
+)
+_FAST_OUTPUT_TOKENS = min(
+    1800, _positive_int("MURIKAH_CHAT_FAST_OUTPUT_TOKENS", 1600)
+)
+_LONG_OUTPUT_TOKENS = min(
+    3000, _positive_int("MURIKAH_CHAT_LONG_OUTPUT_TOKENS", 3000)
+)
+_FAST_CONTEXT_CHARS = min(
+    24000, _positive_int("MURIKAH_CHAT_CONTEXT_CHARS", 16000)
 )
 _MAX_CONTINUATIONS = min(
-    4, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 3)
+    1, _positive_int("MURIKAH_CHAT_MAX_CONTINUATIONS", 1)
 )
+_PROVIDER_HEDGE_DELAYS = (0.0, 0.4, 0.8)
+_CATALOG_HEDGE_DELAY = 1.2
+
+
+def _long_answer_requested(context: UnifiedContext) -> bool:
+    prompt = str(context.user_message or "").strip().lower()
+    if not prompt:
+        return False
+    if re.search(r"\b\d{4,}\s*(?:words?|tokens?)\b", prompt):
+        return True
+    return any(
+        marker in prompt
+        for marker in (
+            "detailed answer",
+            "detailed explanation",
+            "comprehensive answer",
+            "comprehensive explanation",
+            "in-depth",
+            "in depth",
+            "long-form",
+            "long form",
+            "write an essay",
+            "write a report",
+        )
+    )
+
+
+def _output_token_budget(context: UnifiedContext) -> int:
+    return _LONG_OUTPUT_TOKENS if _long_answer_requested(context) else _FAST_OUTPUT_TOKENS
 '''
 
 OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus) -> None:
