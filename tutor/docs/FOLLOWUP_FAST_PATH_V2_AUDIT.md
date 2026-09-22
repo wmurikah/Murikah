@@ -20,7 +20,8 @@ This applies to ordinary Tutor chat and ordinary follow-up turns. Deep Solve, re
 - [x] **Pre-build the next follow-up context**
   - On completion, the next context packet is prepared asynchronously outside the learner-facing generation critical path.
   - A strong task reference is retained until background preparation completes.
-  - The next turn consumes the cached packet when available and safely rebuilds after a process restart/cache miss.
+  - Background preparation is fail-open and cannot turn an already-completed answer into an error.
+  - The next turn consumes the cached packet when available, merges the authoritative newest assistant/user tail, and safely rebuilds after a process restart/cache miss.
   - Evidence: `schedule_next_context()`, `context_packet_for_turn()`.
 
 - [x] **Explicit fast/deep per-turn routing**
@@ -78,7 +79,8 @@ This applies to ordinary Tutor chat and ordinary follow-up turns. Deep Solve, re
 
 - [x] **Deployment regression protection**
   - Cloudflare preflight requires Fast Path V2 markers and the context packet module.
-  - Production container bundles the helper.
+  - The helper is copied into both the branded source tree and the final `/app/deeptutor` runtime image so the patched chat capability cannot import a missing module.
+  - Production container bundles the helper before Python regression tests run.
   - Image revision bumped to `2026-09-22-v33`.
 
 ## Acceptance criteria
