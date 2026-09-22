@@ -50,6 +50,11 @@ COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personali
 COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py
+COPY tutor/railway/murikah_personalization.py /opt/murikah/murikah_personalization.py
+COPY tutor/railway/murikah_visible_text.py /opt/murikah/murikah_visible_text.py
+COPY tutor/railway/apply_tutor_personalization.py /opt/murikah/apply_tutor_personalization.py
+COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personalization.ts.txt
+COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx.txt
 COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt
 COPY tutor/railway/murikah_diagram.py /opt/murikah/murikah_diagram.py
 COPY tutor/railway/murikah_er.py /opt/murikah/murikah_er.py
@@ -98,6 +103,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/harden_admin_controls.py /src/DeepTutor \
     && python /opt/murikah/harden_math_animator.py /src/DeepTutor \
     && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
+    && python /opt/murikah/apply_tutor_personalization.py /src/DeepTutor /opt/murikah \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
     && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
@@ -165,6 +171,8 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_email_verification.py /app/deeptutor/murikah_email_verification.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_personalization.py /app/deeptutor/murikah_personalization.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_visible_text.py /app/deeptutor/murikah_visible_text.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/disposable_email_domains.txt /app/deeptutor/disposable_email_domains.txt
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_diagram.py /app/deeptutor/murikah_diagram.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_er.py /app/deeptutor/murikah_er.py
