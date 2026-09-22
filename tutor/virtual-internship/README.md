@@ -1167,7 +1167,7 @@ This record is the canonical implementation contract for the persistence/securit
 
 Migration: `tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql`.
 
-It creates exactly the Phase 1 structured-state tables:
+It creates exactly the Phase 1 structured-state tables. `internship_instances` also has a composite foreign key to `scenario_versions(scenario_pack_id, id)`, preventing a record from pairing one pack with another pack's version.
 
 - `scenario_packs`: stable career/role offering identity, slug, title, career family, role title and publication status.
 - `scenario_versions`: immutable-by-application version records linked to one scenario pack, with version number, schema version, publication status, canonical manifest JSON/reference metadata, minimum duration, workload band and content hash.
@@ -1180,7 +1180,7 @@ Indexes/constraints:
 - `idx_scenario_versions_pack_status_version` supports current published-version resolution.
 - `idx_internship_instances_one_active_qualifying` is a partial unique index on learner ID for `status='active' AND qualifying=1`; it is the database concurrency backstop for the first-release one-active-internship rule.
 - `idx_internship_instances_learner_status` and `idx_internship_instances_scenario_version` support owner/status and historical-version lookups.
-- `idx_internship_memberships_actor` supports actor membership lookup.
+- `idx_internship_memberships_actor` supports actor membership lookup, while `idx_internship_memberships_one_active_learner` guarantees at most one active learner membership per internship.
 - `idx_internship_activity_internship_time` supports ordered lifecycle audit.
 - `idx_internship_activity_single_start` and `idx_internship_activity_single_stop` prevent concurrent duplicate lifecycle events.
 - `UNIQUE(actor_id, event_type, request_id)` makes logical start/stop request replay retry-safe independently of the existing HMAC transport replay nonce.
