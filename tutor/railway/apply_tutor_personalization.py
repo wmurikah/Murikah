@@ -202,6 +202,7 @@ import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
   composerPlaceholderForIndex,
   greetingForContext,
+  sanitizeTutorVisibleText,
 } from "@/lib/murikah-personalization";
 import { MurikahNamePrompt } from "@/components/auth/MurikahPreferredName";
 ''',
@@ -606,6 +607,22 @@ import {
                     }
 ''',
         "guest varied composer placeholder",
+    )
+    replace_once(
+        path,
+        '''        const visibleAnswer = answer;
+''',
+        '''        const visibleAnswer = sanitizeTutorVisibleText(answer);
+''',
+        "guest accumulated stream sanitizer",
+    )
+    replace_once(
+        path,
+        '''        const visibleAnswer = answer;
+''',
+        '''        const visibleAnswer = sanitizeTutorVisibleText(answer);
+''',
+        "guest accumulated tail sanitizer",
     )
 
 
