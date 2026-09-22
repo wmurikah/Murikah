@@ -91,6 +91,13 @@ def main() -> int:
 """,
         """                    "history_budget": history_result.budget,
                     "turn_id": turn_id,
+                    "murikah_pre_model_ms": max(
+                        0,
+                        int(
+                            (asyncio.get_running_loop().time() - murikah_journal_started_at)
+                            * 1000
+                        ),
+                    ),
                     # Follow-up Fast Path V2: only current-request routing flags
                     # may promote this turn into the deep agent lane. Persisted
                     # conversation metadata is intentionally excluded.
