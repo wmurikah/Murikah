@@ -1,0 +1,15 @@
+{
+  "organization_id": "org_cobalt_software",
+  "name": "Cobalt Harbor Software",
+  "fictional": true,
+  "sector": "Software services",
+  "country_region": "Fictional distributed team",
+  "description": "A fictional software company used only for deterministic scenario-engine demonstrations.",
+  "products_services": ["workflow SaaS"],
+  "departments": [{"id":"dept_engineering","name":"Engineering"},{"id":"dept_product","name":"Product"},{"id":"dept_quality","name":"Quality Assurance"}],
+  "systems": ["IssueTrack Demo","BuildLab"],
+  "process_references": ["bug triage","test review"],
+  "vocabulary": ["reproduction","regression","acceptance criterion"],
+  "communication_norms": ["Separate observed behavior from proposed fixes."],
+  "work_calendar": {"timezone_label":"distributed-team-context","work_days":["monday","tuesday","wednesday","thursday","friday"],"notes":"Server UTC controls canonical triggers."}
+}
