@@ -72,6 +72,9 @@ class TutorVisibleTextTests(unittest.TestCase):
         self.assertIn("return sanitize_murikah_visible_text(", overlay)
         self.assertIn("yield sanitize_murikah_visible_text(first_chunk)", overlay)
         self.assertIn("yield sanitize_murikah_visible_text(text)", overlay)
+        self.assertIn("def patch_chat_display_sanitizer(", overlay)
+        self.assertIn("stream accumulated display sanitizer", overlay)
+        self.assertIn("sanitizeTutorVisibleText(normalizeMarkdownForDisplay(raw))", overlay)
 
     def test_overlay_does_not_rewrite_user_input(self):
         overlay = source("railway/apply_tutor_personalization.py")
@@ -79,6 +82,8 @@ class TutorVisibleTextTests(unittest.TestCase):
             return
         self.assertNotIn("raw_user_content = sanitize_murikah_visible_text", overlay)
         self.assertNotIn("user_message = sanitize_murikah_visible_text", overlay)
+        self.assertIn('message.role === "assistant"', overlay)
+        self.assertIn(": raw,", overlay)
 
     def test_runtime_ui_validator_reports_exact_file_and_line(self):
         overlay_path = ROOT / "railway" / "apply_tutor_personalization.py"
