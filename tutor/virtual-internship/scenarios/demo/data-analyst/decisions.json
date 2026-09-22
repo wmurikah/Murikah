@@ -1,0 +1,16 @@
+[
+  {
+    "decision_id": "decision_scope_response",
+    "label": "How will you handle the changed requirement?",
+    "options": [
+      {
+        "option_id": "clarify",
+        "label": "Clarify the metric grain."
+      },
+      {
+        "option_id": "accept",
+        "label": "Accept the bounded scope change."
+      }
+    ]
+  }
+]
