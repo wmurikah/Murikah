@@ -163,6 +163,12 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     decision_ids=_unique(pack["decisions"],"decision_id","decisions.json")
     if not set(manifest["initial_task_ids"])<=task_ids:_err("manifest.initial_task_ids","references unknown task")
     if not set(manifest["initial_event_ids"])<=event_ids:_err("manifest.initial_event_ids","references unknown event")
+    authored_classes={actor["actor_class"] for actor in pack["actors"]}
+    if not authored_classes<=set(manifest["available_actor_classes"]):_err("manifest.available_actor_classes","missing authored actor class")
+    for fact in pack["facts"]:
+        if fact["visibility"] in {"department","role"} and not fact["visibility_scopes"]:_err(f"facts.{fact['id']}.visibility_scopes","scoped visibility requires at least one scope")
+        if fact["visibility"] in {"public","learner_visible","hidden_truth"} and fact["visibility_scopes"]:_err(f"facts.{fact['id']}.visibility_scopes","visibility does not accept scopes")
+        if fact["future_only"] and fact["initially_revealed"]:_err(f"facts.{fact['id']}","future-only fact cannot be initially revealed")
     for actor in pack["actors"]:
         if actor["reports_to_actor_id"] and actor["reports_to_actor_id"] not in actor_ids:_err(f"actors.{actor['actor_id']}.reports_to_actor_id","unknown actor")
         if not set(actor["knowledge_fact_ids"])<=fact_ids:_err(f"actors.{actor['actor_id']}.knowledge_fact_ids","unknown fact")
