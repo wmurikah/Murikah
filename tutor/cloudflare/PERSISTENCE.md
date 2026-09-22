@@ -38,6 +38,26 @@ The existing `MURIKAH_TUTOR_AUTH_SECRET` authenticates this internal bridge with
 
 The same migration adds non-secret `email` and `email_verified_at` account metadata. Existing accounts are grandfathered and continue to sign in normally; the gate applies to new accounts moving forward. The Resend API key remains a Cloudflare Worker Secret and is not forwarded into the Linux container or stored in D1/R2.
 
+## Durable member naming personalization
+
+`0007_tutor_preferred_name.sql` extends the existing authoritative `tutor_accounts` record with two non-secret account-personalization fields:
+
+- `preferred_name`: the learner's explicit plain-text answer to what Murikah should call them. It is nullable and limited to 64 characters.
+- `preferred_name_decided_at`: the server timestamp of the learner's explicit save or clear action. It distinguishes "never answered" from "cleared later".
+
+D1 remains authoritative. The value is not stored only in React state, browser storage or container-local SQLite, so it survives sign-out/sign-in, browser restart, Tutor deployment and container replacement. Account reconciliation/upsert intentionally does not overwrite either personalization field.
+
+The public member API is `GET /api/murikah/access/preferences` and `PUT /api/murikah/access/preferences`. Those routes derive the member identity from the authenticated Tutor session and never accept a client-supplied actor/user/username as authorization. They call the existing HMAC-authenticated persistence bridge, which uses `GET /__muri/persist/account/personalization` and `POST /__muri/persist/account/preferred-name` internally.
+
+The browser receives only the naming fields it needs: `preferred_name`, `derived_name` and `needs_name_prompt`. It does not need the account email. The server-side fallback resolver uses this order:
+
+1. explicit `preferred_name`;
+2. first sensible human token from the email local part before `@`;
+3. first sensible human token from the username;
+4. no name.
+
+Derived fallback values are never silently written into `preferred_name`. Email/username tokens containing digits, machine-like/reserved labels such as `noreply`, `admin`, `user` or `test`, or otherwise unsuitable tokens are rejected so Tutor falls back to a generic greeting. Clearing the explicit name stores `NULL` while retaining `preferred_name_decided_at`, which restores derived-name behavior without treating the learner as never having answered.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:

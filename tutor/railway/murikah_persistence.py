@@ -207,6 +207,38 @@ def account_upsert(
 
 
 
+def account_personalization(actor_id: str) -> dict[str, Any]:
+    """Read non-secret D1 account personalization for one server-authenticated actor."""
+    if not enabled():
+        raise PersistenceError("Account personalization is unavailable.")
+    query = urlencode({"actor_id": _learning_text(actor_id, 128)})
+    status, raw, _ = _request("GET", f"{PERSIST_PREFIX}/account/personalization?{query}")
+    if status != 200:
+        raise PersistenceError(f"account_personalization_failed:{status}")
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise PersistenceError("Account personalization response is invalid.")
+    return parsed
+
+
+def account_preferred_name_update(
+    actor_id: str,
+    *,
+    preferred_name: str,
+) -> dict[str, Any]:
+    """Persist the current actor's explicit preferred name or explicit clear."""
+    if not enabled():
+        raise PersistenceError("Account personalization is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/account/preferred-name",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "preferred_name": _learning_text(preferred_name, 64),
+        },
+    )
+
+
 def scenario_version_resolve(
     *,
     scenario_pack_id: str = "",
