@@ -75,11 +75,31 @@ function definitionShape(definition:Record<string,unknown>):{ok:true;manifest:Re
     if(values.some(v=>!v)||new Set(values).size!==values.length)return {ok:false,error:'scenario_definition_invalid'};
     sets[name]=new Set(values);
   }
+  const taskDeps=new Map<string,string[]>();
   for(const task of arrayOfObjects(definition.tasks)){
     const taskId=id(task.task_id), deps=asArray(task.dependencies).map(id);
     if(!sets.actors.has(id(task.assigned_by_actor_id))||deps.some(dep=>!sets.tasks.has(dep)||dep===taskId))return {ok:false,error:'scenario_definition_reference_invalid'};
     if(deps.length && task.initial_state!=='locked')return {ok:false,error:'scenario_task_initial_state_invalid'};
+    taskDeps.set(taskId,deps);
   }
+  const taskVisiting=new Set<string>(),taskVisited=new Set<string>();
+  const visitTask=(taskId:string):boolean=>{
+    if(taskVisiting.has(taskId))return false;if(taskVisited.has(taskId))return true;
+    taskVisiting.add(taskId);for(const dep of taskDeps.get(taskId)||[])if(!visitTask(dep))return false;
+    taskVisiting.delete(taskId);taskVisited.add(taskId);return true;
+  };
+  for(const taskId of Array.from(sets.tasks).sort())if(!visitTask(taskId))return {ok:false,error:'scenario_task_cycle'};
+  for(const actor of arrayOfObjects(definition.actors)){
+    if(asArray(actor.knowledge_fact_ids).map(id).some(factId=>!sets.facts.has(factId)))return {ok:false,error:'scenario_definition_reference_invalid'};
+    if(asArray(actor.allowed_event_ids).map(id).some(eventId=>!sets.events.has(eventId)))return {ok:false,error:'scenario_definition_reference_invalid'};
+  }
+  const decisionOptions=new Map<string,Set<string>>();
+  for(const decision of arrayOfObjects(definition.decisions)){
+    const options=new Set(arrayOfObjects(decision.options).map(option=>id(option.option_id)));
+    if(options.has('')||options.size!==arrayOfObjects(decision.options).length)return {ok:false,error:'scenario_decision_invalid'};
+    decisionOptions.set(id(decision.decision_id),options);
+  }
+  const eventDeps=new Map<string,string[]>();
   for(const event of arrayOfObjects(definition.events)){
     if(event.once!==true)return {ok:false,error:'scenario_repeat_events_deferred'};
     for(const trigger of arrayOfObjects(event.triggers)){
@@ -88,7 +108,13 @@ function definitionShape(definition:Record<string,unknown>):{ok:true;manifest:Re
       if(['task_state','all_dependencies_completed'].includes(kind)&&!sets.tasks.has(id(trigger.task_id)))return {ok:false,error:'scenario_definition_reference_invalid'};
       if(kind==='fact_equals'&&!sets.facts.has(id(trigger.fact_id)))return {ok:false,error:'scenario_definition_reference_invalid'};
       if(kind==='prior_event'&&!sets.events.has(id(trigger.event_id)))return {ok:false,error:'scenario_definition_reference_invalid'};
+      if(kind==='decision'){
+        const decisionId=id(trigger.decision_id),optionId=id(trigger.option_id);
+        if(!decisionOptions.get(decisionId)?.has(optionId))return {ok:false,error:'scenario_decision_invalid'};
+      }
     }
+    if(asArray(event.actor_ids).map(id).some(actorId=>!sets.actors.has(actorId)))return {ok:false,error:'scenario_definition_reference_invalid'};
+    eventDeps.set(id(event.event_id),arrayOfObjects(event.triggers).filter(t=>t.trigger_type==='prior_event').map(t=>id(t.event_id)));
     for(const mutation of arrayOfObjects(event.mutations)){
       const kind=String(mutation.mutation_type||'');
       if(!EVENT_MUTATIONS.has(kind))return {ok:false,error:'scenario_mutation_invalid'};
@@ -98,8 +124,19 @@ function definitionShape(definition:Record<string,unknown>):{ok:true;manifest:Re
         const fact=arrayOfObjects(definition.facts).find(f=>id(f.id)===id(mutation.fact_id));
         if(fact?.mutability!=='mutable')return {ok:false,error:'scenario_immutable_fact'};
       }
+      if(kind==='record_decision'){
+        const decisionId=id(mutation.decision_id),optionId=id(mutation.option_id);
+        if(!decisionOptions.get(decisionId)?.has(optionId))return {ok:false,error:'scenario_decision_invalid'};
+      }
     }
   }
+  const eventVisiting=new Set<string>(),eventVisited=new Set<string>();
+  const visitEvent=(eventId:string):boolean=>{
+    if(eventVisiting.has(eventId))return false;if(eventVisited.has(eventId))return true;
+    eventVisiting.add(eventId);for(const dep of eventDeps.get(eventId)||[])if(!visitEvent(dep))return false;
+    eventVisiting.delete(eventId);eventVisited.add(eventId);return true;
+  };
+  for(const eventId of Array.from(sets.events).sort())if(!visitEvent(eventId))return {ok:false,error:'scenario_event_cycle'};
   return {ok:true,manifest};
 }
 function manifestRef(versionId:string):string{return `d1:scenario-version-content/${versionId}`;}
@@ -154,9 +191,10 @@ async function installDefinition(request:Request,env:ScenarioEnv,now:number):Pro
   if(new TextEncoder().encode(canonical).byteLength>SCENARIO_MAX_CANONICAL_BYTES)return json({error:'scenario_definition_too_large'},413);
   const digest=await sha256(canonical), declared=String(shape.manifest.content_hash||'');
   if(declared!==digest||String(body.content_hash||digest)!==digest)return json({error:'scenario_content_hash_mismatch'},409);
-  const sv=await env.TUTOR_DB.prepare('SELECT id, schema_version, status, manifest_ref, content_hash FROM scenario_versions WHERE id = ? LIMIT 1').bind(versionId).first<{id:string;schema_version:number;status:string;manifest_ref:string;content_hash:string}>();
+  const sv=await env.TUTOR_DB.prepare('SELECT id, scenario_pack_id, version, schema_version, status, manifest_ref, minimum_duration_days, content_hash FROM scenario_versions WHERE id = ? LIMIT 1').bind(versionId).first<{id:string;scenario_pack_id:string;version:number;schema_version:number;status:string;manifest_ref:string;minimum_duration_days:number;content_hash:string}>();
   if(!sv)return json({error:'scenario_version_not_available'},404);
   if(sv.schema_version!==SCENARIO_SCHEMA_VERSION)return json({error:'scenario_schema_version_mismatch'},409);
+  if(id(shape.manifest.id)!==sv.scenario_pack_id||int(shape.manifest.scenario_version)!==sv.version||int(shape.manifest.minimum_duration_days)!==sv.minimum_duration_days)return json({error:'scenario_version_metadata_mismatch'},409);
   const existing=await env.TUTOR_DB.prepare('SELECT content_hash FROM scenario_version_content WHERE scenario_version_id = ? LIMIT 1').bind(versionId).first<{content_hash:string}>();
   if(existing)return existing.content_hash===digest?json({ok:true,idempotent_replay:true,scenario_version_id:versionId,content_hash:digest,manifest_ref:manifestRef(versionId)}):json({error:'scenario_definition_immutable'},409);
   const expectedRef=manifestRef(versionId);
