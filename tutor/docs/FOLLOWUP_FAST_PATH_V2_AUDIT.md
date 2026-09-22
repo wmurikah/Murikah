@@ -40,7 +40,7 @@ This applies to ordinary Tutor chat and ordinary follow-up turns. Deep Solve, re
   - Evidence: `MURIKAH_CHAT_STREAM_IDLE_TIMEOUT_SECONDS`.
 
 - [x] **Normal-turn ceiling reduced**
-  - Ordinary fast segment ceiling reduced from 300 seconds to 45 seconds.
+  - Ordinary fast turn uses one shared 45-second deadline across the initial stream and any continuation recovery.
   - Evidence: `MURIKAH_CHAT_FAST_TURN_TIMEOUT_SECONDS`.
 
 - [x] **Only one automatic continuation**
@@ -69,6 +69,7 @@ This applies to ordinary Tutor chat and ordinary follow-up turns. Deep Solve, re
 
 - [x] **Follow-up growth tests at turns 1, 2, 5, 10, and 25**
   - Synthetic long histories verify that packet size stays bounded rather than growing linearly with transcript length.
+  - The same test records context-packet build time and enforces a generous CI ceiling so context construction cannot quietly become a new latency source.
   - Evidence: `tutor/tests/test_context_packet.py`.
 
 - [x] **Provider-private state stripping**
@@ -90,7 +91,7 @@ A release is acceptable when:
 - Context-packet tests pass.
 - Ordinary follow-ups do not silently enter the multi-agent lane due to stale metadata.
 - The 25-turn synthetic history remains bounded near the configured 16k packet ceiling.
-- A stalled ordinary response cannot consume three 45-second hidden continuation waits.
+- A stalled ordinary response cannot consume three 45-second hidden continuation waits, and continuation startup itself is bounded by the same 45-second turn deadline.
 
 ## Post-deploy observation
 
