@@ -80,6 +80,23 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(winner.name, "fallback")
         await fast.close_stream(winner.stream)
 
+    async def test_hard_first_token_deadline_is_not_extended_by_delayed_hedge(self):
+        async def too_late():
+            await asyncio.sleep(.12)
+            yield "late"
+
+        started = time.perf_counter()
+        winner = await fast.race_first_visible(
+            [fast.HedgeCandidate("late", .08, too_late)],
+            request_started=started,
+            first_token_timeout=.2,
+            overall_timeout=.05,
+            hard_deadline=True,
+        )
+        elapsed = time.perf_counter() - started
+        self.assertIsNone(winner)
+        self.assertLess(elapsed, .11)
+
     async def test_portable_followup_history_strips_provider_private_state(self):
         messages = [
             {"role": "system", "content": "Teach clearly.", "_provider_response_state": {"x": 1}},
