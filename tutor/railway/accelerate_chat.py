@@ -221,7 +221,7 @@ NEW_RUN = '''    @staticmethod
             )
         )
         turn_output_tokens = min(
-            2800 if long_answer_requested else _FAST_OUTPUT_TOKENS,
+            3000 if long_answer_requested else _FAST_OUTPUT_TOKENS,
             prompt_pipeline.respond_max_tokens,
         )
         logger.info(
