@@ -76,7 +76,7 @@
     "competency_refs": [
       "comp_metric_definition"
     ],
-    "initial_state": "available",
+    "initial_state": "locked",
     "deliverable_types": [
       "analysis_plan"
     ]
@@ -119,7 +119,7 @@
     "competency_refs": [
       "comp_data_quality"
     ],
-    "initial_state": "available",
+    "initial_state": "locked",
     "deliverable_types": [
       "analysis_plan"
     ]
