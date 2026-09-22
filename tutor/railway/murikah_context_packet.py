@@ -86,7 +86,7 @@ def build_context_packet(
     recent = conversation[-recent_messages:]
     older = conversation[:-recent_messages]
 
-    sys_text = system[-1]["content"] if system else ""
+    sys_text = "\n\n".join(item["content"] for item in system[-2:]) if system else ""
     sys_budget = min(5000, max(2500, max_chars // 4))
     summary_budget = min(5000, max(2000, max_chars // 3))
     packet: list[dict[str, str]] = []
