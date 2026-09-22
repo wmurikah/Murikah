@@ -99,6 +99,7 @@ class VirtualInternshipPhase1Tests(unittest.TestCase):
             "idx_internship_instances_learner_status",
             "idx_internship_instances_scenario_version",
             "idx_internship_memberships_actor",
+            "idx_internship_memberships_one_active_learner",
             "idx_internship_activity_internship_time",
             "idx_internship_activity_single_start",
             "idx_internship_activity_single_stop",
@@ -173,6 +174,38 @@ class VirtualInternshipPhase1Tests(unittest.TestCase):
             ).fetchone(),
             ("scenario_phase1_foundation_v2", 120),
         )
+
+    def test_pack_version_pair_and_single_active_learner_membership_are_enforced(self):
+        db = open_phase1()
+        account(db, "member_integrity")
+        account(db, "member_other")
+        db.execute(
+            "INSERT INTO scenario_packs(id, slug, title, career_family, role_title, status, created_at, updated_at) "
+            "VALUES ('scenario_other', 'scenario-other', 'Other', 'Other', 'Other Intern', 'published', 1, 1)"
+        )
+        db.execute(
+            "INSERT INTO scenario_versions(id, scenario_pack_id, version, schema_version, status, "
+            "manifest_json, minimum_duration_days, expected_workload_band, content_hash, created_at, published_at) "
+            "VALUES ('scenario_other_v1', 'scenario_other', 1, 1, 'published', '{}', 90, 'standard', 'other-v1', 1, 1)"
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            instance(
+                db,
+                "internship_bad_pair",
+                "member_integrity",
+                scenario_version_id="scenario_other_v1",
+            )
+
+        instance(db, "internship_membership", "member_integrity")
+        db.execute(
+            "INSERT INTO internship_memberships(internship_id, actor_id, role, status, created_at) "
+            "VALUES ('internship_membership', 'member_integrity', 'learner', 'active', 1)"
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.execute(
+                "INSERT INTO internship_memberships(internship_id, actor_id, role, status, created_at) "
+                "VALUES ('internship_membership', 'member_other', 'learner', 'active', 2)"
+            )
 
     def test_activity_request_replay_and_single_lifecycle_events_are_constrained(self):
         db = open_phase1()
