@@ -50,10 +50,30 @@ def resolve_role_candidates(
         if not any(_selection_key(existing) == key for existing in ordered):
             ordered.append(dict(row))
 
+    def preference_rank(row: Any) -> int:
+        if not isinstance(row, dict):
+            return 9
+        effort = str(row.get("reasoning_effort") or "").strip().lower()
+        supported = row.get("supported_reasoning_efforts") or []
+        reasoning_capable = bool(supported) or effort not in {"", "none", "minimal", "low"}
+        if policy.model_preference == "reasoning":
+            return 0 if reasoning_capable else 1
+        if policy.model_preference == "latency":
+            return 0 if not reasoning_capable else 1
+        return 0
+
+    # An explicit learner/deployment selection may lead only when it is already
+    # authorized. The remaining authorized pool is ordered deterministically by
+    # the role policy, then by the existing catalog order. This keeps account
+    # grants authoritative without creating a second internship model catalog.
     add(requested_selection)
-    add(options.get("active"))
-    for row in options.get("options") or []:
-        add(row)
+    remaining: list[dict[str, Any]] = []
+    active = options.get("active")
+    if isinstance(active, dict):
+        remaining.append(active)
+    remaining.extend(row for row in (options.get("options") or []) if isinstance(row, dict))
+    for row in sorted(enumerate(remaining), key=lambda item: (preference_rank(item[1]), item[0])):
+        add(row[1])
 
     resolved: list[ProviderCandidate] = []
     seen: set[tuple[str, str]] = set()
