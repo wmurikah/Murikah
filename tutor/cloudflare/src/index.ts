@@ -355,6 +355,208 @@ async function upsertLearningActor(
   ]);
 }
 
+type TutorContextPacketRow = {
+  conversation_id: string;
+  actor_id: string;
+  summary: string;
+  facts_json: string;
+  open_threads_json: string;
+  recent_messages_json: string;
+  preferred_provider: string;
+  preferred_model: string;
+  source_message_count: number;
+  packet_version: number;
+  updated_at: number;
+};
+
+function parseStringList(value: string, limit = 16): string[] {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const item of parsed) {
+      const text = learningText(item, 400).trim();
+      const key = text.toLocaleLowerCase();
+      if (!text || seen.has(key)) continue;
+      seen.add(key);
+      result.push(text);
+      if (result.length >= limit) break;
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+function parseRecentMessages(value: string): Array<{ role: string; content: string }> {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          role: ['user', 'assistant'].includes(String(row.role || ''))
+            ? String(row.role)
+            : '',
+          content: learningText(row.content, 2500).trim(),
+        };
+      })
+      .filter((item) => item.role && item.content)
+      .slice(-6);
+  } catch {
+    return [];
+  }
+}
+
+function contextPacketResponse(row: TutorContextPacketRow | null): Record<string, unknown> {
+  if (!row) return {};
+  return {
+    summary: learningText(row.summary, 6000),
+    facts: parseStringList(row.facts_json, 12),
+    open_threads: parseStringList(row.open_threads_json, 6),
+    recent_messages: parseRecentMessages(row.recent_messages_json),
+    preferred_provider: learningText(row.preferred_provider, 128),
+    preferred_model: learningText(row.preferred_model, 256),
+    source_message_count: Math.max(0, Number(row.source_message_count || 0)),
+    packet_version: Math.max(1, Number(row.packet_version || 1)),
+    updated_at: Math.max(0, Number(row.updated_at || 0)),
+  };
+}
+
+async function readConversationContext(
+  env: TutorEnv,
+  conversationId: string,
+  actorId: string,
+): Promise<TutorContextPacketRow | null> {
+  const row = await env.TUTOR_DB.prepare(
+    'SELECT conversation_id, actor_id, summary, facts_json, open_threads_json, recent_messages_json, ' +
+      'preferred_provider, preferred_model, source_message_count, packet_version, updated_at ' +
+      'FROM tutor_conversation_context WHERE conversation_id = ? AND actor_id = ?',
+  )
+    .bind(conversationId, actorId)
+    .first<TutorContextPacketRow>();
+  return row || null;
+}
+
+function rollingContextSummary(existing: string, promptSummary: string, responseSummary: string): string {
+  const additions = [
+    promptSummary ? `Learner: ${learningText(promptSummary, 800).trim()}` : '',
+    responseSummary ? `Tutor: ${learningText(responseSummary, 800).trim()}` : '',
+  ].filter(Boolean);
+  const merged = [learningText(existing, 6000).trim(), ...additions].filter(Boolean).join('\n');
+  return merged.length <= 6000 ? merged : merged.slice(-6000);
+}
+
+function extractContextFacts(
+  prior: string[],
+  promptSummary: string,
+  responseSummary: string,
+): string[] {
+  const candidates = [promptSummary, responseSummary]
+    .join(' ')
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => learningText(item, 360).trim())
+    .filter(Boolean);
+  const signal =
+    /\d|\b(?:is|are|was|were|means|called|named|uses|requires|prefers|wants|needs|has|have|must|deadline|date|version|model)\b/i;
+  const combined = [...prior, ...candidates.filter((item) => signal.test(item))];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of combined.reverse()) {
+    const text = learningText(item, 360).trim();
+    const key = text.toLocaleLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+    if (result.length >= 12) break;
+  }
+  return result.reverse();
+}
+
+async function refreshConversationContext(
+  env: TutorEnv,
+  *,
+  conversationId: string,
+  actorId: string,
+  promptSummary: string,
+  responseSummary: string,
+  provider: string,
+  modelId: string,
+  status: string,
+  incomplete: boolean,
+  now: number,
+): Promise<void> {
+  const existing = await readConversationContext(env, conversationId, actorId);
+  const priorFacts = existing ? parseStringList(existing.facts_json, 12) : [];
+  const priorThreads = existing ? parseStringList(existing.open_threads_json, 6) : [];
+  const recentResult = await env.TUTOR_DB.prepare(
+    "SELECT role, content FROM tutor_messages WHERE conversation_id = ? AND role IN ('user','assistant') ORDER BY created_at DESC LIMIT 6",
+  )
+    .bind(conversationId)
+    .all<{ role: string; content: string }>();
+  const recentMessages = (recentResult.results || [])
+    .map((item) => ({
+      role: item.role,
+      content: learningText(item.content, 2500).trim(),
+    }))
+    .filter((item) => ['user', 'assistant'].includes(item.role) && item.content)
+    .reverse();
+
+  const facts = extractContextFacts(priorFacts, promptSummary, responseSummary);
+  const normalizedPrompt = learningText(promptSummary, 800).trim();
+  let openThreads = priorThreads.filter(
+    (item) => item.toLocaleLowerCase() !== normalizedPrompt.toLocaleLowerCase(),
+  );
+  if ((incomplete || status !== 'completed') && normalizedPrompt) {
+    openThreads = [...openThreads, normalizedPrompt].slice(-6);
+  }
+
+  const preferredProvider =
+    status === 'completed' && provider
+      ? learningText(provider, 128)
+      : learningText(existing?.preferred_provider || '', 128);
+  const preferredModel =
+    status === 'completed' && modelId
+      ? learningText(modelId, 256)
+      : learningText(existing?.preferred_model || '', 256);
+  const countRow = await env.TUTOR_DB.prepare(
+    'SELECT COUNT(*) AS count FROM tutor_messages WHERE conversation_id = ?',
+  )
+    .bind(conversationId)
+    .first<{ count: number }>();
+  const sourceMessageCount = Math.max(0, Number(countRow?.count || 0));
+  const summary = rollingContextSummary(existing?.summary || '', promptSummary, responseSummary);
+
+  await env.TUTOR_DB.prepare(
+    'INSERT INTO tutor_conversation_context(' +
+      'conversation_id, actor_id, summary, facts_json, open_threads_json, recent_messages_json, ' +
+      'preferred_provider, preferred_model, source_message_count, packet_version, updated_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) ' +
+      'ON CONFLICT(conversation_id) DO UPDATE SET ' +
+      'actor_id = excluded.actor_id, summary = excluded.summary, facts_json = excluded.facts_json, ' +
+      'open_threads_json = excluded.open_threads_json, recent_messages_json = excluded.recent_messages_json, ' +
+      'preferred_provider = excluded.preferred_provider, preferred_model = excluded.preferred_model, ' +
+      'source_message_count = excluded.source_message_count, packet_version = excluded.packet_version, ' +
+      'updated_at = excluded.updated_at',
+  )
+    .bind(
+      conversationId,
+      actorId,
+      summary,
+      JSON.stringify(facts),
+      JSON.stringify(openThreads),
+      JSON.stringify(recentMessages),
+      preferredProvider,
+      preferredModel,
+      sourceMessageCount,
+      now,
+    )
+    .run();
+}
+
 async function verifyPersistenceRequest(
   request: Request,
   env: TutorEnv,
