@@ -24,6 +24,8 @@ class VirtualInternshipDurationTests(unittest.TestCase):
         self.assertIn("clock: () => number = utcNowSeconds", source)
         self.assertIn("const now = clock();", source)
         self.assertIn("const targetEndAt = now + effectiveMinimumDays * 86400;", source)
+        self.assertIn("row.stopped_at == null ? now : Number(row.stopped_at)", source)
+        self.assertIn("durationClock >= Number(row.target_end_at)", source)
         self.assertNotIn("Africa/Nairobi", source[source.index("function internshipStatusForActor"):source.index("async function handlePersistence")])
         self.assertIn("final_completion_available: false", source)
         self.assertIn("pending_future_completion_gates: true", source)
@@ -35,6 +37,16 @@ class VirtualInternshipDurationTests(unittest.TestCase):
         self.assertFalse(start + timedelta(days=89, hours=23, minutes=59, seconds=59) >= target)
         self.assertTrue(start + timedelta(days=90) >= target)
         self.assertTrue(start + timedelta(days=91) >= target)
+
+    def test_stopped_early_does_not_age_into_duration_compliance(self):
+        start = datetime(2026, 1, 1, 8, 30, tzinfo=timezone.utc)
+        target = start + timedelta(days=90)
+        stopped_at = start + timedelta(days=10)
+        current_server_time = start + timedelta(days=120)
+        duration_clock = stopped_at
+        self.assertLess(duration_clock, target)
+        self.assertGreater(current_server_time, target)
+        self.assertFalse(duration_clock >= target)
 
     def test_scenario_minimum_below_90_cannot_reduce_policy(self):
         self.assertEqual(effective_minimum(30), 90)
