@@ -29,6 +29,12 @@ async def stream(*chunks):
 
 
 class ProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fast_lane_latency_defaults_are_bounded(self):
+        self.assertEqual(fast.DEFAULT_FAST_HISTORY_CHARS, 16000)
+        self.assertEqual(fast.DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS, 8.0)
+        self.assertEqual(fast.DEFAULT_OVERALL_FIRST_TOKEN_SECONDS, 10.0)
+        self.assertLessEqual(fast.DEFAULT_HEDGE_DELAY_SECONDS, 0.4)
+
     async def test_split_overload_never_becomes_content(self):
         visible = []
         with self.assertRaises(RuntimeError):
