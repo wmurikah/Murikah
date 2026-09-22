@@ -223,7 +223,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v34"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -237,6 +237,7 @@ def main() -> int:
             '"MURIKAH_NVIDIA_NIM_API_KEY"',
             '"MURIKAH_DASHSCOPE_API_KEY"',
             '"MURIKAH_TAVILY_API_KEY"',
+            'MURIKAH_EXPECTED_IMAGE_REV = "2026-09-22-v34"',
             'MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"',
             'MURIKAH_GUEST_PROMPT_LIMIT = "7"',
             'RESEND_FROM_EMAIL = "Murikah Tutor <noreply@murikah.com>"',
@@ -247,24 +248,23 @@ def main() -> int:
     require_markers(
         "tutor/cloudflare/deploy_staging.py",
         (
-            'APP_NAME = "murikah-tutor-container-staging-TutorContainer"',
-            'def list_tutor_applications()',
-            'def recycle_tutor_application()',
             'TRANSIENT_DEPLOY_ERRORS',
-            'REGISTRY_PROPAGATION_MARKERS',
             '"no such manifest:"',
-            'def recover_fresh_but_unready_runtime(',
-            'recycling the container application once after registry propagation',
-            'wait_until_ready(base, timeout_seconds=300)',
+            '"manifest unknown"',
+            'if result.returncode == 0:',
+            'Wrangler accepted the Worker + container target',
+            'def expected_image_revision()',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV',
+            'MURIKAH_EXPECTED_IMAGE_REV',
+            'def wait_for_expected_runtime(',
+            '"/__muri/runtime-status"',
+            'imageRevision',
+            'DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS = 360',
+            'def one_failure_diagnostic()',
+            '"/__muri/container-diagnostics"',
+            'Deployment verified non-destructively',
             'def apply_persistence_migrations()',
             '"d1", "migrations", "apply", "murikah-tutor-prod", "--remote"',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV',
-            '"/__muri/container-diagnostics"',
-            '"/__muri/runtime-status"',
-            'ModuleNotFoundError: No module named \'deeptutor\'',
-            'port 3782 healthy',
-            'def refreshed_failure_detail(',
-            'diagnostics refresh failed:',
         ),
     )
     require_markers(
@@ -361,6 +361,12 @@ def main() -> int:
             'READY_CACHE_MS = 5_000',
             'statusInFlight',
             'cachedStatus(tutor, runtimeEnv)',
+            'MURIKAH_EXPECTED_IMAGE_REV',
+            'expectedImageRevision',
+            'imageRevision',
+            'Waiting for Tutor image',
+            "url.pathname === '/__muri/runtime-status'",
+            'const status = await safeStatus(tutor, runtimeEnv);',
             'How can I help you learn today?',
             'buildContainerEnv(env)',
             'this.ctx.container.start({',
@@ -406,6 +412,14 @@ def main() -> int:
             'MURIKAH_GOOGLE_CLIENT_ID',
             'MURIKAH_MICROSOFT_CLIENT_ID',
             'MURIKAH_APPLE_CLIENT_ID',
+        ),
+    )
+    require_markers(
+        "tutor/railway/health-route.ts.txt",
+        (
+            'readFile("/app/murikah-cloudflare-image-rev", "utf8")',
+            'imageRevision',
+            '"/health/ready"',
         ),
     )
     require_markers(
@@ -756,6 +770,8 @@ def main() -> int:
             'ownershipSchemaVersion',
             'emailVerificationSchemaVersion',
             'verificationEmailConfigured',
+            'expectedImageRevision',
+            'imageRevision',
             'new signup remains fail-closed',
             'unregisteredObjectCount',
             'every durable manifest object has a D1 ownership record',
@@ -963,10 +979,10 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive; deep-task NVIDIA selection is preserved for Solve and Math Animator")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with a transparent retry race")
+    print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with bounded first-token hedging")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
-    print(" - stale Cloudflare container applications are detected and recycled during deploy")
+    print(" - Cloudflare rollouts are verified non-destructively against the live app image revision")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
     print(" - staging startup is non-blocking at the edge")
@@ -974,9 +990,9 @@ def main() -> int:
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
-    print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
-    print(" - provider finish reasons are tracked and token-limited/interrupted answers continue invisibly before completion")
-    print(" - active fast-chat streams have a 4096-token segment budget, a 300s segment ceiling, and up to three hidden continuation passes")
+    print(" - ordinary follow-ups use compact context packets and cannot silently fall into the multi-agent pipeline")
+    print(" - provider finish reasons are tracked and interrupted answers get one live bounded continuation")
+    print(" - active fast-chat turns use a 1800-token default, 45s total ceiling, and at most one live continuation")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
     print(" - every ordinary account inherits all shareable admin-configured LLMs dynamically; owner-bound admin OAuth models stay private")
