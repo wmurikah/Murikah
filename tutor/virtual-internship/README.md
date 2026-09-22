@@ -1965,7 +1965,7 @@ A role uses at most two authorized configured candidates. Provider failure or fi
 - `deeptutor.services.model_selection.runtime.resolve_llm_config_for_selection()`
 - `deeptutor.services.llm.factory.stream()`
 
-The requested model is considered only if it is already present in the current account/deployment allowed options. Candidate ordering is deterministic: authorized requested selection, current active selection, then the remaining authorized options, with provider/model duplicates removed.
+The requested model is considered only if it is already present in the current account/deployment allowed options. Candidate ordering is deterministic and role-aware: an authorized explicit selection remains first, then the remaining authorized catalog rows are ranked by the role policy (`latency`, `balanced`, or `reasoning`) while preserving catalog order inside each rank. Provider/model duplicates are removed. No unauthorized model can be introduced by role preference.
 
 Phase 3 adds no internship-specific provider API-key environment variables and does not persist credentials. Existing deployment/admin model policy and account grants therefore remain authoritative.
 
