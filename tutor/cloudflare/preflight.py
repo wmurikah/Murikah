@@ -614,7 +614,7 @@ def main() -> int:
             'href={SIGN_UP}',
             'Sign up',
             'href="/register?next=%2Fvirtual-internship"',
-            'aria-label="Virtual Internship — coming soon"',
+            'aria-label="Virtual Internship, coming soon"',
         ),
     )
     require_markers(
@@ -644,7 +644,7 @@ def main() -> int:
             "at least three months",
             "AI workplace actors",
             "Competency Passport",
-            "Start internship — coming later",
+            "Start internship, coming later",
         ),
     )
     require_markers(
