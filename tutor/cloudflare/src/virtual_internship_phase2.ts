@@ -120,7 +120,7 @@ async function replayChange(db:ScenarioDatabase,internshipId:string,req:string):
 export async function buildScenarioInitializationStatements(
   db:ScenarioDatabase,scenarioVersionId:string,internshipId:string,startedAt:number,now:number,
 ):Promise<ScenarioStatement[]>{
-  const content=await db.prepare('SELECT scenario_version_id FROM scenario_version_content WHERE scenario_version_id = ? LIMIT 1').bind(scenarioVersionId).first<{scenario_version_id:string}>();
+  const content=await db.prepare('SELECT c.scenario_version_id FROM scenario_version_content c JOIN scenario_versions sv ON sv.id = c.scenario_version_id WHERE c.scenario_version_id = ? AND c.content_hash = sv.content_hash AND c.manifest_ref = sv.manifest_ref LIMIT 1').bind(scenarioVersionId).first<{scenario_version_id:string}>();
   if(!content)return [];
   const facts=(await db.prepare('SELECT fact_id, initial_value_json, visibility, initially_revealed FROM scenario_facts WHERE scenario_version_id = ? ORDER BY fact_id').bind(scenarioVersionId).all<{fact_id:string;initial_value_json:string;visibility:string;initially_revealed:number}>()).results||[];
   const tasks=(await db.prepare('SELECT task_id, due_offset_days FROM scenario_task_definitions WHERE scenario_version_id = ? ORDER BY authored_sequence, task_id').bind(scenarioVersionId).all<{task_id:string;due_offset_days:number}>()).results||[];
@@ -147,7 +147,7 @@ export async function buildScenarioInitializationStatements(
 
 async function installDefinition(request:Request,env:ScenarioEnv,now:number):Promise<Response>{
   const body=await bodyJson(request),versionId=id(body.scenario_version_id),definition=asObject(body.canonical_definition);
-  if(!versionId||!definition.scenario_version_id && Object.keys(definition).length===0)return json({error:'scenario_definition_invalid'},400);
+  if(!versionId||Object.keys(definition).length===0)return json({error:'scenario_definition_invalid'},400);
   const shape=definitionShape(definition);if(!shape.ok)return json({error:shape.error},400);
   if(id(shape.manifest.scenario_version_id)!==versionId)return json({error:'scenario_version_mismatch'},409);
   const canonical=canonicalString(definition);
@@ -324,6 +324,7 @@ async function applyEvent(env:ScenarioEnv,owned:OwnedInternship,event:{event_id:
   try{await env.TUTOR_DB.batch(statements);return {ok:true,revision:next,unlocked};}catch{return {ok:false,revision:state.revision,unlocked:[]};}
 }
 async function evaluate(request:Request,env:ScenarioEnv,owned:OwnedInternship,now:number):Promise<Response>{
+  const evaluationStartedMs=Date.now();
   const body=await bodyJson(request),req=requestId(body.request_id);if(!req)return json({error:'scenario_evaluation_invalid'},400);
   const initial=await readyState(env.TUTOR_DB,owned.id);if(!initial||initial.status!=='ready')return json({error:'scenario_not_ready'},409);
   const expected=body.expected_revision===undefined?initial.revision:int(body.expected_revision,-1);if(expected!==initial.revision)return json({error:'scenario_revision_conflict',revision:initial.revision},409);
@@ -336,7 +337,7 @@ async function evaluate(request:Request,env:ScenarioEnv,owned:OwnedInternship,no
   const remaining=await eligibleEvents(env.TUTOR_DB,owned,now);
   if(remaining.length)return json({error:'scenario_cascade_limit'},409);
   const final=await readyState(env.TUTOR_DB,owned.id);
-  console.log(JSON.stringify({event:'vi_scenario_evaluate',internship_id:owned.id,scenario_version_id:owned.scenario_version_id,state_revision:final?.revision||initial.revision,evaluated_event_count:evaluated,fired_event_count:fired.length,unlocked_task_count:unlocked,elapsed_ms:0}));
+  console.log(JSON.stringify({event:'vi_scenario_evaluate',internship_id:owned.id,scenario_version_id:owned.scenario_version_id,state_revision:final?.revision||initial.revision,evaluated_event_count:evaluated,fired_event_count:fired.length,unlocked_task_count:unlocked,elapsed_ms:Math.max(0,Date.now()-evaluationStartedMs)}));
   return json({ok:true,revision:final?.revision||initial.revision,fired_events:fired,evaluated_event_count:evaluated});
 }
 async function actorView(db:ScenarioDatabase,owned:OwnedInternship,actorId:string):Promise<Record<string,unknown>|null>{
@@ -363,6 +364,8 @@ export async function handleScenarioPersistenceRoute(request:Request,env:Scenari
   const internshipId=id(request.method==='GET'?url.searchParams.get('internship_id'):body.internship_id);
   if(!actorId)return json({error:'authentication_required'},401);
   if(!internshipId)return json({error:'internship_not_found'},404);
+  const account=await env.TUTOR_DB.prepare("SELECT role, account_status FROM tutor_accounts WHERE actor_id = ? LIMIT 1").bind(actorId).first<{role:string;account_status:string}>();
+  if(!account||!['member','admin'].includes(account.role)||account.account_status!=='active')return json({error:'authentication_required'},401);
   const owned=await ownedInternship(env.TUTOR_DB,internshipId,actorId);if(!owned)return json({error:'internship_not_found'},404);
 
   if(route==='/internships/scenario/initialize'&&request.method==='POST'){
@@ -375,7 +378,7 @@ export async function handleScenarioPersistenceRoute(request:Request,env:Scenari
     }
   }
   if(route==='/internships/scenario/definition'&&request.method==='GET'){
-    const row=await env.TUTOR_DB.prepare('SELECT c.canonical_json, c.content_hash, c.manifest_ref FROM scenario_version_content c JOIN internship_instances i ON i.scenario_version_id = c.scenario_version_id WHERE i.id = ? AND i.learner_id = ? LIMIT 1').bind(owned.id,actorId).first<{canonical_json:string;content_hash:string;manifest_ref:string}>();
+    const row=await env.TUTOR_DB.prepare('SELECT c.canonical_json, c.content_hash, c.manifest_ref FROM scenario_version_content c JOIN scenario_versions sv ON sv.id = c.scenario_version_id JOIN internship_instances i ON i.scenario_version_id = c.scenario_version_id WHERE i.id = ? AND i.learner_id = ? AND c.content_hash = sv.content_hash AND c.manifest_ref = sv.manifest_ref LIMIT 1').bind(owned.id,actorId).first<{canonical_json:string;content_hash:string;manifest_ref:string}>();
     if(!row)return json({error:'scenario_definition_not_engine_ready'},404);
     return json({ok:true,scenario_version_id:owned.scenario_version_id,content_hash:row.content_hash,manifest_ref:row.manifest_ref,definition:JSON.parse(row.canonical_json)});
   }
