@@ -485,9 +485,16 @@ class VirtualInternshipAIOrchestrator:
 
                 async def collect() -> str:
                     chunks: list[str] = []
+                    in_think = False
                     async for raw in stream:
                         text = str(raw or "")
-                        if text in {"<think>", "</think>"}:
+                        if text == "<think>":
+                            in_think = True
+                            continue
+                        if text == "</think>":
+                            in_think = False
+                            continue
+                        if in_think:
                             continue
                         chunks.append(text)
                     return "".join(chunks)
