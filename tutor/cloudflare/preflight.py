@@ -1025,6 +1025,14 @@ def main() -> int:
             "invalid_actor_override",
         ),
     )
+    forbid_markers(
+        "tutor/cloudflare/src/virtual_internship_phase2.ts",
+        ("Math.random(", "OpenAI(", "Anthropic(", "Gemini(", "Qwen(", "NVIDIA(", "patch_state(dict)", "set_fact_from_client"),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0008_virtual_internship_phase2.sql",
+        ("chain_of_thought", "scratchpad", "reasoning TEXT"),
+    )
     require_markers(
         "tutor/cloudflare/src/index.ts",
         ("buildScenarioInitializationStatements", "...scenarioInitialization"),
@@ -1097,7 +1105,7 @@ def main() -> int:
             "0006_virtual_internship_phase1.sql",
             "0008_virtual_internship_phase2.sql",
             "d1:scenario-version-content/<scenario-version-id>",
-            "SCENARIO_MAX_CASCADE_DEPTH",
+            "maximum deterministic event cascade depth of 16",
         ),
     )
     require_markers(
