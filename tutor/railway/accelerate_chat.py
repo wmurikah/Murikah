@@ -255,9 +255,6 @@ NEW_RUN = '''    @staticmethod
 
         gemini_model = configured_gemini_model()
         gemini_on = gemini_configured()
-        selected_is_gemini = bool(
-            resolved and str(getattr(resolved[0], "model", "")) == gemini_model
-        )
         hedges: list[HedgeCandidate] = []
 
         def deep_candidate(config: Any, delay_seconds: float) -> HedgeCandidate:
@@ -423,11 +420,11 @@ NEW_RUN = '''    @staticmethod
         )
 
         context.metadata["murikah_provider"] = winner.name
-        if winner.name.startswith(("gemini:", "gemini-retry:")):
+        if winner.name.startswith("gemini:"):
             winner_model = gemini_model
-        elif winner.name.startswith(("nvidia-fast:", "nvidia-retry:")):
+        elif winner.name.startswith("nvidia-fast:"):
             winner_model = nvidia_model
-        elif winner.name.startswith(("qwen-fast:", "qwen-retry:")):
+        elif winner.name.startswith("qwen-fast:"):
             winner_model = qwen_model
         else:
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
@@ -547,10 +544,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: gemini_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -561,10 +555,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: nvidia_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -575,10 +566,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: qwen_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -605,10 +593,7 @@ NEW_RUN = '''    @staticmethod
                             reasoning_effort=config.reasoning_effort,
                             extra_headers=config.extra_headers,
                             temperature=prompt_pipeline._chat_temperature,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=turn_output_tokens,
                             stream_coalesce_chars=24,
                             stream_coalesce_seconds=0.02,
                         ),
