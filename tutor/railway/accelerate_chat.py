@@ -615,12 +615,27 @@ NEW_RUN = '''    @staticmethod
                     )
                 )
 
+            remaining_for_recovery = turn_deadline - time.perf_counter()
+            if remaining_for_recovery <= 2.5:
+                logger.warning(
+                    "MURIKAH_LATENCY route=fast event=continuation_skipped reason=turn_deadline elapsed_ms=%s",
+                    latency_ms(request_started),
+                )
+                break
             recovery_started = time.perf_counter()
+            recovery_first_timeout = min(
+                4.0,
+                max(1.0, remaining_for_recovery - 1.5),
+            )
+            recovery_overall_timeout = min(
+                5.0,
+                max(1.5, remaining_for_recovery - 0.5),
+            )
             recovery_winner = await race_first_visible(
                 recovery_hedges,
                 request_started=recovery_started,
-                first_token_timeout=min(8.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                overall_timeout=min(10.0, _OVERALL_FIRST_TOKEN_SECONDS),
+                first_token_timeout=recovery_first_timeout,
+                overall_timeout=recovery_overall_timeout,
             )
             if recovery_winner is None:
                 logger.warning(
