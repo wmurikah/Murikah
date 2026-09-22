@@ -60,16 +60,53 @@ class ActorAITests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Do not act as the Murikah Mentor",source)
         self.assertIn("Do not mark tasks complete",source)
 
-    def test_all_three_demo_careers_are_context_generic(self):
+    def test_all_three_demo_careers_build_actor_context_without_career_branches(self):
         scenario_root=ROOT/"virtual-internship/scenarios/demo"
         if not scenario_root.exists():
             self.skipTest("demo scenario fixtures are unavailable in this test environment")
         from virtual_internship.validator import validate_pack
+
+        class PackService:
+            def __init__(self,pack):
+                self.pack=pack
+            def definition(self,_actor_id,_internship_id):
+                return {"definition":self.pack}
+            def learner_view(self,_actor_id,internship_id):
+                facts=[
+                    {"fact_id":f["id"],"value":f["value"]}
+                    for f in self.pack["facts"]
+                    if f.get("initially_revealed") and f.get("visibility") in {"public","learner_visible"}
+                ]
+                tasks=[
+                    {"task_id":t["task_id"],"title":t["title"],"category":t["category"],
+                     "status":"locked" if t.get("dependencies") else "available","due_at":1000}
+                    for t in self.pack["tasks"]
+                ]
+                return {"view":{"internship_id":internship_id,"scenario_version_id":self.pack["manifest"]["scenario_version_id"],"facts":facts,"tasks":tasks,"fired_events":[]}}
+            def actor_view(self,_actor_id,_internship_id,scenario_actor_id):
+                actor=next(x for x in self.pack["actors"] if x["actor_id"]==scenario_actor_id)
+                grants=set(actor.get("knowledge_fact_ids",[]))
+                facts=[
+                    {"fact_id":f["id"],"value":f["value"]}
+                    for f in self.pack["facts"]
+                    if not f.get("future_only") and (f.get("visibility")=="public" or f["id"] in grants)
+                ]
+                return {"view":{"actor":{
+                    "actor_id":actor["actor_id"],"name":actor["name"],"actor_class":actor["actor_class"],
+                    "job_title":actor["job_title"],"department_id":actor["department_id"],
+                },"facts":facts}}
+
+        context_source=(ROOT/"railway/virtual_internship/ai/context.py").read_text()
         for name in ("internal-audit","data-analyst","software-engineering"):
             pack=validate_pack(scenario_root/name)
-            self.assertTrue(pack["actors"])
-            self.assertTrue(pack["tasks"])
-            self.assertNotIn(name,(ROOT/"railway/virtual_internship/ai/context.py").read_text())
+            actor_id=pack["actors"][0]["actor_id"]
+            ctx=build_actor_context(
+                PackService(pack),account_actor_id="learner_a",internship_id="vi_demo",
+                scenario_actor_id=actor_id,learner_message="Status update?"
+            )
+            self.assertEqual(ctx["actor"]["actor_id"],actor_id)
+            self.assertTrue(ctx["task"])
+            self.assertNotIn(name,context_source)
 
 
 if __name__=="__main__": unittest.main()
