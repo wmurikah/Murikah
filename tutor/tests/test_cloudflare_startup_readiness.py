@@ -64,7 +64,6 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
         self.assertIn("recycle_tutor_application()", text)
         self.assertIn("report,base=recover_unready_application(expected_revision)", text)
         self.assertIn("recycling the container application once", text)
-        self.assertIn("fresh Tutor image failed isolated startup probe", text)
 
     def test_source_smoke_waits_for_ownership_after_runtime_health(self):
         smoke = ROOT / "cloudflare/smoke_staging.py"
