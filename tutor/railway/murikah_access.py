@@ -197,6 +197,45 @@ async def access_status(request: Request, response: Response):
     return guest_status(request_identity(request))
 
 
+def _member_identity(request: Request):
+    payload = request_identity(request)
+    if payload is None or str(payload.username).startswith(PREFIX):
+        raise HTTPException(401, "Sign in to personalize Tutor.")
+    return payload
+
+
+@router.get("/preferences")
+async def account_preferences(request: Request, response: Response):
+    """Return only current-member naming fields needed by Tutor UI."""
+    payload = _member_identity(request)
+    response.headers["Cache-Control"] = "no-store"
+    from deeptutor.murikah_personalization import personalization_for_actor
+
+    return personalization_for_actor(payload.user_id, payload.username)
+
+
+@router.put("/preferences")
+async def update_account_preferences(
+    body: PreferredNameUpdate,
+    request: Request,
+    response: Response,
+):
+    """Update only the signed-in actor's durable preferred name."""
+    check_origin(request)
+    payload = _member_identity(request)
+    response.headers["Cache-Control"] = "no-store"
+    from deeptutor.murikah_personalization import update_actor_preferred_name
+
+    try:
+        return update_actor_preferred_name(payload.user_id, body.preferred_name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            503, "Your preferred name could not be saved. Please try again."
+        ) from exc
+
+
 @router.post("/session")
 async def guest_session(request: Request, response: Response):
     check_origin(request)
@@ -252,6 +291,10 @@ async def guest_session(request: Request, response: Response):
                 db.execute("INSERT INTO prompts VALUES (?, ?)", (uid, f"legacy:{n}"))
     set_session(response, username, uid)
     return {"guest": True, "ok": True}
+
+
+class PreferredNameUpdate(BaseModel):
+    preferred_name: str | None = Field(default=None, max_length=128)
 
 
 class SignupStart(BaseModel):
