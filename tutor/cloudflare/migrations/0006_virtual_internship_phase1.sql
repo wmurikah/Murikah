@@ -113,6 +113,14 @@ CREATE TABLE IF NOT EXISTS internship_activity (
 CREATE INDEX IF NOT EXISTS idx_internship_activity_internship_time
   ON internship_activity(internship_id, created_at ASC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_activity_single_start
+  ON internship_activity(internship_id)
+  WHERE event_type = 'internship_started';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_activity_single_stop
+  ON internship_activity(internship_id)
+  WHERE event_type = 'internship_stopped';
+
 -- Minimal Phase 1 lifecycle fixture. It contains no task/event graph or fake
 -- assignments; it exists only so the start/status/stop persistence contract can
 -- be exercised before Phase 2 scenario-engine work begins.
