@@ -60,11 +60,16 @@ def _validate_schema(value: Any, schema: dict[str, Any], root: dict[str, Any], p
         for key in required:
             if key not in value: _err(f"{path}.{key}","required field is missing")
         props=schema.get("properties",{})
-        if schema.get("additionalProperties") is False:
-            unknown=sorted(set(value)-set(props))
-            if unknown: _err(path,f"unknown fields: {', '.join(unknown)}")
+        additional=schema.get("additionalProperties", True)
+        unknown=sorted(set(value)-set(props))
+        if additional is False and unknown: _err(path,f"unknown fields: {', '.join(unknown)}")
+        if len(value)>schema.get("maxProperties",10**9): _err(path,"contains too many properties")
+        property_names=schema.get("propertyNames")
+        if property_names:
+            for key in value:_validate_schema(key,property_names,root,f"{path}.<key>")
         for key,item in value.items():
-            if key in props: _validate_schema(item,props[key],root,f"{path}.{key}")
+            if key in props:_validate_schema(item,props[key],root,f"{path}.{key}")
+            elif isinstance(additional,dict):_validate_schema(item,additional,root,f"{path}.{key}")
     if isinstance(value,list):
         if len(value)<schema.get("minItems",0): _err(path,"contains too few items")
         if len(value)>schema.get("maxItems",10**9): _err(path,"contains too many items")
