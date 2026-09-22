@@ -1,6 +1,15 @@
+import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+
+async function imageRevision(): Promise<string> {
+  try {
+    return (await readFile("/app/murikah-cloudflare-image-rev", "utf8")).trim();
+  } catch {
+    return "";
+  }
+}
 
 export async function GET() {
   try {
@@ -9,10 +18,19 @@ export async function GET() {
       signal: AbortSignal.timeout(4000),
     });
     if (!response.ok) {
-      return NextResponse.json({ status: "starting" }, { status: 503 });
+      return NextResponse.json(
+        { status: "starting", imageRevision: await imageRevision() },
+        { status: 503 },
+      );
     }
-    return NextResponse.json({ status: "ok" });
+    return NextResponse.json({
+      status: "ok",
+      imageRevision: await imageRevision(),
+    });
   } catch {
-    return NextResponse.json({ status: "starting" }, { status: 503 });
+    return NextResponse.json(
+      { status: "starting", imageRevision: await imageRevision() },
+      { status: 503 },
+    );
   }
 }
