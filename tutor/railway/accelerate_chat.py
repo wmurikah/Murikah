@@ -192,14 +192,44 @@ NEW_RUN = '''    @staticmethod
         packet_chars = sum(len(str(item.get("content") or "")) for item in messages)
         context_build_ms = latency_ms(context_build_started)
         follow_up = sum(1 for item in messages if item.get("role") == "user") > 1
+        latest_user_text = next(
+            (
+                str(item.get("content") or "")
+                for item in reversed(messages)
+                if item.get("role") == "user"
+            ),
+            "",
+        ).lower()
+        long_answer_requested = any(
+            marker in latest_user_text
+            for marker in (
+                "detailed",
+                "comprehensive",
+                "in depth",
+                "in-depth",
+                "long answer",
+                "long explanation",
+                "deep explanation",
+                "word essay",
+                "words essay",
+                "3000 words",
+                "2500 words",
+                "2000 words",
+            )
+        )
+        turn_output_tokens = min(
+            2800 if long_answer_requested else _FAST_OUTPUT_TOKENS,
+            prompt_pipeline.respond_max_tokens,
+        )
         logger.info(
-            "MURIKAH_LATENCY route=fast event=context_packet conversation=%s follow_up=%s cache_hit=%s raw_history_chars=%s packet_chars=%s context_build_ms=%s",
+            "MURIKAH_LATENCY route=fast event=context_packet conversation=%s follow_up=%s cache_hit=%s raw_history_chars=%s packet_chars=%s context_build_ms=%s output_tokens=%s",
             conversation_id or "unknown",
             follow_up,
             context_cache_hit,
             raw_history_chars,
             packet_chars,
             context_build_ms,
+            turn_output_tokens,
         )
 
         resolved: list[Any] = []
@@ -245,7 +275,7 @@ NEW_RUN = '''    @staticmethod
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                    max_tokens=turn_output_tokens,
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 ),
@@ -268,7 +298,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.0 if preferred_provider.startswith("gemini") or not preferred_provider else 0.8,
                     factory=lambda: gemini_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -279,7 +309,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.0 if preferred_provider.startswith("nvidia") else (0.4 if gemini_on else 0.0),
                     factory=lambda: nvidia_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -290,7 +320,7 @@ NEW_RUN = '''    @staticmethod
                     delay_seconds=0.0 if preferred_provider.startswith("qwen") else (0.8 if (gemini_on or nvidia_on) else 0.0),
                     factory=lambda: qwen_stream(
                         messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                        max_tokens=turn_output_tokens,
                     ),
                 )
             )
@@ -354,7 +384,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: gemini_stream(
                             messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -365,7 +395,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: nvidia_stream(
                             messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
@@ -376,7 +406,7 @@ NEW_RUN = '''    @staticmethod
                         delay_seconds=0.0,
                         factory=lambda: qwen_stream(
                             messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                            max_tokens=turn_output_tokens,
                         ),
                     )
                 )
