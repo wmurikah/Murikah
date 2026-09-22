@@ -202,16 +202,55 @@ NEW_RUN = '''    @staticmethod
 
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
         request_started = time.perf_counter()
+        context_build_started = time.perf_counter()
         prompt_pipeline = AgenticChatPipeline(language=context.language)
-        messages = prompt_pipeline._build_loop_messages(
+        raw_messages = prompt_pipeline._build_loop_messages(
             context=context,
             enabled_tools=[],
             include_tool_manifest=False,
         )
 
-        # Remove provider-private replay fields and bound recent history so
-        # follow-ups can move cleanly between Gemini and NVIDIA.
-        messages = portable_chat_messages(messages)
+        # Follow-up Fast Path V2 uses the packet prepared at the end of the
+        # previous turn plus only the newest exchanges. Raw transcript growth
+        # therefore cannot make turn 10 or turn 25 progressively slower.
+        packet = (context.metadata or {}).get("murikah_context_packet") or {}
+        context_window = build_fast_context_window(
+            raw_messages,
+            context_packet=packet,
+            max_chars=_FAST_CONTEXT_CHARS,
+        )
+        messages = context_window.messages
+        context_build_ms = latency_ms(context_build_started)
+        output_token_budget = min(
+            _output_token_budget(context),
+            prompt_pipeline.respond_max_tokens,
+        )
+        turn_number = max(1, int((context.metadata or {}).get("murikah_turn_number") or 1))
+        is_followup = bool((context.metadata or {}).get("murikah_is_followup") or turn_number > 1)
+        context.metadata["murikah_history_chars"] = context_window.payload_chars
+        context.metadata["murikah_history_messages"] = context_window.history_messages
+        context.metadata["murikah_context_packet_chars"] = context_window.context_packet_chars
+        context.metadata["murikah_context_build_ms"] = context_build_ms
+        context.metadata["murikah_output_token_budget"] = output_token_budget
+        context.metadata["murikah_first_token_deadline_ms"] = int(
+            _OVERALL_FIRST_TOKEN_SECONDS * 1000
+        )
+        context.metadata["murikah_stream_idle_timeout_ms"] = int(
+            _STREAM_IDLE_TIMEOUT_SECONDS * 1000
+        )
+        context.metadata["murikah_turn_number"] = turn_number
+        context.metadata["murikah_is_followup"] = is_followup
+        logger.info(
+            "MURIKAH_LATENCY route=fast event=context_ready followup=%s turn=%s "
+            "payload_chars=%s history_messages=%s packet_chars=%s build_ms=%s output_tokens=%s",
+            is_followup,
+            turn_number,
+            context_window.payload_chars,
+            context_window.history_messages,
+            context_window.context_packet_chars,
+            context_build_ms,
+            output_token_budget,
+        )
 
         resolved: list[Any] = []
         seen: set[tuple[str, str]] = set()
@@ -233,10 +272,10 @@ NEW_RUN = '''    @staticmethod
 
         gemini_model = configured_gemini_model()
         gemini_on = gemini_configured()
-        selected_is_gemini = bool(
-            resolved and str(getattr(resolved[0], "model", "")) == gemini_model
-        )
-        hedges: list[HedgeCandidate] = []
+        nvidia_model = configured_nvidia_fast_model()
+        nvidia_on = nvidia_configured()
+        qwen_model = configured_qwen_fast_model()
+        qwen_on = qwen_configured()
 
         def deep_candidate(config: Any, delay_seconds: float) -> HedgeCandidate:
             name = f"{config.provider_name or config.binding or 'provider'}:{config.model}"
@@ -256,54 +295,72 @@ NEW_RUN = '''    @staticmethod
                     reasoning_effort=config.reasoning_effort,
                     extra_headers=config.extra_headers,
                     temperature=prompt_pipeline._chat_temperature,
-                    max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
+                    max_tokens=output_token_budget,
                     stream_coalesce_chars=24,
                     stream_coalesce_seconds=0.02,
                 ),
             )
 
-        # Three independent fast-chat routes: Google's lowest-latency stable
-        # Flash-Lite model, NVIDIA Nemotron Lightning with hidden thinking off,
-        # and Qwen Flash through DashScope. A catalog model remains a fourth
-        # safety net, but ordinary Chat never falls into the multi-agent loop.
-        nvidia_model = configured_nvidia_fast_model()
-        nvidia_on = nvidia_configured()
-        qwen_model = configured_qwen_fast_model()
-        qwen_on = qwen_configured()
-
+        direct: list[HedgeCandidate] = []
         if gemini_on:
-            hedges.append(
+            direct.append(
                 HedgeCandidate(
                     name=f"gemini:{gemini_model}",
                     delay_seconds=0.0,
-                    factory=lambda: gemini_stream(
-                        messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                    ),
+                    factory=lambda: gemini_stream(messages, max_tokens=output_token_budget),
                 )
             )
         if nvidia_on:
-            hedges.append(
+            direct.append(
                 HedgeCandidate(
                     name=f"nvidia-fast:{nvidia_model}",
-                    delay_seconds=0.55 if gemini_on else 0.0,
-                    factory=lambda: nvidia_stream(
-                        messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                    ),
+                    delay_seconds=0.0,
+                    factory=lambda: nvidia_stream(messages, max_tokens=output_token_budget),
                 )
             )
         if qwen_on:
-            hedges.append(
+            direct.append(
                 HedgeCandidate(
                     name=f"qwen-fast:{qwen_model}",
-                    delay_seconds=1.1 if (gemini_on or nvidia_on) else 0.0,
-                    factory=lambda: qwen_stream(
-                        messages,
-                        max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                    ),
+                    delay_seconds=0.0,
+                    factory=lambda: qwen_stream(messages, max_tokens=output_token_budget),
                 )
             )
+
+        preferred_provider = (
+            str(packet.get("preferred_provider") or "").strip().lower()
+            if isinstance(packet, dict)
+            else ""
+        )
+
+        def provider_family(name: str) -> str:
+            value = name.lower()
+            if value.startswith("gemini"):
+                return "gemini"
+            if value.startswith("nvidia"):
+                return "nvidia"
+            if value.startswith("qwen"):
+                return "qwen"
+            return value.split(":", 1)[0]
+
+        preferred_family = provider_family(preferred_provider) if preferred_provider else ""
+        default_order = {"gemini": 0, "nvidia": 1, "qwen": 2}
+        direct.sort(
+            key=lambda item: (
+                0 if preferred_family and provider_family(item.name) == preferred_family else 1,
+                default_order.get(provider_family(item.name), 9),
+            )
+        )
+        hedges: list[HedgeCandidate] = [
+            HedgeCandidate(
+                name=item.name,
+                delay_seconds=_PROVIDER_HEDGE_DELAYS[
+                    min(index, len(_PROVIDER_HEDGE_DELAYS) - 1)
+                ],
+                factory=item.factory,
+            )
+            for index, item in enumerate(direct)
+        ]
 
         fallback_configs = [
             config
@@ -311,7 +368,7 @@ NEW_RUN = '''    @staticmethod
             if str(getattr(config, "model", "")) not in {gemini_model, nvidia_model, qwen_model}
         ]
         if fallback_configs:
-            hedges.append(deep_candidate(fallback_configs[0], 1.8))
+            hedges.append(deep_candidate(fallback_configs[0], _CATALOG_HEDGE_DELAY))
 
         if not hedges:
             logger.error("MURIKAH_LATENCY route=fast event=no_candidates")
