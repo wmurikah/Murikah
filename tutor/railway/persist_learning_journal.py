@@ -37,6 +37,7 @@ def main() -> int:
         murikah_journal_terminal = False
         murikah_journal_started_at = asyncio.get_running_loop().time()
         _murikah_journal = None
+        _murikah_turn_start = {}
 """,
         "journal lifecycle state",
     )
@@ -64,7 +65,7 @@ def main() -> int:
                 if _murikah_username.startswith("guest_")
                 else ("admin" if bool(getattr(_murikah_actor, "is_admin", False)) else "member")
             )
-            await asyncio.to_thread(
+            _murikah_turn_start = await asyncio.to_thread(
                 _murikah_journal.learning_turn_start,
                 turn_id=turn_id,
                 conversation_id=session_id,
@@ -76,7 +77,7 @@ def main() -> int:
                 language=str(payload.get("language", "en") or "en"),
                 llm_selection=payload.get("llm_selection"),
                 regenerate=is_regenerate,
-            )
+            ) or {}
             murikah_journal_started = True
 """,
         "D1 prompt journal",
