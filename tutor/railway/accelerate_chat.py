@@ -555,6 +555,9 @@ NEW_RUN = '''    @staticmethod
         incomplete = should_continue(answer, finish_reason, stream_failure)
 
         while incomplete and continuation_count < _MAX_CONTINUATIONS:
+            remaining_turn = turn_deadline - time.perf_counter()
+            if remaining_turn <= 0.75:
+                break
             continuation_count += 1
             await stream.progress(
                 "Continuing response…",
@@ -573,49 +576,56 @@ NEW_RUN = '''    @staticmethod
             )
 
             recovery_messages = continuation_messages(messages, answer)
-            recovery_hedges: list[HedgeCandidate] = []
+            recovery_direct: list[HedgeCandidate] = []
             if gemini_on:
-                recovery_hedges.append(
+                recovery_direct.append(
                     HedgeCandidate(
                         name=f"gemini-continuation:{gemini_model}",
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: gemini_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=output_token_budget,
                         ),
                     )
                 )
             if nvidia_on:
-                recovery_hedges.append(
+                recovery_direct.append(
                     HedgeCandidate(
                         name=f"nvidia-continuation:{nvidia_model}",
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: nvidia_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=output_token_budget,
                         ),
                     )
                 )
             if qwen_on:
-                recovery_hedges.append(
+                recovery_direct.append(
                     HedgeCandidate(
                         name=f"qwen-continuation:{qwen_model}",
                         delay_seconds=0.0,
                         factory=lambda recovery_messages=recovery_messages: qwen_stream(
                             recovery_messages,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=output_token_budget,
                         ),
                     )
                 )
+
+            winner_family = provider_family(winner.name)
+            recovery_direct.sort(
+                key=lambda item: (
+                    0 if provider_family(item.name) == winner_family else 1,
+                    default_order.get(provider_family(item.name), 9),
+                )
+            )
+            recovery_hedges: list[HedgeCandidate] = [
+                HedgeCandidate(
+                    name=item.name,
+                    delay_seconds=(0.0, 0.35, 0.7)[min(index, 2)],
+                    factory=item.factory,
+                )
+                for index, item in enumerate(recovery_direct)
+            ]
             if fallback_configs:
                 recovery_config = fallback_configs[0]
                 recovery_name = (
@@ -625,7 +635,7 @@ NEW_RUN = '''    @staticmethod
                 recovery_hedges.append(
                     HedgeCandidate(
                         name=f"catalog-continuation:{recovery_name}",
-                        delay_seconds=0.75,
+                        delay_seconds=0.9,
                         factory=lambda config=recovery_config, recovery_messages=recovery_messages: llm_factory.stream(
                             prompt="",
                             system_prompt="",
@@ -639,10 +649,7 @@ NEW_RUN = '''    @staticmethod
                             reasoning_effort=config.reasoning_effort,
                             extra_headers=config.extra_headers,
                             temperature=prompt_pipeline._chat_temperature,
-                            max_tokens=min(
-                                _FAST_OUTPUT_TOKENS,
-                                prompt_pipeline.respond_max_tokens,
-                            ),
+                            max_tokens=output_token_budget,
                             stream_coalesce_chars=24,
                             stream_coalesce_seconds=0.02,
                         ),
@@ -650,11 +657,14 @@ NEW_RUN = '''    @staticmethod
                 )
 
             recovery_started = time.perf_counter()
+            remaining_turn = max(0.0, turn_deadline - recovery_started)
+            if remaining_turn <= 0.75:
+                break
             recovery_winner = await race_first_visible(
                 recovery_hedges,
                 request_started=recovery_started,
-                first_token_timeout=min(8.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                overall_timeout=min(10.0, _OVERALL_FIRST_TOKEN_SECONDS),
+                first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS, remaining_turn),
+                overall_timeout=min(7.5, _OVERALL_FIRST_TOKEN_SECONDS, remaining_turn),
             )
             if recovery_winner is None:
                 logger.warning(
@@ -674,31 +684,39 @@ NEW_RUN = '''    @staticmethod
                     "continuation": continuation_count,
                 },
             )
-            recovery_tail, recovery_finish_reason, recovery_failure = await collect_remaining(
-                recovery_winner,
-                publish=False,
-                metadata=recovery_meta,
+
+            # Publish the continuation as soon as it begins. Only the first
+            # visible chunk is overlap-trimmed; the rest streams live instead
+            # of being hidden until an entire repair segment finishes.
+            continuation_head = trim_continuation_overlap(
+                answer,
+                recovery_winner.first_chunk,
             )
-            raw_continuation = recovery_winner.first_chunk + recovery_tail
-            continuation_text = trim_continuation_overlap(answer, raw_continuation)
-            if answer and continuation_text and not continuation_text[0].isspace():
+            if answer and continuation_head and not continuation_head[0].isspace():
                 if (
                     answer[-1:].isalnum()
-                    and continuation_text[0].isalnum()
+                    and continuation_head[0].isalnum()
                 ) or (
                     answer[-1:] in ",;:.!?)]}"
-                    and continuation_text[0].isalnum()
+                    and continuation_head[0].isalnum()
                 ):
-                    continuation_text = " " + continuation_text
-
-            if continuation_text:
-                answer += continuation_text
+                    continuation_head = " " + continuation_head
+            if continuation_head:
+                answer += continuation_head
                 await stream.content(
-                    continuation_text,
+                    continuation_head,
                     source="chat",
                     stage="responding",
                     metadata=recovery_meta,
                 )
+
+            recovery_tail, recovery_finish_reason, recovery_failure = await collect_remaining(
+                recovery_winner,
+                publish=True,
+                metadata=recovery_meta,
+            )
+            if recovery_tail:
+                answer += recovery_tail
 
             finish_reason = recovery_finish_reason
             stream_failure = recovery_failure
