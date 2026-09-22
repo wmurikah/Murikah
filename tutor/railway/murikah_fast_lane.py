@@ -714,6 +714,7 @@ async def race_first_visible(
     request_started: float,
     first_token_timeout: float = DEFAULT_FIRST_TOKEN_TIMEOUT_SECONDS,
     overall_timeout: float = DEFAULT_OVERALL_FIRST_TOKEN_SECONDS,
+    hard_deadline: bool = False,
 ) -> HedgeWinner | None:
     """Hedge providers and keep the first one that produces visible text.
 
@@ -725,10 +726,17 @@ async def race_first_visible(
         return None
 
     latest_start = max(max(0.0, candidate.delay_seconds) for candidate in candidates)
-    effective_overall_timeout = max(
-        max(0.0, overall_timeout),
-        latest_start + max(0.0, first_token_timeout) + 0.5,
-    )
+    if hard_deadline:
+        # Interactive chat owns a strict user-facing first-token SLA. Delayed
+        # hedges share that wall-clock envelope instead of extending it.
+        effective_overall_timeout = max(0.0, overall_timeout)
+    else:
+        # Non-interactive callers may still choose the historical behavior in
+        # which a delayed hedge receives its full individual allowance.
+        effective_overall_timeout = max(
+            max(0.0, overall_timeout),
+            latest_start + max(0.0, first_token_timeout) + 0.5,
+        )
 
     async def probe(candidate: HedgeCandidate) -> HedgeWinner | None:
         stream: AsyncIterator[str] | None = None
