@@ -59,7 +59,7 @@ This applies to ordinary Tutor chat and ordinary follow-up turns. Deep Solve, re
 
 - [x] **Smaller default output budget**
   - Ordinary Chat: 1,800-token default ceiling.
-  - Explicit detailed/comprehensive/long-answer request: up to 2,800 tokens.
+  - Explicit detailed/comprehensive/long-answer request: up to 3,000 tokens.
   - Deep Solve remains separate.
   - Evidence: `turn_output_tokens` selection.
 
