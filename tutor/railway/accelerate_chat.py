@@ -399,6 +399,7 @@ NEW_RUN = '''    @staticmethod
             request_started=request_started,
             first_token_timeout=_FIRST_TOKEN_TIMEOUT_SECONDS,
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
+            hard_deadline=True,
         )
         # One bounded hedged race is the whole first-token budget. Starting a
         # second race after the deadline made ordinary follow-ups wait 15–20s
@@ -665,6 +666,7 @@ NEW_RUN = '''    @staticmethod
                 request_started=recovery_started,
                 first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS, remaining_turn),
                 overall_timeout=min(7.5, _OVERALL_FIRST_TOKEN_SECONDS, remaining_turn),
+                hard_deadline=True,
             )
             if recovery_winner is None:
                 logger.warning(
