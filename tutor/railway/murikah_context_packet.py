@@ -265,10 +265,11 @@ def schedule_next_context(
 ) -> None:
     """Schedule preparation without ever failing an already-completed answer."""
     try:
-        task = asyncio.create_task(
-            prepare_next_context(conversation_id, messages, answer, provider)
-        )
+        loop = asyncio.get_running_loop()
     except RuntimeError:
         return
+    task = loop.create_task(
+        prepare_next_context(conversation_id, messages, answer, provider)
+    )
     _background_tasks.add(task)
     task.add_done_callback(_background_done)
