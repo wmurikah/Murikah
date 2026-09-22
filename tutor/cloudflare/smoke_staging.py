@@ -96,7 +96,12 @@ def main() -> int:
         print(f"Worker config status: HTTP {config_code} {config_body[:1000]}")
         return 1
 
+    expected_revision = str(config.get("expectedImageRevision") or "").strip()
+    if not expected_revision:
+        print("Murikah Tutor staging smoke test: FAILED - Worker expected image revision is missing")
+        return 1
     print(" - Worker runtime can see required admin/auth secrets and D1/R2 persistence bindings")
+    print(f" - Worker expects Tutor image {expected_revision}")
     if config.get("verificationEmailConfigured") is True:
         print(" - verification email is configured")
     else:
@@ -134,12 +139,20 @@ def main() -> int:
                 print(
                     f" - {elapsed:>3}s status={status_code} running={parsed.get('running')} "
                     f"ready={parsed.get('ready')} http={parsed.get('httpStatus')} "
+                    f"image={parsed.get('imageRevision') or 'unknown'} "
+                    f"expected={parsed.get('expectedImageRevision') or expected_revision} "
                     f"state={state_name or 'unknown'} error={str(parsed.get('error') or '')[:160]}"
                 )
                 if parsed.get("workerSecretConfigured") is False:
                     print("Murikah Tutor staging smoke test: FAILED - Worker secret disappeared during startup")
                     return 1
                 if parsed.get("ready") is True:
+                    if parsed.get("imageRevision") != expected_revision:
+                        print(
+                            "Murikah Tutor staging smoke test: FAILED - ready runtime "
+                            "does not match the Worker expected image revision"
+                        )
+                        return 1
                     health_code, health_body = get("/health")
                     if health_code == 200:
                         ownership_ready, ownership = wait_for_ownership_reconciliation()
