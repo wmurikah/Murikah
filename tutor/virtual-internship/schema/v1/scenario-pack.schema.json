@@ -347,6 +347,53 @@
               "maxLength": 300
             }
           }
+        },
+        "reporting_relationships": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "manager_actor_id",
+              "direct_report_actor_id"
+            ],
+            "properties": {
+              "manager_actor_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                "maxLength": 64
+              },
+              "direct_report_actor_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                "maxLength": 64
+              }
+            }
+          }
+        },
+        "organization_chart_entries": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "department_id",
+              "label"
+            ],
+            "properties": {
+              "department_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                "maxLength": 64
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 160
+              }
+            }
+          }
         }
       }
     },
