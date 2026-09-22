@@ -28,6 +28,20 @@ class StructuredAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(meta["output_schema_version"],1)
         self.assertEqual(service.mutations,[])
 
+
+    async def test_structured_role_discards_hidden_thinking_chunks_before_json_validation(self):
+        service=FakeStateService(); sink=AuditSink(); c1=candidate()
+        valid={"schema_version":1,"proposal_type":"select_authored_event","event_id":"event_known","rationale_summary":"Use the authored event."}
+        orch=VirtualInternshipAIOrchestrator(
+            service,candidate_resolver=lambda *_a,**_k:[c1],
+            stream_factory=lambda *_a,**_k:FakeStream(["<think>","private reasoning","</think>",json.dumps(valid)]),
+            audit_recorder=sink,
+        )
+        result,meta=await orch.invoke_scenario_director(owner_actor_id="learner_a",internship_id="vi_1")
+        self.assertEqual(result["event_id"],"event_known")
+        self.assertNotIn("private reasoning",str(result))
+        self.assertNotIn("private reasoning",str(meta))
+
     async def test_structured_malformed_primary_repairs_once_via_fallback(self):
         service=FakeStateService(); sink=AuditSink(); candidates=[candidate(model_id="m1"),candidate(model_id="m2",model="vendor/m2")]
         calls=[]
