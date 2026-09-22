@@ -201,7 +201,14 @@ NEW_RUN = '''    @staticmethod
         return candidates
 
     async def _run_fast_chat(self, context: UnifiedContext, stream: StreamBus) -> None:
-        request_started = time.perf_counter()
+        pre_model_ms = max(
+            0,
+            int((context.metadata or {}).get("murikah_pre_model_ms") or 0),
+        )
+        # Reconstruct an end-to-end monotonic start so TTFT includes D1 turn
+        # journaling and DeepTutor history/context preparation, not merely the
+        # provider call that happens afterwards.
+        request_started = time.perf_counter() - (pre_model_ms / 1000.0)
         context_build_started = time.perf_counter()
         prompt_pipeline = AgenticChatPipeline(language=context.language)
         raw_messages = prompt_pipeline._build_loop_messages(
@@ -220,7 +227,8 @@ NEW_RUN = '''    @staticmethod
             max_chars=_FAST_CONTEXT_CHARS,
         )
         messages = context_window.messages
-        context_build_ms = latency_ms(context_build_started)
+        local_context_build_ms = latency_ms(context_build_started)
+        context_build_ms = pre_model_ms + local_context_build_ms
         output_token_budget = min(
             _output_token_budget(context),
             prompt_pipeline.respond_max_tokens,
@@ -250,6 +258,13 @@ NEW_RUN = '''    @staticmethod
             context_window.context_packet_chars,
             context_build_ms,
             output_token_budget,
+        )
+        logger.info(
+            "MURIKAH_LATENCY route=fast event=context_breakdown pre_model_ms=%s "
+            "local_prompt_build_ms=%s total_context_ms=%s",
+            pre_model_ms,
+            local_context_build_ms,
+            context_build_ms,
         )
 
         resolved: list[Any] = []
