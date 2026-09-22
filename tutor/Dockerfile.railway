@@ -43,6 +43,11 @@ COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
 COPY tutor/railway/apply_workspace_access.py /opt/murikah/apply_workspace_access.py
 COPY tutor/railway/hide_guest_account_ui.py /opt/murikah/hide_guest_account_ui.py
+COPY tutor/railway/apply_tutor_personalization.py /opt/murikah/apply_tutor_personalization.py
+COPY tutor/railway/murikah_personalization.py /opt/murikah/murikah_personalization.py
+COPY tutor/railway/murikah_visible_text.py /opt/murikah/murikah_visible_text.py
+COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personalization.ts
+COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py
 COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt
@@ -97,6 +102,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
     && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
     && python /opt/murikah/hide_guest_account_ui.py /src/DeepTutor \
+    && python /opt/murikah/apply_tutor_personalization.py /src/DeepTutor /opt/murikah \
     && cp /opt/murikah/murikah-logo.png /src/DeepTutor/web/public/murikah-logo.png
 
 FROM node:22-slim AS frontend-builder
@@ -111,7 +117,8 @@ COPY tutor/tests/guest-limit.spec.tsx.txt ./tests/integration/guest-limit.spec.t
 COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx
 COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx
 COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verified-email-invites.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx
+COPY tutor/tests/personalization-visible-text.spec.tsx.txt ./tests/integration/personalization-visible-text.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
@@ -169,6 +176,11 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/settings.py /app
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /app/deeptutor/agents/chat/capability.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/math_animator /app/deeptutor/agents/math_animator
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/_turn_runtime_shared.py /app/deeptutor/services/session/_turn_runtime_shared.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/runtime/stream_bus.py /app/deeptutor/runtime/stream_bus.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/agents/loop/pipeline.py /app/deeptutor/agents/loop/pipeline.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_personalization.py /app/deeptutor/murikah_personalization.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_visible_text.py /app/deeptutor/murikah_visible_text.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_context_packet.py /app/deeptutor/murikah_context_packet.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
