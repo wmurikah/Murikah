@@ -735,6 +735,7 @@ NEW_RUN = '''    @staticmethod
         if continuation_providers:
             context.metadata["murikah_continuation_providers"] = continuation_providers
 
+        context.metadata["murikah_incomplete"] = bool(incomplete)
         if incomplete:
             logger.warning(
                 "MURIKAH_LATENCY route=fast event=terminal_incomplete_response finish_reason=%s failure=%s continuations=%s elapsed_ms=%s",
@@ -743,13 +744,28 @@ NEW_RUN = '''    @staticmethod
                 continuation_count,
                 latency_ms(request_started),
             )
-            raise RuntimeError(
-                "Murikah could not finish this response right now. Please try again."
+            interruption_note = (
+                "\n\n*The response was interrupted. Send “continue” and I’ll pick up from here.*"
+            )
+            answer += interruption_note
+            await stream.content(
+                interruption_note,
+                source="chat",
+                stage="responding",
+                metadata=merge_trace_metadata(
+                    trace_meta,
+                    {
+                        "trace_kind": "llm_chunk",
+                        "murikah_lane": "fast",
+                        "interrupted": True,
+                    },
+                ),
             )
 
         context.capability_output.agent_output = answer
         context.capability_output.answer_published = True
         total_ms = latency_ms(request_started)
+        context.metadata["murikah_stream_ms"] = latency_ms(stream_started)
         context.metadata["murikah_total_ms"] = total_ms
         logger.info(
             "MURIKAH_LATENCY route=fast event=complete provider=%s first_token_ms=%s total_ms=%s",
@@ -791,6 +807,8 @@ NEW_RUN = '''    @staticmethod
     async def run(self, context: UnifiedContext, stream: StreamBus) -> None:
         reason = self._agent_reason(context)
         if reason:
+            context.metadata["murikah_lane"] = "deep_agent"
+            context.metadata["murikah_route_reason"] = reason
             started = time.perf_counter()
             logger.info(
                 "MURIKAH_LATENCY route=deep_agent event=start reason=%s enabled_tools=%s",
@@ -805,6 +823,8 @@ NEW_RUN = '''    @staticmethod
                 latency_ms(started),
             )
             return
+        context.metadata["murikah_lane"] = "fast"
+        context.metadata["murikah_route_reason"] = "ordinary_chat"
         await self._run_fast_chat(context, stream)
 '''
 
