@@ -126,10 +126,11 @@ def candidate(profile="shared", model_id="m1", provider="openai", model="vendor/
 
 
 class FakeStream:
-    def __init__(self, chunks=None, *, error=None, delay=0):
+    def __init__(self, chunks=None, *, error=None, delay=0, delays=None):
         self.chunks = list(chunks or [])
         self.error = error
         self.delay = delay
+        self.delays = list(delays or [])
         self.closed = False
         self.index = 0
 
@@ -138,8 +139,9 @@ class FakeStream:
 
     async def __anext__(self):
         import asyncio
-        if self.delay:
-            await asyncio.sleep(self.delay)
+        wait = self.delays[self.index] if self.index < len(self.delays) else self.delay
+        if wait:
+            await asyncio.sleep(wait)
         if self.index < len(self.chunks):
             value = self.chunks[self.index]
             self.index += 1
