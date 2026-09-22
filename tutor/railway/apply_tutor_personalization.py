@@ -588,14 +588,27 @@ import {
 ''',
         "guest stable greeting selection",
     )
-    replace_once(
-        path,
-        '''                <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">Learn in the mode that fits the moment.</h1>
-''',
-        '''                <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">{guestGreeting}</h1>
-''',
-        "guest generic greeting",
+    guest_text = path.read_text(encoding="utf-8")
+    home_marker = 'messages.length === 0 && spaceId === "home"'
+    home_start = guest_text.find(home_marker)
+    if home_start < 0:
+        raise RuntimeError("Guest home-view marker was not found")
+    heading_start = guest_text.find("<h1", home_start)
+    heading_open_end = guest_text.find(">", heading_start)
+    heading_close = guest_text.find("</h1>", heading_open_end)
+    if (
+        heading_start < 0
+        or heading_open_end < 0
+        or heading_close < 0
+        or heading_close - heading_start > 2500
+    ):
+        raise RuntimeError("Guest home-view heading was not found near its stable state marker")
+    guest_text = (
+        guest_text[: heading_open_end + 1]
+        + "{guestGreeting}"
+        + guest_text[heading_close:]
     )
+    path.write_text(guest_text, encoding="utf-8")
     replace_once(
         path,
         '''                    placeholder={activeMode.placeholder}
