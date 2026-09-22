@@ -43,17 +43,52 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
         self.assertIn("reconcile_pid=$!", text)
         self.assertIn("runtime remains available", text)
 
-    def test_source_deploy_diagnostics_refresh_after_readiness_failure(self):
+    def test_source_deploy_uses_live_revision_gate_without_application_recycling(self):
         deploy = ROOT / "cloudflare/deploy_staging.py"
         if not deploy.exists():
             return
         text = deploy.read_text(encoding="utf-8")
-        self.assertIn("def refreshed_failure_detail(", text)
-        self.assertIn("diagnostics refresh failed:", text)
-        self.assertGreaterEqual(
-            text.count("refreshed_failure_detail(expected_revision)"),
-            2,
-        )
+        self.assertIn("def wait_for_expected_runtime(", text)
+        self.assertIn('"/__muri/runtime-status"', text)
+        self.assertIn("imageRevision", text)
+        self.assertIn("Deployment verified non-destructively", text)
+        self.assertIn("def one_failure_diagnostic()", text)
+        self.assertNotIn("recycle_tutor_application", text)
+        self.assertNotIn('"containers", "delete"', text)
+        self.assertNotIn("runtime image revision is still unknown after deployment", text)
+
+    def test_successful_wrangler_deploy_is_not_replayed_for_manifest_warning(self):
+        deploy = ROOT / "cloudflare/deploy_staging.py"
+        if not deploy.exists():
+            return
+        text = deploy.read_text(encoding="utf-8")
+        success = text.index("if result.returncode == 0:")
+        retry = text.index("if attempt >= attempts or not is_transient_deploy_error", success)
+        self.assertLess(success, retry)
+        self.assertIn("exit code 0 is authoritative here", text)
+
+    def test_health_route_reports_runtime_image_revision(self):
+        health = ROOT / "railway/health-route.ts.txt"
+        if not health.exists():
+            return
+        text = health.read_text(encoding="utf-8")
+        self.assertIn('readFile("/app/murikah-cloudflare-image-rev", "utf8")', text)
+        self.assertIn("imageRevision", text)
+        self.assertIn("/health/ready", text)
+
+    def test_worker_refuses_stale_container_revision(self):
+        worker = ROOT / "cloudflare/src/index.ts"
+        if not worker.exists():
+            return
+        text = worker.read_text(encoding="utf-8")
+        self.assertIn("MURIKAH_EXPECTED_IMAGE_REV", text)
+        self.assertIn("imageRevision === expectedRevision", text)
+        self.assertIn("ready: httpReady && revisionReady", text)
+        self.assertIn("Waiting for Tutor image", text)
+        runtime_route = text.index("url.pathname === '/__muri/runtime-status'")
+        safe_status = text.index("const status = await safeStatus(tutor, runtimeEnv);", runtime_route)
+        cached_status = text.index("const status = await cachedStatus(tutor, runtimeEnv);", safe_status)
+        self.assertLess(safe_status, cached_status)
 
     def test_source_smoke_waits_for_ownership_after_runtime_health(self):
         smoke = ROOT / "cloudflare/smoke_staging.py"
