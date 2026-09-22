@@ -103,6 +103,16 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["role"] for item in portable], ["system", "user", "assistant", "user"])
         self.assertTrue(all(set(item) == {"role", "content"} for item in portable))
         self.assertEqual(portable[-1]["content"], "Proceed")
+        self.assertIn(fast.MURIKAH_VISIBLE_STYLE_RULE, portable[0]["content"])
+
+    async def test_fast_lane_adds_visible_style_rule_without_unbounded_context(self):
+        portable = fast.portable_chat_messages(
+            [{"role": "user", "content": "Explain correlation and causation."}],
+            max_chars=8000,
+        )
+        self.assertEqual(portable[0]["role"], "system")
+        self.assertEqual(portable[0]["content"], fast.MURIKAH_VISIBLE_STYLE_RULE)
+        self.assertEqual(portable[-1]["content"], "Explain correlation and causation.")
 
     async def test_portable_history_keeps_latest_turn_under_budget(self):
         messages = [
