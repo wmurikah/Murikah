@@ -71,6 +71,7 @@ new_sqlite_classes = ["TutorContainer"]
 
 [vars]
 MURIKAH_TUTOR_RUNTIME = "cloudflare-container-staging"
+MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33"
 MURIKAH_PUBLIC_BASE_URL = "https://tutor.murikah.com"
 MURIKAH_GUEST_PROMPT_LIMIT = "7"
 RESEND_FROM_EMAIL = "Murikah Tutor <noreply@murikah.com>"
