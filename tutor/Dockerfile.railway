@@ -196,6 +196,8 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/virtual_internship /app/deep
 COPY tutor/railway /opt/murikah/railway
 COPY tutor/virtual-internship /opt/murikah/virtual-internship
 COPY tutor/scripts/validate_virtual_internship_scenarios.py /opt/murikah/scripts/validate_virtual_internship_scenarios.py
+COPY tutor/cloudflare/src /opt/murikah/cloudflare/src
+COPY tutor/cloudflare/migrations /opt/murikah/cloudflare/migrations
 COPY tutor/cloudflare/entrypoint.sh /opt/murikah/cloudflare/entrypoint.sh
 COPY tutor/tests /opt/murikah/tests
 RUN python /opt/murikah/scripts/validate_virtual_internship_scenarios.py
