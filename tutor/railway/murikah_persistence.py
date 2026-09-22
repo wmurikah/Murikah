@@ -371,11 +371,12 @@ def learning_turn_start(
     language: str,
     llm_selection: Any = None,
     regenerate: bool = False,
-) -> None:
+) -> dict[str, Any]:
+    """Start the durable turn and fetch the pre-built context packet in one RTT."""
     if not enabled():
-        return
+        return {}
     profile_id, model_id = _selection_fields(llm_selection)
-    _json_request(
+    return _json_request(
         "POST",
         f"{PERSIST_PREFIX}/learning/turn/start",
         {
@@ -408,6 +409,20 @@ def learning_turn_finish(
     error_code: str = "",
     error_text: str = "",
     retryable: bool = False,
+    lane: str = "",
+    route_reason: str = "",
+    turn_number: int = 1,
+    is_followup: bool = False,
+    history_chars: int = 0,
+    history_messages: int = 0,
+    context_packet_chars: int = 0,
+    context_build_ms: int = 0,
+    output_token_budget: int = 0,
+    first_token_deadline_ms: int = 0,
+    stream_idle_timeout_ms: int = 0,
+    stream_ms: int = 0,
+    continuation_count: int = 0,
+    incomplete: bool = False,
 ) -> None:
     if not enabled():
         return
@@ -426,6 +441,20 @@ def learning_turn_finish(
             "error_code": _learning_text(error_code, 128),
             "error_text": _learning_text(error_text, 2_000),
             "retryable": bool(retryable),
+            "lane": _learning_text(lane, 32),
+            "route_reason": _learning_text(route_reason, 96),
+            "turn_number": max(1, int(turn_number or 1)),
+            "is_followup": bool(is_followup),
+            "history_chars": max(0, int(history_chars or 0)),
+            "history_messages": max(0, int(history_messages or 0)),
+            "context_packet_chars": max(0, int(context_packet_chars or 0)),
+            "context_build_ms": max(0, int(context_build_ms or 0)),
+            "output_token_budget": max(0, int(output_token_budget or 0)),
+            "first_token_deadline_ms": max(0, int(first_token_deadline_ms or 0)),
+            "stream_idle_timeout_ms": max(0, int(stream_idle_timeout_ms or 0)),
+            "stream_ms": max(0, int(stream_ms or 0)),
+            "continuation_count": max(0, int(continuation_count or 0)),
+            "incomplete": bool(incomplete),
         },
     )
 
