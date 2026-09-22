@@ -50,11 +50,6 @@ COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personali
 COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx.txt
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py
-COPY tutor/railway/murikah_personalization.py /opt/murikah/murikah_personalization.py
-COPY tutor/railway/murikah_visible_text.py /opt/murikah/murikah_visible_text.py
-COPY tutor/railway/apply_tutor_personalization.py /opt/murikah/apply_tutor_personalization.py
-COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personalization.ts.txt
-COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx.txt
 COPY tutor/railway/disposable_email_domains.txt /opt/murikah/disposable_email_domains.txt
 COPY tutor/railway/murikah_diagram.py /opt/murikah/murikah_diagram.py
 COPY tutor/railway/murikah_er.py /opt/murikah/murikah_er.py
