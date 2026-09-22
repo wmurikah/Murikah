@@ -263,7 +263,6 @@ def main() -> int:
             'def recover_unready_application(',
             'Fresh image passed isolated startup',
             'report,base=recover_unready_application(expected_revision)',
-            'fresh Tutor image failed isolated startup probe',
             'recycling the container application once',
         ),
     )
