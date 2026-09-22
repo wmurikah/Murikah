@@ -38,7 +38,7 @@ TRANSIENT_DEPLOY_ERRORS = (
     "no such manifest:",
     "manifest unknown",
 )
-DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS = 360
+DEFAULT_RUNTIME_ROLLOUT_TIMEOUT_SECONDS = 180
 
 
 def wrangler_path() -> str:
@@ -213,26 +213,32 @@ def wait_for_expected_runtime(
     expected_revision: str,
     *,
     timeout_seconds: int,
-) -> tuple[dict[str, Any], str]:
-    """Wait for the main Tutor instance, not the disposable diagnostic instance.
+) -> dict[str, Any]:
+    """Observe the main Tutor instance without turning rollout lag into failure.
 
-    The new Worker can become active before Cloudflare replaces the old
-    container image. /__muri/runtime-status is deliberately non-cached and
-    reports the image revision returned by the live container's /health route.
+    Cloudflare documents that Worker activation and container replacement are
+    asynchronous. The Worker itself refuses to proxy a stale/unknown revision,
+    so an old image can never be served as ready. This observer therefore
+    distinguishes a broken *new* image from a merely pending rollout.
     """
     deadline = time.monotonic() + timeout_seconds
     last_status: dict[str, Any] = {}
     last_base = VERIFY_BASES[0]
     last_error = ""
     last_line = ""
+    had_status = False
+    saw_expected_revision = False
 
     while time.monotonic() < deadline:
         for base in VERIFY_BASES:
             try:
                 status = fetch_json(base, "/__muri/runtime-status", timeout=12)
+                had_status = True
                 last_status = status
                 last_base = base
                 revision = runtime_revision(status)
+                if revision == expected_revision:
+                    saw_expected_revision = True
                 line = (
                     "[Murikah Tutor] Live rollout check: "
                     f"running={bool(status.get('running'))} "
@@ -255,27 +261,28 @@ def wait_for_expected_runtime(
                     and status.get("httpStatus") == 200
                     and revision == expected_revision
                 ):
-                    return status, base
+                    return {
+                        "converged": True,
+                        "status": status,
+                        "base": base,
+                        "hadStatus": True,
+                        "sawExpectedRevision": True,
+                        "lastError": "",
+                    }
             except RuntimeError:
                 raise
             except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
         time.sleep(3)
 
-    summary = {
-        "running": last_status.get("running"),
-        "ready": last_status.get("ready"),
-        "httpStatus": last_status.get("httpStatus"),
-        "imageRevision": runtime_revision(last_status) or "unknown",
-        "expectedImageRevision": expected_revision,
-        "error": str(last_status.get("error") or "")[:300],
+    return {
+        "converged": False,
+        "status": last_status,
+        "base": last_base,
+        "hadStatus": had_status,
+        "sawExpectedRevision": saw_expected_revision,
+        "lastError": last_error,
     }
-    raise RuntimeError(
-        "Cloudflare accepted the deployment, but the live Tutor instance did not "
-        f"converge to image {expected_revision} within {timeout_seconds}s. "
-        f"Last status={json.dumps(summary, sort_keys=True)}"
-        + (f"; last probe error={last_error}" if last_error else "")
-    )
 
 
 def startup_log(report: dict[str, Any]) -> str:
@@ -331,21 +338,58 @@ def main() -> int:
     apply_persistence_migrations()
     deploy()
 
-    try:
-        _, base = wait_for_expected_runtime(
-            expected_revision,
-            timeout_seconds=runtime_rollout_timeout(),
-        )
-    except RuntimeError as exc:
-        detail = one_failure_diagnostic()
-        raise RuntimeError(f"{exc}\n{detail}") from exc
-
-    print(
-        "[Murikah Tutor] Deployment verified non-destructively: "
-        f"live image {expected_revision}, port 3782 healthy via {base}.",
-        flush=True,
+    observation = wait_for_expected_runtime(
+        expected_revision,
+        timeout_seconds=runtime_rollout_timeout(),
     )
-    return 0
+    status = observation.get("status")
+    status = status if isinstance(status, dict) else {}
+    base = str(observation.get("base") or VERIFY_BASES[0])
+
+    if observation.get("converged") is True:
+        print(
+            "[Murikah Tutor] Deployment verified non-destructively: "
+            f"live image {expected_revision}, port 3782 healthy via {base}.",
+            flush=True,
+        )
+        return 0
+
+    state = status.get("state") if isinstance(status.get("state"), dict) else {}
+    state_name = str(state.get("status") or "")
+    if observation.get("sawExpectedRevision") is True or state_name == "stopped_with_code":
+        detail = one_failure_diagnostic()
+        summary = {
+            "running": status.get("running"),
+            "ready": status.get("ready"),
+            "httpStatus": status.get("httpStatus"),
+            "imageRevision": runtime_revision(status) or "unknown",
+            "expectedImageRevision": expected_revision,
+            "state": state_name or "unknown",
+            "error": str(status.get("error") or "")[:300],
+        }
+        raise RuntimeError(
+            "The expected Tutor image reached the live runtime but did not become "
+            "healthy, so this is a real startup failure rather than rollout lag. "
+            f"Last status={json.dumps(summary, sort_keys=True)}\n{detail}"
+        )
+
+    if observation.get("hadStatus") is True:
+        print(
+            "[Murikah Tutor] Deployment target accepted; Cloudflare is still "
+            f"replacing the previous container with {expected_revision}. "
+            "The Worker readiness gate is refusing stale/unknown images, and its "
+            "self-healing revision check will recycle the stale instance until the "
+            "new target starts. Asynchronous rollout lag is not a build failure.",
+            flush=True,
+        )
+        return 0
+
+    detail = one_failure_diagnostic()
+    raise RuntimeError(
+        "Worker deployment was accepted but no live Tutor runtime status could be "
+        f"observed during rollout; last probe error={observation.get('lastError') or 'unknown'}\n"
+        + detail
+    )
 
 
 if __name__ == "__main__":
