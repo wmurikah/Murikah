@@ -400,53 +400,10 @@ NEW_RUN = '''    @staticmethod
             first_token_timeout=_FIRST_TOKEN_TIMEOUT_SECONDS,
             overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
         )
-        if winner is None:
-            # One transparent reconnect race before the learner sees any error.
-            # Start every direct provider at once; shared trial capacity or a
-            # transient regional connection must not kill an ordinary follow-up.
-            retry_hedges: list[HedgeCandidate] = []
-            if gemini_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"gemini-retry:{gemini_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: gemini_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if nvidia_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"nvidia-retry:{nvidia_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: nvidia_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if qwen_on:
-                retry_hedges.append(
-                    HedgeCandidate(
-                        name=f"qwen-retry:{qwen_model}",
-                        delay_seconds=0.0,
-                        factory=lambda: qwen_stream(
-                            messages,
-                            max_tokens=min(_FAST_OUTPUT_TOKENS, prompt_pipeline.respond_max_tokens),
-                        ),
-                    )
-                )
-            if fallback_configs:
-                retry_hedges.append(deep_candidate(fallback_configs[0], 0.0))
-            if retry_hedges:
-                winner = await race_first_visible(
-                    retry_hedges,
-                    request_started=request_started,
-                    first_token_timeout=min(6.0, _FIRST_TOKEN_TIMEOUT_SECONDS),
-                    overall_timeout=min(7.0, _OVERALL_FIRST_TOKEN_SECONDS),
-                )
+        # One bounded hedged race is the whole first-token budget. Starting a
+        # second race after the deadline made ordinary follow-ups wait 15–20s
+        # before even beginning to answer. Provider failover already happens
+        # inside the concurrent hedge set above.
 
         if winner is None:
             elapsed = latency_ms(request_started)
@@ -495,11 +452,11 @@ NEW_RUN = '''    @staticmethod
         )
 
         context.metadata["murikah_provider"] = winner.name
-        if winner.name.startswith(("gemini:", "gemini-retry:")):
+        if winner.name.startswith("gemini:"):
             winner_model = gemini_model
-        elif winner.name.startswith(("nvidia-fast:", "nvidia-retry:")):
+        elif winner.name.startswith("nvidia-fast:"):
             winner_model = nvidia_model
-        elif winner.name.startswith(("qwen-fast:", "qwen-retry:")):
+        elif winner.name.startswith("qwen-fast:"):
             winner_model = qwen_model
         else:
             winner_model = winner.name.split(":", 1)[1] if ":" in winner.name else ""
