@@ -31,6 +31,7 @@ type TutorEnv = {
   TUTOR_DB: PersistenceDatabase;
   TUTOR_FILES: PersistenceBucket;
   MURIKAH_TUTOR_RUNTIME: string;
+  MURIKAH_EXPECTED_IMAGE_REV?: string;
   MURIKAH_PUBLIC_BASE_URL?: string;
   MURIKAH_GUEST_PROMPT_LIMIT?: string;
   TZ: string;
@@ -94,6 +95,8 @@ type RuntimeStatus = {
   running: boolean;
   ready: boolean;
   httpStatus?: number;
+  imageRevision?: string;
+  expectedImageRevision?: string;
   state?: ContainerState | { error: string };
   error?: string;
   workerSecretConfigured?: boolean;
@@ -1235,6 +1238,7 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     TZ: source.TZ || 'Africa/Nairobi',
     FRONTEND_HOST: '0.0.0.0',
     MURIKAH_TUTOR_RUNTIME: optional(source.MURIKAH_TUTOR_RUNTIME),
+    MURIKAH_EXPECTED_IMAGE_REV: optional(source.MURIKAH_EXPECTED_IMAGE_REV),
     MURIKAH_PUBLIC_BASE_URL: optional(source.MURIKAH_PUBLIC_BASE_URL),
     MURIKAH_GUEST_PROMPT_LIMIT: optional(source.MURIKAH_GUEST_PROMPT_LIMIT) || '7',
     MURIKAH_TUTOR_ADMIN_USERNAME: optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || 'admin',
@@ -1331,8 +1335,10 @@ export class TutorContainer extends Container<TutorEnv> {
       };
     }
 
+    const expectedRevision = (runtimeEnv.MURIKAH_EXPECTED_IMAGE_REV || '').trim();
+
     if (this.ctx.container.running) {
-      const current = await this.runtimeStatus();
+      const current = await this.runtimeStatus(expectedRevision);
       return { ...current, workerSecretConfigured: true };
     }
 
@@ -1349,6 +1355,7 @@ export class TutorContainer extends Container<TutorEnv> {
         return {
           running: false,
           ready: false,
+          expectedImageRevision: expectedRevision || undefined,
           state: await this.readContainerState(),
           error: startError,
           workerSecretConfigured: true,
@@ -1357,7 +1364,7 @@ export class TutorContainer extends Container<TutorEnv> {
     }
 
     await delay(150);
-    const status = await this.runtimeStatus();
+    const status = await this.runtimeStatus(expectedRevision);
     return {
       ...status,
       error: status.error || (status.running ? undefined : startError || undefined),
@@ -1365,10 +1372,15 @@ export class TutorContainer extends Container<TutorEnv> {
     };
   }
 
-  async runtimeStatus(): Promise<RuntimeStatus> {
+  async runtimeStatus(expectedRevision = ''): Promise<RuntimeStatus> {
     const state = await this.readContainerState();
     if (!this.ctx.container.running) {
-      return { running: false, ready: false, state };
+      return {
+        running: false,
+        ready: false,
+        expectedImageRevision: expectedRevision || undefined,
+        state,
+      };
     }
 
     const controller = new AbortController();
@@ -1378,16 +1390,33 @@ export class TutorContainer extends Container<TutorEnv> {
         signal: controller.signal,
         headers: { 'cache-control': 'no-store' },
       });
+      let imageRevision = '';
+      try {
+        const payload = (await response.clone().json()) as { imageRevision?: unknown };
+        imageRevision =
+          typeof payload.imageRevision === 'string' ? payload.imageRevision.trim() : '';
+      } catch {
+        imageRevision = '';
+      }
+      const httpReady = response.status === 200;
+      const revisionReady = !expectedRevision || imageRevision === expectedRevision;
       return {
         running: true,
-        ready: response.status === 200,
+        ready: httpReady && revisionReady,
         httpStatus: response.status,
+        imageRevision: imageRevision || undefined,
+        expectedImageRevision: expectedRevision || undefined,
         state,
+        error:
+          httpReady && !revisionReady
+            ? `Waiting for Tutor image ${expectedRevision}; current image is ${imageRevision || 'unknown'}.`
+            : undefined,
       };
     } catch (error) {
       return {
         running: true,
         ready: false,
+        expectedImageRevision: expectedRevision || undefined,
         state,
         error: errorText(error),
       };
@@ -1639,6 +1668,7 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
       verificationEmailConfigured: Boolean(optional(env.RESEND_API_KEY)),
       geminiFastLaneConfigured: Boolean(runtimeEnv.MURIKAH_GEMINI_API_KEY),
       fastChatModel: runtimeEnv.MURIKAH_FAST_CHAT_MODEL,
+      expectedImageRevision: optional(env.MURIKAH_EXPECTED_IMAGE_REV),
       persistenceConfigured: Boolean(env.TUTOR_DB && env.TUTOR_FILES),
       appInstance: APP_INSTANCE,
     },
@@ -1683,7 +1713,8 @@ async function safeStatus(
   }
 
   try {
-    let status = await tutor.runtimeStatus();
+    const expectedRevision = (runtimeEnv.MURIKAH_EXPECTED_IMAGE_REV || '').trim();
+    let status = await tutor.runtimeStatus(expectedRevision);
     if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
     return { ...status, workerSecretConfigured: true };
   } catch (error) {
@@ -1754,13 +1785,15 @@ export default {
     }
 
     const tutor = getContainer(env.TUTOR_CONTAINER, APP_INSTANCE);
-    const status = await cachedStatus(tutor, runtimeEnv);
 
     if (url.pathname === '/__muri/runtime-status') {
+      const status = await safeStatus(tutor, runtimeEnv);
       return Response.json(status, {
         headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
       });
     }
+
+    const status = await cachedStatus(tutor, runtimeEnv);
 
     if (status.ready) {
       try {
