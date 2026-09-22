@@ -46,8 +46,8 @@ COPY tutor/railway/hide_guest_account_ui.py /opt/murikah/hide_guest_account_ui.p
 COPY tutor/railway/apply_tutor_personalization.py /opt/murikah/apply_tutor_personalization.py
 COPY tutor/railway/murikah_personalization.py /opt/murikah/murikah_personalization.py
 COPY tutor/railway/murikah_visible_text.py /opt/murikah/murikah_visible_text.py
-COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personalization.ts
-COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx
+COPY tutor/railway/murikah-personalization.ts.txt /opt/murikah/murikah-personalization.ts.txt
+COPY tutor/railway/MurikahPreferredName.tsx.txt /opt/murikah/MurikahPreferredName.tsx.txt
 COPY tutor/railway/murikah_access.py /opt/murikah/murikah_access.py
 COPY tutor/railway/murikah_email_verification.py /opt/murikah/murikah_email_verification.py
 COPY tutor/railway/murikah_personalization.py /opt/murikah/murikah_personalization.py
@@ -103,7 +103,6 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/harden_admin_controls.py /src/DeepTutor \
     && python /opt/murikah/harden_math_animator.py /src/DeepTutor \
     && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
-    && python /opt/murikah/apply_tutor_personalization.py /src/DeepTutor /opt/murikah \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
     && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
@@ -124,7 +123,8 @@ COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx
 COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx
 COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verified-email-invites.spec.tsx
 COPY tutor/tests/personalization-visible-text.spec.tsx.txt ./tests/integration/personalization-visible-text.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx
+COPY tutor/tests/personalization.spec.tsx.txt ./tests/integration/personalization.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx tests/integration/personalization.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
