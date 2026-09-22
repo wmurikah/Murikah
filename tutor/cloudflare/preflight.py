@@ -98,6 +98,32 @@ def validate_resend_deploy_policy() -> None:
         )
 
 
+def validate_image_revision_alignment() -> None:
+    """The Worker readiness gate and Docker image must target the same revision."""
+    relative = "tutor/cloudflare/wrangler.toml"
+    content = require(relative)
+    if not content:
+        return
+    image_match = re.search(
+        r'MURIKAH_CLOUDFLARE_IMAGE_REV\s*=\s*"([^"]+)"',
+        content,
+    )
+    worker_match = re.search(
+        r'MURIKAH_EXPECTED_IMAGE_REV\s*=\s*"([^"]+)"',
+        content,
+    )
+    if not image_match or not worker_match:
+        failures.append(
+            f"{relative} must declare both build and Worker expected image revisions"
+        )
+        return
+    if image_match.group(1) != worker_match.group(1):
+        failures.append(
+            f"{relative} image revision mismatch: build={image_match.group(1)!r} "
+            f"worker={worker_match.group(1)!r}"
+        )
+
+
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
     bootstrap_path = ROOT / "tutor/railway/bootstrap_runtime.py"
@@ -972,6 +998,7 @@ def main() -> int:
     )
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
+    validate_image_revision_alignment()
     validate_bootstrap_fixture()
 
     if failures:
