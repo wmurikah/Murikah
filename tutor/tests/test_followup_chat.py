@@ -48,7 +48,7 @@ class FollowupChatTests(unittest.TestCase):
         self.assertIn("turn_deadline = request_started + _FAST_TURN_TIMEOUT_SECONDS", source)
         self.assertIn("selected_lane=fast", source)
         self.assertIn("selected_lane=deep_agent", source)
-        self.assertIn("2800 if long_answer_requested else _FAST_OUTPUT_TOKENS", source)
+        self.assertIn("3000 if long_answer_requested else _FAST_OUTPUT_TOKENS", source)
         self.assertIn("remaining_for_recovery = turn_deadline - time.perf_counter()", source)
         self.assertIn("continuation_skipped", source)
         self.assertNotIn("recover_with_standard_pipeline", source)
