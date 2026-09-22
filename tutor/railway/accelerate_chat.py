@@ -138,20 +138,22 @@ OLD_RUN = '''    async def run(self, context: UnifiedContext, stream: StreamBus)
 
 NEW_RUN = '''    @staticmethod
     def _agent_reason(context: UnifiedContext) -> str:
-        """Return why this turn genuinely needs the full DeepTutor agent lane.
+        """Promote only from explicit inputs belonging to *this* turn.
 
-        Tool availability alone is deliberately not a reason. DeepTutor can expose
-        optional tools on ordinary Chat by default; routing every such turn through
-        the agent loop is what made simple prompts take minutes.
+        Session metadata is intentionally not consulted directly: DeepTutor can
+        carry flags forward in conversation context, which used to make an
+        ordinary follow-up inherit a previous deep/tool route.
         """
         metadata = context.metadata or {}
-        if context.knowledge_bases:
-            return "knowledge_base"
-        if context.attachments:
-            return "attachments"
-        # Source metadata can persist from the previous answer. It must not
-        # promote an ordinary follow-up into the multi-agent lane by itself.
-        for key in (
+        current = metadata.get("murikah_current_turn")
+        if not isinstance(current, dict):
+            current = {
+                "knowledge_base": bool(context.knowledge_bases),
+                "attachments": bool(context.attachments),
+            }
+        ordered = (
+            "knowledge_base",
+            "attachments",
             "mastery_mode",
             "immersive_reading_mode",
             "question_bank_context",
@@ -159,8 +161,9 @@ NEW_RUN = '''    @staticmethod
             "research_mode",
             "force_agentic_chat",
             "tool_execution_requested",
-        ):
-            if metadata.get(key):
+        )
+        for key in ordered:
+            if current.get(key):
                 return key
         return ""
 
