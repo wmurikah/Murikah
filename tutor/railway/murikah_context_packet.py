@@ -57,11 +57,30 @@ def _build_summary(older: list[dict[str, str]], max_chars: int) -> str:
     if not older:
         return ""
     lines = ["Conversation summary:"]
-    for item in older[-12:]:
+    for item in older[-10:]:
         label = "Learner" if item["role"] == "user" else "Tutor"
         lines.append(f"- {label}: {_short(item['content'])}")
-        if sum(len(line) for line in lines) >= max_chars:
+        if sum(len(line) for line in lines) >= max_chars // 2:
             break
+
+    facts: list[str] = []
+    intents: list[str] = []
+    for item in older[-16:]:
+        text = _short(item["content"], 260)
+        low = text.lower()
+        if item["role"] == "user":
+            if any(token in low for token in ("my ", "i am ", "i'm ", "must ", "need ", "cannot ", "can't ", "should ")):
+                facts.append(text)
+            if "?" in text or any(token in low for token in ("i want", "please", "help me", "how do", "why ")):
+                intents.append(text)
+
+    if facts:
+        lines.append("Known facts / constraints:")
+        lines.extend(f"- {_short(value, 260)}" for value in facts[-5:])
+    if intents:
+        lines.append("Open threads / learner intents:")
+        lines.extend(f"- {_short(value, 260)}" for value in intents[-4:])
+
     return "\n".join(lines)[:max_chars]
 
 
