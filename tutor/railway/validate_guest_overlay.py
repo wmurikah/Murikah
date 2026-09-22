@@ -83,7 +83,7 @@ def main() -> None:
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
             'href="/register?next=%2Fvirtual-internship"',
-            'aria-label="Virtual Internship — coming soon"',
+            'aria-label="Virtual Internship, coming soon"',
         ),
     )
     forbid_markers(
@@ -141,7 +141,7 @@ def main() -> None:
             "at least three months",
             "AI workplace actors",
             "Competency Passport",
-            "Start internship — coming later",
+            "Start internship, coming later",
         ),
     )
     require_markers(
