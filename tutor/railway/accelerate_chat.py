@@ -27,9 +27,9 @@ from deeptutor.core.context import UnifiedContext
 from deeptutor.core.trace import build_trace_metadata, merge_trace_metadata, new_call_id
 from deeptutor.multi_user.model_access import allowed_llm_options
 from deeptutor.murikah_context_packet import (
-    build_context_packet,
-    prepare_next_context,
+    context_packet_for_turn,
     provider_affinity,
+    schedule_next_context,
 )
 from deeptutor.murikah_fast_lane import (
     HedgeCandidate,
@@ -183,7 +183,8 @@ NEW_RUN = '''    @staticmethod
             if isinstance(item, dict)
         )
         context_build_started = time.perf_counter()
-        messages = build_context_packet(
+        messages, context_cache_hit = context_packet_for_turn(
+            conversation_id,
             messages,
             max_chars=_FAST_CONTEXT_CHARS,
             recent_turns=4,
@@ -192,9 +193,10 @@ NEW_RUN = '''    @staticmethod
         context_build_ms = latency_ms(context_build_started)
         follow_up = sum(1 for item in messages if item.get("role") == "user") > 1
         logger.info(
-            "MURIKAH_LATENCY route=fast event=context_packet conversation=%s follow_up=%s raw_history_chars=%s packet_chars=%s context_build_ms=%s",
+            "MURIKAH_LATENCY route=fast event=context_packet conversation=%s follow_up=%s cache_hit=%s raw_history_chars=%s packet_chars=%s context_build_ms=%s",
             conversation_id or "unknown",
             follow_up,
+            context_cache_hit,
             raw_history_chars,
             packet_chars,
             context_build_ms,
@@ -329,6 +331,7 @@ NEW_RUN = '''    @staticmethod
                     "history_chars": raw_history_chars,
                     "context_packet_chars": packet_chars,
                     "context_build_ms": context_build_ms,
+                    "context_cache_hit": context_cache_hit,
                 },
             ),
         )
@@ -735,13 +738,11 @@ NEW_RUN = '''    @staticmethod
         )
         # Prepare the next follow-up packet after the answer is complete. This
         # is intentionally outside the learner-facing generation critical path.
-        asyncio.create_task(
-            prepare_next_context(
-                conversation_id,
-                messages,
-                answer,
-                winner.name,
-            )
+        schedule_next_context(
+            conversation_id,
+            messages,
+            answer,
+            winner.name,
         )
         await stream.progress(
             "",
