@@ -58,6 +58,26 @@ The browser receives only the naming fields it needs: `preferred_name`, `derived
 
 Derived fallback values are never silently written into `preferred_name`. Email/username tokens containing digits, machine-like/reserved labels such as `noreply`, `admin`, `user` or `test`, or otherwise unsuitable tokens are rejected so Tutor falls back to a generic greeting. Clearing the explicit name stores `NULL` while retaining `preferred_name_decided_at`, which restores derived-name behavior without treating the learner as never having answered.
 
+## Virtual Internship Phase 2 scenario state
+
+`0008_virtual_internship_phase2.sql` extends the Phase 1 Virtual Internship foundation without changing its ownership, duration or lifecycle semantics.
+
+D1 stores the immutable engine-ready scenario snapshot in `scenario_version_content` and normalized authored definitions in the `scenario_actors`, `scenario_facts`, `scenario_actor_knowledge`, `scenario_task_definitions`, `scenario_task_dependencies`, `scenario_event_definitions`, `scenario_event_triggers` and `scenario_decision_options` tables.
+
+An engine-ready `scenario_versions.manifest_ref` has the form:
+
+`d1:scenario-version-content/<scenario-version-id>`
+
+Its `scenario_versions.content_hash` must equal the SHA-256 content hash stored with the immutable D1 snapshot. Published definitions cannot be replaced by the normal install operation. Active internships therefore remain reproducible after a deployment or later repository scenario change.
+
+Per-internship mutable truth is stored separately in `internship_scenario_state`, `internship_scenario_facts`, `internship_tasks`, `internship_event_state`, `internship_decisions`, `internship_event_firings` and append-only `internship_state_changes`. These rows link only to `internship_id`; Phase 2 does not introduce another learner ownership authority.
+
+State-changing operations use the existing HMAC-protected `/__muri/persist/*` bridge. Member-specific reads are owner-bound through `internship_instances.learner_id`. The browser cannot directly write arbitrary facts, fire arbitrary events or patch canonical JSON.
+
+The runtime state revision is monotonic. `(internship_id, revision)` and request-id uniqueness protect retries and concurrent transitions, while `(internship_id, event_id)` makes once-only event firing exactly once in D1.
+
+Ordinary task dependency evaluation, actor/learner knowledge views and event evaluation use indexed D1 rows. They do not require R2 or container-local memory for correctness.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:
