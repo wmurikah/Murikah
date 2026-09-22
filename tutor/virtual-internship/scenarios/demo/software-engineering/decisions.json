@@ -1,0 +1,3 @@
+[
+  {"decision_id":"decision_priority_response","label":"How will you handle the higher priority?","options":[{"option_id":"replan","label":"Replan the work sequence."},{"option_id":"clarify","label":"Clarify the changed acceptance criteria."}]}
+]
