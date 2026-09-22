@@ -207,6 +207,44 @@ class PersistenceClientTests(unittest.TestCase):
         self.assertEqual(payload["stream_idle_timeout_ms"], 14000)
         self.assertEqual(payload["continuation_count"], 0)
 
+    def test_learning_turn_fail_preserves_followup_identity_and_latency(self):
+        captured = {}
+        original_enabled = persistence.enabled
+        original_json = persistence._json_request
+        persistence.enabled = lambda: True
+
+        def fake_json(method, path, payload=None):
+            captured.update(method=method, path=path, payload=payload)
+            return {"ok": True}
+
+        persistence._json_request = fake_json
+        try:
+            persistence.learning_turn_fail(
+                turn_id="turn_9",
+                error="provider timeout",
+                status="timed_out",
+                error_code="fast_lane_timeout",
+                total_ms=10000,
+                lane="fast",
+                route_reason="ordinary_chat",
+                turn_number=9,
+                is_followup=True,
+                history_chars=14000,
+                context_packet_chars=4900,
+                first_token_deadline_ms=10000,
+            )
+        finally:
+            persistence.enabled = original_enabled
+            persistence._json_request = original_json
+
+        payload = captured["payload"]
+        self.assertEqual(payload["status"], "timed_out")
+        self.assertEqual(payload["turn_number"], 9)
+        self.assertTrue(payload["is_followup"])
+        self.assertEqual(payload["lane"], "fast")
+        self.assertEqual(payload["history_chars"], 14000)
+        self.assertEqual(payload["context_packet_chars"], 4900)
+
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
         self.assertTrue(persistence._skip("user/settings/model_catalog.json"))
