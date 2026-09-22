@@ -34,6 +34,7 @@ class RolePolicy:
     structured_output: bool
     prompt_version: int
     output_schema_version: int | None = None
+    model_preference: str = "catalog"
 
 
 ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
@@ -46,6 +47,7 @@ ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
         candidate_limit=2,
         structured_output=False,
         prompt_version=ACTOR_PROMPT_VERSION,
+        model_preference="latency",
     ),
     VirtualInternshipModelRole.MENTOR: RolePolicy(
         role=VirtualInternshipModelRole.MENTOR,
@@ -56,6 +58,7 @@ ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
         candidate_limit=2,
         structured_output=False,
         prompt_version=MENTOR_PROMPT_VERSION,
+        model_preference="balanced",
     ),
     VirtualInternshipModelRole.ASSESSOR: RolePolicy(
         role=VirtualInternshipModelRole.ASSESSOR,
@@ -67,6 +70,7 @@ ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
         structured_output=True,
         prompt_version=ASSESSOR_PROMPT_VERSION,
         output_schema_version=ASSESSOR_OUTPUT_SCHEMA_VERSION,
+        model_preference="reasoning",
     ),
     VirtualInternshipModelRole.SCENARIO_DIRECTOR: RolePolicy(
         role=VirtualInternshipModelRole.SCENARIO_DIRECTOR,
@@ -78,6 +82,7 @@ ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
         structured_output=True,
         prompt_version=DIRECTOR_PROMPT_VERSION,
         output_schema_version=DIRECTOR_OUTPUT_SCHEMA_VERSION,
+        model_preference="reasoning",
     ),
 }
 
