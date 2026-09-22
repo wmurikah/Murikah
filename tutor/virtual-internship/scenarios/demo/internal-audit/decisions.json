@@ -1,0 +1,16 @@
+[
+  {
+    "decision_id": "decision_pressure_response",
+    "label": "How will you respond to the priority pressure?",
+    "options": [
+      {
+        "option_id": "clarify",
+        "label": "Ask for clarification and evidence."
+      },
+      {
+        "option_id": "escalate",
+        "label": "Escalate through the audit supervisor."
+      }
+    ]
+  }
+]
