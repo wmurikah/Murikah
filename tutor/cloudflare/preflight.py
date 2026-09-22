@@ -654,9 +654,6 @@ def main() -> int:
             'provider_affinity',
             'MURIKAH_CHAT_CONTEXT_CHARS',
             'qwen-fast:',
-            'qwen-retry:',
-            'nvidia-retry:',
-            'gemini-retry:',
             'terminal_first_token_timeout',
             '_FAST_TURN_TIMEOUT_SECONDS',
             'MURIKAH_CHAT_FAST_OUTPUT_TOKENS',
@@ -667,6 +664,9 @@ def main() -> int:
             'context_packet',
             'history_chars',
             'context_build_ms',
+            'turn_deadline = request_started + _FAST_TURN_TIMEOUT_SECONDS',
+            'selected_lane=fast',
+            'selected_lane=deep_agent',
             'route=deep_agent',
             'route=fast',
         ),
@@ -682,6 +682,8 @@ def main() -> int:
             'async def prepare_next_context(',
             'def schedule_next_context(',
             'Conversation summary:',
+            'Known facts / constraints:',
+            'Open threads / learner intents:',
         ),
     )
     forbid_markers(
