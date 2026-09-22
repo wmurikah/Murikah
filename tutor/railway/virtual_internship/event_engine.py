@@ -52,7 +52,7 @@ def _apply_mutation(pack:dict[str,Any],state:dict[str,Any],mutation:dict[str,Any
 def initialize_state(pack:dict[str,Any],started_at:int)->dict[str,Any]:
     from .knowledge import initial_runtime_facts
     from .task_graph import initial_task_states
-    return {"revision":0,"facts":initial_runtime_facts(pack),"tasks":initial_task_states(pack),
+    return {"revision":0,"facts":initial_runtime_facts(pack),"tasks":initial_task_states(pack["tasks"]),
             "due_at":{t["task_id"]:started_at+t["due_policy"]["days"]*86400 for t in pack["tasks"]},
             "fired_events":[],"decisions":{},"audit":[{"revision":0,"type":"scenario_initialized"}]}
 
