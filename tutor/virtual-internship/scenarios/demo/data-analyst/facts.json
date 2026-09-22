@@ -1,0 +1,71 @@
+[
+  {
+    "id": "fact_metric_policy",
+    "key": "metric_policy",
+    "value": "Revenue metrics use booked invoices only.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "analytics_standard",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_dataset_grain",
+    "key": "dataset_grain",
+    "value": "one row per invoice line",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "data_dictionary",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_quality_status",
+    "key": "quality_status",
+    "value": "unknown",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "quality_log",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_hidden_null_issue",
+    "key": "hidden_null_issue",
+    "value": "customer_segment has elevated nulls",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "sealed_quality_note",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_product_priority",
+    "key": "product_priority",
+    "value": "retention metric first",
+    "mutability": "mutable",
+    "visibility": "role",
+    "visibility_scopes": [
+      "manager",
+      "project_sponsor"
+    ],
+    "source": "roadmap",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_future_requirement",
+    "key": "future_requirement",
+    "value": "stakeholder will request weekly segmentation",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "event_schedule",
+    "initially_revealed": false,
+    "future_only": true
+  }
+]
