@@ -19,6 +19,10 @@ TRANSIENT_DEPLOY_ERRORS = (
     "application is currently being deleted",
     "try again later",
 )
+REGISTRY_PROPAGATION_MARKERS = (
+    "no such manifest:",
+    "manifest unknown",
+)
 
 def wrangler_path() -> str:
     local = ROOT / "node_modules" / ".bin" / "wrangler"
@@ -73,8 +77,24 @@ def deploy(*, attempts: int=8) -> str:
         result = run_wrangler("deploy","--containers-rollout=immediate",capture=True,check=False)
         emit_completed_process(result)
         last_output = f"{result.stdout or ''}\n{result.stderr or ''}"
-        if result.returncode == 0:
+        folded = last_output.casefold()
+        registry_pending = any(marker in folded for marker in REGISTRY_PROPAGATION_MARKERS)
+        if result.returncode == 0 and not registry_pending:
             return last_output
+        if result.returncode == 0 and registry_pending:
+            if attempt >= attempts:
+                raise RuntimeError(
+                    "Cloudflare accepted the deploy command but the container registry "
+                    "manifest was still unavailable after all propagation retries."
+                )
+            delay = max(20, delays[min(attempt-1,len(delays)-1)])
+            print(
+                "[Murikah Tutor] Cloudflare accepted the Worker deploy before the "
+                f"container manifest became readable; retrying after {delay}s "
+                f"({attempt}/{attempts})."
+            )
+            time.sleep(delay)
+            continue
         if attempt >= attempts or not is_transient_deploy_error(last_output):
             raise subprocess.CalledProcessError(result.returncode,result.args,output=result.stdout,stderr=result.stderr)
         delay = delays[min(attempt-1,len(delays)-1)]
@@ -210,6 +230,46 @@ def refreshed_failure_detail(expected_revision: str) -> str:
     except Exception as exc:
         return f"diagnostics refresh failed: {type(exc).__name__}: {exc}"
 
+
+def recover_fresh_but_unready_runtime(expected_revision: str) -> tuple[dict[str,Any],str]:
+    """Retry one clean application creation after an image/registry readiness race.
+
+    Cloudflare can report a successful Worker deploy while the freshly-pushed
+    container manifest is still propagating. In that state the expected image
+    revision may already be observable through diagnostics even though the
+    long-lived application never opens port 3782. Recreate the application once
+    after propagation has settled instead of failing the whole deployment on
+    that transient first-start race.
+    """
+    before = refreshed_failure_detail(expected_revision)
+    print(
+        "[Murikah Tutor] Expected image is present but port 3782 is still not "
+        "ready; recycling the container application once after registry propagation."
+    )
+    if before:
+        print("[Murikah Tutor] Pre-recycle readiness diagnostics:\n" + before)
+    recycle_tutor_application()
+    time.sleep(20)
+    deploy()
+    fresh, report, base = verify_fresh_runtime(expected_revision, timeout_seconds=180)
+    if not fresh:
+        detail = refreshed_failure_detail(expected_revision)
+        raise RuntimeError(
+            "Tutor readiness recovery recreated the application but the expected "
+            f"image {expected_revision} did not become observable"
+            + (f"\n{detail}" if detail else "")
+        )
+    status = wait_until_ready(base, timeout_seconds=300)
+    validate_runtime_report(report)
+    if status.get("ready") is not True or status.get("httpStatus") != 200:
+        detail = refreshed_failure_detail(expected_revision)
+        raise RuntimeError(
+            "Tutor readiness recovery deployed the expected image but port 3782 "
+            "still did not become healthy"
+            + (f"\n{detail}" if detail else "")
+        )
+    return report, base
+
 def main() -> int:
     expected_revision=expected_image_revision()
     apply_persistence_migrations()
@@ -252,8 +312,7 @@ def main() -> int:
     validate_runtime_report(report)
     status=wait_until_ready(base,timeout_seconds=180)
     if status.get("ready") is not True or status.get("httpStatus")!=200:
-        detail=safe_failure_detail(startup_log(report))
-        raise RuntimeError("fresh Tutor image deployed but did not become ready on port 3782"+(f"\n{detail}" if detail else ""))
+        report,base=recover_fresh_but_unready_runtime(expected_revision)
 
     print(f"[Murikah Tutor] Deployment verified: image {expected_revision}, port 3782 healthy.")
     return 0
