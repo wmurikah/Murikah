@@ -1066,6 +1066,148 @@ def main() -> int:
         )
     validate_virtual_internship_phase2_fixture()
     require_markers(
+        "tutor/cloudflare/migrations/0009_virtual_internship_phase3_ai.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS internship_ai_invocations",
+            "idx_internship_ai_invocations_internship_time",
+            "idx_internship_ai_invocations_role_time",
+            "idx_internship_ai_invocations_actor_time",
+            "virtual_internship_phase3_ai_schema_version",
+            "CHECK (model_role IN ('actor','mentor','assessor','scenario_director'))",
+            "CHECK (retry_count BETWEEN 0 AND 1)",
+            "CHECK (fallback_count BETWEEN 0 AND 1)",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0009_virtual_internship_phase3_ai.sql",
+        ("raw_prompt", "raw_response", "chain_of_thought TEXT", "scratchpad TEXT", "api_key TEXT", "authorization TEXT"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase3.ts",
+        (
+            "handlePhase3AIPersistenceRoute",
+            "/internships/ai/invocation",
+            "WHERE id = ? AND learner_id = ?",
+            "internship_ai_invocations",
+            "invalid_ai_audit_payload",
+            "ai_audit_persistence_failed",
+            "'api_key','authorization','prompt','response','chain_of_thought','scratchpad'",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "handlePhase3AIPersistenceRoute",
+            "const phase3Response = await handlePhase3AIPersistenceRoute",
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/roles.py",
+        (
+            "class VirtualInternshipModelRole",
+            'ACTOR = "actor"',
+            'MENTOR = "mentor"',
+            'ASSESSOR = "assessor"',
+            'SCENARIO_DIRECTOR = "scenario_director"',
+            "ORCHESTRATION_SCHEMA_VERSION = 1",
+            "INTERNSHIP_CONTEXT_MAX_CHARS = 14_000",
+            "max_attempts=2",
+            "first_token_timeout_seconds=7.0",
+            "first_token_timeout_seconds=9.0",
+            "total_timeout_seconds=55.0",
+            "total_timeout_seconds=35.0",
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/providers.py",
+        (
+            "allowed_llm_options",
+            "resolve_llm_config_for_selection",
+            "from deeptutor.services.llm import factory as llm_factory",
+            "candidate_limit",
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/virtual_internship/ai/providers.py",
+        ("INTERNSHIP_OPENAI_KEY", "INTERNSHIP_GEMINI_KEY", "INTERNSHIP_QWEN_KEY", "INTERNSHIP_NVIDIA_KEY"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/context.py",
+        (
+            "def build_actor_context(",
+            "service.actor_view(",
+            "def build_mentor_context(",
+            "service.learner_view(",
+            "def build_assessor_context(",
+            "def build_scenario_director_context(",
+            "build_context_packet",
+            "def normalized_context_hash(",
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/outputs.py",
+        (
+            "ASSESSOR_RESULTS",
+            "DIRECTOR_PROPOSAL_TYPES",
+            "def validate_assistance_level(",
+            "def validate_assessor_output(",
+            "def validate_director_output(",
+            "unknown fields",
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/orchestrator.py",
+        (
+            "class VirtualInternshipAIOrchestrator",
+            "SAFE_MESSAGES",
+            "async def stream_actor(",
+            "async def stream_mentor(",
+            "async def invoke_assessor(",
+            "async def invoke_scenario_director(",
+            "def apply_director_proposal(",
+            "state_service.record_decision(",
+            "state_service.evaluate(",
+            "MURIKAH_INTERNSHIP_AI",
+            "provider_stream_error",
+            "schema_validation_failed",
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/virtual_internship/ai/orchestrator.py",
+        ("execute_sql", "patch_scenario", "update_fact(", "set_task_state(", "chain_of_thought", "scratchpad"),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        ("def internship_ai_invocation_record(", "/internships/ai/invocation"),
+    )
+    for phase3_test, marker in (
+        ("tutor/tests/test_virtual_internship_ai_roles.py", "class AIRoleTests"),
+        ("tutor/tests/test_virtual_internship_actor_ai.py", "class ActorAITests"),
+        ("tutor/tests/test_virtual_internship_mentor_ai.py", "class MentorAITests"),
+        ("tutor/tests/test_virtual_internship_structured_ai.py", "class StructuredAITests"),
+        ("tutor/tests/test_virtual_internship_ai_failover.py", "class AIFailoverTests"),
+        ("tutor/tests/test_virtual_internship_ai_audit.py", "class AIAuditTests"),
+    ):
+        require_markers(phase3_test, (marker,))
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "## Phase 3 Implementation Record",
+            "## SUBSEQUENT AI ORCHESTRATION REQUIREMENT",
+            "- [x] Add model-role abstraction for actor, mentor, assessor and scenario director.",
+            "- [x] Test provider failure and malformed structured output.",
+            "Phase 4 remains completely unchecked.",
+        ),
+    )
+    require_markers(
+        "tutor/Dockerfile.railway",
+        (
+            "COPY tutor/railway/virtual_internship /src/DeepTutor/deeptutor/virtual_internship",
+            "COPY --from=branded-source /src/DeepTutor/deeptutor/virtual_internship /app/deeptutor/virtual_internship",
+            "COPY tutor/railway /opt/murikah/railway",
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "STANDARD_MINIMUM_INTERNSHIP_DAYS",
