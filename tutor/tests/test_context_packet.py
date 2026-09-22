@@ -82,6 +82,14 @@ class ContextPacketTests(unittest.TestCase):
         self.assertEqual(packet[-1]["role"], "user")
         self.assertEqual(packet[-1]["content"], "Give me an example.")
 
+    def test_background_schedule_is_fail_open_without_running_loop(self):
+        ctx.schedule_next_context(
+            "no-loop",
+            [{"role": "user", "content": "Hello"}],
+            "Hi",
+            "gemini:gemini-3.5-flash-lite",
+        )
+
     def test_provider_private_fields_are_not_retained(self):
         packet = ctx.build_context_packet(
             [
