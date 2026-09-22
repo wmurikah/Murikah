@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import sys
 from pathlib import Path
 import tempfile
 
@@ -257,6 +258,21 @@ def validate_personalization_fixture() -> None:
         content = require(relative)
         if content and "—" in content:
             failures.append(f"{relative} contains a source-controlled runtime em dash")
+
+
+def validate_virtual_internship_phase2_fixture() -> None:
+    """Validate committed scenario packs with the same deterministic offline validator used in CI."""
+    railway = str(ROOT / "tutor/railway")
+    if railway not in sys.path:
+        sys.path.insert(0, railway)
+    try:
+        from virtual_internship.validator import validate_all
+        rows = validate_all()
+    except Exception as exc:
+        failures.append(f"Virtual Internship Phase 2 scenario validation failed: {exc}")
+        return
+    if len(rows) != 3:
+        failures.append(f"Virtual Internship Phase 2 expected 3 demo packs, found {len(rows)}")
 
 
 def main() -> int:
@@ -948,6 +964,99 @@ def main() -> int:
         "tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql",
         ("CREATE TRIGGER",),
     )
+    require_markers(
+        "tutor/cloudflare/migrations/0008_virtual_internship_phase2.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS scenario_version_content",
+            "CREATE TABLE IF NOT EXISTS scenario_actors",
+            "CREATE TABLE IF NOT EXISTS scenario_facts",
+            "CREATE TABLE IF NOT EXISTS scenario_actor_knowledge",
+            "CREATE TABLE IF NOT EXISTS scenario_task_definitions",
+            "CREATE TABLE IF NOT EXISTS scenario_task_dependencies",
+            "CREATE TABLE IF NOT EXISTS scenario_event_definitions",
+            "CREATE TABLE IF NOT EXISTS scenario_event_triggers",
+            "CREATE TABLE IF NOT EXISTS internship_scenario_state",
+            "CREATE TABLE IF NOT EXISTS internship_scenario_facts",
+            "CREATE TABLE IF NOT EXISTS internship_tasks",
+            "CREATE TABLE IF NOT EXISTS internship_event_state",
+            "CREATE TABLE IF NOT EXISTS internship_event_firings",
+            "CREATE TABLE IF NOT EXISTS internship_state_changes",
+            "PRIMARY KEY (internship_id, revision)",
+            "PRIMARY KEY (internship_id, event_id)",
+            "virtual_internship_phase2_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0008_virtual_internship_phase2.sql",
+        ("CREATE TRIGGER", "scenario_owner_id", "engine_owner_id"),
+    )
+    require_markers(
+        "tutor/virtual-internship/schema/v1/scenario-pack.schema.json",
+        (
+            '"$schema": "https://json-schema.org/draft/2020-12/schema"',
+            '"schema_version"',
+            '"hidden_truth"',
+            '"time_elapsed_days"',
+            '"all_dependencies_completed"',
+            '"set_mutable_fact"',
+            '"additionalProperties": false',
+        ),
+    )
+    require_markers(
+        "tutor/scripts/validate_virtual_internship_scenarios.py",
+        ("Virtual Internship Phase 2 scenario validation: PASS", "validate_all"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase2.ts",
+        (
+            "SCENARIO_MAX_CASCADE_DEPTH = 16",
+            "d1:scenario-version-content/",
+            "buildScenarioInitializationStatements",
+            "handleScenarioPersistenceRoute",
+            "/scenario-definition/install",
+            "/internships/scenario/state",
+            "/internships/scenario/actor-view",
+            "/internships/scenario/learner-view",
+            "/internships/scenario/task-transition",
+            "/internships/scenario/decision",
+            "/internships/scenario/evaluate",
+            "scenario_revision_conflict",
+            "scenario_immutable_fact",
+            "invalid_actor_override",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        ("buildScenarioInitializationStatements", "...scenarioInitialization"),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def scenario_definition_install(",
+            "def scenario_definition_get(",
+            "def scenario_initialize(",
+            "def scenario_state_get(",
+            "def scenario_actor_view(",
+            "def scenario_learner_view(",
+            "def scenario_task_transition(",
+            "def scenario_record_decision(",
+            "def scenario_evaluate(",
+        ),
+    )
+    for phase2_test, marker in (
+        ("tutor/tests/test_virtual_internship_scenario_schema.py", "class ScenarioSchemaTests"),
+        ("tutor/tests/test_virtual_internship_scenario_state.py", "class ScenarioStateTests"),
+        ("tutor/tests/test_virtual_internship_actor_knowledge.py", "class ActorKnowledgeTests"),
+        ("tutor/tests/test_virtual_internship_task_graph.py", "class TaskGraphTests"),
+        ("tutor/tests/test_virtual_internship_event_engine.py", "class EventEngineTests"),
+    ):
+        require_markers(phase2_test, (marker,))
+    for demo in ("internal-audit", "data-analyst", "software-engineering"):
+        require_markers(
+            f"tutor/virtual-internship/scenarios/demo/{demo}/manifest.json",
+            ('"classification": "demo"', '"qualifying": false', '"content_hash"'),
+        )
+    validate_virtual_internship_phase2_fixture()
     require_markers(
         "tutor/cloudflare/src/index.ts",
         (
