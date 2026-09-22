@@ -197,6 +197,10 @@ async def access_status(request: Request, response: Response):
     return guest_status(request_identity(request))
 
 
+class PreferredNameUpdate(BaseModel):
+    preferred_name: str | None = Field(default=None, max_length=64)
+
+
 def _member_identity(request: Request):
     payload = request_identity(request)
     if payload is None or str(payload.username).startswith(PREFIX):
@@ -291,10 +295,6 @@ async def guest_session(request: Request, response: Response):
                 db.execute("INSERT INTO prompts VALUES (?, ?)", (uid, f"legacy:{n}"))
     set_session(response, username, uid)
     return {"guest": True, "ok": True}
-
-
-class PreferredNameUpdate(BaseModel):
-    preferred_name: str | None = Field(default=None, max_length=64)
 
 
 class SignupStart(BaseModel):
