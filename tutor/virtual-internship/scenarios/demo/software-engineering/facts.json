@@ -1,0 +1,8 @@
+[
+  {"id":"fact_bug_summary","key":"bug_summary","value":"Export can omit the final row under a narrow filter.","mutability":"immutable","visibility":"public","visibility_scopes":[],"source":"issue_record","initially_revealed":true,"future_only":false},
+  {"id":"fact_repro_status","key":"reproduction_status","value":"not_reproduced","mutability":"mutable","visibility":"learner_visible","visibility_scopes":[],"source":"qa_log","initially_revealed":true,"future_only":false},
+  {"id":"fact_hidden_trigger","key":"hidden_trigger","value":"empty final partition triggers the defect","mutability":"immutable","visibility":"hidden_truth","visibility_scopes":[],"source":"sealed_repro_note","initially_revealed":false,"future_only":false},
+  {"id":"fact_priority","key":"issue_priority","value":"medium","mutability":"mutable","visibility":"role","visibility_scopes":["manager","project_sponsor"],"source":"triage","initially_revealed":true,"future_only":false},
+  {"id":"fact_regression_risk","key":"regression_risk","value":"unknown","mutability":"mutable","visibility":"learner_visible","visibility_scopes":[],"source":"qa_review","initially_revealed":false,"future_only":false},
+  {"id":"fact_future_qa","key":"future_qa_signal","value":"QA will identify pagination regression risk","mutability":"immutable","visibility":"hidden_truth","visibility_scopes":[],"source":"event_schedule","initially_revealed":false,"future_only":true}
+]
