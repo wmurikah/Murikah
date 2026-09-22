@@ -170,6 +170,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/agents/chat/capability.py /a
 COPY --from=branded-source /src/DeepTutor/deeptutor/agents/math_animator /app/deeptutor/agents/math_animator
 COPY --from=branded-source /src/DeepTutor/deeptutor/services/session/turns/executor.py /app/deeptutor/services/session/turns/executor.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_fast_lane.py /app/deeptutor/murikah_fast_lane.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_context_packet.py /app/deeptutor/murikah_context_packet.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_persistence.py /app/deeptutor/murikah_persistence.py
 
 # The Python regression suite intentionally validates both installed runtime
