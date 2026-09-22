@@ -173,10 +173,6 @@ def context_packet_for_turn(
     cleaned = _clean_messages(messages)
     cached = get_cached_packet(conversation_id)
     if cached and isinstance(cached.get("messages"), list):
-        latest_user = next(
-            (item for item in reversed(cleaned) if item["role"] == "user"),
-            None,
-        )
         base = [
             item
             for item in cached["messages"]
@@ -184,9 +180,14 @@ def context_packet_for_turn(
             and item.get("role") in {"system", "user", "assistant"}
             and isinstance(item.get("content"), str)
         ]
-        if latest_user is not None:
-            if not base or base[-1] != latest_user:
-                base.append(latest_user)
+        # Merge the newest assistant/user tail from the authoritative runtime
+        # history. This closes the tiny race where a learner submits the next
+        # prompt before the previous turn's background packet task has finished.
+        for item in cleaned[-2:]:
+            if item["role"] == "system":
+                continue
+            if not base or base[-1] != item:
+                base.append(item)
         return (
             build_context_packet(base, max_chars=max_chars, recent_turns=recent_turns),
             True,
