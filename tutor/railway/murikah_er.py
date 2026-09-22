@@ -152,7 +152,7 @@ def render_plan(plan, style="editorial"):
     for i, line_text in enumerate(footer):
         svg.append(f'<text x="80" y="{footer_y+i*24}" font-size="12" fill="{muted}">{esc(line_text)}</text>')
     svg.append('</g></svg>')
-    narrative = 'Illustrative schema — confirm the relationships against your business rules.\n\n' + '\n'.join(relationships)
+    narrative = 'Illustrative schema. Confirm the relationships against your business rules.\n\n' + '\n'.join(relationships)
     if plan['assumptions']:
         narrative += '\n\nAssumptions:\n' + '\n'.join('- '+a for a in plan['assumptions'])
     fence = chr(96) * 3
