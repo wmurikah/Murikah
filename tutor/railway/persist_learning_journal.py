@@ -191,6 +191,7 @@ def main() -> int:
 """,
         """        except asyncio.CancelledError:
             if murikah_journal_started and not murikah_journal_terminal and _murikah_journal is not None:
+                _murikah_failure_meta = getattr(locals().get("context"), "metadata", {}) or {}
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(
                         _murikah_journal.learning_turn_fail,
@@ -203,6 +204,38 @@ def main() -> int:
                             0,
                             int((asyncio.get_running_loop().time() - murikah_journal_started_at) * 1000),
                         ),
+                        provider=str(_murikah_failure_meta.get("murikah_provider") or ""),
+                        model_id=str(_murikah_failure_meta.get("murikah_model") or ""),
+                        first_token_ms=int(_murikah_failure_meta.get("murikah_first_token_ms") or 0),
+                        lane=str(_murikah_failure_meta.get("murikah_lane") or ""),
+                        route_reason=str(_murikah_failure_meta.get("murikah_route_reason") or ""),
+                        turn_number=int(
+                            _murikah_failure_meta.get("murikah_turn_number")
+                            or (
+                                _murikah_turn_start.get("turn_number")
+                                if isinstance(_murikah_turn_start, dict)
+                                else 1
+                            )
+                            or 1
+                        ),
+                        is_followup=bool(
+                            _murikah_failure_meta.get("murikah_is_followup")
+                            or (
+                                _murikah_turn_start.get("is_followup")
+                                if isinstance(_murikah_turn_start, dict)
+                                else False
+                            )
+                        ),
+                        history_chars=int(_murikah_failure_meta.get("murikah_history_chars") or 0),
+                        history_messages=int(_murikah_failure_meta.get("murikah_history_messages") or 0),
+                        context_packet_chars=int(_murikah_failure_meta.get("murikah_context_packet_chars") or 0),
+                        context_build_ms=int(_murikah_failure_meta.get("murikah_context_build_ms") or 0),
+                        output_token_budget=int(_murikah_failure_meta.get("murikah_output_token_budget") or 0),
+                        first_token_deadline_ms=int(_murikah_failure_meta.get("murikah_first_token_deadline_ms") or 0),
+                        stream_idle_timeout_ms=int(_murikah_failure_meta.get("murikah_stream_idle_timeout_ms") or 0),
+                        stream_ms=int(_murikah_failure_meta.get("murikah_stream_ms") or 0),
+                        continuation_count=int(_murikah_failure_meta.get("murikah_continuations") or 0),
+                        incomplete=bool(_murikah_failure_meta.get("murikah_incomplete")),
                     )
                 murikah_journal_terminal = True
             if execution.lease_lost:
@@ -219,6 +252,7 @@ def main() -> int:
             _murikah_timed_out = isinstance(exc, (TimeoutError, asyncio.TimeoutError))
             _murikah_public_error = "Murikah could not complete this response right now. Please retry."
             if murikah_journal_started and not murikah_journal_terminal and _murikah_journal is not None:
+                _murikah_failure_meta = getattr(locals().get("context"), "metadata", {}) or {}
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(
                         _murikah_journal.learning_turn_fail,
@@ -231,6 +265,38 @@ def main() -> int:
                             0,
                             int((asyncio.get_running_loop().time() - murikah_journal_started_at) * 1000),
                         ),
+                        provider=str(_murikah_failure_meta.get("murikah_provider") or ""),
+                        model_id=str(_murikah_failure_meta.get("murikah_model") or ""),
+                        first_token_ms=int(_murikah_failure_meta.get("murikah_first_token_ms") or 0),
+                        lane=str(_murikah_failure_meta.get("murikah_lane") or ""),
+                        route_reason=str(_murikah_failure_meta.get("murikah_route_reason") or ""),
+                        turn_number=int(
+                            _murikah_failure_meta.get("murikah_turn_number")
+                            or (
+                                _murikah_turn_start.get("turn_number")
+                                if isinstance(_murikah_turn_start, dict)
+                                else 1
+                            )
+                            or 1
+                        ),
+                        is_followup=bool(
+                            _murikah_failure_meta.get("murikah_is_followup")
+                            or (
+                                _murikah_turn_start.get("is_followup")
+                                if isinstance(_murikah_turn_start, dict)
+                                else False
+                            )
+                        ),
+                        history_chars=int(_murikah_failure_meta.get("murikah_history_chars") or 0),
+                        history_messages=int(_murikah_failure_meta.get("murikah_history_messages") or 0),
+                        context_packet_chars=int(_murikah_failure_meta.get("murikah_context_packet_chars") or 0),
+                        context_build_ms=int(_murikah_failure_meta.get("murikah_context_build_ms") or 0),
+                        output_token_budget=int(_murikah_failure_meta.get("murikah_output_token_budget") or 0),
+                        first_token_deadline_ms=int(_murikah_failure_meta.get("murikah_first_token_deadline_ms") or 0),
+                        stream_idle_timeout_ms=int(_murikah_failure_meta.get("murikah_stream_idle_timeout_ms") or 0),
+                        stream_ms=int(_murikah_failure_meta.get("murikah_stream_ms") or 0),
+                        continuation_count=int(_murikah_failure_meta.get("murikah_continuations") or 0),
+                        incomplete=bool(_murikah_failure_meta.get("murikah_incomplete")),
                     )
                 murikah_journal_terminal = True
             if stream_done_sent:
