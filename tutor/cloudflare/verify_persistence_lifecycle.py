@@ -52,8 +52,10 @@ def snapshot(base: str) -> dict:
         raise RuntimeError("Tutor persistence status is not healthy")
     if status.get("schemaVersion") != "1":
         raise RuntimeError("Base persistence schema is not ready")
-    if status.get("learningJournalSchemaVersion") != "1":
-        raise RuntimeError("Learning journal schema is not ready")
+    if status.get("learningJournalSchemaVersion") != "2":
+        raise RuntimeError("Learning journal schema v2 is not ready")
+    if status.get("followupFastPathSchemaVersion") != "1":
+        raise RuntimeError("Follow-up fast-path schema is not ready")
     if status.get("ownershipSchemaVersion") != "1":
         raise RuntimeError("Ownership schema is not ready")
     if int(status.get("unregisteredObjectCount") or 0) != 0:
