@@ -111,14 +111,15 @@ def main() -> int:
         persistence_code != 200
         or persistence.get("ok") is not True
         or persistence.get("schemaVersion") != "1"
-        or persistence.get("learningJournalSchemaVersion") != "1"
+        or persistence.get("learningJournalSchemaVersion") != "2"
+        or persistence.get("followupFastPathSchemaVersion") != "1"
         or persistence.get("ownershipSchemaVersion") != "1"
         or persistence.get("emailVerificationSchemaVersion") != "1"
     ):
-        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning/ownership/email-verification schema is not ready")
+        print("Murikah Tutor staging smoke test: FAILED - D1 persistence/learning/follow-up/ownership/email-verification schema is not ready")
         print(f"Persistence status: HTTP {persistence_code} {persistence_body[:1000]}")
         return 1
-    print(" - D1 persistence, learning journal, ownership and email-verification schemas v1 are ready")
+    print(" - D1 persistence schema v1, learning journal v2, follow-up fast-path v1, ownership v1 and email-verification v1 are ready")
     started = time.monotonic()
     last: dict = {}
 
