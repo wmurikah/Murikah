@@ -493,7 +493,7 @@ function SidebarSpaceButton({
     <button
       type="button"
       onClick={onSelect}
-      title={collapsed ? `${option.label} — ${option.description}` : option.description}
+      title={collapsed ? `${option.label}: ${option.description}` : option.description}
       aria-pressed={active}
       className={`group relative flex w-full items-center rounded-xl px-3 py-2.5 text-left text-[14px] font-medium transition-colors ${
         collapsed ? "justify-center" : "gap-3"
@@ -991,7 +991,7 @@ export default function MurikahGuestChat() {
                   setSidebarCollapsed(false);
                   setLearningModeOpen(true);
                 }}
-                title={`Choose Learning Mode — ${activeMode.label}`}
+                title={`Choose Learning Mode: ${activeMode.label}`}
                 className="flex w-full justify-center rounded-xl bg-[#A9822E]/10 p-3 text-[#A9822E] hover:bg-[#A9822E]/15"
               >
                 <ActiveModeIcon size={19} />
