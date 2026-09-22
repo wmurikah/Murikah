@@ -82,6 +82,8 @@ def main() -> None:
             '<MurikahInviteFriends',
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
+            'href="/register?next=%2Fvirtual-internship"',
+            'aria-label="Virtual Internship — coming soon"',
         ),
     )
     forbid_markers(
@@ -125,7 +127,21 @@ def main() -> None:
             'href: "/diagram-design"',
             'label: "Diagram Design"',
             "icon: Workflow",
+            'href: "/virtual-internship"',
+            'label: "Virtual Internship"',
+            "icon: GraduationCap",
+            'A 3+ month simulated workplace with evidence-based competency tracking',
             'requires: "llm"',
+        ),
+    )
+    require_markers(
+        root / "web/app/(workspace)/virtual-internship/page.tsx",
+        (
+            "Virtual Internship",
+            "at least three months",
+            "AI workplace actors",
+            "Competency Passport",
+            "Start internship — coming later",
         ),
     )
     require_markers(
