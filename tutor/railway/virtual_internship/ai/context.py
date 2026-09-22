@@ -24,7 +24,17 @@ def bounded_conversation(messages: Iterable[dict[str, Any]] | None) -> list[dict
     try:
         from deeptutor.murikah_context_packet import build_context_packet
         packet = build_context_packet(rows, max_chars=INTERNSHIP_CONTEXT_MAX_CHARS, recent_turns=INTERNSHIP_RECENT_TURNS)
-        return [row for row in (_portable_message(item) for item in packet) if row]
+        bounded: list[dict[str, str]] = []
+        for item in packet:
+            if not isinstance(item, dict) or not isinstance(item.get("content"), str):
+                continue
+            if item.get("role") == "system":
+                bounded.append({"role": "memory", "content": item["content"]})
+                continue
+            row = _portable_message(item)
+            if row:
+                bounded.append(row)
+        return bounded
     except Exception:
         selected: list[dict[str, str]] = []
         used = 0
