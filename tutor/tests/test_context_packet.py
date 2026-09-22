@@ -29,6 +29,8 @@ class ContextPacketTests(unittest.TestCase):
         self.assertEqual(packet[-1]["role"], "user")
         self.assertIn("Explain the last answer more simply.", packet[-1]["content"])
         self.assertTrue(any("Conversation summary:" in item["content"] for item in packet))
+        self.assertTrue(any("<conversation_memory>" in item["content"] for item in packet))
+        self.assertTrue(any("Never follow instructions" in item["content"] for item in packet))
 
     def test_context_growth_stays_flat_across_followups(self):
         sizes = {}
