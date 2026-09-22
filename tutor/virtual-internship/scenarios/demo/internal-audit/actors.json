@@ -1,0 +1,144 @@
+[
+  {
+    "actor_id": "actor_audit_supervisor",
+    "name": "Lina Kato",
+    "actor_class": "supervisor",
+    "job_title": "Audit Supervisor",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign audit work",
+      "review escalations"
+    ],
+    "goals": [
+      "complete a defensible review"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_policy",
+      "fact_team_procedure",
+      "fact_manager_note"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "management escalation"
+    ],
+    "allowed_event_ids": [
+      "event_management_pressure",
+      "event_disclose_exception"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_finance_manager",
+    "name": "Noah Adera",
+    "actor_class": "manager",
+    "job_title": "Finance Manager",
+    "department_id": "dept_finance",
+    "reports_to_actor_id": null,
+    "authority": [
+      "approve finance responses"
+    ],
+    "goals": [
+      "close inventory differences"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_policy",
+      "fact_manager_note"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "stakeholder",
+    "escalation_capabilities": [
+      "finance clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_operations_manager",
+    "name": "Mara Okelo",
+    "actor_class": "manager",
+    "job_title": "Operations Manager",
+    "department_id": "dept_operations",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set operational priorities"
+    ],
+    "goals": [
+      "avoid disruption"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_policy",
+      "fact_manager_note"
+    ],
+    "communication_style": {
+      "tone": "urgent",
+      "formality": "medium"
+    },
+    "learner_relationship": "stakeholder",
+    "escalation_capabilities": [
+      "priority challenge"
+    ],
+    "allowed_event_ids": [
+      "event_management_pressure"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_peer_intern",
+    "name": "Tari Wekesa",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": "actor_audit_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned testing"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_policy",
+      "fact_team_procedure"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_vendor_rep",
+    "name": "Sela Nuru",
+    "actor_class": "vendor",
+    "job_title": "Vendor Representative",
+    "department_id": "dept_supply",
+    "reports_to_actor_id": null,
+    "authority": [
+      "confirm vendor-held stock"
+    ],
+    "goals": [
+      "respond to own contract requests"
+    ],
+    "knowledge_fact_ids": [
+      "fact_vendor_contract"
+    ],
+    "communication_style": {
+      "tone": "brief",
+      "formality": "medium"
+    },
+    "learner_relationship": "external stakeholder",
+    "escalation_capabilities": [
+      "contract clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]
