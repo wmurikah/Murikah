@@ -55,6 +55,28 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
             2,
         )
 
+    def test_source_deploy_verifies_real_runtime_revision(self):
+        deploy = ROOT / "cloudflare/deploy_staging.py"
+        if not deploy.exists():
+            return
+        text = deploy.read_text(encoding="utf-8")
+        self.assertIn("DEPLOY_SUCCESS_MARKERS", text)
+        self.assertIn("deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)", text)
+        self.assertIn('"/__muri/runtime-revision"', text)
+        self.assertIn("def wait_for_runtime_revision(", text)
+        self.assertIn("stale_observations >= 2", text)
+        self.assertIn("Recycling the stale/indeterminate container application once", text)
+        self.assertIn("wait_for_runtime_revision(expected_revision,timeout_seconds=180)", text)
+
+    def test_worker_exposes_main_runtime_revision_endpoint(self):
+        worker = ROOT / "cloudflare/src/index.ts"
+        if not worker.exists():
+            return
+        text = worker.read_text(encoding="utf-8")
+        self.assertIn("async runtimeRevision()", text)
+        self.assertIn("'/__muri/runtime-revision'", text)
+        self.assertIn("expectedImageRevision", text)
+        self.assertIn("MURIKAH_CLOUDFLARE_IMAGE_REV", text)
     def test_source_smoke_waits_for_ownership_after_runtime_health(self):
         smoke = ROOT / "cloudflare/smoke_staging.py"
         if not smoke.exists():

@@ -252,10 +252,15 @@ def main() -> int:
             'def recycle_tutor_application()',
             'TRANSIENT_DEPLOY_ERRORS',
             'REGISTRY_PROPAGATION_MARKERS',
+            'DEPLOY_SUCCESS_MARKERS',
             '"no such manifest:"',
-            'def recover_fresh_but_unready_runtime(',
-            'recycling the container application once after registry propagation',
-            'wait_until_ready(base, timeout_seconds=300)',
+            'deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)',
+            'def wait_for_runtime_revision(',
+            '"/__muri/runtime-revision"',
+            'Main runtime image check:',
+            'Recycling the stale/indeterminate container application once',
+            'wait_for_runtime_revision(expected_revision,timeout_seconds=180)',
+            'wait_until_ready(base,timeout_seconds=300)',
             'def apply_persistence_migrations()',
             '"d1", "migrations", "apply", "murikah-tutor-prod", "--remote"',
             'MURIKAH_CLOUDFLARE_IMAGE_REV',
@@ -370,6 +375,10 @@ def main() -> int:
             'entrypoint: [CLOUDFLARE_ENTRYPOINT]',
             'async ensureStarted(',
             'async runtimeStatus()',
+            'async runtimeRevision()',
+            "'/__muri/runtime-revision'",
+            'expectedImageRevision',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV',
             'async isolatedStartupDiagnostics(',
             'isolatedStartupDiagnostics(runtimeEnv)',
             'this.ctx.container.getTcpPort(3782).fetch(',
@@ -963,7 +972,7 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive; deep-task NVIDIA selection is preserved for Solve and Math Animator")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with a transparent retry race")
+    print(" - fast chat uses provider affinity plus rapid Gemini/NVIDIA/Qwen hedges with a 10s first-token ceiling")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
@@ -975,8 +984,8 @@ def main() -> int:
     print(" - readiness is determined by the real Tutor /health route")
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
     print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
-    print(" - provider finish reasons are tracked and token-limited/interrupted answers continue invisibly before completion")
-    print(" - active fast-chat streams have a 4096-token segment budget, a 300s segment ceiling, and up to three hidden continuation passes")
+    print(" - provider finish reasons are tracked; one interrupted continuation streams live before a partial answer is preserved")
+    print(" - ordinary fast chat uses a 1800-token default, 15s idle ceiling, one continuation, and one shared 45s turn deadline")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
     print(" - every ordinary account inherits all shareable admin-configured LLMs dynamically; owner-bound admin OAuth models stay private")

@@ -23,6 +23,11 @@ REGISTRY_PROPAGATION_MARKERS = (
     "no such manifest:",
     "manifest unknown",
 )
+DEPLOY_SUCCESS_MARKERS = (
+    "deployed murikah-tutor-container-staging triggers",
+    "success  modified application",
+    "applied changes",
+)
 
 def wrangler_path() -> str:
     local = ROOT / "node_modules" / ".bin" / "wrangler"
@@ -79,6 +84,13 @@ def deploy(*, attempts: int=8) -> str:
         last_output = f"{result.stdout or ''}\n{result.stderr or ''}"
         folded = last_output.casefold()
         registry_pending = any(marker in folded for marker in REGISTRY_PROPAGATION_MARKERS)
+        deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)
+        if result.returncode == 0 and deploy_succeeded:
+            # Wrangler can emit a transient "no such manifest" while its own
+            # internal rollout retry is still converging, then finish with a
+            # successful application update. Trust the final success marker
+            # rather than replaying the whole image build/deploy unnecessarily.
+            return last_output
         if result.returncode == 0 and not registry_pending:
             return last_output
         if result.returncode == 0 and registry_pending:
@@ -151,6 +163,60 @@ def fetch_json(base: str, path: str, *, timeout: float) -> dict[str,Any]:
         payload=json.loads(response.read().decode("utf-8"))
     if not isinstance(payload,dict): raise RuntimeError(f"unexpected JSON payload from {base}{path}")
     return payload
+
+def runtime_revision_payload(base: str, *, timeout: float=20.0) -> dict[str,Any]:
+    return fetch_json(base, "/__muri/runtime-revision", timeout=timeout)
+
+def wait_for_runtime_revision(
+    expected_revision: str,
+    *,
+    timeout_seconds: int=120,
+) -> tuple[bool,dict[str,Any],str]:
+    """Verify the image running in the real Tutor application instance.
+
+    This deliberately avoids the isolated diagnostics container for the primary
+    rollout decision. The diagnostics instance is useful for failure detail but
+    can briefly report an unknown revision while Cloudflare's registry/control
+    plane converges, even when the real application has already been updated.
+    """
+    deadline=time.monotonic()+timeout_seconds
+    last_payload: dict[str,Any]={}
+    last_base=""
+    last_error=""
+    last_revision=""
+    stale_observations=0
+    while time.monotonic()<deadline:
+        for base in VERIFY_BASES:
+            try:
+                payload=runtime_revision_payload(base,timeout=20)
+                revision=str(payload.get("imageRevision") or "").strip()
+                ready=payload.get("ready") is True and payload.get("httpStatus")==200
+                running=payload.get("running") is True
+                print(
+                    f"[Murikah Tutor] Main runtime image check: "
+                    f"{revision or 'unknown'} (expected {expected_revision}); "
+                    f"running={running} ready={ready}."
+                )
+                last_payload=payload
+                last_base=base
+                last_revision=revision
+                if revision==expected_revision:
+                    return True,payload,base
+                if revision:
+                    stale_observations += 1
+                    # A concrete wrong revision is authoritative evidence that
+                    # the warm application did not roll to the deployed image.
+                    # Two observations avoid a one-off read during transition
+                    # without wasting the full timeout before deterministic
+                    # recreation.
+                    if stale_observations >= 2:
+                        return False,payload,base
+            except (HTTPError,URLError,TimeoutError,OSError,ValueError,RuntimeError) as exc:
+                last_error=f"{type(exc).__name__}: {exc}"
+        time.sleep(4)
+    if last_payload:
+        return last_revision==expected_revision,last_payload,last_base
+    raise RuntimeError(f"could not obtain Tutor main runtime revision: {last_error}")
 
 def image_revision(report: dict[str,Any]) -> str:
     image=report.get("image")
@@ -274,47 +340,58 @@ def main() -> int:
     expected_revision=expected_image_revision()
     apply_persistence_migrations()
     application_existed_before=bool(list_tutor_applications())
+
     deploy()
-    fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=120)
-    observed_revision=image_revision(report)
 
-    if not fresh and not application_existed_before:
-        print("[Murikah Tutor] A fresh container application was created in this deployment. Diagnostics have not confirmed the image revision yet; preserving the new application and extending readiness observation.")
-        status=wait_until_ready(base,timeout_seconds=240)
-        if status.get("ready") is True and status.get("httpStatus")==200:
-            validate_runtime_report(report)
-            print(f"[Murikah Tutor] Deployment verified: freshly-created application for image {expected_revision}, port 3782 healthy.")
-            return 0
-        fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
-        if not fresh:
-            detail=refreshed_failure_detail(expected_revision)
-            raise RuntimeError("freshly-created Tutor application did not become healthy or expose image "+expected_revision+"; application was preserved for inspection"+(f"\n{detail}" if detail else ""))
-
-    elif not fresh:
-        if not observed_revision:
-            status=wait_until_ready(base,timeout_seconds=180)
-            if status.get("ready") is True and status.get("httpStatus")==200:
-                raise RuntimeError("Tutor is healthy but runtime image revision is still unknown; preserving the existing application rather than deleting it.")
-            raise RuntimeError("Tutor runtime image revision is still unknown after deployment; preserving the existing application rather than deleting it.")
-        print(f"[Murikah Tutor] Confirmed stale runtime image {observed_revision}; expected {expected_revision}.")
+    # First verify the real application instance, not the isolated diagnostics
+    # instance. Give Cloudflare a short window to switch a warm container to the
+    # new image. If it stays stale or unknown, do one deterministic recreation.
+    fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=90)
+    if not fresh:
+        observed=str(status.get("imageRevision") or "").strip()
+        print(
+            "[Murikah Tutor] Main runtime did not switch to the deployed image "
+            f"(observed {observed or 'unknown'}, expected {expected_revision})."
+        )
+        if application_existed_before:
+            print(
+                "[Murikah Tutor] Recycling the stale/indeterminate container "
+                "application once so Cloudflare starts the deployed image cleanly."
+            )
+        else:
+            print(
+                "[Murikah Tutor] Newly-created application did not expose the "
+                "deployed image; recreating it once after registry propagation."
+            )
         recycle_tutor_application()
+        time.sleep(15)
         deploy()
-        fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
+        fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=180)
         if not fresh:
-            status=wait_until_ready(base,timeout_seconds=240)
-            if status.get("ready") is True and status.get("httpStatus")==200:
-                validate_runtime_report(report)
-                print(f"[Murikah Tutor] Deployment verified after application recreation: image {expected_revision}, port 3782 healthy.")
-                return 0
-            detail=safe_failure_detail(startup_log(report))
-            raise RuntimeError("Tutor application was recreated but the expected image did not become observable/healthy; the recreated application was preserved"+(f"\n{detail}" if detail else ""))
+            observed=str(status.get("imageRevision") or "").strip()
+            detail=refreshed_failure_detail(expected_revision)
+            raise RuntimeError(
+                "Tutor application was recreated but the real runtime still did "
+                f"not expose image {expected_revision} (observed {observed or 'unknown'})"
+                +(f"\n{detail}" if detail else "")
+            )
 
-    validate_runtime_report(report)
-    status=wait_until_ready(base,timeout_seconds=180)
-    if status.get("ready") is not True or status.get("httpStatus")!=200:
-        report,base=recover_fresh_but_unready_runtime(expected_revision)
+    # Image identity is now authoritative. Only then wait for application health.
+    ready=wait_until_ready(base,timeout_seconds=300)
+    if ready.get("ready") is not True or ready.get("httpStatus")!=200:
+        # Refresh isolated diagnostics only for troubleshooting detail. Do not use
+        # its temporarily-unknown image revision as the rollout authority.
+        detail=refreshed_failure_detail(expected_revision)
+        raise RuntimeError(
+            f"Tutor runtime is on image {expected_revision} but did not become "
+            "healthy on port 3782 within the readiness window"
+            +(f"\n{detail}" if detail else "")
+        )
 
-    print(f"[Murikah Tutor] Deployment verified: image {expected_revision}, port 3782 healthy.")
+    print(
+        f"[Murikah Tutor] Deployment verified: main runtime image "
+        f"{expected_revision}, port 3782 healthy."
+    )
     return 0
 
 if __name__=="__main__":
