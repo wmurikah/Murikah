@@ -702,10 +702,29 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         actorType === 'guest' ? (guestSessionId || actorId) : '',
         now,
       );
+
+      const existingConversation = await env.TUTOR_DB.prepare(
+        'SELECT actor_id FROM tutor_conversations WHERE conversation_id = ?',
+      )
+        .bind(conversationId)
+        .first<{ actor_id: string }>();
+      if (existingConversation && existingConversation.actor_id !== actorId) {
+        return persistenceJson({ error: 'learning_conversation_owner_mismatch' }, 403);
+      }
+
+      const packetBeforeTurn = await readConversationContext(env, conversationId, actorId);
+      const priorTurns = await env.TUTOR_DB.prepare(
+        'SELECT COUNT(*) AS count FROM tutor_turns WHERE conversation_id = ?',
+      )
+        .bind(conversationId)
+        .first<{ count: number }>();
+      const turnNumber = Math.max(1, Number(priorTurns?.count || 0) + 1);
+      const isFollowup = turnNumber > 1;
+
       await env.TUTOR_DB.prepare(
         'INSERT INTO tutor_conversations(conversation_id, actor_id, title, summary, surface, created_at, updated_at, message_count, last_turn_id) ' +
           "VALUES (?, ?, ?, '', 'chat', ?, ?, 0, ?) " +
-          'ON CONFLICT(conversation_id) DO UPDATE SET actor_id = excluded.actor_id, updated_at = excluded.updated_at, last_turn_id = excluded.last_turn_id',
+          'ON CONFLICT(conversation_id) DO UPDATE SET updated_at = excluded.updated_at, last_turn_id = excluded.last_turn_id',
       )
         .bind(conversationId, actorId, promptSummary.slice(0, 100), now, now, turnId)
         .run();
@@ -730,6 +749,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           now,
         )
         .run();
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_turn_metrics(' +
+          'turn_id, conversation_id, actor_id, turn_number, is_followup, created_at, updated_at' +
+          ') VALUES (?, ?, ?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(turn_id) DO UPDATE SET turn_number = excluded.turn_number, is_followup = excluded.is_followup, updated_at = excluded.updated_at',
+      )
+        .bind(turnId, conversationId, actorId, turnNumber, isFollowup ? 1 : 0, now, now)
+        .run();
       if (prompt.trim()) {
         const messageId = turnId + '_user';
         const promptHash = await textSha256(prompt);
@@ -746,7 +773,12 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       )
         .bind(conversationId, now, conversationId)
         .run();
-      return persistenceJson({ ok: true });
+      return persistenceJson({
+        ok: true,
+        turn_number: turnNumber,
+        is_followup: isFollowup,
+        context_packet: contextPacketResponse(packetBeforeTurn),
+      });
     } catch (error) {
       console.error('Tutor D1 learning turn start failed', error);
       return persistenceJson({ error: 'learning_turn_start_failed' }, 503);
@@ -766,22 +798,48 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     const errorCode = learningText(body.error_code, 128);
     const errorTextValue = learningText(body.error_text, 2000);
     const retryable = body.retryable === true ? 1 : 0;
+    const lane = learningText(body.lane, 32);
+    const routeReason = learningText(body.route_reason, 96);
+    const turnNumber = Number(body.turn_number || 1);
+    const isFollowup = body.is_followup === true ? 1 : 0;
+    const historyChars = Number(body.history_chars || 0);
+    const historyMessages = Number(body.history_messages || 0);
+    const contextPacketChars = Number(body.context_packet_chars || 0);
+    const contextBuildMs = Number(body.context_build_ms || 0);
+    const outputTokenBudget = Number(body.output_token_budget || 0);
+    const firstTokenDeadlineMs = Number(body.first_token_deadline_ms || 0);
+    const streamIdleTimeoutMs = Number(body.stream_idle_timeout_ms || 0);
+    const streamMs = Number(body.stream_ms || 0);
+    const continuationCount = Number(body.continuation_count || 0);
+    const incomplete = body.incomplete === true ? 1 : 0;
+    const nonNegativeIntegers = [
+      firstTokenMs,
+      totalMs,
+      turnNumber,
+      historyChars,
+      historyMessages,
+      contextPacketChars,
+      contextBuildMs,
+      outputTokenBudget,
+      firstTokenDeadlineMs,
+      streamIdleTimeoutMs,
+      streamMs,
+      continuationCount,
+    ];
     if (
       !turnId ||
       !['completed', 'failed', 'timed_out', 'cancelled'].includes(status) ||
-      !Number.isSafeInteger(firstTokenMs) ||
-      firstTokenMs < 0 ||
-      !Number.isSafeInteger(totalMs) ||
-      totalMs < 0
+      nonNegativeIntegers.some((value) => !Number.isSafeInteger(value) || value < 0) ||
+      turnNumber < 1
     ) {
       return persistenceJson({ error: 'invalid_learning_finish' }, 400);
     }
     try {
       const turn = await env.TUTOR_DB.prepare(
-        'SELECT conversation_id, actor_id FROM tutor_turns WHERE turn_id = ?',
+        'SELECT conversation_id, actor_id, prompt_summary FROM tutor_turns WHERE turn_id = ?',
       )
         .bind(turnId)
-        .first<{ conversation_id: string; actor_id: string }>();
+        .first<{ conversation_id: string; actor_id: string; prompt_summary: string }>();
       if (!turn) return persistenceJson({ error: 'learning_turn_not_found' }, 404);
 
       if (response) {
@@ -829,11 +887,66 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         )
         .run();
       await env.TUTOR_DB.prepare(
+        'INSERT INTO tutor_turn_metrics(' +
+          'turn_id, conversation_id, actor_id, turn_number, is_followup, lane, route_reason, history_chars, history_messages, ' +
+          'context_packet_chars, context_build_ms, output_token_budget, first_token_deadline_ms, stream_idle_timeout_ms, ' +
+          'provider, model_id, first_token_ms, stream_ms, continuation_count, total_ms, incomplete, created_at, updated_at' +
+          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(turn_id) DO UPDATE SET ' +
+          'turn_number = excluded.turn_number, is_followup = excluded.is_followup, lane = excluded.lane, ' +
+          'route_reason = excluded.route_reason, history_chars = excluded.history_chars, history_messages = excluded.history_messages, ' +
+          'context_packet_chars = excluded.context_packet_chars, context_build_ms = excluded.context_build_ms, ' +
+          'output_token_budget = excluded.output_token_budget, first_token_deadline_ms = excluded.first_token_deadline_ms, ' +
+          'stream_idle_timeout_ms = excluded.stream_idle_timeout_ms, provider = excluded.provider, model_id = excluded.model_id, ' +
+          'first_token_ms = excluded.first_token_ms, stream_ms = excluded.stream_ms, continuation_count = excluded.continuation_count, ' +
+          'total_ms = excluded.total_ms, incomplete = excluded.incomplete, updated_at = excluded.updated_at',
+      )
+        .bind(
+          turnId,
+          turn.conversation_id,
+          turn.actor_id,
+          turnNumber,
+          isFollowup,
+          lane,
+          routeReason,
+          historyChars,
+          historyMessages,
+          contextPacketChars,
+          contextBuildMs,
+          outputTokenBudget,
+          firstTokenDeadlineMs,
+          streamIdleTimeoutMs,
+          provider,
+          modelId,
+          firstTokenMs,
+          streamMs,
+          continuationCount,
+          totalMs,
+          incomplete,
+          now,
+          now,
+        )
+        .run();
+      await env.TUTOR_DB.prepare(
         'UPDATE tutor_conversations SET summary = ?, message_count = (SELECT COUNT(*) FROM tutor_messages WHERE conversation_id = ?), ' +
           'updated_at = ?, last_turn_id = ? WHERE conversation_id = ?',
       )
         .bind(responseSummary, turn.conversation_id, now, turnId, turn.conversation_id)
         .run();
+
+      // Prepare the next follow-up packet now, after the learner-visible answer
+      // is known, so the next request does not rebuild context from the full transcript.
+      await refreshConversationContext(env, {
+        conversationId: turn.conversation_id,
+        actorId: turn.actor_id,
+        promptSummary: turn.prompt_summary,
+        responseSummary,
+        provider,
+        modelId,
+        status,
+        incomplete: incomplete === 1,
+        now,
+      });
       return persistenceJson({ ok: true });
     } catch (error) {
       console.error('Tutor D1 learning turn finish failed', error);
