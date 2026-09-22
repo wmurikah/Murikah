@@ -223,7 +223,7 @@ def main() -> int:
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-21-v32"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -618,8 +618,16 @@ def main() -> int:
         (
             'DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"',
             'DEFAULT_NVIDIA_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"',
-            'def portable_chat_messages(',
             'DEFAULT_QWEN_FAST_MODEL = "qwen3.8-flash"',
+            'DEFAULT_FAST_HISTORY_CHARS = 16000',
+            'MAX_FAST_HISTORY_CHARS = 24000',
+            'DEFAULT_FAST_RECENT_MESSAGES = 6',
+            'DEFAULT_CONTEXT_PACKET_CHARS = 5000',
+            'class FastContextWindow:',
+            'def build_fast_context_window(',
+            'Conversation memory from earlier turns',
+            'untrusted remembered dialogue/facts',
+            'def portable_chat_messages(',
             'def configured_qwen_fast_model(',
             'def qwen_configured(',
             'async def qwen_stream(',
@@ -631,6 +639,8 @@ def main() -> int:
             'async def nvidia_stream(',
             'trust_env=False',
             'async def race_first_visible(',
+            'hard_deadline: bool = False',
+            'if hard_deadline:',
             'MURIKAH_LATENCY route=fast',
             'FINISH_SIGNAL_PREFIX = "\\x00MURIKAH_FINISH:"',
             'def finish_reason_needs_continuation(',
@@ -642,23 +652,37 @@ def main() -> int:
     require_markers(
         "tutor/railway/accelerate_chat.py",
         (
-            'MURIKAH_DUAL_LANE_CHAT_V6',
+            'MURIKAH_FOLLOWUP_FAST_PATH_V2',
             'def _agent_reason(',
+            'current = metadata.get("murikah_current_turn")',
             'force_agentic_chat',
-            'race_first_visible(',
-            'nvidia-fast:',
-            'portable_chat_messages',
-            'qwen-fast:',
-            'qwen-retry:',
-            'nvidia-retry:',
-            'gemini-retry:',
-            'terminal_first_token_timeout',
+            'build_fast_context_window',
+            'preferred_provider',
+            '_OVERALL_FIRST_TOKEN_SECONDS',
+            '_STREAM_IDLE_TIMEOUT_SECONDS',
             '_FAST_TURN_TIMEOUT_SECONDS',
+            '_LONG_FAST_TURN_TIMEOUT_SECONDS',
             'MURIKAH_CHAT_FAST_OUTPUT_TOKENS',
+            'MURIKAH_CHAT_LONG_OUTPUT_TOKENS',
+            '_FAST_CONTEXT_CHARS',
             'MURIKAH_CHAT_MAX_CONTINUATIONS',
+            '_PROVIDER_HEDGE_DELAYS = (0.0, 0.4, 0.8)',
+            'hard_deadline=True',
+            'turn_deadline',
+            'nvidia-fast:',
+            'qwen-fast:',
+            'terminal_first_token_timeout',
             'Continuing response…',
+            'publish=True',
             'terminal_incomplete_response',
+            'The response was interrupted.',
             'finish_reason_needs_continuation',
+            'murikah_history_chars',
+            'murikah_context_packet_chars',
+            'murikah_stream_idle_timeout_ms',
+            'murikah_stream_ms',
+            'murikah_lane',
+            'murikah_route_reason',
             'route=deep_agent',
             'route=fast',
         ),
@@ -666,10 +690,16 @@ def main() -> int:
     forbid_markers(
         "tutor/railway/accelerate_chat.py",
         (
+            "MURIKAH_DUAL_LANE_CHAT_V6",
             "recover_with_standard_pipeline",
             "fast_lane_recovery",
+            "retry_hedges",
+            "gemini-retry:",
+            "nvidia-retry:",
+            "qwen-retry:",
             "if context.source_manifest:",
             'if metadata.get("source_index"):',
+            'if metadata.get(key):',
         ),
     )
     require_markers(
@@ -678,8 +708,17 @@ def main() -> int:
             "MURIKAH_D1_LEARNING_JOURNAL_V2",
             "_murikah_public_error",
             "learner-safe terminal error",
+            "_murikah_turn_start = await asyncio.to_thread",
+            '"murikah_context_packet"',
+            '"murikah_current_turn"',
+            '"murikah_turn_number"',
+            '"murikah_is_followup"',
             "learning_turn_start",
             "learning_turn_finish",
+            "history_chars=int(context.metadata.get",
+            "context_packet_chars=int(context.metadata.get",
+            "stream_idle_timeout_ms=int(context.metadata.get",
+            "continuation_count=int(context.metadata.get",
             "learning_turn_fail",
         ),
     )
@@ -721,6 +760,7 @@ def main() -> int:
             '"/__muri/persistence-status"',
             'schemaVersion',
             'learningJournalSchemaVersion',
+            'followupFastPathSchemaVersion',
             'ownershipSchemaVersion',
             'emailVerificationSchemaVersion',
             'verificationEmailConfigured',
@@ -739,6 +779,8 @@ def main() -> int:
         "tutor/cloudflare/verify_persistence_lifecycle.py",
         (
             '"/__muri/persistence-status"',
+            '"learningJournalSchemaVersion"',
+            '"followupFastPathSchemaVersion"',
             '"ownershipSchemaVersion"',
             '"unregisteredObjectCount"',
             "Murikah Tutor persistence lifecycle acceptance: PASS",
@@ -827,6 +869,25 @@ def main() -> int:
         ("CREATE TRIGGER", "code TEXT"),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0006_followup_fast_path.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS tutor_conversation_context",
+            "CREATE TABLE IF NOT EXISTS tutor_turn_metrics",
+            "preferred_provider TEXT NOT NULL DEFAULT ''",
+            "turn_number INTEGER NOT NULL DEFAULT 1",
+            "is_followup INTEGER NOT NULL DEFAULT 0",
+            "context_packet_chars INTEGER NOT NULL DEFAULT 0",
+            "first_token_deadline_ms INTEGER NOT NULL DEFAULT 0",
+            "stream_idle_timeout_ms INTEGER NOT NULL DEFAULT 0",
+            "followup_fast_path_schema_version",
+            "VALUES ('learning_journal_schema_version', '2', unixepoch())",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0006_followup_fast_path.sql",
+        ("CREATE TRIGGER",),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "/learning/actor",
@@ -835,6 +896,18 @@ def main() -> int:
             "/learning/status",
             "tutor_training_consent",
             "training_eligible",
+            "TutorContextPacketRow",
+            "readConversationContext",
+            "refreshConversationContext",
+            "contextPacketResponse",
+            "tutor_conversation_context",
+            "tutor_turn_metrics",
+            "learning_conversation_owner_mismatch",
+            "followupFastPathSchemaVersion",
+            "conversationContextPacketCount",
+            "turnMetricCount",
+            "followupTurnMetricCount",
+            "MAX(tutor_turn_metrics.history_chars, excluded.history_chars)",
         ),
     )
     require_markers(
@@ -888,6 +961,10 @@ def main() -> int:
             "def learning_actor(",
             "def learning_turn_start(",
             "def learning_turn_finish(",
+            "lane: str = \"\"",
+            "context_packet_chars: int = 0",
+            "stream_idle_timeout_ms: int = 0",
+            "continuation_count: int = 0",
             "def learning_turn_fail(",
             "MAX_LEARNING_CONTENT_CHARS",
             "mtime_ms = max(0, int(mtime_ns) // 1_000_000)",
@@ -931,7 +1008,7 @@ def main() -> int:
     print(" - model/service configuration is rebuilt from Cloudflare on container start")
     print(" - Gemini fast chat is additive; deep-task NVIDIA selection is preserved for Solve and Math Animator")
     print(" - ordinary Chat is separated from the DeepTutor agent lane")
-    print(" - fast chat races Gemini Flash-Lite, NVIDIA Nemotron, and Qwen Flash with a transparent retry race")
+    print(" - fast chat uses one strict <=10s first-token race across Gemini Flash-Lite, NVIDIA Nemotron, Qwen Flash and the catalog hedge")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
@@ -942,9 +1019,12 @@ def main() -> int:
     print(" - Durable Object/container errors are contained and cannot surface as edge 1101")
     print(" - readiness is determined by the real Tutor /health route")
     print(" - D1-backed guest quotas and private R2 runtime checkpoints are wired through the Worker bridge")
-    print(" - ordinary follow-ups use bounded portable history and cannot silently fall into the multi-agent pipeline")
-    print(" - provider finish reasons are tracked and token-limited/interrupted answers continue invisibly before completion")
-    print(" - active fast-chat streams have a 4096-token segment budget, a 300s segment ceiling, and up to three hidden continuation passes")
+    print(" - ordinary follow-ups use a pre-built D1 context packet plus bounded recent history; raw transcript growth cannot silently expand provider payloads")
+    print(" - fast/deep routing is explicit per turn, so stale conversation metadata cannot promote an ordinary follow-up into the agent lane")
+    print(" - ordinary chat has a <=15s stream-idle ceiling, <=45s normal turn ceiling, 1600-token default budget, and at most one live continuation")
+    print(" - interrupted partial answers stay visible with an explicit Continue recovery path instead of being discarded")
+    print(" - previous successful provider affinity is persisted and hedged at 0.0s/0.4s/0.8s without sacrificing failover")
+    print(" - D1 records per-turn context size, routing, TTFT, stream, continuation and total-latency telemetry")
     print(" - D1 learning journal stores prompt/response pairs and consent-gated training metadata")
     print(" - signed-in member sessions use a long-lived sliding secure cookie and explicit logout remains authoritative")
     print(" - every ordinary account inherits all shareable admin-configured LLMs dynamically; owner-bound admin OAuth models stay private")
