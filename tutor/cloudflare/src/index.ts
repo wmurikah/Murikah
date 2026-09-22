@@ -111,6 +111,15 @@ const EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const EMAIL_RESEND_SECONDS = 60;
 const EMAIL_MAX_ATTEMPTS = 5;
 const EMAIL_MAX_SENDS = 3;
+const STANDARD_MINIMUM_INTERNSHIP_DAYS = 90;
+const INTERNSHIP_R2_OBJECT_TYPES = new Set([
+  'scenario',
+  'documents',
+  'artifacts',
+  'artifact-versions',
+  'exports',
+  'reports',
+]);
 
 let readyCacheUntil = 0;
 let statusInFlight: Promise<RuntimeStatus> | null = null;
@@ -436,12 +445,519 @@ async function requestJson(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
-async function handlePersistence(request: Request, env: TutorEnv, url: URL): Promise<Response> {
+type ScenarioVersionRecord = {
+  scenario_pack_id: string;
+  scenario_slug: string;
+  scenario_title: string;
+  career_family: string;
+  role_title: string;
+  scenario_version_id: string;
+  version: number;
+  schema_version: number;
+  minimum_duration_days: number;
+  expected_workload_band: string;
+};
+
+type InternshipStatusRecord = {
+  id: string;
+  status: string;
+  lifecycle_stage: string;
+  qualifying: number;
+  started_at: number;
+  target_end_at: number;
+  minimum_duration_days: number;
+  stopped_at: number | null;
+  completed_at: number | null;
+  scenario_pack_id: string;
+  scenario_slug: string;
+  scenario_title: string;
+  career_family: string;
+  role_title: string;
+  scenario_version_id: string;
+  scenario_version: number;
+  scenario_schema_version: number;
+};
+
+function utcNowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+async function verifiedInternshipMember(env: TutorEnv, actorId: string): Promise<boolean> {
+  const account = await env.TUTOR_DB.prepare(
+    'SELECT role, account_status, email_verified_at FROM tutor_accounts WHERE actor_id = ?',
+  )
+    .bind(actorId)
+    .first<{ role: string; account_status: string; email_verified_at: number | null }>();
+  return Boolean(
+    account &&
+      account.role === 'member' &&
+      account.account_status === 'active' &&
+      Number(account.email_verified_at || 0) > 0,
+  );
+}
+
+function safeInternshipSegment(value: unknown, limit = 128): string {
+  const raw = learningText(value, limit).trim();
+  if (!raw || raw === '.' || raw === '..' || /[\\/\0]/.test(raw)) return '';
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return '';
+  }
+  if (
+    !decoded ||
+    decoded === '.' ||
+    decoded === '..' ||
+    /[\\/\0]/.test(decoded) ||
+    !/^[A-Za-z0-9_-]+$/.test(decoded)
+  ) {
+    return '';
+  }
+  return decoded;
+}
+
+function internshipObjectKey(
+  actorId: string,
+  internshipId: string,
+  objectType: string,
+  objectId: string,
+): string {
+  return [
+    'users',
+    encodeURIComponent(actorId),
+    'virtual-internships',
+    encodeURIComponent(internshipId),
+    encodeURIComponent(objectType),
+    encodeURIComponent(objectId),
+  ].join('/');
+}
+
+async function resolveScenarioVersion(
+  env: TutorEnv,
+  scenarioPackId: string,
+  scenarioSlug: string,
+  explicitVersion: number,
+): Promise<ScenarioVersionRecord | null> {
+  const base =
+    'SELECT p.id AS scenario_pack_id, p.slug AS scenario_slug, p.title AS scenario_title, ' +
+    'p.career_family, p.role_title, v.id AS scenario_version_id, v.version, v.schema_version, ' +
+    'v.minimum_duration_days, v.expected_workload_band ' +
+    'FROM scenario_packs p JOIN scenario_versions v ON v.scenario_pack_id = p.id ' +
+    "WHERE p.status = 'published' AND v.status = 'published' AND (p.id = ? OR p.slug = ?) ";
+  const statement =
+    explicitVersion > 0
+      ? env.TUTOR_DB.prepare(base + 'AND v.version = ? ORDER BY v.version DESC LIMIT 1').bind(
+          scenarioPackId,
+          scenarioSlug,
+          explicitVersion,
+        )
+      : env.TUTOR_DB.prepare(base + 'ORDER BY v.version DESC LIMIT 1').bind(
+          scenarioPackId,
+          scenarioSlug,
+        );
+  return statement.first<ScenarioVersionRecord>();
+}
+
+async function getScenarioVersion(
+  env: TutorEnv,
+  actorId: string,
+  scenarioVersionId: string,
+): Promise<Record<string, unknown> | null> {
+  if (!(await verifiedInternshipMember(env, actorId))) return null;
+  const row = await env.TUTOR_DB.prepare(
+    'SELECT p.id AS scenario_pack_id, p.slug AS scenario_slug, p.title AS scenario_title, ' +
+      'p.career_family, p.role_title, v.id AS scenario_version_id, v.version, v.schema_version, ' +
+      'v.minimum_duration_days, v.expected_workload_band, v.status ' +
+      'FROM scenario_versions v JOIN scenario_packs p ON p.id = v.scenario_pack_id ' +
+      "WHERE v.id = ? AND v.status IN ('published', 'retired')",
+  )
+    .bind(scenarioVersionId)
+    .first<ScenarioVersionRecord & { status: string }>();
+  if (!row) return null;
+  return {
+    scenario_pack: {
+      id: row.scenario_pack_id,
+      slug: row.scenario_slug,
+      title: row.scenario_title,
+      career_family: row.career_family,
+      role_title: row.role_title,
+    },
+    scenario_version: {
+      id: row.scenario_version_id,
+      version: Number(row.version),
+      schema_version: Number(row.schema_version),
+      status: row.status,
+      minimum_duration_days: Number(row.minimum_duration_days),
+      expected_workload_band: row.expected_workload_band,
+    },
+  };
+}
+
+async function internshipStatusForActor(
+  env: TutorEnv,
+  actorId: string,
+  internshipId: string,
+  now: number,
+): Promise<Record<string, unknown> | null> {
+  const row = await env.TUTOR_DB.prepare(
+    'SELECT i.id, i.status, i.lifecycle_stage, i.qualifying, i.started_at, i.target_end_at, ' +
+      'i.minimum_duration_days, i.stopped_at, i.completed_at, ' +
+      'p.id AS scenario_pack_id, p.slug AS scenario_slug, p.title AS scenario_title, ' +
+      'p.career_family, p.role_title, v.id AS scenario_version_id, v.version AS scenario_version, ' +
+      'v.schema_version AS scenario_schema_version ' +
+      'FROM internship_instances i ' +
+      'JOIN scenario_packs p ON p.id = i.scenario_pack_id ' +
+      'JOIN scenario_versions v ON v.id = i.scenario_version_id ' +
+      'WHERE i.id = ? AND i.learner_id = ?',
+  )
+    .bind(internshipId, actorId)
+    .first<InternshipStatusRecord>();
+  if (!row) return null;
+
+  const elapsedSeconds = Math.max(0, now - Number(row.started_at));
+  const durationRequirementMet =
+    Number(row.qualifying) === 1 && now >= Number(row.target_end_at);
+  return {
+    internship_id: row.id,
+    status: row.status,
+    lifecycle_stage: row.lifecycle_stage,
+    scenario_pack: {
+      id: row.scenario_pack_id,
+      slug: row.scenario_slug,
+      title: row.scenario_title,
+      career_family: row.career_family,
+      role_title: row.role_title,
+    },
+    scenario_version: {
+      id: row.scenario_version_id,
+      version: Number(row.scenario_version),
+      schema_version: Number(row.scenario_schema_version),
+    },
+    qualifying: Number(row.qualifying) === 1,
+    started_at: Number(row.started_at),
+    target_end_at: Number(row.target_end_at),
+    current_server_time: now,
+    minimum_duration_days: Number(row.minimum_duration_days),
+    elapsed_duration: {
+      seconds: elapsedSeconds,
+      whole_calendar_days_utc: Math.floor(elapsedSeconds / 86400),
+    },
+    duration_requirement_met: durationRequirementMet,
+    final_completion_available: false,
+    pending_future_completion_gates: true,
+    stopped_at: row.stopped_at == null ? null : Number(row.stopped_at),
+    completed_at: row.completed_at == null ? null : Number(row.completed_at),
+    can_stop: row.status === 'active',
+  };
+}
+
+async function handlePersistence(
+  request: Request,
+  env: TutorEnv,
+  url: URL,
+  clock: () => number = utcNowSeconds,
+): Promise<Response> {
   const denied = await verifyPersistenceRequest(request, env, url);
   if (denied) return denied;
 
   const route = url.pathname.slice(PERSISTENCE_PREFIX.length);
-  const now = Math.floor(Date.now() / 1000);
+  const now = clock();
+
+  if (route === '/scenario-version/resolve' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const scenarioPackId = safeInternshipSegment(body.scenario_pack_id);
+    const scenarioSlug = safeInternshipSegment(body.scenario_slug);
+    const explicitVersionRaw = Number(body.version || 0);
+    const explicitVersion =
+      Number.isSafeInteger(explicitVersionRaw) && explicitVersionRaw > 0
+        ? explicitVersionRaw
+        : 0;
+    if (!actorId || (!scenarioPackId && !scenarioSlug)) {
+      return persistenceJson({ error: 'scenario_not_available' }, 404);
+    }
+    try {
+      if (!(await verifiedInternshipMember(env, actorId))) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+      const version = await resolveScenarioVersion(
+        env,
+        scenarioPackId,
+        scenarioSlug,
+        explicitVersion,
+      );
+      if (!version) {
+        return persistenceJson(
+          { error: explicitVersion > 0 ? 'scenario_version_not_available' : 'scenario_not_available' },
+          404,
+        );
+      }
+      return persistenceJson({
+        scenario_pack: {
+          id: version.scenario_pack_id,
+          slug: version.scenario_slug,
+          title: version.scenario_title,
+          career_family: version.career_family,
+          role_title: version.role_title,
+        },
+        scenario_version: {
+          id: version.scenario_version_id,
+          version: Number(version.version),
+          schema_version: Number(version.schema_version),
+          minimum_duration_days: Number(version.minimum_duration_days),
+          expected_workload_band: version.expected_workload_band,
+        },
+      });
+    } catch (error) {
+      console.error('Tutor Virtual Internship scenario resolution failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/scenario-version' && request.method === 'GET') {
+    const actorId = validPersistenceId(url.searchParams.get('actor_id'));
+    const scenarioVersionId = validPersistenceId(url.searchParams.get('scenario_version_id'));
+    if (!actorId || !scenarioVersionId) {
+      return persistenceJson({ error: 'scenario_version_not_available' }, 404);
+    }
+    try {
+      const version = await getScenarioVersion(env, actorId, scenarioVersionId);
+      if (!version) {
+        const verified = await verifiedInternshipMember(env, actorId);
+        return persistenceJson(
+          { error: verified ? 'scenario_version_not_available' : 'verified_member_required' },
+          verified ? 404 : 403,
+        );
+      }
+      return persistenceJson(version);
+    } catch (error) {
+      console.error('Tutor Virtual Internship scenario version read failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/start' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const requestId = validPersistenceId(body.request_id);
+    const scenarioPackId = safeInternshipSegment(body.scenario_pack_id);
+    const scenarioSlug = safeInternshipSegment(body.scenario_slug);
+    const explicitVersionRaw = Number(body.scenario_version || 0);
+    const explicitVersion =
+      Number.isSafeInteger(explicitVersionRaw) && explicitVersionRaw > 0
+        ? explicitVersionRaw
+        : 0;
+    if (!actorId || !requestId || (!scenarioPackId && !scenarioSlug)) {
+      return persistenceJson({ error: 'scenario_not_available' }, 400);
+    }
+
+    try {
+      if (!(await verifiedInternshipMember(env, actorId))) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+
+      const replay = await env.TUTOR_DB.prepare(
+        "SELECT internship_id FROM internship_activity WHERE actor_id = ? AND event_type = 'internship_started' AND request_id = ?",
+      )
+        .bind(actorId, requestId)
+        .first<{ internship_id: string }>();
+      if (replay?.internship_id) {
+        const replayStatus = await internshipStatusForActor(
+          env,
+          actorId,
+          replay.internship_id,
+          now,
+        );
+        if (replayStatus) return persistenceJson(replayStatus, 200);
+      }
+
+      const version = await resolveScenarioVersion(
+        env,
+        scenarioPackId,
+        scenarioSlug,
+        explicitVersion,
+      );
+      if (!version) {
+        return persistenceJson(
+          { error: explicitVersion > 0 ? 'scenario_version_not_available' : 'scenario_not_available' },
+          404,
+        );
+      }
+
+      const active = await env.TUTOR_DB.prepare(
+        "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+      )
+        .bind(actorId)
+        .first<{ id: string }>();
+      if (active) return persistenceJson({ error: 'active_internship_exists' }, 409);
+
+      const effectiveMinimumDays = Math.max(
+        STANDARD_MINIMUM_INTERNSHIP_DAYS,
+        Number(version.minimum_duration_days),
+      );
+      const internshipId = crypto.randomUUID().replace(/-/g, '');
+      const activityId = crypto.randomUUID().replace(/-/g, '');
+      const targetEndAt = now + effectiveMinimumDays * 86400;
+
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          'INSERT INTO internship_instances(' +
+            'id, learner_id, scenario_pack_id, scenario_version_id, mode, qualifying, status, lifecycle_stage, ' +
+            'started_at, minimum_duration_days, target_end_at, stopped_at, completed_at, created_at, updated_at' +
+            ") VALUES (?, ?, ?, ?, 'standard', 1, 'active', 'started', ?, ?, ?, NULL, NULL, ?, ?)",
+        ).bind(
+          internshipId,
+          actorId,
+          version.scenario_pack_id,
+          version.scenario_version_id,
+          now,
+          effectiveMinimumDays,
+          targetEndAt,
+          now,
+          now,
+        ),
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_memberships(internship_id, actor_id, role, status, created_at) VALUES (?, ?, 'learner', 'active', ?)",
+        ).bind(internshipId, actorId, now),
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_activity(id, internship_id, actor_id, event_type, request_id, detail_json, created_at) VALUES (?, ?, ?, 'internship_started', ?, '{}', ?)",
+        ).bind(activityId, internshipId, actorId, requestId, now),
+      ]);
+
+      const status = await internshipStatusForActor(env, actorId, internshipId, now);
+      if (!status) throw new Error('internship_start_status_missing');
+      return persistenceJson(status, 201);
+    } catch (error) {
+      const replay = actorId && requestId
+        ? await env.TUTOR_DB.prepare(
+            "SELECT internship_id FROM internship_activity WHERE actor_id = ? AND event_type = 'internship_started' AND request_id = ?",
+          ).bind(actorId, requestId).first<{ internship_id: string }>()
+        : null;
+      if (replay?.internship_id) {
+        const replayStatus = await internshipStatusForActor(env, actorId, replay.internship_id, now);
+        if (replayStatus) return persistenceJson(replayStatus, 200);
+      }
+      if (actorId) {
+        const active = await env.TUTOR_DB.prepare(
+          "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+        ).bind(actorId).first<{ id: string }>();
+        if (active) return persistenceJson({ error: 'active_internship_exists' }, 409);
+      }
+      console.error('Tutor Virtual Internship start failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/status' && request.method === 'GET') {
+    const actorId = validPersistenceId(url.searchParams.get('actor_id'));
+    const internshipId = validPersistenceId(url.searchParams.get('internship_id'));
+    if (!actorId || !internshipId) {
+      return persistenceJson({ error: 'internship_not_found' }, 404);
+    }
+    try {
+      if (!(await verifiedInternshipMember(env, actorId))) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+      const status = await internshipStatusForActor(env, actorId, internshipId, now);
+      return status
+        ? persistenceJson(status)
+        : persistenceJson({ error: 'internship_not_found' }, 404);
+    } catch (error) {
+      console.error('Tutor Virtual Internship status failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/stop' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const internshipId = validPersistenceId(body.internship_id);
+    const requestId = validPersistenceId(body.request_id);
+    if (!actorId || !internshipId || !requestId) {
+      return persistenceJson({ error: 'internship_not_found' }, 404);
+    }
+
+    try {
+      if (!(await verifiedInternshipMember(env, actorId))) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+      const current = await internshipStatusForActor(env, actorId, internshipId, now);
+      if (!current) return persistenceJson({ error: 'internship_not_found' }, 404);
+      if (current.status === 'stopped') return persistenceJson(current);
+
+      const replay = await env.TUTOR_DB.prepare(
+        "SELECT internship_id FROM internship_activity WHERE actor_id = ? AND event_type = 'internship_stopped' AND request_id = ? AND internship_id = ?",
+      )
+        .bind(actorId, requestId, internshipId)
+        .first<{ internship_id: string }>();
+      if (replay) {
+        const replayStatus = await internshipStatusForActor(env, actorId, internshipId, now);
+        return replayStatus
+          ? persistenceJson(replayStatus)
+          : persistenceJson({ error: 'internship_not_found' }, 404);
+      }
+
+      const activityId = crypto.randomUUID().replace(/-/g, '');
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          "UPDATE internship_instances SET status = 'stopped', lifecycle_stage = 'stopped', stopped_at = ?, updated_at = ? " +
+            "WHERE id = ? AND learner_id = ? AND status = 'active'",
+        ).bind(now, now, internshipId, actorId),
+        env.TUTOR_DB.prepare(
+          "UPDATE internship_memberships SET status = 'inactive' WHERE internship_id = ? AND actor_id = ? AND role = 'learner'",
+        ).bind(internshipId, actorId),
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_activity(id, internship_id, actor_id, event_type, request_id, detail_json, created_at) VALUES (?, ?, ?, 'internship_stopped', ?, '{}', ?)",
+        ).bind(activityId, internshipId, actorId, requestId, now),
+      ]);
+
+      const status = await internshipStatusForActor(env, actorId, internshipId, now);
+      if (!status) return persistenceJson({ error: 'internship_not_found' }, 404);
+      return persistenceJson(status);
+    } catch (error) {
+      const status =
+        actorId && internshipId
+          ? await internshipStatusForActor(env, actorId, internshipId, now)
+          : null;
+      if (status?.status === 'stopped') return persistenceJson(status);
+      console.error('Tutor Virtual Internship stop failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
+
+  if (route === '/internships/object-key' && request.method === 'POST') {
+    const body = await requestJson(request);
+    const actorId = validPersistenceId(body.actor_id);
+    const internshipId = validPersistenceId(body.internship_id);
+    const objectType = learningText(body.object_type, 32);
+    const objectId = safeInternshipSegment(body.object_id);
+    if (
+      !actorId ||
+      !internshipId ||
+      !objectId ||
+      !INTERNSHIP_R2_OBJECT_TYPES.has(objectType)
+    ) {
+      return persistenceJson({ error: 'invalid_internship_object' }, 400);
+    }
+    try {
+      if (!(await verifiedInternshipMember(env, actorId))) {
+        return persistenceJson({ error: 'verified_member_required' }, 403);
+      }
+      const owned = await env.TUTOR_DB.prepare(
+        'SELECT id FROM internship_instances WHERE id = ? AND learner_id = ?',
+      )
+        .bind(internshipId, actorId)
+        .first<{ id: string }>();
+      if (!owned) return persistenceJson({ error: 'internship_not_found' }, 404);
+      return persistenceJson({
+        object_key: internshipObjectKey(actorId, internshipId, objectType, objectId),
+      });
+    } catch (error) {
+      console.error('Tutor Virtual Internship object-key policy failed', error);
+      return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
+    }
+  }
 
   if (route === '/learning/actor' && request.method === 'POST') {
     const body = await requestJson(request);
