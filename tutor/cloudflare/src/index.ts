@@ -31,6 +31,7 @@ type TutorEnv = {
   TUTOR_DB: PersistenceDatabase;
   TUTOR_FILES: PersistenceBucket;
   MURIKAH_TUTOR_RUNTIME: string;
+  MURIKAH_CLOUDFLARE_IMAGE_REV?: string;
   MURIKAH_PUBLIC_BASE_URL?: string;
   MURIKAH_GUEST_PROMPT_LIMIT?: string;
   TZ: string;
@@ -1235,6 +1236,7 @@ function buildContainerEnv(source: TutorEnv): Record<string, string> {
     TZ: source.TZ || 'Africa/Nairobi',
     FRONTEND_HOST: '0.0.0.0',
     MURIKAH_TUTOR_RUNTIME: optional(source.MURIKAH_TUTOR_RUNTIME),
+    MURIKAH_CLOUDFLARE_IMAGE_REV: optional(source.MURIKAH_CLOUDFLARE_IMAGE_REV),
     MURIKAH_PUBLIC_BASE_URL: optional(source.MURIKAH_PUBLIC_BASE_URL),
     MURIKAH_GUEST_PROMPT_LIMIT: optional(source.MURIKAH_GUEST_PROMPT_LIMIT) || '7',
     MURIKAH_TUTOR_ADMIN_USERNAME: optional(source.MURIKAH_TUTOR_ADMIN_USERNAME) || 'admin',
@@ -1393,6 +1395,23 @@ export class TutorContainer extends Container<TutorEnv> {
       };
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  async runtimeRevision(): Promise<{ running: boolean; imageRevision: string; error?: string }> {
+    if (!this.ctx.container.running) {
+      return { running: false, imageRevision: '' };
+    }
+    try {
+      const process = await this.ctx.container.exec(
+        ['/bin/sh', '-lc', 'cat /app/murikah-cloudflare-image-rev 2>/dev/null || true'],
+        { stdout: 'pipe', stderr: 'combined' },
+      );
+      const output = await process.output();
+      const imageRevision = new TextDecoder().decode(output.stdout).trim().split(/\s+/)[0] || '';
+      return { running: true, imageRevision };
+    } catch (error) {
+      return { running: true, imageRevision: '', error: errorText(error) };
     }
   }
 
@@ -1760,6 +1779,20 @@ export default {
       return Response.json(status, {
         headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
       });
+    }
+
+    if (url.pathname === '/__muri/runtime-revision') {
+      const revision = await tutor.runtimeRevision();
+      return Response.json(
+        {
+          ...status,
+          ...revision,
+          expectedImageRevision: optional(env.MURIKAH_CLOUDFLARE_IMAGE_REV),
+        },
+        {
+          headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+        },
+      );
     }
 
     if (status.ready) {
