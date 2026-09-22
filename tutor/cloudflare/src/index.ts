@@ -1,4 +1,5 @@
 import { Container, getContainer } from '@cloudflare/containers';
+import { buildScenarioInitializationStatements, handleScenarioPersistenceRoute } from './virtual_internship_phase2';
 
 type PersistenceRunResult = { meta?: { changes?: number } };
 type PersistenceStatement = {
@@ -614,6 +615,8 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
   const route = url.pathname.slice(PERSISTENCE_PREFIX.length);
   const now = Math.floor(Date.now() / 1000);
 
+  const phase2Response = await handleScenarioPersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
+  if (phase2Response) return phase2Response;
 
   if (route === '/scenario-version/resolve' && request.method === 'POST') {
     const body = await requestJson(request);
@@ -691,6 +694,13 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
       const targetEndAt = now + effectiveMinimumDays * INTERNSHIP_DAY_SECONDS;
       const internshipId = newInternshipId('vi');
       const activityId = newInternshipId('ia');
+      const scenarioInitialization = await buildScenarioInitializationStatements(
+        env.TUTOR_DB,
+        scenario.id,
+        internshipId,
+        now,
+        now,
+      );
 
       await env.TUTOR_DB.batch([
         env.TUTOR_DB.prepare(
@@ -716,6 +726,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         env.TUTOR_DB.prepare(
           "INSERT INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) VALUES (?, ?, ?, 'internship_started', ?, ?, '')",
         ).bind(activityId, internshipId, actorId, now, requestId),
+        ...scenarioInitialization,
       ]);
 
       const status = await internshipStatusForActor(env, internshipId, actorId, now);
