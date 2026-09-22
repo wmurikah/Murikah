@@ -563,6 +563,9 @@ def main() -> int:
             "## 22. Competency Evidence Record",
             "## 34. Testing contract",
             "## 37. Definition of done for the full product",
+            "## Phase 1 Implementation Record",
+            "### Tutor AI Runtime / Fast-Path Compatibility",
+            "### SUBSEQUENT DEVELOPMENT REQUIREMENT",
         ),
     )
     require_markers(
@@ -612,6 +615,11 @@ def main() -> int:
             '@router.post("/email/resend")',
             "verification_required",
             "email_verified_at=verified_at",
+            '@router.post("/internships/start")',
+            '@router.get("/internships/{internship_id}/status")',
+            '@router.post("/internships/{internship_id}/stop")',
+            "class InternshipStartRequest",
+            'extra = "forbid"',
         ),
     )
     require_markers(
@@ -868,6 +876,31 @@ def main() -> int:
         ("CREATE TRIGGER", "code TEXT"),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS scenario_packs",
+            "CREATE TABLE IF NOT EXISTS scenario_versions",
+            "CREATE TABLE IF NOT EXISTS internship_instances",
+            "CREATE TABLE IF NOT EXISTS internship_memberships",
+            "CREATE TABLE IF NOT EXISTS internship_activity",
+            "idx_internship_instances_one_active_qualifying",
+            "idx_internship_activity_single_start",
+            "idx_internship_activity_single_stop",
+            "virtual_internship_phase1_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql",
+        (
+            "CREATE TRIGGER",
+            "virtual_internship_objects",
+            "competency_evidence",
+            "competency_passports",
+            "internship_tasks",
+            "internship_messages",
+        ),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "/learning/actor",
@@ -905,6 +938,17 @@ def main() -> int:
             "s.used_count + COUNT(p.request_id) AS used_count",
             "guest_prompt_limit",
             "guest_session_expired",
+            "STANDARD_MINIMUM_INTERNSHIP_DAYS = 90",
+            "clock: () => number = utcNowSeconds",
+            "scenario_versions",
+            "/scenario-version/resolve",
+            "/internships/start",
+            "/internships/status",
+            "/internships/stop",
+            "/internships/object-key",
+            "function internshipObjectKey(",
+            "WHERE i.id = ? AND i.learner_id = ?",
+            "final_completion_available: false",
         ),
     )
     require_markers(
@@ -931,8 +975,43 @@ def main() -> int:
             "def learning_turn_finish(",
             "def learning_turn_fail(",
             "MAX_LEARNING_CONTENT_CHARS",
+            "def scenario_version_get(",
+            "def scenario_version_resolve(",
+            "def internship_start(",
+            "def internship_get(",
+            "def internship_status(",
+            "def internship_stop(",
+            "def internship_duration_status(",
+            "def internship_object_key(",
             "mtime_ms = max(0, int(mtime_ns) // 1_000_000)",
             "x-murikah-object-mtime-ms",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_phase1.py",
+        (
+            "class VirtualInternshipPhase1Tests",
+            "test_one_active_qualifying_internship_is_database_enforced",
+            "test_scenario_version_history_does_not_move_when_v2_is_published",
+            "test_state_survives_fresh_database_adapter_instance",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_ownership.py",
+        (
+            "class VirtualInternshipOwnershipTests",
+            "test_status_stop_and_object_key_queries_are_actor_bound",
+            "test_public_api_has_no_browser_owner_fields_and_forbids_extra_fields",
+            "test_canonical_r2_key_helper_is_owner_scoped_and_rejects_foreign_prefix",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_duration.py",
+        (
+            "class VirtualInternshipDurationTests",
+            "test_89_days_and_89d_235959_are_false_exact_90_is_true",
+            "test_scenario_minimum_above_90_extends_policy",
+            "test_month_year_and_leap_boundaries_use_utc_elapsed_calendar_days",
         ),
     )
     require_markers(
@@ -995,6 +1074,7 @@ def main() -> int:
     print(" - Tutor opens backend/frontend ports before ownership/account reconciliation or checkpoint maintenance can block readiness")
     print(" - deploy failures refresh isolated startup diagnostics after the actual readiness timeout")
     print(" - new user-owned R2 writes use canonical users/<user-id>/<object-type>/<object-id> keys")
+    print(" - Virtual Internship Phase 1 uses D1 lifecycle/version state, verified-member actor binding, 90-day duration policy and owner-scoped R2 key construction")
     print(" - non-secret account role/status metadata is reconciled into D1 while credentials remain in Cloudflare Secrets/protected auth storage")
     print(" - Google SSO is a required production secret pair and renders as a branded first-class account option")
     print(" - new local and SSO accounts require a one-time emailed code before any member session is issued")
