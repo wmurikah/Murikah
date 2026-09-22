@@ -85,6 +85,48 @@ def main() -> int:
 
     text = replace_once(
         text,
+        """                    "history_budget": history_result.budget,
+                    "turn_id": turn_id,
+                    "question_followup_context": followup_question_context or {},
+""",
+        """                    "history_budget": history_result.budget,
+                    "turn_id": turn_id,
+                    # Follow-up Fast Path V2: only current-request routing flags
+                    # may promote this turn into the deep agent lane. Persisted
+                    # conversation metadata is intentionally excluded.
+                    "murikah_context_packet": (
+                        _murikah_turn_start.get("context_packet", {})
+                        if isinstance(_murikah_turn_start, dict)
+                        else {}
+                    ),
+                    "murikah_turn_number": (
+                        int(_murikah_turn_start.get("turn_number") or 1)
+                        if isinstance(_murikah_turn_start, dict)
+                        else 1
+                    ),
+                    "murikah_is_followup": (
+                        bool(_murikah_turn_start.get("is_followup"))
+                        if isinstance(_murikah_turn_start, dict)
+                        else False
+                    ),
+                    "murikah_current_turn": {
+                        "knowledge_base": bool(payload.get("knowledge_bases") or []),
+                        "attachments": bool(attachments),
+                        "mastery_mode": workspace_mode == WORKSPACE_MODE_MASTERY,
+                        "immersive_reading_mode": workspace_mode == WORKSPACE_MODE_READING,
+                        "question_bank_context": bool(question_bank_context),
+                        "deep_mode": bool(payload.get("deep_mode")),
+                        "research_mode": bool(payload.get("research_mode")),
+                        "force_agentic_chat": bool(payload.get("force_agentic_chat")),
+                        "tool_execution_requested": bool(payload.get("tool_execution_requested")),
+                    },
+                    "question_followup_context": followup_question_context or {},
+""",
+        "turn-scoped fast/deep routing and context packet",
+    )
+
+    text = replace_once(
+        text,
         """            # Assistant continues the same branch as the user message it
 """,
         """            # Commit the full answer and compact response summary to
