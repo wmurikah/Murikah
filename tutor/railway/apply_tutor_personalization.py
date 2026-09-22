@@ -611,12 +611,12 @@ import {
     path.write_text(guest_text, encoding="utf-8")
     replace_once(
         path,
-        '''                    placeholder={activeMode.placeholder}
+        '''                    placeholder={composerPlaceholder}
 ''',
         '''                    placeholder={
                       messages.length === 0 && spaceId === "home"
                         ? guestComposerPlaceholder
-                        : activeMode.placeholder
+                        : composerPlaceholder
                     }
 ''',
         "guest varied composer placeholder",
