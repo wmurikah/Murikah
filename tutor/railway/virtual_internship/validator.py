@@ -178,8 +178,12 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
         for trigger in event["triggers"]:
             tt=trigger["trigger_type"]
             if tt not in TRIGGERS:_err(f"events.{event['event_id']}.triggers","unknown trigger")
+            if tt=="time_elapsed_days" and (not isinstance(trigger.get("days"),int) or isinstance(trigger.get("days"),bool) or trigger["days"]<0):_err(f"events.{event['event_id']}.triggers","time trigger requires non-negative days")
             if tt in {"task_state","all_dependencies_completed"} and trigger.get("task_id") not in task_ids:_err(f"events.{event['event_id']}.triggers","unknown task")
-            if tt=="fact_equals" and trigger.get("fact_id") not in fact_ids:_err(f"events.{event['event_id']}.triggers","unknown fact")
+            if tt=="task_state" and trigger.get("status") not in TASK_STATES:_err(f"events.{event['event_id']}.triggers","invalid task status")
+            if tt=="fact_equals":
+                if trigger.get("fact_id") not in fact_ids:_err(f"events.{event['event_id']}.triggers","unknown fact")
+                if "expected" not in trigger:_err(f"events.{event['event_id']}.triggers","fact trigger requires expected value")
             if tt=="prior_event" and trigger.get("event_id") not in event_ids:_err(f"events.{event['event_id']}.triggers","unknown event")
             if tt=="decision":
                 decision=trigger.get("decision_id"); option=trigger.get("option_id")
@@ -193,9 +197,19 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
                 fact=mutation.get("fact_id")
                 if fact not in fact_ids:_err(f"events.{event['event_id']}.mutations","unknown fact")
                 if mt=="set_mutable_fact":
+                    if "value" not in mutation:_err(f"events.{event['event_id']}.mutations","set_mutable_fact requires value")
                     target=next(f for f in pack["facts"] if f["id"]==fact)
                     if target["mutability"]!="mutable":_err(f"events.{event['event_id']}.mutations","cannot mutate immutable fact")
             if mt in {"unlock_task","assign_task","adjust_deadline"} and mutation.get("task_id") not in task_ids:_err(f"events.{event['event_id']}.mutations","unknown task")
+            if mt=="adjust_deadline" and not isinstance(mutation.get("offset_days"),int):_err(f"events.{event['event_id']}.mutations","deadline mutation requires integer offset_days")
+            if mt=="record_decision":
+                decision=mutation.get("decision_id"); option=mutation.get("option_id")
+                if decision not in decision_ids:_err(f"events.{event['event_id']}.mutations","unknown decision")
+                options={o["option_id"] for d in pack["decisions"] if d["decision_id"]==decision for o in d["options"]}
+                if option not in options:_err(f"events.{event['event_id']}.mutations","unknown decision option")
+    for decision in pack["decisions"]:
+        option_ids=[o["option_id"] for o in decision["options"]]
+        if len(option_ids)!=len(set(option_ids)):_err(f"decisions.{decision['decision_id']}.options","duplicate option_id")
     _event_dependency_cycle(pack["events"])
     raw=canonical_bytes(pack)
     if len(raw)>MAX_CANONICAL_JSON_BYTES:_err("scenario","canonical definition exceeds size limit")
