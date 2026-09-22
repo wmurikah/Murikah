@@ -1125,6 +1125,9 @@ def main() -> int:
             "resolve_llm_config_for_selection",
             "from deeptutor.services.llm import factory as llm_factory",
             "candidate_limit",
+            "def preference_rank(",
+            'policy.model_preference == "reasoning"',
+            'policy.model_preference == "latency"',
         ),
     )
     forbid_markers(
@@ -1170,6 +1173,8 @@ def main() -> int:
             "MURIKAH_INTERNSHIP_AI",
             "provider_stream_error",
             "schema_validation_failed",
+            'if text == "<think>":',
+            "if in_think:",
         ),
     )
     forbid_markers(
