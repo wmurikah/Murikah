@@ -210,6 +210,46 @@ def refreshed_failure_detail(expected_revision: str) -> str:
     except Exception as exc:
         return f"diagnostics refresh failed: {type(exc).__name__}: {exc}"
 
+def recover_unready_application(expected_revision: str) -> tuple[dict[str,Any],str]:
+    """Recover a serving instance that stayed wedged after a successful image deploy.
+
+    The isolated diagnostic container proves the new image can boot. A separate
+    APP_INSTANCE can still be left running/stuck across a container application
+    rollout, so recycle the application once and redeploy instead of failing the
+    release with a permanently unready serving instance.
+    """
+    detail=refreshed_failure_detail(expected_revision)
+    print(
+        "[Murikah Tutor] Fresh image passed isolated startup, but the serving "
+        "instance did not become ready; recycling the container application once."
+    )
+    if detail:
+        print(f"[Murikah Tutor] Pre-recycle diagnostics:\n{detail}")
+
+    recycle_tutor_application()
+    deploy()
+
+    fresh,report,base=verify_fresh_runtime(expected_revision,timeout_seconds=180)
+    if not fresh:
+        detail=refreshed_failure_detail(expected_revision)
+        raise RuntimeError(
+            "Tutor application was recycled, but the expected image did not "
+            "become observable"
+            +(f"\n{detail}" if detail else "")
+        )
+
+    validate_runtime_report(report)
+    status=wait_until_ready(base,timeout_seconds=240)
+    if status.get("ready") is not True or status.get("httpStatus")!=200:
+        detail=refreshed_failure_detail(expected_revision)
+        raise RuntimeError(
+            "Tutor application was recycled, but the serving instance still "
+            "did not become ready on port 3782"
+            +(f"\n{detail}" if detail else "")
+        )
+    return report,base
+
+
 def main() -> int:
     expected_revision=expected_image_revision()
     apply_persistence_migrations()
@@ -252,8 +292,7 @@ def main() -> int:
     validate_runtime_report(report)
     status=wait_until_ready(base,timeout_seconds=180)
     if status.get("ready") is not True or status.get("httpStatus")!=200:
-        detail=safe_failure_detail(startup_log(report))
-        raise RuntimeError("fresh Tutor image deployed but did not become ready on port 3782"+(f"\n{detail}" if detail else ""))
+        report,base=recover_unready_application(expected_revision)
 
     print(f"[Murikah Tutor] Deployment verified: image {expected_revision}, port 3782 healthy.")
     return 0

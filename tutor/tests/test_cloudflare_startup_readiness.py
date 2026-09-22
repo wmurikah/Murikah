@@ -55,6 +55,16 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
             2,
         )
 
+    def test_source_deploy_recycles_once_when_fresh_serving_instance_is_wedged(self):
+        deploy = ROOT / "cloudflare/deploy_staging.py"
+        if not deploy.exists():
+            return
+        text = deploy.read_text(encoding="utf-8")
+        self.assertIn("def recover_unready_application(", text)
+        self.assertIn("recycle_tutor_application()", text)
+        self.assertIn("report,base=recover_unready_application(expected_revision)", text)
+        self.assertIn("recycling the container application once", text)
+
     def test_source_smoke_waits_for_ownership_after_runtime_health(self):
         smoke = ROOT / "cloudflare/smoke_staging.py"
         if not smoke.exists():
