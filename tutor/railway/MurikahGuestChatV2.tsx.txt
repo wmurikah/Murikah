@@ -1102,7 +1102,7 @@ export default function MurikahGuestChat() {
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#A9822E]">One tutor. Every way you learn.</p>
                 <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">Learn in the mode that fits the moment.</h1>
                 <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-7 text-[var(--muted-foreground)] sm:text-base">
-                  Explore the Tutor before signing in. Your seven guest interactions can use learning modes, uploads, persona, voice and model selection — interface changes do not reduce the allowance.
+                  Explore the Tutor before signing in. Your seven guest interactions can use learning modes, uploads, persona, voice and model selection. Interface changes do not reduce the allowance.
                 </p>
               </div>
             ) : messages.length === 0 ? (
@@ -1134,7 +1134,7 @@ export default function MurikahGuestChat() {
                 <div className="text-center">
                   <h2 className="text-xl font-semibold tracking-tight">Sign in to keep learning</h2>
                   <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-                    You have reached the seven-interaction guest limit. Your guest conversation is retained in this browser and will be continued in your account after sign-in — you will not lose the chat or start again.
+                    You have reached the seven-interaction guest limit. Your guest conversation is retained in this browser and will be continued in your account after sign-in. You will not lose the chat or start again.
                   </p>
                 </div>
                 <div className="mt-5" onClick={persistGuestState}>
