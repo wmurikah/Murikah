@@ -422,7 +422,9 @@
           "pattern": "^[a-z][a-z0-9_]{2,63}$",
           "maxLength": 64
         },
-        "value": {},
+        "value": {
+          "$ref": "#/$defs/canonicalValue"
+        },
         "mutability": {
           "enum": [
             "immutable",
@@ -841,7 +843,9 @@
           "pattern": "^[a-z][a-z0-9_]{2,63}$",
           "maxLength": 64
         },
-        "expected": {},
+        "expected": {
+          "$ref": "#/$defs/canonicalValue"
+        },
         "event_id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]{2,63}$",
@@ -881,7 +885,9 @@
           "pattern": "^[a-z][a-z0-9_]{2,63}$",
           "maxLength": 64
         },
-        "value": {},
+        "value": {
+          "$ref": "#/$defs/canonicalValue"
+        },
         "task_id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]{2,63}$",
@@ -1028,6 +1034,43 @@
           }
         }
       }
+    },
+    "canonicalValue": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/canonicalValue"
+          }
+        },
+        {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/canonicalValue"
+          }
+        }
+      ]
     }
   }
 }
