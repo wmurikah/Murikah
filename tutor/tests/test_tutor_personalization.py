@@ -110,6 +110,30 @@ class TutorPersonalizationTests(unittest.TestCase):
         self.assertIn("useAuthStatus", overlay)
         self.assertIn("MurikahNamePrompt", overlay)
 
+    def test_account_reconciliation_does_not_overwrite_preferred_name(self):
+        worker = source("cloudflare/src/index.ts")
+        if not worker:
+            return
+        start = worker.index("if (route === '/account/upsert'")
+        end = worker.index("if (route === '/audit'", start)
+        upsert = worker[start:end]
+        self.assertIn("ON CONFLICT(actor_id) DO UPDATE", upsert)
+        self.assertNotIn("preferred_name =", upsert)
+        self.assertNotIn("preferred_name_decided_at =", upsert)
+
+    def test_member_route_cannot_target_another_actor(self):
+        access = source("railway/murikah_access.py")
+        if not access:
+            return
+        start = access.index('@router.put("/preferences")')
+        end = access.index('@router.post("/session")', start)
+        block = access[start:end]
+        self.assertIn("payload = _member_identity(request)", block)
+        self.assertIn("payload.user_id", block)
+        self.assertNotIn("body.actor_id", block)
+        self.assertNotIn("body.user_id", block)
+        self.assertNotIn("body.username", block)
+
     def test_not_now_is_session_scoped_not_permanent(self):
         ui = source("railway/MurikahPreferredName.tsx.txt")
         if not ui:
