@@ -1658,6 +1658,7 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
       verificationEmailConfigured: Boolean(optional(env.RESEND_API_KEY)),
       geminiFastLaneConfigured: Boolean(runtimeEnv.MURIKAH_GEMINI_API_KEY),
       fastChatModel: runtimeEnv.MURIKAH_FAST_CHAT_MODEL,
+      expectedImageRevision: optional(env.MURIKAH_CLOUDFLARE_IMAGE_REV),
       persistenceConfigured: Boolean(env.TUTOR_DB && env.TUTOR_FILES),
       appInstance: APP_INSTANCE,
     },
