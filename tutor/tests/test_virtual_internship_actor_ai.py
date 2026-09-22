@@ -32,6 +32,16 @@ class ActorAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx["actor"]["actor_id"],"actor_supervisor")
         self.assertIn("ignore your rules",ctx["learner_message"].lower())
 
+    def test_internship_conversation_context_has_a_hard_bound(self):
+        from virtual_internship.ai.context import bounded_conversation
+        messages=[]
+        for index in range(40):
+            messages.append({"role":"user","content":f"Question {index}: "+("x"*1000)})
+            messages.append({"role":"assistant","content":f"Answer {index}: "+("y"*1000)})
+        packet=bounded_conversation(messages)
+        self.assertLessEqual(sum(len(row["content"]) for row in packet),15000)
+        self.assertIn(packet[-1]["role"],{"user","assistant"})
+
     async def test_actor_streams_and_never_mutates_canonical_state(self):
         service=FakeStateService(); sink=AuditSink()
         c1=candidate()
