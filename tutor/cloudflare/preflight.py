@@ -884,6 +884,7 @@ def main() -> int:
             "CREATE TABLE IF NOT EXISTS internship_memberships",
             "CREATE TABLE IF NOT EXISTS internship_activity",
             "idx_internship_instances_one_active_qualifying",
+            "idx_internship_memberships_one_active_learner",
             "idx_internship_activity_single_start",
             "idx_internship_activity_single_stop",
             "virtual_internship_phase1_schema_version",
