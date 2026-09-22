@@ -868,6 +868,74 @@ def main() -> int:
         ("CREATE TRIGGER", "code TEXT"),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS scenario_packs",
+            "CREATE TABLE IF NOT EXISTS scenario_versions",
+            "CREATE TABLE IF NOT EXISTS internship_instances",
+            "CREATE TABLE IF NOT EXISTS internship_memberships",
+            "CREATE TABLE IF NOT EXISTS internship_activity",
+            "idx_internship_one_active_qualifying_per_learner",
+            "UNIQUE (learner_id, start_request_id)",
+            "CHECK (completed_at IS NULL)",
+            "virtual_internship_phase1_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0006_virtual_internship_phase1.sql",
+        ("CREATE TRIGGER",),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "STANDARD_MINIMUM_INTERNSHIP_DAYS",
+            "internshipDurationStatus(",
+            "resolveScenarioVersion(",
+            "/scenario-version/resolve",
+            "/internships/start",
+            "/internships/status",
+            "/internships/stop",
+            "/internships/object-key",
+            "verified_member_required",
+            "active_internship_exists",
+            "final_completion_available: false",
+            "pending_future_completion_gates: true",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def scenario_version_resolve(",
+            "def internship_start(",
+            "def internship_status(",
+            "def internship_stop(",
+            "def internship_duration_status(",
+            "def internship_object_key(",
+        ),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "Phase 1 Implementation Record",
+            "Tutor AI Runtime / Fast-Path Compatibility",
+            "SUBSEQUENT VIRTUAL INTERNSHIP AI DEVELOPMENT REQUIREMENT",
+            "SUBSEQUENT DEVELOPMENT REQUIREMENT",
+            "0006_virtual_internship_phase1.sql",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_phase1.py",
+        ("class VirtualInternshipPhase1Tests",),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_ownership.py",
+        ("class VirtualInternshipOwnershipTests",),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_duration.py",
+        ("class VirtualInternshipDurationTests",),
+    )
+    require_markers(
         "tutor/cloudflare/src/index.ts",
         (
             "/learning/actor",
