@@ -355,8 +355,8 @@ def main() -> int:
         )
         if application_existed_before:
             print(
-                "[Murikah Tutor] Recycling the stale/indeterminate container "
-                "application once so Cloudflare starts the deployed image cleanly."
+                "[Murikah Tutor] Recycling the stale/indeterminate container application once "
+                "so Cloudflare starts the deployed image cleanly."
             )
         else:
             print(
