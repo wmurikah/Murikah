@@ -293,7 +293,11 @@ def main() -> int:
             'sawExpectedRevision',
             'hadStatus',
             'def apply_persistence_migrations()',
-            '"d1", "migrations", "apply", "murikah-tutor-prod", "--remote"',
+            '"d1",',
+            '"migrations",',
+            '"apply",',
+            '"murikah-tutor-prod",',
+            '"--remote",',
         ),
     )
     forbid_markers(
@@ -417,7 +421,7 @@ def main() -> int:
             'env: runtimeEnv',
             'entrypoint: [CLOUDFLARE_ENTRYPOINT]',
             'async ensureStarted(',
-            'async runtimeStatus()',
+            "async runtimeStatus(expectedRevision = '')",
             'async isolatedStartupDiagnostics(',
             'isolatedStartupDiagnostics(runtimeEnv)',
             'this.ctx.container.getTcpPort(3782).fetch(',
@@ -461,7 +465,7 @@ def main() -> int:
         (
             'readFile("/app/murikah-cloudflare-image-rev", "utf8")',
             'imageRevision',
-            '"/health/ready"',
+            '/health/ready',
         ),
     )
     require_markers(
