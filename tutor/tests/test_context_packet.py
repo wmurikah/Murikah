@@ -57,6 +57,31 @@ class ContextPacketTests(unittest.TestCase):
             "gemini:gemini-3.5-flash-lite",
         )
 
+    def test_followup_consumes_prebuilt_packet_and_appends_latest_prompt(self):
+        conversation = "conversation-cache-hit"
+        ctx.remember_completed_turn(
+            conversation,
+            [
+                {"role": "system", "content": "Teach clearly."},
+                {"role": "user", "content": "Explain regression."},
+            ],
+            "Regression models relationships.",
+            "qwen-fast:qwen3.8-flash",
+        )
+        packet, cache_hit = ctx.context_packet_for_turn(
+            conversation,
+            [
+                {"role": "system", "content": "Teach clearly."},
+                {"role": "user", "content": "Explain regression."},
+                {"role": "assistant", "content": "Regression models relationships."},
+                {"role": "user", "content": "Give me an example."},
+            ],
+            max_chars=16000,
+        )
+        self.assertTrue(cache_hit)
+        self.assertEqual(packet[-1]["role"], "user")
+        self.assertEqual(packet[-1]["content"], "Give me an example.")
+
     def test_provider_private_fields_are_not_retained(self):
         packet = ctx.build_context_packet(
             [
