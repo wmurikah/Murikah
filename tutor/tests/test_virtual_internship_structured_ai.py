@@ -42,6 +42,7 @@ class StructuredAITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls,["m1","m2"])
         self.assertEqual(meta["fallback_count"],1)
         self.assertEqual(meta["decision_id"],"decision_escalation")
+        self.assertEqual(service.mutations,[])
 
     def test_director_rejects_unknown_event_and_arbitrary_patch(self):
         with self.assertRaises(StructuredOutputError):
@@ -54,6 +55,20 @@ class StructuredAITests(unittest.IsolatedAsyncioTestCase):
                 {"schema_version":1,"proposal_type":"select_authored_event","event_id":"event_known","rationale_summary":"","patch_state":{"anything":"anything"}},
                 allowed_event_ids={"event_known"},allowed_decisions={},
             )
+
+    async def test_director_malformed_outputs_fail_closed_without_state_mutation(self):
+        service=FakeStateService(); sink=AuditSink()
+        candidates=[candidate(model_id="m1"),candidate(model_id="m2",model="vendor/m2")]
+        orch=VirtualInternshipAIOrchestrator(
+            service,candidate_resolver=lambda *_a,**_k:candidates,
+            stream_factory=lambda *_a,**_k:FakeStream(['{"schema_version":1,"proposal_type":"select_authored_event","event_id":"unknown","rationale_summary":""}']),
+            audit_recorder=sink,
+        )
+        with self.assertRaises(AIOrchestrationError):
+            await orch.invoke_scenario_director(owner_actor_id="learner_a",internship_id="vi_1")
+        self.assertEqual(service.mutations,[])
+        self.assertEqual(sink.rows[-1][2]["status"],"failed")
+        self.assertEqual(sink.rows[-1][2]["error_code"],"schema_validation_failed")
 
     def test_director_application_uses_only_phase2_typed_operations(self):
         service=FakeStateService()
