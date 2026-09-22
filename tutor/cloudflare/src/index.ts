@@ -829,20 +829,24 @@ async function handlePersistence(
       if (!status) throw new Error('internship_start_status_missing');
       return persistenceJson(status, 201);
     } catch (error) {
-      const replay = actorId && requestId
-        ? await env.TUTOR_DB.prepare(
-            "SELECT internship_id FROM internship_activity WHERE actor_id = ? AND event_type = 'internship_started' AND request_id = ?",
-          ).bind(actorId, requestId).first<{ internship_id: string }>()
-        : null;
-      if (replay?.internship_id) {
-        const replayStatus = await internshipStatusForActor(env, actorId, replay.internship_id, now);
-        if (replayStatus) return persistenceJson(replayStatus, 200);
-      }
-      if (actorId) {
-        const active = await env.TUTOR_DB.prepare(
-          "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
-        ).bind(actorId).first<{ id: string }>();
-        if (active) return persistenceJson({ error: 'active_internship_exists' }, 409);
+      try {
+        const replay = actorId && requestId
+          ? await env.TUTOR_DB.prepare(
+              "SELECT internship_id FROM internship_activity WHERE actor_id = ? AND event_type = 'internship_started' AND request_id = ?",
+            ).bind(actorId, requestId).first<{ internship_id: string }>()
+          : null;
+        if (replay?.internship_id) {
+          const replayStatus = await internshipStatusForActor(env, actorId, replay.internship_id, now);
+          if (replayStatus) return persistenceJson(replayStatus, 200);
+        }
+        if (actorId) {
+          const active = await env.TUTOR_DB.prepare(
+            "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+          ).bind(actorId).first<{ id: string }>();
+          if (active) return persistenceJson({ error: 'active_internship_exists' }, 409);
+        }
+      } catch (classificationError) {
+        console.error('Tutor Virtual Internship start classification failed', classificationError);
       }
       console.error('Tutor Virtual Internship start failed', error);
       return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
@@ -916,11 +920,15 @@ async function handlePersistence(
       if (!status) return persistenceJson({ error: 'internship_not_found' }, 404);
       return persistenceJson(status);
     } catch (error) {
-      const status =
-        actorId && internshipId
-          ? await internshipStatusForActor(env, actorId, internshipId, now)
-          : null;
-      if (status?.status === 'stopped') return persistenceJson(status);
+      try {
+        const status =
+          actorId && internshipId
+            ? await internshipStatusForActor(env, actorId, internshipId, now)
+            : null;
+        if (status?.status === 'stopped') return persistenceJson(status);
+      } catch (classificationError) {
+        console.error('Tutor Virtual Internship stop classification failed', classificationError);
+      }
       console.error('Tutor Virtual Internship stop failed', error);
       return persistenceJson({ error: 'internship_persistence_unavailable' }, 503);
     }
