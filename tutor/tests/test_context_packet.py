@@ -1,6 +1,7 @@
 """Tests for compact follow-up context packets and provider affinity."""
 from pathlib import Path
 import importlib.util
+import time
 import unittest
 
 
@@ -31,11 +32,17 @@ class ContextPacketTests(unittest.TestCase):
 
     def test_context_growth_stays_flat_across_followups(self):
         sizes = {}
+        build_ms = {}
         for turn in (1, 2, 5, 10, 25):
+            started = time.perf_counter()
             packet = ctx.build_context_packet(self.make_messages(turn), max_chars=16000, recent_turns=4)
+            build_ms[turn] = (time.perf_counter() - started) * 1000
             sizes[turn] = sum(len(item["content"]) for item in packet)
         self.assertLessEqual(sizes[25], 17000)
         self.assertLessEqual(sizes[25] - sizes[10], 2500)
+        # This is deliberately generous for CI; the algorithm should be tiny
+        # compared with a network model call and must not grow with turn count.
+        self.assertTrue(all(value < 200 for value in build_ms.values()), build_ms)
 
     def test_provider_affinity_tracks_last_completed_turn(self):
         conversation = "conversation-123"
