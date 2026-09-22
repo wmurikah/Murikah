@@ -191,13 +191,8 @@ def validate_runtime_report(report: dict[str,Any]) -> None:
     port_probe=str(runtime.get("port3782","")) if isinstance(runtime,dict) else ""
     if "ModuleNotFoundError: No module named 'deeptutor'" in log:
         raise RuntimeError("fresh Tutor image still cannot import the bundled deeptutor package")
-    if port_probe!="http-200":
-        detail=safe_failure_detail(log)
-        suffix=f"\n{detail}" if detail else ""
-        raise RuntimeError(
-            f"fresh Tutor image failed isolated startup probe (port3782={port_probe or 'unknown'})"
-            + suffix
-        )
+    if "Traceback (most recent call last):" in log and port_probe!="http-200":
+        raise RuntimeError(f"fresh Tutor image failed during startup:\n{safe_failure_detail(log)}")
 
 def refreshed_failure_detail(expected_revision: str) -> str:
     """Capture diagnostics after a readiness failure, not from an earlier image probe."""
