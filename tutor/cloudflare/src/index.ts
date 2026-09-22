@@ -1892,6 +1892,15 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
     const learningTurns = await env.TUTOR_DB.prepare(
       'SELECT COUNT(*) AS count FROM tutor_turns',
     ).first<{ count: number }>();
+    const followupFastPathSchema = await env.TUTOR_DB.prepare(
+      "SELECT value FROM persistence_meta WHERE key = 'followup_fast_path_schema_version'",
+    ).first<{ value: string }>();
+    const followupState = await env.TUTOR_DB.prepare(
+      'SELECT ' +
+        '(SELECT COUNT(*) FROM tutor_conversation_context) AS packets, ' +
+        '(SELECT COUNT(*) FROM tutor_turn_metrics) AS metrics, ' +
+        '(SELECT COUNT(*) FROM tutor_turn_metrics WHERE is_followup = 1) AS followups',
+    ).first<{ packets: number; metrics: number; followups: number }>();
     const ownershipSchema = await env.TUTOR_DB.prepare(
       "SELECT value FROM persistence_meta WHERE key = 'ownership_schema_version'",
     ).first<{ value: string }>();
@@ -1914,9 +1923,13 @@ async function persistenceStatus(env: TutorEnv): Promise<Response> {
       ok: true,
       schemaVersion: schema?.value || '',
       learningJournalSchemaVersion: learningSchema?.value || '',
+      followupFastPathSchemaVersion: followupFastPathSchema?.value || '',
       ownershipSchemaVersion: ownershipSchema?.value || '',
       emailVerificationSchemaVersion: emailVerificationSchema?.value || '',
       learningTurnCount: learningTurns?.count || 0,
+      conversationContextPacketCount: followupState?.packets || 0,
+      turnMetricCount: followupState?.metrics || 0,
+      followupTurnMetricCount: followupState?.followups || 0,
       durableObjectCount: objects?.count || 0,
       ownedObjectCount: ownershipCounts?.owned_objects || 0,
       userOwnedObjectCount: ownershipCounts?.user_objects || 0,
