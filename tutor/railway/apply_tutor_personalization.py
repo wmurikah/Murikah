@@ -621,21 +621,20 @@ import {
 ''',
         "guest varied composer placeholder",
     )
-    replace_once(
-        path,
-        '''        const visibleAnswer = answer;
-''',
-        '''        const visibleAnswer = sanitizeTutorVisibleText(answer);
-''',
-        "guest accumulated stream sanitizer",
+    guest_text = path.read_text(encoding="utf-8")
+    visible_answer_source = "        const visibleAnswer = answer;\n"
+    visible_answer_target = (
+        "        const visibleAnswer = sanitizeTutorVisibleText(answer);\n"
     )
-    replace_once(
-        path,
-        '''        const visibleAnswer = answer;
-''',
-        '''        const visibleAnswer = sanitizeTutorVisibleText(answer);
-''',
-        "guest accumulated tail sanitizer",
+    visible_answer_count = guest_text.count(visible_answer_source)
+    if visible_answer_count != 2:
+        raise RuntimeError(
+            "Expected two guest accumulated-answer boundaries in "
+            f"{path}, found {visible_answer_count}"
+        )
+    path.write_text(
+        guest_text.replace(visible_answer_source, visible_answer_target),
+        encoding="utf-8",
     )
 
 
