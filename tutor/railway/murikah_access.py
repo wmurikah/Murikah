@@ -397,6 +397,160 @@ async def resend_verification(body: VerificationResend, request: Request):
     }
 
 
+class InternshipStartRequest(BaseModel):
+    request_id: str = Field(min_length=3, max_length=128)
+    scenario_pack_id: str = Field(default="", max_length=128)
+    scenario_slug: str = Field(default="", max_length=128)
+    scenario_version: int | None = Field(default=None, ge=1)
+
+    class Config:
+        extra = "forbid"
+
+
+class InternshipStopRequest(BaseModel):
+    request_id: str = Field(min_length=3, max_length=128)
+
+    class Config:
+        extra = "forbid"
+
+
+class InternshipObjectKeyRequest(BaseModel):
+    object_type: str = Field(min_length=1, max_length=32)
+    object_id: str = Field(min_length=3, max_length=128)
+
+    class Config:
+        extra = "forbid"
+
+
+_INTERNSHIP_ERRORS = {
+    "authentication_required": (401, "Sign in to continue."),
+    "verified_member_required": (403, "A verified member account is required."),
+    "scenario_not_available": (404, "That internship scenario is not available."),
+    "scenario_version_not_available": (404, "That internship scenario version is not available."),
+    "active_internship_exists": (409, "You already have an active qualifying internship."),
+    "internship_not_found": (404, "That internship was not found."),
+    "internship_not_active": (409, "That internship is not active."),
+    "invalid_state_transition": (409, "That internship state change is not available."),
+    "invalid_internship_object": (400, "That internship object request is invalid."),
+    "internship_persistence_unavailable": (503, "Virtual Internship storage is temporarily unavailable."),
+}
+
+
+def _internship_actor(request: Request):
+    payload = request_identity(request)
+    if payload is None:
+        raise HTTPException(401, "Sign in to continue.")
+    if str(getattr(payload, "username", "")).startswith(PREFIX):
+        raise HTTPException(403, "A verified member account is required.")
+    actor_id = str(getattr(payload, "user_id", "") or "")
+    if not actor_id:
+        raise HTTPException(401, "Sign in to continue.")
+    return payload, actor_id
+
+
+def _internship_store():
+    try:
+        from deeptutor import murikah_persistence
+    except Exception as exc:
+        raise HTTPException(503, "Virtual Internship storage is temporarily unavailable.") from exc
+    if not murikah_persistence.enabled():
+        raise HTTPException(503, "Virtual Internship storage is temporarily unavailable.")
+    return murikah_persistence
+
+
+def _internship_error_response(exc: Exception) -> JSONResponse:
+    detail = str(exc)
+    for code, (status, message) in _INTERNSHIP_ERRORS.items():
+        if code in detail:
+            return JSONResponse(
+                {"detail": message, "code": code},
+                status_code=status,
+                headers={"Cache-Control": "no-store"},
+            )
+    return JSONResponse(
+        {
+            "detail": "Virtual Internship storage is temporarily unavailable.",
+            "code": "internship_persistence_unavailable",
+        },
+        status_code=503,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/internships/start")
+async def internship_start(body: InternshipStartRequest, request: Request):
+    check_origin(request)
+    _, actor_id = _internship_actor(request)
+    if not body.scenario_pack_id.strip() and not body.scenario_slug.strip():
+        return JSONResponse(
+            {"detail": "Choose an available internship scenario.", "code": "scenario_not_available"},
+            status_code=422,
+            headers={"Cache-Control": "no-store"},
+        )
+    durable = _internship_store()
+    try:
+        return durable.internship_start(
+            actor_id,
+            request_id=body.request_id,
+            scenario_pack_id=body.scenario_pack_id,
+            scenario_slug=body.scenario_slug,
+            scenario_version=body.scenario_version,
+        )
+    except durable.PersistenceError as exc:
+        return _internship_error_response(exc)
+
+
+@router.get("/internships/{internship_id}/status")
+async def internship_status(internship_id: str, request: Request):
+    _, actor_id = _internship_actor(request)
+    durable = _internship_store()
+    try:
+        return durable.internship_status(actor_id, internship_id)
+    except durable.PersistenceError as exc:
+        return _internship_error_response(exc)
+
+
+@router.post("/internships/{internship_id}/stop")
+async def internship_stop(
+    internship_id: str,
+    body: InternshipStopRequest,
+    request: Request,
+):
+    check_origin(request)
+    _, actor_id = _internship_actor(request)
+    durable = _internship_store()
+    try:
+        return durable.internship_stop(
+            actor_id,
+            internship_id,
+            request_id=body.request_id,
+        )
+    except durable.PersistenceError as exc:
+        return _internship_error_response(exc)
+
+
+@router.post("/internships/{internship_id}/object-key")
+async def internship_object_key(
+    internship_id: str,
+    body: InternshipObjectKeyRequest,
+    request: Request,
+):
+    check_origin(request)
+    _, actor_id = _internship_actor(request)
+    durable = _internship_store()
+    try:
+        return {
+            "object_key": durable.internship_object_key(
+                actor_id,
+                internship_id,
+                object_type=body.object_type,
+                object_id=body.object_id,
+            )
+        }
+    except durable.PersistenceError as exc:
+        return _internship_error_response(exc)
+
+
 def guest_prompt(method):
     """Budget accepted turns centrally, including regenerate and every capability."""
     @wraps(method)
