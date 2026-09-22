@@ -478,7 +478,6 @@ function extractContextFacts(
 
 async function refreshConversationContext(
   env: TutorEnv,
-  *,
   conversationId: string,
   actorId: string,
   promptSummary: string,
@@ -947,17 +946,18 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
       // Prepare the next follow-up packet now, after the learner-visible answer
       // is known, so the next request does not rebuild context from the full transcript.
-      await refreshConversationContext(env, {
-        conversationId: turn.conversation_id,
-        actorId: turn.actor_id,
-        promptSummary: turn.prompt_summary,
+      await refreshConversationContext(
+        env,
+        turn.conversation_id,
+        turn.actor_id,
+        turn.prompt_summary,
         responseSummary,
         provider,
         modelId,
         status,
-        incomplete: incomplete === 1,
+        incomplete === 1,
         now,
-      });
+      );
       return persistenceJson({ ok: true });
     } catch (error) {
       console.error('Tutor D1 learning turn finish failed', error);
