@@ -394,11 +394,15 @@ NEW_RUN = '''    @staticmethod
             ),
         )
 
+        first_token_remaining = max(
+            0.25,
+            _OVERALL_FIRST_TOKEN_SECONDS - (time.perf_counter() - request_started),
+        )
         winner = await race_first_visible(
             hedges,
             request_started=request_started,
-            first_token_timeout=_FIRST_TOKEN_TIMEOUT_SECONDS,
-            overall_timeout=_OVERALL_FIRST_TOKEN_SECONDS,
+            first_token_timeout=min(_FIRST_TOKEN_TIMEOUT_SECONDS, first_token_remaining),
+            overall_timeout=first_token_remaining,
             hard_deadline=True,
         )
         # One bounded hedged race is the whole first-token budget. Starting a
