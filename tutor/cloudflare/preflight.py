@@ -250,7 +250,6 @@ def validate_personalization_fixture() -> None:
             failures.append("visible-text sanitizer changes hyphen-minus or en dash")
 
     runtime_sources = (
-        "tutor/railway/MurikahGuestChatV2.tsx.txt",
         "tutor/railway/murikah-virtual-internship-page.tsx.txt",
         "tutor/railway/murikah_er.py",
     )
