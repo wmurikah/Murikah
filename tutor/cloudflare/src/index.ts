@@ -893,13 +893,24 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           'provider, model_id, first_token_ms, stream_ms, continuation_count, total_ms, incomplete, created_at, updated_at' +
           ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
           'ON CONFLICT(turn_id) DO UPDATE SET ' +
-          'turn_number = excluded.turn_number, is_followup = excluded.is_followup, lane = excluded.lane, ' +
-          'route_reason = excluded.route_reason, history_chars = excluded.history_chars, history_messages = excluded.history_messages, ' +
-          'context_packet_chars = excluded.context_packet_chars, context_build_ms = excluded.context_build_ms, ' +
-          'output_token_budget = excluded.output_token_budget, first_token_deadline_ms = excluded.first_token_deadline_ms, ' +
-          'stream_idle_timeout_ms = excluded.stream_idle_timeout_ms, provider = excluded.provider, model_id = excluded.model_id, ' +
-          'first_token_ms = excluded.first_token_ms, stream_ms = excluded.stream_ms, continuation_count = excluded.continuation_count, ' +
-          'total_ms = excluded.total_ms, incomplete = excluded.incomplete, updated_at = excluded.updated_at',
+          "turn_number = CASE WHEN excluded.lane <> '' THEN excluded.turn_number ELSE tutor_turn_metrics.turn_number END, " +
+          "is_followup = CASE WHEN excluded.lane <> '' THEN excluded.is_followup ELSE tutor_turn_metrics.is_followup END, " +
+          "lane = CASE WHEN excluded.lane <> '' THEN excluded.lane ELSE tutor_turn_metrics.lane END, " +
+          "route_reason = CASE WHEN excluded.route_reason <> '' THEN excluded.route_reason ELSE tutor_turn_metrics.route_reason END, " +
+          'history_chars = MAX(tutor_turn_metrics.history_chars, excluded.history_chars), ' +
+          'history_messages = MAX(tutor_turn_metrics.history_messages, excluded.history_messages), ' +
+          'context_packet_chars = MAX(tutor_turn_metrics.context_packet_chars, excluded.context_packet_chars), ' +
+          'context_build_ms = MAX(tutor_turn_metrics.context_build_ms, excluded.context_build_ms), ' +
+          'output_token_budget = MAX(tutor_turn_metrics.output_token_budget, excluded.output_token_budget), ' +
+          'first_token_deadline_ms = MAX(tutor_turn_metrics.first_token_deadline_ms, excluded.first_token_deadline_ms), ' +
+          'stream_idle_timeout_ms = MAX(tutor_turn_metrics.stream_idle_timeout_ms, excluded.stream_idle_timeout_ms), ' +
+          "provider = CASE WHEN excluded.provider <> '' THEN excluded.provider ELSE tutor_turn_metrics.provider END, " +
+          "model_id = CASE WHEN excluded.model_id <> '' THEN excluded.model_id ELSE tutor_turn_metrics.model_id END, " +
+          'first_token_ms = MAX(tutor_turn_metrics.first_token_ms, excluded.first_token_ms), ' +
+          'stream_ms = MAX(tutor_turn_metrics.stream_ms, excluded.stream_ms), ' +
+          'continuation_count = MAX(tutor_turn_metrics.continuation_count, excluded.continuation_count), ' +
+          'total_ms = MAX(tutor_turn_metrics.total_ms, excluded.total_ms), ' +
+          'incomplete = MAX(tutor_turn_metrics.incomplete, excluded.incomplete), updated_at = excluded.updated_at',
       )
         .bind(
           turnId,
