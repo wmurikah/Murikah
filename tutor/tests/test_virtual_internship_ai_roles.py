@@ -46,6 +46,37 @@ class AIRoleTests(unittest.TestCase):
         self.assertEqual([(r.profile_id,r.model_id) for r in resolved],[("shared","m1"),("shared","m2")])
         self.assertTrue(all(r.model_id!="forbidden" for r in resolved))
 
+
+    def test_role_model_preference_orders_only_authorized_catalog_rows(self):
+        rows={
+            "active":{"profile_id":"shared","model_id":"balanced"},
+            "options":[
+                {"profile_id":"shared","model_id":"balanced"},
+                {"profile_id":"shared","model_id":"reasoning","reasoning_effort":"high"},
+                {"profile_id":"shared","model_id":"fast","reasoning_effort":"minimal"},
+            ],
+        }
+        def resolver(selection):
+            return SimpleNamespace(
+                provider_name="openai",binding="openai",
+                model="vendor/"+selection["model_id"],api_key="secret",
+                effective_url="https://example.invalid",base_url="https://example.invalid",
+                api_version="",reasoning_effort=selection.get("reasoning_effort"),extra_headers={},
+            )
+        reasoning=resolve_role_candidates(
+            role_policy("assessor"),
+            allowed_options_getter=lambda:rows,
+            config_resolver=resolver,
+        )
+        self.assertEqual(reasoning[0].model_id,"reasoning")
+        latency=resolve_role_candidates(
+            role_policy("actor"),
+            allowed_options_getter=lambda:rows,
+            config_resolver=resolver,
+        )
+        self.assertEqual(latency[0].model_id,"balanced")
+        self.assertNotIn("forbidden",{row.model_id for row in reasoning+latency})
+
     def test_source_uses_existing_murikah_provider_abstractions(self):
         source=(ROOT/"railway/virtual_internship/ai/providers.py").read_text()
         self.assertIn("allowed_llm_options",source)
