@@ -668,7 +668,7 @@ def main() -> int:
             'turn_deadline = request_started + _FAST_TURN_TIMEOUT_SECONDS',
             'selected_lane=fast',
             'selected_lane=deep_agent',
-            '2800 if long_answer_requested else _FAST_OUTPUT_TOKENS',
+            '3000 if long_answer_requested else _FAST_OUTPUT_TOKENS',
             'remaining_for_recovery = turn_deadline - time.perf_counter()',
             'continuation_skipped',
             'route=deep_agent',
