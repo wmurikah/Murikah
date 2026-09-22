@@ -118,7 +118,7 @@ function sanitizeUrl(value: string): string {
 
 function sanitizePlain(value: string): string {
   return value
-    .replaceAll(\` \${EM_DASH} \`, "; ")
+    .replaceAll(` ${EM_DASH} `, "; ")
     .replaceAll(EM_DASH, ", ")
     .replace(ENTITY_RE, "; ");
 }
