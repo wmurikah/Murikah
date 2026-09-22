@@ -124,6 +124,7 @@ describe("Murikah Tutor personalization", () => {
   });
 
   it("keeps Not now session-scoped instead of permanently mutating the account", () => {
+    vi.stubGlobal("fetch", vi.fn());
     render(
       <MurikahNamePrompt
         userId="u_member_2"
