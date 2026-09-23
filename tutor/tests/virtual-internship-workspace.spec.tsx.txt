@@ -1,0 +1,346 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import MurikahVirtualInternshipWorkspace from "@/components/virtual-internship/MurikahVirtualInternshipWorkspace";
+
+const nav = vi.hoisted(() => ({
+  pathname: "/virtual-internship",
+  search: "",
+  push: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: nav.push }),
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
+
+const workspace = {
+  state: "active",
+  simulation: true,
+  sections: ["overview", "inbox", "work", "company", "documents", "meetings", "mentor", "activity"],
+  internship: {
+    internship_id: "vi_1",
+    status: "active",
+    lifecycle_stage: "started",
+    role_title: "Internal Audit Intern",
+    scenario_title: "Audit Demo",
+    scenario_version: 2,
+    classification: "qualifying",
+    qualifying: true,
+    started_at: 1_790_000_000,
+    target_end_at: 1_797_776_000,
+    current_server_time: 1_790_691_200,
+    minimum_duration_days: 90,
+    elapsed_days: 8,
+    current_day: 9,
+    current_week: 2,
+    expected_workload_band: "standard",
+    stopped_at: 0,
+  },
+  overview: {
+    active_task_count: 1,
+    completed_task_count: 0,
+    next_deadline: 1_790_900_000,
+    next_meeting: 0,
+    recent_threads: [{
+      thread_id: "vit_1",
+      thread_kind: "workplace",
+      scenario_actor_id: "actor_supervisor",
+      title: "Lina A.",
+      related_task_id: "task_1",
+      last_message: "Please review the reconciliation brief.",
+      last_sender_type: "actor",
+      last_message_at: 1_790_680_000,
+      message_count: 2,
+    }],
+    recent_activity: [{
+      id: "event:1",
+      type: "scenario_event",
+      title: "New assignment available",
+      detail: "A learner-visible workplace event occurred.",
+      timestamp: 1_790_670_000,
+      href: "/virtual-internship/activity",
+    }],
+  },
+  company: {
+    name: "Meridian Energy Services",
+    fictional: true,
+    sector: "Energy",
+    country_region: "East Africa",
+    description: "A fictional organization used for a Murikah workplace simulation.",
+    products_services: ["Fuel distribution"],
+    departments: [{ id: "audit", name: "Internal Audit" }],
+    systems: ["ERP"],
+    process_references: ["Inventory reconciliation"],
+    communication_norms: ["Use concise professional messages."],
+    work_calendar: {},
+    reporting_relationships: [],
+  },
+  people: [{
+    actor_id: "actor_supervisor",
+    name: "Lina A.",
+    actor_class: "supervisor",
+    job_title: "Internal Audit Supervisor",
+    department_id: "audit",
+    reports_to_actor_id: "",
+    learner_relationship: "Direct supervisor",
+    active: true,
+  }],
+  tasks: [{
+    task_id: "task_1",
+    title: "Review inventory reconciliation",
+    category: "review",
+    assigned_by_actor_id: "actor_supervisor",
+    business_context: "The monthly reconciliation has an unexplained variance.",
+    learner_objective: "Use the disclosed evidence to identify the next review steps.",
+    brief: "Review the supplied source material and prepare your work approach.",
+    expected_effort: "2 hours",
+    difficulty: "introductory",
+    due_at: 1_790_900_000,
+    status: "available",
+    dependencies: [],
+    deliverable_types: ["memo"],
+    allowed_tools: ["notes"],
+    mentor_support: { key: "light_coaching", level: 2, label: "Light guidance" },
+    stakeholder_actor_ids: ["actor_supervisor"],
+  }],
+  documents: [{
+    document_id: "fact:policy_1",
+    title: "Inventory Policy",
+    kind: "scenario_source",
+    source: "policy_manual",
+    summary: "Monthly cycle counts are required.",
+  }],
+  meetings: [],
+  threads: [{
+    thread_id: "vit_1",
+    thread_kind: "workplace",
+    scenario_actor_id: "actor_supervisor",
+    title: "Lina A.",
+    related_task_id: "task_1",
+    last_message: "Please review the reconciliation brief.",
+    last_sender_type: "actor",
+    last_message_at: 1_790_680_000,
+    message_count: 2,
+  }],
+  reflections: [],
+  activity: [{
+    id: "internship:start",
+    type: "internship_started",
+    title: "Internship started",
+    detail: "Your simulated workplace record was created.",
+    timestamp: 1_790_000_000,
+    href: "/virtual-internship",
+  }],
+};
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function workspaceFetch(extra?: (url: string, init?: RequestInit) => Response | Promise<Response> | undefined) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const custom = extra?.(url, init);
+    if (custom) return await custom;
+    if (url.endsWith("/workspace")) return jsonResponse(workspace);
+    throw new Error("Unexpected request: " + url);
+  });
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  nav.pathname = "/virtual-internship";
+  nav.search = "";
+  nav.push.mockReset();
+});
+
+describe("Virtual Internship Phase 4 workplace", () => {
+  it("renders the real dashboard without fake completion scoring", async () => {
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Meridian Energy Services" })).toBeVisible();
+    expect(screen.getByText("Day 9")).toBeVisible();
+    expect(screen.getByText(/Week 2/)).toBeVisible();
+    expect(screen.getByText("Review inventory reconciliation")).toBeVisible();
+    expect(screen.getByText("Please review the reconciliation brief.")).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Virtual Internship workspace" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByText(/% complete/i)).toBeNull();
+    expect(screen.queryByText(/competency score/i)).toBeNull();
+  });
+
+  it("shows assignment detail but no Phase 5 artifact actions", async () => {
+    nav.pathname = "/virtual-internship/work";
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
+    expect(screen.getByRole("heading", { name: "Review inventory reconciliation" })).toBeVisible();
+    expect(screen.getByText("Light guidance")).toBeVisible();
+    expect(screen.getByText("Memo")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /upload/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /mark complete/i })).toBeNull();
+  });
+
+  it("keeps company actors learner-safe and labels the simulation", async () => {
+    nav.pathname = "/virtual-internship/company";
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByText("Fictional workplace")).toBeVisible();
+    expect(screen.getByText("Lina A.")).toBeVisible();
+    expect(screen.getByText("Internal Audit Supervisor")).toBeVisible();
+    expect(screen.queryByText("hidden goal")).toBeNull();
+    expect(screen.queryByText("system prompt")).toBeNull();
+  });
+
+  it("loads document content through the secured document endpoint and has no artifact upload", async () => {
+    nav.pathname = "/virtual-internship/documents";
+    const fetchMock = workspaceFetch((url) => {
+      if (url.includes("/documents/fact%3Apolicy_1")) {
+        return jsonResponse({
+          ok: true,
+          document: {
+            ...workspace.documents[0],
+            content: "Monthly cycle counts are required before close.",
+          },
+        });
+      }
+      return undefined;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open document" }));
+    expect(await screen.findByText("Monthly cycle counts are required before close.")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/documents/fact%3Apolicy_1?internship_id=vi_1"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(screen.queryByRole("button", { name: /upload/i })).toBeNull();
+  });
+
+  it("streams a workplace actor reply through the Phase 4 API surface", async () => {
+    nav.pathname = "/virtual-internship/inbox";
+    const fetchMock = workspaceFetch((url, init) => {
+      if (url.endsWith("/actor/messages/stream")) {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body));
+        expect(body.scenario_actor_id).toBe("actor_supervisor");
+        expect(body.request_id).toMatch(/^actor-/);
+        return new Response(
+          JSON.stringify({ type: "chunk", text: "Please start with the policy and variance evidence." }) + "\n" +
+          JSON.stringify({ type: "final", text: "Please start with the policy and variance evidence.", message_id: "vim_2" }) + "\n",
+          { headers: { "content-type": "application/x-ndjson" } },
+        );
+      }
+      return undefined;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Lina A\./ }));
+    const composer = screen.getByLabelText("Workplace message");
+    fireEvent.change(composer, { target: { value: "Where should I start?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Please start with the policy and variance evidence.")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/actor/messages/stream"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("keeps Murikah Mentor separate and uses its streaming endpoint", async () => {
+    nav.pathname = "/virtual-internship/mentor";
+    const fetchMock = workspaceFetch((url) => {
+      if (url.endsWith("/mentor/messages/stream")) {
+        return new Response(
+          JSON.stringify({ type: "chunk", text: "Break the task into evidence, criteria and next actions." }) + "\n" +
+          JSON.stringify({ type: "final", text: "Break the task into evidence, criteria and next actions.", message_id: "vim_m1", assistance_label: "Light guidance" }) + "\n",
+          { headers: { "content-type": "application/x-ndjson" } },
+        );
+      }
+      return undefined;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Murikah Mentor" })).toBeVisible();
+    expect(screen.getByText(/separate from workplace actors/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Message Murikah Mentor"), { target: { value: "Help me plan this task." } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Mentor" }));
+
+    expect(await screen.findByText("Break the task into evidence, criteria and next actions.")).toBeVisible();
+    expect(screen.getByText("Coaching level: Light guidance")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /complete my task/i })).toBeNull();
+  });
+
+  it("persists the learner reflection without scoring it", async () => {
+    nav.pathname = "/virtual-internship/activity";
+    const fetchMock = workspaceFetch((url, init) => {
+      if (url.endsWith("/reflections")) {
+        const body = JSON.parse(String(init?.body));
+        expect(body.period_key).toBe("week-2");
+        expect(body.content).toContain("I learned");
+        return jsonResponse({ ok: true, reflection: { id: "vir_1" } });
+      }
+      return undefined;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.change(await screen.findByLabelText("Your reflection"), { target: { value: "I learned to validate the source evidence first." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save reflection" }));
+    expect(await screen.findByText("Reflection saved.")).toBeVisible();
+    expect(screen.queryByText(/score/i)).toBeNull();
+    expect(screen.queryByText(/pass/i)).toBeNull();
+  });
+
+  it("keeps a stopped internship historical and read-only", async () => {
+    nav.pathname = "/virtual-internship/mentor";
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...workspace,
+      state: "stopped",
+      internship: { ...workspace.internship, status: "stopped", stopped_at: 1_790_700_000 },
+    })));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByText("Stopped")).toBeVisible();
+    expect(screen.getByText(/history remains available/i)).toBeVisible();
+    expect(screen.getByLabelText("Message Murikah Mentor")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ask Mentor" })).toBeDisabled();
+    expect(screen.queryByText("Completed internship")).toBeNull();
+  });
+
+  it("shows guest and no-internship states without exposing private workplace data", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      state: "guest",
+      simulation: true,
+      title: "Murikah Virtual Internship",
+      description: "Preview",
+      sections: workspace.sections,
+    })));
+    const first = render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?next=%2Fvirtual-internship");
+    expect(screen.queryByText("Lina A.")).toBeNull();
+    first.unmount();
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      state: "none",
+      simulation: true,
+      sections: workspace.sections,
+      start_options: [],
+    })));
+    render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByText("No internship is available right now.")).toBeVisible();
+  });
+});
