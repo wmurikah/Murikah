@@ -39,6 +39,7 @@ COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py
 COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py
 COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
+COPY tutor/railway/murikah_virtual_internship.py /opt/murikah/murikah_virtual_internship.py
 COPY tutor/railway/virtual_internship /src/DeepTutor/deeptutor/virtual_internship
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
@@ -72,6 +73,7 @@ COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButton
 COPY tutor/railway/MurikahDiagramStudio.tsx.txt /opt/murikah/MurikahDiagramStudio.tsx
 COPY tutor/railway/murikah-diagram-page.tsx.txt /opt/murikah/murikah-diagram-page.tsx
 COPY tutor/railway/murikah-virtual-internship-page.tsx.txt /opt/murikah/murikah-virtual-internship-page.tsx
+COPY tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt /opt/murikah/MurikahVirtualInternshipWorkspace.tsx
 COPY tutor/railway/murikah-entry-page.tsx.txt /opt/murikah/murikah-entry-page.tsx
 COPY tutor/railway/murikah-login-page.tsx.txt /opt/murikah/murikah-login-page.tsx
 COPY tutor/railway/murikah-register-page.tsx.txt /opt/murikah/murikah-register-page.tsx
@@ -88,7 +90,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/polish_guest_shell.py /src/DeepTutor \
     && python /opt/murikah/render_guest_markdown.py /src/DeepTutor \
     && python /opt/murikah/enhance_guest_diagram.py /src/DeepTutor \
-    && python /opt/murikah/add_virtual_internship_placeholder.py /src/DeepTutor /opt/murikah/murikah-virtual-internship-page.tsx \
+    && python /opt/murikah/add_virtual_internship_placeholder.py /src/DeepTutor /opt/murikah/murikah-virtual-internship-page.tsx /opt/murikah/MurikahVirtualInternshipWorkspace.tsx \
     && python /opt/murikah/harden_guest_completion.py /src/DeepTutor \
     && python /opt/murikah/accelerate_chat.py /src/DeepTutor \
     && python /opt/murikah/lock_guest_composer.py /src/DeepTutor \
@@ -120,7 +122,8 @@ COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settin
 COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verified-email-invites.spec.tsx
 COPY tutor/tests/personalization-visible-text.spec.tsx.txt ./tests/integration/personalization-visible-text.spec.tsx
 COPY tutor/tests/personalization.spec.tsx.txt ./tests/integration/personalization.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx tests/integration/personalization.spec.tsx
+COPY tutor/tests/virtual-internship-workspace.spec.tsx.txt ./tests/integration/virtual-internship-workspace.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx tests/integration/personalization.spec.tsx tests/integration/virtual-internship-workspace.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
@@ -165,6 +168,7 @@ RUN apt-get update \
 # the runtime is the pinned release; the rest remains the reviewed upstream image.
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py /app/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_virtual_internship.py /app/deeptutor/api/routers/murikah_virtual_internship.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_email_verification.py /app/deeptutor/murikah_email_verification.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_personalization.py /app/deeptutor/murikah_personalization.py
