@@ -2181,6 +2181,14 @@ Frontend integration coverage is in `tutor/tests/virtual-internship-workspace.sp
 
 The Tutor Docker build restores the overlay component into the pinned DeepTutor checkout and runs this integration test alongside the existing Tutor integration suite before the production Next.js build.
 
+## SUBSEQUENT WORKPLACE UI REQUIREMENT
+
+Future Virtual Internship UI work must reuse the Phase 4 workspace shell and learner-safe APIs. It must never fetch raw canonical scenario state or expose hidden actor, fact or event data to the browser.
+
+Future workplace UI changes must reuse Phase 3 AI orchestration rather than calling model providers directly from React. They must also reuse the shared preferred-name contract and visible-text sanitization, preserve mobile and responsive behavior and accessibility, preserve message and thread ownership, and preserve the separation between Murikah Mentor conversations and workplace actor conversations.
+
+Phase 5 must extend the existing Work surface rather than build a second assignment UI.
+
 ## SUBSEQUENT AI ORCHESTRATION REQUIREMENT
 
 Future Virtual Internship AI development must use the Phase 3 orchestrator and role contracts. Workplace UI must not call model providers directly. Future work must preserve current model grants, use Phase 2 actor/learner bounded views, avoid raw full-canonical-state actor prompts, keep conversation context bounded, reuse prompt/schema versions and learner-safe errors, retain invocation audit metadata, preserve prompt-injection boundaries, close losing/expired streams, and never allow model output to patch canonical scenario state.
