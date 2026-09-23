@@ -1,0 +1,228 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { InternshipInbox } from "@/components/virtual-internship/Conversations";
+import type { InternshipWorkspace } from "@/components/virtual-internship/types";
+
+const nav = vi.hoisted(() => ({
+  search: "actor=supervisor",
+  push: vi.fn(),
+  replace: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(nav.search),
+  useRouter: () => ({ push: nav.push, replace: nav.replace }),
+}));
+
+const WORKSPACE: InternshipWorkspace = {
+  state: "active",
+  simulation: true,
+  sections: ["overview", "inbox", "work", "company", "documents", "meetings", "mentor", "activity"],
+  internship: {
+    internship_id: "vi_1",
+    status: "active",
+    lifecycle_stage: "started",
+    role_title: "Audit Intern",
+    scenario_title: "Audit Practice",
+    scenario_version: 1,
+    classification: "qualifying",
+    qualifying: true,
+    started_at: 1000,
+    target_end_at: 9000,
+    current_server_time: 2000,
+    minimum_duration_days: 90,
+    elapsed_days: 8,
+    current_day: 9,
+    current_week: 2,
+    expected_workload_band: "standard",
+    stopped_at: 0,
+  },
+  people: [
+    {
+      actor_id: "supervisor",
+      name: "Lina Otieno",
+      actor_class: "supervisor",
+      job_title: "Audit Supervisor",
+      department_id: "audit",
+      reports_to_actor_id: "",
+      learner_relationship: "Direct supervisor",
+      active: true,
+    },
+  ],
+  tasks: [],
+  documents: [],
+  meetings: [],
+  threads: [],
+  reflections: [],
+  activity: [],
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  nav.search = "actor=supervisor";
+  nav.push.mockReset();
+  nav.replace.mockReset();
+});
+
+describe("Virtual Internship workplace inbox", () => {
+  it("streams an actor response through the Phase 4 API and keeps Mentor separate", async () => {
+    const posted: string[] = [];
+    const refreshed: InternshipWorkspace = {
+      ...WORKSPACE,
+      threads: [
+        {
+          thread_id: "thread_1",
+          thread_kind: "workplace",
+          scenario_actor_id: "supervisor",
+          title: "Lina Otieno",
+          related_task_id: "",
+          last_message: "Please focus on the control objective.",
+          last_sender_type: "actor",
+          last_message_at: 2000,
+          message_count: 2,
+        },
+      ],
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/actor/messages/stream")) {
+          posted.push(String(init?.body || ""));
+          return new Response(
+            '{"type":"chunk","text":"Please focus on "}\n' +
+              '{"type":"chunk","text":"the control objective."}\n' +
+              '{"type":"final","text":"Please focus on the control objective.","message_id":"m2"}\n',
+            { status: 200, headers: { "content-type": "application/x-ndjson" } },
+          );
+        }
+        if (url.includes("/threads/thread_1")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              messages: [
+                { id: "m1", thread_id: "thread_1", sender_type: "learner", body: "Where should I begin?", created_at: 1900 },
+                { id: "m2", thread_id: "thread_1", sender_type: "actor", body: "Please focus on the control objective.", created_at: 2000 },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    render(
+      <InternshipInbox
+        workspace={WORKSPACE}
+        readOnly={false}
+        refresh={async () => refreshed}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    expect(screen.getAllByText("Lina Otieno").length).toBeGreaterThan(1);
+    expect(screen.queryByText("Murikah Mentor")).toBeNull();
+
+    const composer = screen.getByLabelText("Message Lina Otieno");
+    fireEvent.change(composer, { target: { value: "Where should I begin?" } });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: false });
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    const body = JSON.parse(posted[0]);
+    expect(body.internship_id).toBe("vi_1");
+    expect(body.scenario_actor_id).toBe("supervisor");
+    expect(body.text).toBe("Where should I begin?");
+    await screen.findByText("Please focus on the control objective.");
+  });
+
+  it("retries with the same request ID and does not append a second learner message", async () => {
+    const requestIds: string[] = [];
+    let attempt = 0;
+    const refreshed: InternshipWorkspace = {
+      ...WORKSPACE,
+      threads: [
+        {
+          thread_id: "thread_1",
+          thread_kind: "workplace",
+          scenario_actor_id: "supervisor",
+          title: "Lina Otieno",
+          related_task_id: "",
+          last_message: "Recovered response",
+          last_sender_type: "actor",
+          last_message_at: 2000,
+          message_count: 2,
+        },
+      ],
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/actor/messages/stream")) {
+          const body = JSON.parse(String(init?.body || "{}"));
+          requestIds.push(body.request_id);
+          attempt += 1;
+          if (attempt === 1) {
+            return new Response(
+              '{"type":"error","message":"This workplace response is temporarily unavailable. Please try again.","retryable":true}\n',
+              { status: 200, headers: { "content-type": "application/x-ndjson" } },
+            );
+          }
+          return new Response(
+            '{"type":"chunk","text":"Recovered response"}\n' +
+              '{"type":"final","text":"Recovered response","message_id":"m2","idempotent_replay":true}\n',
+            { status: 200, headers: { "content-type": "application/x-ndjson" } },
+          );
+        }
+        if (url.includes("/threads/thread_1")) {
+          return new Response(
+            JSON.stringify({
+              messages: [
+                { id: "m1", thread_id: "thread_1", sender_type: "learner", body: "Please clarify", created_at: 1900 },
+                { id: "m2", thread_id: "thread_1", sender_type: "actor", body: "Recovered response", created_at: 2000 },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    render(
+      <InternshipInbox
+        workspace={WORKSPACE}
+        readOnly={false}
+        refresh={async () => refreshed}
+      />,
+    );
+
+    const composer = screen.getByLabelText("Message Lina Otieno");
+    fireEvent.change(composer, { target: { value: "Please clarify" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText(/temporarily unavailable/)).toBeVisible();
+    expect(screen.getAllByText("Please clarify")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(requestIds).toHaveLength(2));
+    expect(requestIds[1]).toBe(requestIds[0]);
+    await screen.findByText("Recovered response");
+    expect(screen.getAllByText("Please clarify")).toHaveLength(1);
+  });
+
+  it("keeps stopped internship conversations read-only", () => {
+    render(
+      <InternshipInbox
+        workspace={WORKSPACE}
+        readOnly
+        refresh={async () => WORKSPACE}
+      />,
+    );
+    expect(screen.getByText(/Historical workplace messages remain available/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+  });
+});
