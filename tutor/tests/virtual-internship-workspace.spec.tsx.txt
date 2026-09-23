@@ -247,7 +247,8 @@ describe("Virtual Internship Phase 4 workplace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<MurikahVirtualInternshipWorkspace />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Lina A\./ }));
+    const linaButtons = await screen.findAllByRole("button", { name: /Lina A\./ });
+    fireEvent.click(linaButtons[linaButtons.length - 1]);
     const composer = screen.getByLabelText("Workplace message");
     fireEvent.change(composer, { target: { value: "Where should I start?" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
