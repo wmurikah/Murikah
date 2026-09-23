@@ -1,0 +1,833 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  fetchThread,
+  streamActorMessage,
+  streamMentorMessage,
+  virtualInternshipRequestId,
+} from "./api";
+import { Card, EmptyState, InlineError, StatusPill, SurfaceTitle, formatDateTime } from "./shared";
+import type {
+  InternshipMessage,
+  InternshipPerson,
+  InternshipStreamEvent,
+  InternshipThread,
+  InternshipWorkspace,
+} from "./types";
+
+type ConversationSurfaceProps = {
+  workspace: InternshipWorkspace;
+  readOnly: boolean;
+  refresh: () => Promise<InternshipWorkspace | null>;
+};
+
+function safeMessageTimestamp(workspace: InternshipWorkspace): number {
+  return workspace.internship?.current_server_time || 0;
+}
+
+function personFor(
+  workspace: InternshipWorkspace,
+  actorId: string,
+): InternshipPerson | undefined {
+  return (workspace.people || []).find((person) => person.actor_id === actorId);
+}
+
+function threadForActor(
+  threads: InternshipThread[],
+  actorId: string,
+): InternshipThread | undefined {
+  return threads.find(
+    (thread) =>
+      thread.thread_kind === "workplace" &&
+      thread.scenario_actor_id === actorId,
+  );
+}
+
+function messageName(
+  message: InternshipMessage,
+  actor: InternshipPerson | undefined,
+  mentor = false,
+): string {
+  if (message.sender_type === "learner") return "You";
+  if (mentor || message.sender_type === "mentor") return "Murikah Mentor";
+  if (message.sender_type === "actor") return actor?.name || "Workplace contact";
+  return "System";
+}
+
+function MessageBubble({
+  message,
+  actor,
+  mentor = false,
+}: {
+  message: InternshipMessage;
+  actor?: InternshipPerson;
+  mentor?: boolean;
+}) {
+  const mine = message.sender_type === "learner";
+  return (
+    <article
+      className={`max-w-[90%] rounded-xl border p-3 sm:max-w-[78%] ${
+        mine
+          ? "ml-auto border-[#A9822E]/35 bg-[#A9822E]/8"
+          : "mr-auto border-[var(--border)] bg-[var(--card)]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+        <span className="font-medium text-[var(--foreground)]">
+          {messageName(message, actor, mentor)}
+        </span>
+        {message.created_at ? <span>{formatDateTime(message.created_at)}</span> : null}
+        {message.optimistic ? <span>Sending</span> : null}
+      </div>
+      <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--foreground)]">
+        {message.body}
+      </div>
+    </article>
+  );
+}
+
+function StreamingBubble({
+  text,
+  label,
+}: {
+  text: string;
+  label: string;
+}) {
+  return (
+    <article
+      aria-live="polite"
+      className="mr-auto max-w-[90%] rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:max-w-[78%]"
+    >
+      <p className="text-xs font-medium text-[var(--foreground)]">{label}</p>
+      <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--foreground)]">
+        {text || "Responding..."}
+      </div>
+    </article>
+  );
+}
+
+function Composer({
+  label,
+  placeholder,
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  busy,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  disabled: boolean;
+  busy: boolean;
+}) {
+  const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      onSubmit();
+    }
+  };
+
+  return (
+    <div className="border-t border-[var(--border)] pt-3">
+      <label
+        htmlFor={`internship-composer-${label.replace(/\s+/g, "-").toLowerCase()}`}
+        className="sr-only"
+      >
+        {label}
+      </label>
+      <div className="flex items-end gap-2">
+        <textarea
+          id={`internship-composer-${label.replace(/\s+/g, "-").toLowerCase()}`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={keyDown}
+          disabled={disabled}
+          maxLength={8000}
+          rows={2}
+          placeholder={placeholder}
+          className="min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-sm text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={disabled || !value.trim()}
+          className="min-h-11 rounded-lg bg-[var(--foreground)] px-4 py-2.5 text-sm font-medium text-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? "Sending..." : "Send"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
+        Enter sends. Shift+Enter adds a new line.
+      </p>
+    </div>
+  );
+}
+
+export function InternshipInbox({
+  workspace,
+  readOnly,
+  refresh,
+}: ConversationSurfaceProps) {
+  const router = useRouter();
+  const search = useSearchParams();
+  const internship = workspace.internship;
+  const workplaceThreads = (workspace.threads || []).filter(
+    (thread) => thread.thread_kind === "workplace",
+  );
+  const visiblePeople = (workspace.people || []).filter((person) => person.active);
+  const selectedThreadId = search.get("thread") || "";
+  const requestedActorId = search.get("actor") || "";
+  const selectedThread =
+    workplaceThreads.find((thread) => thread.thread_id === selectedThreadId) ||
+    threadForActor(workplaceThreads, requestedActorId);
+  const selectedActorId =
+    selectedThread?.scenario_actor_id || requestedActorId;
+  const selectedActor = personFor(workspace, selectedActorId);
+  const canMessageActor = Boolean(selectedActor?.active);
+
+  const [messages, setMessages] = useState<InternshipMessage[]>([]);
+  const [loadingThread, setLoadingThread] = useState(false);
+  const [threadError, setThreadError] = useState("");
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [pendingRequestId, setPendingRequestId] = useState("");
+  const [assumedTaskId, setAssumedTaskId] = useState(
+    selectedThread?.related_task_id || "",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!internship || !selectedThread?.thread_id) {
+      setMessages([]);
+      setThreadError("");
+      return;
+    }
+    setLoadingThread(true);
+    setThreadError("");
+    fetchThread(internship.internship_id, selectedThread.thread_id)
+      .then((payload) => {
+        if (!cancelled) setMessages(payload.messages);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setThreadError("This conversation could not be loaded. Try again.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingThread(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [internship?.internship_id, selectedThread?.thread_id]);
+
+  useEffect(() => {
+    setAssumedTaskId(selectedThread?.related_task_id || "");
+  }, [selectedThread?.thread_id, selectedThread?.related_task_id]);
+
+  const openActor = (actorId: string) => {
+    const existing = threadForActor(workplaceThreads, actorId);
+    const href = existing
+      ? `/virtual-internship/inbox?thread=${encodeURIComponent(existing.thread_id)}`
+      : `/virtual-internship/inbox?actor=${encodeURIComponent(actorId)}`;
+    router.push(href);
+  };
+
+  const send = async (reuseRequest = false) => {
+    if (
+      !internship ||
+      !selectedActor ||
+      !canMessageActor ||
+      readOnly ||
+      busy ||
+      (!draft.trim() && !reuseRequest)
+    ) {
+      return;
+    }
+
+    const text = draft.trim();
+    const requestId =
+      reuseRequest && pendingRequestId
+        ? pendingRequestId
+        : virtualInternshipRequestId("actor");
+    if (!reuseRequest) {
+      setPendingRequestId(requestId);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `local:${requestId}`,
+          thread_id: selectedThread?.thread_id || "",
+          sender_type: "learner",
+          body: text,
+          created_at: safeMessageTimestamp(workspace),
+          optimistic: true,
+        },
+      ]);
+      setDraft("");
+    }
+
+    const sourceText = reuseRequest
+      ? messages.find((message) => message.id === `local:${requestId}`)?.body || ""
+      : text;
+    if (!sourceText) return;
+
+    setBusy(true);
+    setSendError("");
+    setStreamingText("");
+    try {
+      await streamActorMessage(
+        {
+          internship_id: internship.internship_id,
+          scenario_actor_id: selectedActor.actor_id,
+          text: sourceText,
+          request_id: requestId,
+          task_id: assumedTaskId || undefined,
+        },
+        (event: InternshipStreamEvent) => {
+          if (event.type === "chunk") {
+            setStreamingText((current) => current + (event.text || ""));
+          }
+        },
+      );
+
+      const updated = await refresh();
+      const updatedThread = updated
+        ? threadForActor(updated.threads || [], selectedActor.actor_id)
+        : undefined;
+      if (updatedThread?.thread_id) {
+        router.replace(
+          `/virtual-internship/inbox?thread=${encodeURIComponent(updatedThread.thread_id)}`,
+        );
+        try {
+          const payload = await fetchThread(
+            internship.internship_id,
+            updatedThread.thread_id,
+          );
+          setMessages(payload.messages);
+        } catch {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === `local:${requestId}`
+                ? { ...message, optimistic: false }
+                : message,
+            ),
+          );
+        }
+      } else {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === `local:${requestId}`
+              ? { ...message, optimistic: false }
+              : message,
+          ),
+        );
+      }
+      setStreamingText("");
+      setPendingRequestId("");
+    } catch {
+      setStreamingText("");
+      setSendError("This workplace response is temporarily unavailable. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void send(false);
+  };
+
+  const hasSelection = Boolean(selectedActor || selectedThread);
+
+  return (
+    <div className="space-y-5">
+      <SurfaceTitle
+        title="Inbox"
+        description="Workplace communication with learner-visible supervisors, colleagues and stakeholders. Murikah Mentor conversations are kept separate."
+      />
+      <div className="grid min-h-[560px] gap-4 md:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]">
+        <Card className={hasSelection ? "hidden md:block" : ""}>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Workplace contacts
+          </h3>
+          <div className="mt-3 space-y-2">
+            {visiblePeople.length ? (
+              visiblePeople.map((person) => {
+                const thread = threadForActor(workplaceThreads, person.actor_id);
+                const active =
+                  selectedActorId === person.actor_id ||
+                  selectedThread?.thread_id === thread?.thread_id;
+                return (
+                  <button
+                    type="button"
+                    key={person.actor_id}
+                    onClick={() => openActor(person.actor_id)}
+                    aria-current={active ? "page" : undefined}
+                    className={`w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] ${
+                      active
+                        ? "border-[#A9822E]/60 bg-[#A9822E]/5"
+                        : "border-[var(--border)] bg-[var(--background)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--foreground)]">
+                          {person.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                          {person.job_title}
+                        </p>
+                      </div>
+                      {thread?.message_count ? (
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          {thread.message_count}
+                        </span>
+                      ) : null}
+                    </div>
+                    {thread?.last_message ? (
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                        {thread.last_message}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                        No messages yet
+                      </p>
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState title="No workplace contacts are available yet." />
+            )}
+          </div>
+        </Card>
+
+        <Card className={!hasSelection ? "hidden md:block" : ""}>
+          {selectedActor ? (
+            <div className="flex h-full min-h-[500px] flex-col">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+                <div className="flex items-start gap-3">
+                  <Link
+                    href="/virtual-internship/inbox"
+                    className="inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--foreground)] md:hidden"
+                  >
+                    Back
+                  </Link>
+                  <div>
+                    <h3 className="font-semibold text-[var(--foreground)]">
+                      {selectedActor.name}
+                    </h3>
+                    <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                      {selectedActor.job_title}
+                    </p>
+                  </div>
+                </div>
+                <StatusPill status={selectedActor.active ? "available" : "unavailable"} />
+              </div>
+
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-4"
+                aria-label={`Conversation with ${selectedActor.name}`}
+              >
+                {loadingThread ? (
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    Loading conversation...
+                  </p>
+                ) : threadError ? (
+                  <InlineError
+                    message={threadError}
+                    onRetry={() => {
+                      if (!internship || !selectedThread?.thread_id) return;
+                      setLoadingThread(true);
+                      setThreadError("");
+                      fetchThread(internship.internship_id, selectedThread.thread_id)
+                        .then((payload) => setMessages(payload.messages))
+                        .catch(() =>
+                          setThreadError("This conversation could not be loaded. Try again."),
+                        )
+                        .finally(() => setLoadingThread(false));
+                    }}
+                  />
+                ) : messages.length || streamingText ? (
+                  <>
+                    {messages.map((message) => (
+                      <MessageBubble
+                        key={message.id}
+                        message={message}
+                        actor={selectedActor}
+                      />
+                    ))}
+                    {busy ? (
+                      <StreamingBubble
+                        text={streamingText}
+                        label={selectedActor.name}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No workplace messages yet."
+                    description={`Start a professional conversation with ${selectedActor.name}.`}
+                  />
+                )}
+              </div>
+
+              {sendError ? (
+                <div className="mb-3">
+                  <InlineError
+                    message={sendError}
+                    onRetry={
+                      pendingRequestId
+                        ? () => {
+                            void send(true);
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              ) : null}
+
+              <form onSubmit={submit}>
+                {readOnly ? (
+                  <p className="border-t border-[var(--border)] pt-3 text-sm text-[var(--muted-foreground)]">
+                    This stopped internship is read-only. Historical workplace messages remain available.
+                  </p>
+                ) : (
+                  <Composer
+                    label={`Message ${selectedActor.name}`}
+                    placeholder="Write a workplace message"
+                    value={draft}
+                    onChange={setDraft}
+                    onSubmit={() => {
+                      void send(false);
+                    }}
+                    disabled={busy || !canMessageActor}
+                    busy={busy}
+                  />
+                )}
+              </form>
+            </div>
+          ) : (
+            <EmptyState
+              title="Select a workplace contact"
+              description="Choose a learner-visible contact to review or start a workplace conversation."
+            />
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export function InternshipMentor({
+  workspace,
+  readOnly,
+  refresh,
+}: ConversationSurfaceProps) {
+  const internship = workspace.internship;
+  const search = useSearchParams();
+  const mentorThread = (workspace.threads || []).find(
+    (thread) => thread.thread_kind === "mentor",
+  );
+  const tasks = (workspace.tasks || []).filter((task) =>
+    ["available", "in_progress"].includes(task.status),
+  );
+  const initialTaskId = search.get("task") || mentorThread?.related_task_id || "";
+  const [taskId, setTaskId] = useState(initialTaskId);
+  const selectedTask = tasks.find((task) => task.task_id === taskId);
+
+  const [messages, setMessages] = useState<InternshipMessage[]>([]);
+  const [loadingThread, setLoadingThread] = useState(false);
+  const [threadError, setThreadError] = useState("");
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [pendingRequestId, setPendingRequestId] = useState("");
+  const [assistanceLabel, setAssistanceLabel] = useState(
+    selectedTask?.mentor_support?.label || "",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!internship || !mentorThread?.thread_id) {
+      setMessages([]);
+      setThreadError("");
+      return;
+    }
+    setLoadingThread(true);
+    setThreadError("");
+    fetchThread(internship.internship_id, mentorThread.thread_id)
+      .then((payload) => {
+        if (!cancelled) setMessages(payload.messages);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setThreadError("This conversation could not be loaded. Try again.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingThread(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [internship?.internship_id, mentorThread?.thread_id]);
+
+  useEffect(() => {
+    setAssistanceLabel(selectedTask?.mentor_support?.label || "");
+  }, [selectedTask?.task_id, selectedTask?.mentor_support?.label]);
+
+  const send = async (reuseRequest = false) => {
+    if (!internship || readOnly || busy || (!draft.trim() && !reuseRequest)) {
+      return;
+    }
+
+    const text = draft.trim();
+    const requestId =
+      reuseRequest && pendingRequestId
+        ? pendingRequestId
+        : virtualInternshipRequestId("mentor");
+
+    if (!reuseRequest) {
+      setPendingRequestId(requestId);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `local:${requestId}`,
+          thread_id: mentorThread?.thread_id || "",
+          sender_type: "learner",
+          body: text,
+          created_at: safeMessageTimestamp(workspace),
+          optimistic: true,
+        },
+      ]);
+      setDraft("");
+    }
+
+    const sourceText = reuseRequest
+      ? messages.find((message) => message.id === `local:${requestId}`)?.body || ""
+      : text;
+    if (!sourceText) return;
+
+    setBusy(true);
+    setSendError("");
+    setStreamingText("");
+    try {
+      const finalEvent = await streamMentorMessage(
+        {
+          internship_id: internship.internship_id,
+          text: sourceText,
+          request_id: requestId,
+          task_id: taskId || undefined,
+        },
+        (event: InternshipStreamEvent) => {
+          if (event.type === "chunk") {
+            setStreamingText((current) => current + (event.text || ""));
+          }
+        },
+      );
+      if (finalEvent.assistance_label) {
+        setAssistanceLabel(finalEvent.assistance_label);
+      }
+
+      const updated = await refresh();
+      const updatedThread = updated?.threads?.find(
+        (thread) => thread.thread_kind === "mentor",
+      );
+      if (updatedThread?.thread_id) {
+        try {
+          const payload = await fetchThread(
+            internship.internship_id,
+            updatedThread.thread_id,
+          );
+          setMessages(payload.messages);
+        } catch {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === `local:${requestId}`
+                ? { ...message, optimistic: false }
+                : message,
+            ),
+          );
+        }
+      } else {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === `local:${requestId}`
+              ? { ...message, optimistic: false }
+              : message,
+          ),
+        );
+      }
+      setStreamingText("");
+      setPendingRequestId("");
+    } catch {
+      setStreamingText("");
+      setSendError("The Mentor is temporarily unavailable. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <SurfaceTitle
+        title="Murikah Mentor"
+        description="A coaching surface separate from your simulated manager and colleagues. Use it for explanations, planning, skill coaching and reflection."
+        action={
+          assistanceLabel ? (
+            <span className="rounded-full border border-[#A9822E]/40 bg-[#A9822E]/8 px-3 py-1.5 text-xs font-medium text-[#80611B] dark:text-[#D7B766]">
+              Coaching level: {assistanceLabel}
+            </span>
+          ) : undefined
+        }
+      />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.65fr)]">
+        <Card>
+          <div className="flex min-h-[560px] flex-col">
+            <div className="border-b border-[var(--border)] pb-3">
+              <h3 className="font-semibold text-[var(--foreground)]">Mentor conversation</h3>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
+                The Mentor can guide your thinking but does not complete assignments or change internship state.
+              </p>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-4">
+              {loadingThread ? (
+                <p className="text-sm text-[var(--muted-foreground)]">Loading conversation...</p>
+              ) : threadError ? (
+                <InlineError
+                  message={threadError}
+                  onRetry={() => {
+                    if (!internship || !mentorThread?.thread_id) return;
+                    setLoadingThread(true);
+                    setThreadError("");
+                    fetchThread(internship.internship_id, mentorThread.thread_id)
+                      .then((payload) => setMessages(payload.messages))
+                      .catch(() =>
+                        setThreadError("This conversation could not be loaded. Try again."),
+                      )
+                      .finally(() => setLoadingThread(false));
+                  }}
+                />
+              ) : messages.length || streamingText ? (
+                <>
+                  {messages.map((message) => (
+                    <MessageBubble key={message.id} message={message} mentor />
+                  ))}
+                  {busy ? (
+                    <StreamingBubble text={streamingText} label="Murikah Mentor" />
+                  ) : null}
+                </>
+              ) : (
+                <EmptyState
+                  title="Ask the Murikah Mentor"
+                  description="Get guidance, work through a concept, plan your approach or reflect on workplace feedback."
+                />
+              )}
+            </div>
+            {sendError ? (
+              <div className="mb-3">
+                <InlineError
+                  message={sendError}
+                  onRetry={
+                    pendingRequestId
+                      ? () => {
+                          void send(true);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ) : null}
+            {readOnly ? (
+              <p className="border-t border-[var(--border)] pt-3 text-sm text-[var(--muted-foreground)]">
+                This stopped internship is read-only. Historical Mentor conversations remain available.
+              </p>
+            ) : (
+              <Composer
+                label="Ask Murikah Mentor"
+                placeholder="Ask for guidance or an explanation"
+                value={draft}
+                onChange={setDraft}
+                onSubmit={() => {
+                  void send(false);
+                }}
+                disabled={busy}
+                busy={busy}
+              />
+            )}
+          </div>
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <h3 className="font-semibold text-[var(--foreground)]">Work context</h3>
+            <label
+              htmlFor="mentor-task-context"
+              className="mt-4 block text-sm font-medium text-[var(--foreground)]"
+            >
+              Related assignment
+            </label>
+            <select
+              id="mentor-task-context"
+              value={taskId}
+              onChange={(event) => setTaskId(event.target.value)}
+              disabled={busy}
+              className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+            >
+              <option value="">General coaching</option>
+              {tasks.map((task) => (
+                <option key={task.task_id} value={task.task_id}>
+                  {task.title}
+                </option>
+              ))}
+            </select>
+            {selectedTask ? (
+              <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {selectedTask.title}
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  {selectedTask.mentor_support?.label || "Clarification only"}
+                </p>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card>
+            <h3 className="font-semibold text-[var(--foreground)]">Good uses of Mentor</h3>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+              <li>Explain a concept or workplace term.</li>
+              <li>Plan how to approach an assignment.</li>
+              <li>Work through a difficult judgment.</li>
+              <li>Understand feedback you received.</li>
+              <li>Reflect on what you learned.</li>
+            </ul>
+            <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">
+              Mentor guidance does not award competency, score performance or complete work.
+            </p>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
