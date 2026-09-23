@@ -344,4 +344,108 @@ describe("Virtual Internship Phase 4 workplace", () => {
     render(<MurikahVirtualInternshipWorkspace />);
     expect(await screen.findByText("No internship is available right now.")).toBeVisible();
   });
+  it("preserves stable deep links and accessible navigation semantics", async () => {
+    nav.pathname = "/virtual-internship/documents";
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Scenario documents" })).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("navigation", { name: "Virtual Internship workspace" })).toBeVisible();
+
+    const links = [
+      ["Overview", "/virtual-internship"],
+      ["Inbox", "/virtual-internship/inbox"],
+      ["Work", "/virtual-internship/work"],
+      ["Company", "/virtual-internship/company"],
+      ["Documents", "/virtual-internship/documents"],
+      ["Meetings", "/virtual-internship/meetings"],
+      ["Mentor", "/virtual-internship/mentor"],
+      ["Activity", "/virtual-internship/activity"],
+    ] as const;
+    for (const [label, href] of links) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", href);
+    }
+    expect(screen.getByRole("link", { name: /Documents/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders persisted meeting details and an intentional empty meeting state", async () => {
+    nav.pathname = "/virtual-internship/meetings";
+    const meetingWorkspace = {
+      ...workspace,
+      meetings: [{
+        meeting_id: "event:meeting_1",
+        title: "Inventory review",
+        scheduled_at: 1_790_700_000,
+        status: "completed",
+        participants: [{ actor_id: "actor_supervisor", name: "Lina A.", job_title: "Internal Audit Supervisor" }],
+        purpose: "Review learner-visible variance evidence.",
+        related_event_id: "meeting_1",
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(meetingWorkspace)));
+    const first = render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Inventory review" })).toBeVisible();
+    expect(screen.getByText("Review learner-visible variance evidence.")).toBeVisible();
+    expect(screen.getByText(/Lina A\./)).toBeVisible();
+    first.unmount();
+
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByText("No meetings are scheduled.")).toBeVisible();
+  });
+
+  it("keeps narrow-screen workplace controls reachable across core surfaces", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 320 });
+    window.dispatchEvent(new Event("resize"));
+
+    nav.pathname = "/virtual-internship/inbox";
+    vi.stubGlobal("fetch", workspaceFetch());
+    const inbox = render(<MurikahVirtualInternshipWorkspace />);
+    const workspaceNav = await screen.findByRole("navigation", { name: "Virtual Internship workspace" });
+    expect(workspaceNav.className).toContain("overflow-x-auto");
+    expect(screen.getByRole("button", { name: "Back to conversations" })).toBeVisible();
+    expect(screen.getByLabelText("Workplace message")).toBeVisible();
+    inbox.unmount();
+
+    nav.pathname = "/virtual-internship/work";
+    vi.stubGlobal("fetch", workspaceFetch());
+    const work = render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByRole("button", { name: "View assignment" })).toBeVisible();
+    work.unmount();
+
+    nav.pathname = "/virtual-internship/company";
+    vi.stubGlobal("fetch", workspaceFetch());
+    const company = render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByText("Internal Audit Supervisor")).toBeVisible();
+    company.unmount();
+
+    nav.pathname = "/virtual-internship/mentor";
+    vi.stubGlobal("fetch", workspaceFetch());
+    const mentor = render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByLabelText("Message Murikah Mentor")).toBeVisible();
+    mentor.unmount();
+
+    nav.pathname = "/virtual-internship/activity";
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByLabelText("Your reflection")).toBeVisible();
+  });
+
+  it("uses a layout-shaped loading state and learner-safe recoverable error", async () => {
+    let resolveWorkspace: ((value: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { resolveWorkspace = resolve; })));
+    const loading = render(<MurikahVirtualInternshipWorkspace />);
+    expect(document.querySelector('main[aria-busy="true"]')).not.toBeNull();
+    loading.unmount();
+    resolveWorkspace?.(jsonResponse(workspace));
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ detail: "We could not load your internship right now. Try again." }, 503)));
+    render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("We could not load your internship right now. Try again.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(screen.queryByText(/SQL|Cloudflare|Gemini|Qwen|NVIDIA/i)).toBeNull();
+  });
+
 });
