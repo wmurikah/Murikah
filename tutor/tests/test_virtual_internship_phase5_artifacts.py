@@ -188,6 +188,28 @@ class Phase5ArtifactTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT artifact_version_id FROM internship_artifact_submissions ORDER BY submission_number"
             ).fetchall(), [("ver_1",),("ver_2",)])
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("""INSERT INTO internship_artifact_submissions(
+                    id,artifact_id,artifact_version_id,internship_id,task_id,submission_number,request_id,submitted_at,status
+                ) VALUES ('sub_3','art_1','ver_2','vi_1','task_1',3,'sub_req_3',6,'submitted')""")
+            db.execute("""INSERT INTO internship_artifact_reviews(
+                id,internship_id,task_id,artifact_id,submission_id,reviewer_actor_id,review_type,decision,
+                feedback,requested_changes_json,model_invocation_id,request_id,created_at
+            ) VALUES ('rev_2','vi_1','task_1','art_1','sub_2','actor_supervisor','workflow','accepted',
+                'Ready.','[]','viai_test','review_req_2',6)""")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("""INSERT INTO internship_artifact_reviews(
+                    id,internship_id,task_id,artifact_id,submission_id,reviewer_actor_id,review_type,decision,
+                    feedback,requested_changes_json,model_invocation_id,request_id,created_at
+                ) VALUES ('rev_dup','vi_1','task_1','art_1','sub_2','actor_supervisor','workflow','accepted',
+                    'Duplicate.','[]','viai_dup','review_req_dup',7)""")
+            db.execute("""INSERT INTO internship_artifact_activity(
+                id,internship_id,task_id,event_type,event_time,request_id
+            ) VALUES ('act_done_1','vi_1','task_1','task_completed',7,'task_done_1')""")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("""INSERT INTO internship_artifact_activity(
+                    id,internship_id,task_id,event_type,event_time,request_id
+                ) VALUES ('act_done_2','vi_1','task_1','task_completed',8,'task_done_2')""")
             db.commit()
             db.close()
 
@@ -213,7 +235,8 @@ class Phase5ArtifactTests(unittest.TestCase):
             "TUTOR_FILES.delete(key)", "private, no-store", "content-disposition",
             "PHASE5_MAX_FILE_BYTES", "PHASE5_MAX_VERSIONS", "PHASE5_MAX_FILES_PER_VERSION",
             "DANGEROUS_EXT", "artifact-version", "/internships/artifacts/integrity",
-            "orphan_object_count", "invalid_actor_override", "task_ready_for_completion",
+            "orphan_object_count", "invalid_actor_override", "taskDeliverablesAccepted",
+            "task_ready_for_completion",
         )
         for marker in required:
             self.assertIn(marker, worker)
@@ -221,6 +244,7 @@ class Phase5ArtifactTests(unittest.TestCase):
             self.assertNotIn(forbidden, worker)
         self.assertNotIn("UPDATE internship_tasks", worker)
         self.assertIn("for (let attempt=0;attempt<3;attempt++)", worker)
+        self.assertIn("crypto.randomUUID()", worker)
         self.assertIn("normalized && !accepted.has(normalized)", worker)
 
     def test_router_and_ui_use_typed_actions_not_status_patch(self):
