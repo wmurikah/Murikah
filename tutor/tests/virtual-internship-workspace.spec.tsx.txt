@@ -208,6 +208,191 @@ describe("Virtual Internship workplace through Phase 5", () => {
     expect(screen.queryByRole("button", { name: /mark complete/i })).toBeNull();
   });
 
+  it("supports draft, immutable version history, review feedback, revision, resubmission and accepted work", async () => {
+    nav.pathname = "/virtual-internship/work";
+    const current: any = structuredClone(workspace);
+    current.tasks[0] = {
+      ...current.tasks[0],
+      status: "in_progress",
+      acknowledged_at: 1_790_700_000,
+      work_status: "in_progress",
+      work_artifacts: [],
+    };
+    let version = 0;
+    let submission = 0;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) return jsonResponse(current);
+      if (url.endsWith("/artifacts") && init?.method === "POST") {
+        const artifact = {
+          id: "art_1", task_id: "task_1", deliverable_type: "memo", artifact_type: "memo",
+          title: "Memo - Review inventory reconciliation", status: "draft",
+          current_version_id: "", current_version_number: 0, current_filename: "",
+          current_content_type: "", current_size_bytes: 0, current_source_type: "",
+          created_at: 1_790_700_001, updated_at: 1_790_700_001,
+          versions: [], submissions: [], reviews: [],
+        };
+        current.tasks[0].work_artifacts = [artifact];
+        return jsonResponse({ ok: true, artifact }, 201);
+      }
+      if (url.includes("/artifacts/art_1/versions/") && url.includes("/text?internship_id=") && init?.method !== "POST") {
+        return jsonResponse({ ok: true, version_id: "ver_" + version, content: version === 1 ? "Version one" : "Version two" });
+      }
+      if (url.endsWith("/artifacts/art_1/versions/text") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        version += 1;
+        expect(body.content).toBe(version === 1 ? "Version one" : "Version two");
+        const artifact = current.tasks[0].work_artifacts[0];
+        const row = {
+          id: "ver_" + version, artifact_id: "art_1", task_id: "task_1",
+          version_number: version, original_filename: "Memo.md", content_type: "text/markdown",
+          size_bytes: 20 + version, source_type: "text", prior_review_id: body.prior_review_id || "",
+          created_at: 1_790_700_010 + version, submitted: 0,
+        };
+        artifact.current_version_id = row.id;
+        artifact.current_version_number = version;
+        artifact.current_filename = row.original_filename;
+        artifact.current_content_type = row.content_type;
+        artifact.current_size_bytes = row.size_bytes;
+        artifact.current_source_type = "text";
+        artifact.status = "draft";
+        artifact.versions = [row, ...artifact.versions];
+        current.tasks[0].work_status = "draft_saved";
+        return jsonResponse({ ok: true, version: row }, 201);
+      }
+      if (url.endsWith("/artifacts/art_1/submit") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        submission += 1;
+        expect(body.artifact_version_id).toBe("ver_" + version);
+        const artifact = current.tasks[0].work_artifacts[0];
+        artifact.versions = artifact.versions.map((row: any) =>
+          row.id === body.artifact_version_id ? { ...row, submitted: 1 } : row
+        );
+        const submissionRow = {
+          id: "sub_" + submission, artifact_id: "art_1", artifact_version_id: body.artifact_version_id,
+          task_id: "task_1", submission_number: submission,
+          prior_submission_id: submission > 1 ? "sub_1" : "",
+          submitted_at: 1_790_700_020 + submission,
+          status: submission === 1 ? "changes_requested" : "accepted",
+        };
+        const review = {
+          id: "rev_" + submission, task_id: "task_1", artifact_id: "art_1",
+          submission_id: submissionRow.id, reviewer_actor_id: "actor_supervisor", review_type: "workflow",
+          decision: submission === 1 ? "changes_requested" : "accepted",
+          feedback: submission === 1 ? "Reconcile the difference to the source." : "This addresses the requested changes.",
+          requested_changes: submission === 1 ? ["Tie the balance to the source."] : [],
+          created_at: 1_790_700_030 + submission,
+        };
+        artifact.status = review.decision;
+        artifact.submissions = [submissionRow, ...artifact.submissions];
+        artifact.reviews = [review, ...artifact.reviews];
+        current.tasks[0].work_status = review.decision;
+        if (submission === 2) current.tasks[0].status = "completed";
+        return jsonResponse({
+          ok: true,
+          submission: submissionRow,
+          workflow_review: { status: "reviewed", review, task_completed: submission === 2 },
+        }, 201);
+      }
+      throw new Error("Unexpected request: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
+    expect(screen.getByLabelText("Upload file")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    const editor = await screen.findByLabelText("Draft");
+    fireEvent.change(editor, { target: { value: "Version one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText(/Latest Version 1/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit Version 1 for review" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Submit Version 1")));
+    expect(await screen.findByText("Reconcile the difference to the source.")).toBeVisible();
+    expect(screen.getByText("Tie the balance to the source.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create revision" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create revision" }));
+    const revisionEditor = await screen.findByLabelText("Draft");
+    await waitFor(() => expect(revisionEditor).toHaveValue("Version one"));
+    fireEvent.change(revisionEditor, { target: { value: "Version two" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText(/Latest Version 2/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Submit Version 2 for review" }));
+
+    expect(await screen.findByText("This addresses the requested changes.")).toBeVisible();
+    expect(screen.getAllByText("Accepted").length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByText("Version and submission history"));
+    expect(screen.getByText("Version 2")).toBeVisible();
+    expect(screen.getByText("Version 1")).toBeVisible();
+    expect(screen.getByText(/Submission 2: Accepted/)).toBeVisible();
+    expect(screen.getByText(/Submission 1: Changes requested/)).toBeVisible();
+    expect(screen.queryByText(/competency|score|pass percentage/i)).toBeNull();
+  });
+
+  it("uploads a file as a new artifact version through the accessible file control", async () => {
+    nav.pathname = "/virtual-internship/work";
+    const current: any = structuredClone(workspace);
+    current.tasks[0] = {
+      ...current.tasks[0],
+      status: "in_progress",
+      acknowledged_at: 1_790_700_000,
+      work_status: "in_progress",
+      deliverable_types: ["spreadsheet"],
+      work_artifacts: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) return jsonResponse(current);
+      if (url.endsWith("/artifacts") && init?.method === "POST") {
+        const artifact = {
+          id: "art_sheet", task_id: "task_1", deliverable_type: "spreadsheet", artifact_type: "spreadsheet",
+          title: "Spreadsheet - Review inventory reconciliation", status: "draft",
+          current_version_id: "", current_version_number: 0, created_at: 1, updated_at: 1,
+          versions: [], submissions: [], reviews: [],
+        };
+        current.tasks[0].work_artifacts = [artifact];
+        return jsonResponse({ ok: true, artifact }, 201);
+      }
+      if (url.endsWith("/artifacts/art_sheet/versions/upload") && init?.method === "POST") {
+        expect(init.body).toBeInstanceOf(FormData);
+        const form = init.body as FormData;
+        const uploaded = form.get("file") as File;
+        expect(uploaded.name).toBe("reconciliation.xlsx");
+        expect(form.get("internship_id")).toBe("vi_1");
+        const artifact = current.tasks[0].work_artifacts[0];
+        artifact.current_version_id = "ver_sheet_1";
+        artifact.current_version_number = 1;
+        artifact.current_filename = uploaded.name;
+        artifact.current_content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        artifact.current_size_bytes = uploaded.size;
+        artifact.current_source_type = "upload";
+        artifact.versions = [{
+          id: "ver_sheet_1", artifact_id: "art_sheet", task_id: "task_1", version_number: 1,
+          original_filename: uploaded.name, content_type: artifact.current_content_type,
+          size_bytes: uploaded.size, source_type: "upload", created_at: 2, submitted: 0,
+        }];
+        current.tasks[0].work_status = "draft_saved";
+        return jsonResponse({ ok: true, version: artifact.versions[0] }, 201);
+      }
+      throw new Error("Unexpected request: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
+    const input = screen.getByLabelText("Upload file");
+    expect(input).toHaveAttribute("type", "file");
+    const file = new File(["sheet-bytes"], "reconciliation.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(await screen.findByText(/Latest Version 1/)).toBeVisible();
+    expect(screen.getByText(/reconciliation\.xlsx/)).toBeVisible();
+  });
+
   it("keeps company actors learner-safe and labels the simulation", async () => {
     nav.pathname = "/virtual-internship/company";
     vi.stubGlobal("fetch", workspaceFetch());
