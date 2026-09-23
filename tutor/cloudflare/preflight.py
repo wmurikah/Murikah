@@ -774,7 +774,48 @@ def main() -> int:
             "class Phase5ArtifactTests",
             "test_schema_preserves_immutable_lineage_and_uniqueness",
             "test_worker_security_and_integrity_contracts_are_explicit",
+            "test_owner_isolation_and_r2_key_contract_are_server_authoritative",
+            "test_phase2_completion_is_multi_deliverable_and_exactly_once_by_contract",
             "test_router_and_ui_use_typed_actions_not_status_patch",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_phase5_review_ai.py",
+        (
+            "class Phase5WorkflowReviewAITests",
+            "test_workflow_review_reuses_phase3_provider_and_audits_schema",
+            "test_malformed_workflow_review_fails_closed",
+            "test_foreign_learner_fails_before_provider_resolution",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def internship_assignment_acknowledge(",
+            "def internship_artifact_create(",
+            "def internship_artifact_save_text(",
+            "def internship_artifact_upload(",
+            "def internship_artifact_submit(",
+            "def internship_artifact_review_record(",
+            "def internship_artifact_download(",
+            "def internship_artifact_integrity_check(",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/PERSISTENCE.md",
+        (
+            "Virtual Internship Phase 5 work artifacts",
+            "artifact-version/<artifact-version-id>",
+            "/internships/artifacts/integrity",
+        ),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "## Phase 5 Implementation Record",
+            "## SUBSEQUENT ARTIFACT DEVELOPMENT REQUIREMENT",
+            "0011_virtual_internship_phase5_artifacts.sql",
+            "POST /artifacts/{artifact_id}/submit",
         ),
     )
     require_markers(
@@ -787,7 +828,11 @@ def main() -> int:
     )
     require_markers(
         "tutor/railway/virtual_internship/ai/orchestrator.py",
-        ("invoke_workflow_review", "workflow_supervisor_review"),
+        ("invoke_workflow_review", "workflow_supervisor_review", "VirtualInternshipModelRole.WORKFLOW_REVIEW"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/roles.py",
+        ("WORKFLOW_REVIEW = \"workflow_review\"", "WORKFLOW_REVIEW_OUTPUT_SCHEMA_VERSION = 1"),
     )
     require_markers(
         "tutor/railway/MurikahWorkspaceEntry.tsx.txt",
