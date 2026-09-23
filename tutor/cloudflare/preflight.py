@@ -742,6 +742,8 @@ def main() -> int:
             "CREATE TABLE IF NOT EXISTS internship_artifact_activity",
             "UNIQUE (artifact_id, version_number)",
             "UNIQUE (artifact_id, submission_number)",
+            "idx_internship_artifact_one_active_submission",
+            "idx_internship_artifact_task_completed_once",
             "virtual_internship_phase5_artifact_schema_version",
         ),
     )
@@ -761,6 +763,8 @@ def main() -> int:
             "invalid_actor_override",
             "owner_kind = ? AND o.owner_id = ?",
             "TUTOR_FILES.delete(key)",
+            "taskDeliverablesAccepted",
+            "contract.status !== 'in_progress'",
             "task_ready_for_completion",
         ),
     )
