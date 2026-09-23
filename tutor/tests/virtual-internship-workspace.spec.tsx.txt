@@ -395,6 +395,53 @@ describe("Virtual Internship workplace through Phase 5", () => {
     expect(screen.getByText(/reconciliation\.xlsx/)).toBeVisible();
   });
 
+  it("keeps submitted work read-only until supervisor changes are requested", async () => {
+    nav.pathname = "/virtual-internship/work";
+    const submitted: any = structuredClone(workspace);
+    submitted.tasks[0] = {
+      ...submitted.tasks[0],
+      status: "in_progress",
+      acknowledged_at: 1_790_700_000,
+      work_status: "submitted",
+      work_artifacts: [{
+        id: "art_1", task_id: "task_1", deliverable_type: "memo", artifact_type: "memo",
+        title: "Memo", status: "submitted", current_version_id: "ver_1", current_version_number: 1,
+        current_filename: "Memo.md", current_content_type: "text/markdown", current_size_bytes: 20,
+        current_source_type: "text", created_at: 1, updated_at: 2,
+        versions: [{
+          id: "ver_1", artifact_id: "art_1", task_id: "task_1", version_number: 1,
+          original_filename: "Memo.md", content_type: "text/markdown", size_bytes: 20,
+          source_type: "text", created_at: 2, submitted: 1,
+        }],
+        submissions: [{
+          id: "sub_1", artifact_id: "art_1", artifact_version_id: "ver_1",
+          task_id: "task_1", submission_number: 1, submitted_at: 3, status: "under_review",
+        }],
+        reviews: [],
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) return jsonResponse(submitted);
+      if (url.includes("/submissions/sub_1/review")) {
+        return jsonResponse({
+          status: "under_review",
+          review_unavailable: true,
+          message: "Supervisor review is temporarily unavailable. Please try again later.",
+        });
+      }
+      throw new Error("Unexpected request: " + url);
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
+    expect(screen.getByText(/Submitted for review/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Continue editing|Create revision|Save draft/ })).toBeNull();
+    expect(screen.queryByLabelText("Upload file")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry supervisor review" })).toBeVisible();
+    expect(screen.getByText(/Version and submission history/)).toBeVisible();
+  });
+
   it("keeps company actors learner-safe and labels the simulation", async () => {
     nav.pathname = "/virtual-internship/company";
     vi.stubGlobal("fetch", workspaceFetch());
