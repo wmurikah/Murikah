@@ -272,7 +272,8 @@ function formatDate(timestamp: number, withTime = false) {
 }
 
 function sentenceLabel(value: string) {
-  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const normalized = value.replace(/[_-]+/g, " ").trim();
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : normalized;
 }
 
 function requestId(prefix: string) {
