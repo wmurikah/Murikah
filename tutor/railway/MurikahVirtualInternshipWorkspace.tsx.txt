@@ -801,7 +801,7 @@ function TaskDetail({
                     {!editing[deliverable] ? (
                       <button type="button" disabled={Boolean(busy)} onClick={() => void startText(deliverable)}
                         className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">
-                        {artifact?.current_version_number ? "Continue editing" : "Create draft"}
+                        {artifact?.status === "changes_requested" ? "Create revision" : artifact?.current_version_number ? "Continue editing" : "Create draft"}
                       </button>
                     ) : (
                       <div>
