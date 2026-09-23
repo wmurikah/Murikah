@@ -401,10 +401,15 @@ describe("Virtual Internship Phase 4 workplace", () => {
     window.dispatchEvent(new Event("resize"));
 
     nav.pathname = "/virtual-internship/inbox";
-    vi.stubGlobal("fetch", workspaceFetch());
+    vi.stubGlobal("fetch", workspaceFetch((url) => {
+      if (url.includes("/threads/vit_1")) return jsonResponse({ messages: [] });
+      return undefined;
+    }));
     const inbox = render(<MurikahVirtualInternshipWorkspace />);
     const workspaceNav = await screen.findByRole("navigation", { name: "Virtual Internship workspace" });
     expect(workspaceNav.className).toContain("overflow-x-auto");
+    const linaButtons = await screen.findAllByRole("button", { name: /Lina A\./ });
+    fireEvent.click(linaButtons[linaButtons.length - 1]);
     expect(screen.getByRole("button", { name: "Back to conversations" })).toBeVisible();
     expect(screen.getByLabelText("Workplace message")).toBeVisible();
     inbox.unmount();
