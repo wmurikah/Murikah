@@ -83,7 +83,7 @@ def main() -> None:
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
             'href="/register?next=%2Fvirtual-internship"',
-            'aria-label="Virtual Internship, coming soon"',
+            'aria-label="Virtual Internship"',
         ),
     )
     forbid_markers(
@@ -130,18 +130,51 @@ def main() -> None:
             'href: "/virtual-internship"',
             'label: "Virtual Internship"',
             "icon: GraduationCap",
-            'A 3+ month simulated workplace with evidence-based competency tracking',
+            'Enter your persistent simulated workplace',
             'requires: "llm"',
         ),
     )
     require_markers(
-        root / "web/app/(workspace)/virtual-internship/page.tsx",
+        root / "web/app/(workspace)/virtual-internship/[[...section]]/page.tsx",
         (
-            "Virtual Internship",
-            "at least three months",
-            "AI workplace actors",
-            "Competency Passport",
-            "Start internship, coming later",
+            "MurikahVirtualInternshipWorkspace",
+            "<MurikahVirtualInternshipWorkspace />",
+        ),
+    )
+    require_markers(
+        root / "web/components/virtual-internship/MurikahVirtualInternshipWorkspace.tsx",
+        (
+            'const API = "/api/murikah/virtual-internship"',
+            'label: "Overview"',
+            'label: "Inbox"',
+            'label: "Work"',
+            'label: "Company"',
+            'label: "Documents"',
+            'label: "Meetings"',
+            'label: "Mentor"',
+            'label: "Activity"',
+            "Simulated workplace",
+            "Day ",
+            "No active work is available right now.",
+            "No workplace messages yet.",
+            "No meetings are scheduled.",
+            "Murikah Mentor",
+            "Save reflection",
+            "overflow-x-auto",
+            'aria-label="Virtual Internship workspace"',
+        ),
+    )
+    forbid_markers(
+        root / "web/components/virtual-internship/MurikahVirtualInternshipWorkspace.tsx",
+        (
+            "Mark complete",
+            "Upload work",
+            "Submit work",
+            "Competency score",
+            "100% complete",
+            "Generate letter",
+            "Claim certificate",
+            "\u2014",
         ),
     )
     require_markers(

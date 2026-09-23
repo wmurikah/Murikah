@@ -87,16 +87,20 @@ def main() -> int:
         overlay / "murikah_oauth.py",
         root / "deeptutor" / "api" / "routers" / "murikah_oauth.py",
     )
+    copy_required(
+        overlay / "murikah_virtual_internship.py",
+        root / "deeptutor" / "api" / "routers" / "murikah_virtual_internship.py",
+    )
     api_main = root / "deeptutor" / "api" / "main.py"
     replace_once(
         api_main,
         'from deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402',
-        '''from deeptutor.api.routers.murikah_guest import router as murikah_guest_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_oauth import router as murikah_oauth_router  # noqa: E402\nfrom deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402''',
+        '''from deeptutor.api.routers.murikah_guest import router as murikah_guest_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_oauth import router as murikah_oauth_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_virtual_internship import router as murikah_virtual_internship_router  # noqa: E402\nfrom deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402''',
     )
     replace_once(
         api_main,
         '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
-        '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(murikah_oauth_router, prefix="/api/auth/oauth", tags=["murikah-oauth"])\napp.include_router(murikah_guest_router, prefix="/api/murikah", tags=["murikah-guest"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
+        '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(murikah_oauth_router, prefix="/api/auth/oauth", tags=["murikah-oauth"])\napp.include_router(murikah_guest_router, prefix="/api/murikah", tags=["murikah-guest"])\napp.include_router(murikah_virtual_internship_router, prefix="/api/murikah/virtual-internship", tags=["murikah-virtual-internship"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
     )
 
     # Developer resources stay visible to administrators only. Ordinary users
