@@ -676,6 +676,11 @@ def main() -> int:
             "No active work is available right now.",
             "No workplace messages yet.",
             "No meetings are scheduled.",
+            "Acknowledge assignment",
+            "Save draft",
+            "Submit Version ",
+            "Version and submission history",
+            'type="file"',
             "overflow-x-auto",
             'aria-current={section === id ? "page" : undefined}',
         ),
@@ -703,20 +708,86 @@ def main() -> int:
             '@router.post("/reflections")',
             '@router.post("/actor/messages/stream")',
             '@router.post("/mentor/messages/stream")',
+            '@router.post("/tasks/{task_id}/acknowledge")',
+            '@router.get("/artifacts")',
+            '@router.post("/artifacts")',
+            '@router.post("/artifacts/{artifact_id}/versions/text")',
+            '@router.post("/artifacts/{artifact_id}/versions/upload")',
+            '@router.post("/artifacts/{artifact_id}/submit")',
+            '@router.post("/submissions/{submission_id}/review")',
+            "invoke_workflow_review",
             "VirtualInternshipAIOrchestrator",
         ),
     )
     require_markers(
         "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
         (
-            "Virtual Internship Phase 4 workplace",
+            "Virtual Internship workplace through Phase 5",
             "without fake completion scoring",
-            "no Phase 5 artifact actions",
+            "requires deliberate acknowledgement before Phase 5 work actions",
             "streams a workplace actor reply",
             "keeps Murikah Mentor separate",
             "persists the learner reflection",
             "stopped internship historical and read-only",
         ),
+    )
+    require_markers(
+        "tutor/cloudflare/migrations/0011_virtual_internship_phase5_artifacts.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS internship_task_acknowledgements",
+            "CREATE TABLE IF NOT EXISTS internship_artifacts",
+            "CREATE TABLE IF NOT EXISTS internship_artifact_versions",
+            "CREATE TABLE IF NOT EXISTS internship_artifact_submissions",
+            "CREATE TABLE IF NOT EXISTS internship_artifact_reviews",
+            "CREATE TABLE IF NOT EXISTS internship_artifact_activity",
+            "UNIQUE (artifact_id, version_number)",
+            "UNIQUE (artifact_id, submission_number)",
+            "virtual_internship_phase5_artifact_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0011_virtual_internship_phase5_artifacts.sql",
+        ("competency_level", "rubric_score", "evidence_strength", "pass_percentage", "competency_passport"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase5.ts",
+        (
+            "PHASE5_MAX_FILE_BYTES",
+            "PHASE5_MAX_FILES_PER_VERSION",
+            "PHASE5_MAX_VERSIONS",
+            "crypto.subtle.digest('SHA-256'",
+            "/internships/artifacts/integrity",
+            "orphan_object_count",
+            "invalid_actor_override",
+            "owner_kind = ? AND o.owner_id = ?",
+            "TUTOR_FILES.delete(key)",
+            "task_ready_for_completion",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/src/virtual_internship_phase5.ts",
+        ("r2.dev", "competency_level", "rubric_score", "pass_percentage", "UPDATE internship_tasks"),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_phase5_artifacts.py",
+        (
+            "class Phase5ArtifactTests",
+            "test_schema_preserves_immutable_lineage_and_uniqueness",
+            "test_worker_security_and_integrity_contracts_are_explicit",
+            "test_router_and_ui_use_typed_actions_not_status_patch",
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/outputs.py",
+        ("validate_workflow_review_output", "WORKFLOW_REVIEW_DECISIONS"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/prompts.py",
+        ("WORKFLOW_REVIEW_SYSTEM_PROMPT", "workflow review only"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/ai/orchestrator.py",
+        ("invoke_workflow_review", "workflow_supervisor_review"),
     )
     require_markers(
         "tutor/railway/MurikahWorkspaceEntry.tsx.txt",
