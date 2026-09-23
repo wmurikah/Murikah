@@ -16,6 +16,11 @@ type P5Bucket = {
   put(key: string, value: ArrayBuffer | ReadableStream<Uint8Array>, options?: { customMetadata?: Record<string,string> }): Promise<unknown>;
   get(key: string): Promise<P5R2Object | null>;
   delete(key: string): Promise<void>;
+  list(options: { prefix: string; cursor?: string; limit?: number }): Promise<{
+    objects: Array<{ key: string }>;
+    truncated: boolean;
+    cursor?: string;
+  }>;
 };
 type P5Env = { TUTOR_DB: P5Database; TUTOR_FILES: P5Bucket };
 
@@ -23,6 +28,8 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{3,128}$/;
 const DELIVERABLE = /^[a-z][a-z0-9_]{0,63}$/;
 export const PHASE5_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const PHASE5_MAX_FILES_PER_VERSION = 1;
+export const PHASE5_MAX_VERSIONS = 100;
 export const PHASE5_MAX_TEXT_CHARS = 120_000;
 export const PHASE5_MAX_REVIEW_TEXT_BYTES = 512 * 1024;
 
@@ -109,6 +116,23 @@ function safeContentType(filename:string, declared:string):{ok:boolean;contentTy
     normalized.includes('x-executable') ||
     normalized.includes('x-sharedlib')
   )) return {ok:false,contentType:'',extension};
+  const aliases:Record<string,Set<string>> = {
+    md:new Set(['text/plain','text/markdown','application/octet-stream']),
+    txt:new Set(['text/plain','application/octet-stream']),
+    csv:new Set(['text/csv','text/plain','application/vnd.ms-excel','application/octet-stream']),
+    json:new Set(['application/json','text/plain','application/octet-stream']),
+    ipynb:new Set(['application/json','text/plain','application/octet-stream']),
+    py:new Set(['text/plain','text/x-python','application/octet-stream']),
+    js:new Set(['text/plain','text/javascript','application/javascript','application/octet-stream']),
+    ts:new Set(['text/plain','text/typescript','application/octet-stream']),
+    tsx:new Set(['text/plain','text/typescript','application/octet-stream']),
+    jsx:new Set(['text/plain','text/javascript','application/octet-stream']),
+    sql:new Set(['text/plain','application/sql','application/octet-stream']),
+    html:new Set(['text/html','text/plain','application/octet-stream']),
+    svg:new Set(['image/svg+xml','text/plain','application/octet-stream']),
+  };
+  const accepted = aliases[extension] || new Set([canonical,'application/octet-stream']);
+  if (normalized && !accepted.has(normalized)) return {ok:false,contentType:'',extension};
   return {ok:true,contentType:canonical,extension};
 }
 async function sha256Hex(bytes:ArrayBuffer):Promise<string> {
@@ -251,6 +275,39 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const artifactId = id(url.searchParams.get('artifact_id'));
     if (!artifactId || !(await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId))) return json({error:'artifact_not_found'},404);
     return json({ok:true,...await summary(env.TUTOR_DB,internshipId,artifactId)});
+  }
+  if (route === '/internships/artifacts/integrity' && request.method === 'GET') {
+    const rows=(await env.TUTOR_DB.prepare(
+      'SELECT v.id, v.size_bytes, o.object_key FROM internship_artifact_versions v ' +
+      'JOIN internship_instances i ON i.id = v.internship_id ' +
+      'JOIN tutor_objects o ON o.object_id = v.object_id AND o.deleted_at IS NULL ' +
+      'WHERE v.internship_id = ? AND i.learner_id = ? AND o.owner_kind = ? AND o.owner_id = ?',
+    ).bind(internshipId,actorId,'user',actorId).all<{id:string;size_bytes:number;object_key:string}>()).results || [];
+    let missingObjects=0, sizeMismatches=0;
+    const registeredKeys=new Set<string>();
+    for (const row of rows) {
+      registeredKeys.add(row.object_key);
+      const object=await env.TUTOR_FILES.get(row.object_key);
+      if (!object) {
+        missingObjects += 1;
+      } else if (object.size !== Number(row.size_bytes||0)) {
+        sizeMismatches += 1;
+      }
+    }
+    const prefix=['users',actorId,'virtual-internships',internshipId,'artifact-version'].join('/') + '/';
+    let cursor:string|undefined, orphanObjects=0;
+    do {
+      const listed=await env.TUTOR_FILES.list({prefix,cursor,limit:1000});
+      for (const object of listed.objects) if (!registeredKeys.has(object.key)) orphanObjects += 1;
+      cursor=listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+    return json({
+      ok:missingObjects===0 && sizeMismatches===0 && orphanObjects===0,
+      registered_version_count:rows.length,
+      missing_object_count:missingObjects,
+      size_mismatch_count:sizeMismatches,
+      orphan_object_count:orphanObjects,
+    });
   }
 
   if (route === '/internships/artifacts/acknowledge' && request.method === 'POST') {
@@ -580,6 +637,9 @@ async function saveVersion(
       'SELECT current_version_number, status FROM internship_artifacts WHERE id = ? AND internship_id = ? LIMIT 1',
     ).bind(String(artifact.id||''),internshipId).first<{current_version_number:number;status:string}>();
     if (!current || current.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    if (Number(current.current_version_number||0) >= PHASE5_MAX_VERSIONS) {
+      return json({error:'artifact_version_limit',max_versions:PHASE5_MAX_VERSIONS},409);
+    }
     const number=Number(current.current_version_number||0)+1;
     const versionId=generated('ver'), objectId=generated('obj');
     const key=['users',actorId,'virtual-internships',internshipId,'artifact-version',versionId].join('/');
