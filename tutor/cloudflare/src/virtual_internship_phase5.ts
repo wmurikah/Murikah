@@ -405,7 +405,7 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (!artifactId || !req || !content.trim() || content.length > PHASE5_MAX_TEXT_CHARS) return json({error:'invalid_artifact_content'},400);
     const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
     if (!artifact) return json({error:'artifact_not_found'},404);
-    if (artifact.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    if (!['draft','changes_requested'].includes(String(artifact.status||''))) return json({error:'invalid_artifact_state'},409);
     const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(artifact.task_id||''));
     if (!contract || contract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const bytes=new TextEncoder().encode(content).buffer;
@@ -426,7 +426,7 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (!type.ok) return json({error:'unsupported_artifact_type'},415);
     const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
     if (!artifact) return json({error:'artifact_not_found'},404);
-    if (artifact.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    if (!['draft','changes_requested'].includes(String(artifact.status||''))) return json({error:'invalid_artifact_state'},409);
     const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(artifact.task_id||''));
     if (!contract || contract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const bytes=await request.arrayBuffer();
