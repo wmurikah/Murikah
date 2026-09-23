@@ -370,10 +370,12 @@ function NoInternship({
   options,
   onStart,
   starting,
+  error,
 }: {
   options: StartOption[];
   onStart: (slug: string) => void;
   starting: string;
+  error?: string;
 }) {
   return (
     <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
@@ -383,6 +385,7 @@ function NoInternship({
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
           You do not have an active internship. Only internship scenarios that the current server says are available are shown here.
         </p>
+        {error ? <p className="mt-5 rounded-lg border border-red-300/60 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">{error}</p> : null}
         <div className="mt-7 space-y-4">
           {options.length === 0 ? (
             <EmptyState title="No internship is available right now." detail="When a qualifying scenario is available to your account, it will appear here." />
@@ -957,7 +960,8 @@ function InboxView({
       setSelectedThread(thread);
       setSelectedActorId(thread.scenario_actor_id);
     } else if (requestedActor) {
-      setSelectedThread(null);
+      const actorThread = workplaceThreads.find((item) => item.scenario_actor_id === requestedActor) || null;
+      setSelectedThread(actorThread);
       setSelectedActorId(requestedActor);
     }
   }, [requestedThread, requestedActor, workspace.threads]);
@@ -1385,7 +1389,7 @@ export default function MurikahVirtualInternshipWorkspace() {
   if (error && !workspace) return <ErrorWorkspace message={error} retry={() => void loadWorkspace()} />;
   if (!workspace) return <ErrorWorkspace message="We could not load your internship right now. Try again." retry={() => void loadWorkspace()} />;
   if (workspace.state === "guest") return <GuestPreview />;
-  if (workspace.state === "none") return <NoInternship options={workspace.start_options || []} onStart={(slug) => void startInternship(slug)} starting={starting} />;
+  if (workspace.state === "none") return <NoInternship options={workspace.start_options || []} onStart={(slug) => void startInternship(slug)} starting={starting} error={error} />;
 
   const internship = workspace.internship!;
   const company = workspace.company!;
