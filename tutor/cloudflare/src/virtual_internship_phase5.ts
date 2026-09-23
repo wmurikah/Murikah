@@ -729,7 +729,7 @@ async function saveVersion(
           'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         ).bind(versionId,String(artifact.id||''),internshipId,String(artifact.task_id||''),number,objectId,options.filename,options.contentType,bytes.byteLength,sha,options.sourceType,options.priorReviewId||null,options.req,options.now,actorId),
         env.TUTOR_DB.prepare(
-          "UPDATE internship_artifacts SET current_version_id = ?, current_version_number = ?, status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END, updated_at = ? " +
+          'UPDATE internship_artifacts SET current_version_id = ?, current_version_number = ?, updated_at = ? ' +
           'WHERE id = ? AND internship_id = ? AND current_version_number = ?',
         ).bind(versionId,number,options.now,String(artifact.id||''),internshipId,Number(current.current_version_number||0)),
         activityStatement(env.TUTOR_DB,internshipId,String(artifact.task_id||''),'artifact_version_saved',options.now,options.req,{
