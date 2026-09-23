@@ -406,7 +406,7 @@ class VirtualInternshipAIOrchestrator:
             task_id=task_id,
         )
         async for item in self._natural_stream(
-            role=VirtualInternshipModelRole.WORKFLOW_REVIEW,
+            role=VirtualInternshipModelRole.ACTOR,
             owner_actor_id=owner_actor_id,
             internship_id=internship_id,
             context=context,
@@ -637,7 +637,7 @@ class VirtualInternshipAIOrchestrator:
             },
         }
         return await self._structured_call(
-            role=VirtualInternshipModelRole.ACTOR,
+            role=VirtualInternshipModelRole.WORKFLOW_REVIEW,
             owner_actor_id=owner_actor_id,
             internship_id=internship_id,
             context=context,
