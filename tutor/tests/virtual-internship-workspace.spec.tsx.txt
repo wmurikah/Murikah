@@ -235,6 +235,7 @@ describe("Virtual Internship Phase 4 workplace", () => {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body));
         expect(body.scenario_actor_id).toBe("actor_supervisor");
+        expect(body.text).toBe("  **Where** should I start?  ");
         expect(body.request_id).toMatch(/^actor-/);
         return new Response(
           JSON.stringify({ type: "chunk", text: "Please start with the policy and variance evidence." }) + "\n" +
@@ -250,7 +251,7 @@ describe("Virtual Internship Phase 4 workplace", () => {
     const linaButtons = await screen.findAllByRole("button", { name: /Lina A\./ });
     fireEvent.click(linaButtons[linaButtons.length - 1]);
     const composer = screen.getByLabelText("Workplace message");
-    fireEvent.change(composer, { target: { value: "Where should I start?" } });
+    fireEvent.change(composer, { target: { value: "  **Where** should I start?  " } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Please start with the policy and variance evidence.")).toBeVisible();
