@@ -13,12 +13,14 @@ from virtual_internship.ai.providers import resolve_role_candidates
 
 class AIRoleTests(unittest.TestCase):
     def test_role_vocabulary_and_policies_are_deterministic(self):
-        self.assertEqual({r.value for r in VirtualInternshipModelRole},{"actor","mentor","assessor","scenario_director"})
+        self.assertEqual({r.value for r in VirtualInternshipModelRole},{"actor","mentor","assessor","scenario_director","workflow_review"})
         self.assertEqual(role_policy("actor"),ROLE_POLICIES[VirtualInternshipModelRole.ACTOR])
         self.assertEqual(role_policy("actor").max_attempts,2)
         self.assertEqual(role_policy("mentor").max_attempts,2)
         self.assertTrue(role_policy("assessor").structured_output)
         self.assertTrue(role_policy("scenario_director").structured_output)
+        self.assertTrue(role_policy("workflow_review").structured_output)
+        self.assertEqual(role_policy("workflow_review").output_schema_version,1)
         self.assertEqual(INTERNSHIP_CONTEXT_MAX_CHARS,14000)
         with self.assertRaises(ValueError): role_policy("unknown")
 
