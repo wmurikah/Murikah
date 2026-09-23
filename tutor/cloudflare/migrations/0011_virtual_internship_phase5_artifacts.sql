@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS internship_artifacts (
   create_request_id TEXT NOT NULL CHECK (length(create_request_id) BETWEEN 3 AND 128),
   UNIQUE (internship_id, task_id, deliverable_type),
   UNIQUE (internship_id, create_request_id),
-  FOREIGN KEY (internship_id, task_id) REFERENCES internship_tasks(internship_id, task_id) ON DELETE RESTRICT
+  FOREIGN KEY (internship_id, task_id) REFERENCES internship_tasks(internship_id, task_id) ON DELETE RESTRICT,
+  FOREIGN KEY (current_version_id) REFERENCES internship_artifact_versions(id) ON DELETE RESTRICT,
+  FOREIGN KEY (accepted_submission_id) REFERENCES internship_artifact_submissions(id) ON DELETE RESTRICT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS internship_artifact_versions (
@@ -54,7 +56,8 @@ CREATE TABLE IF NOT EXISTS internship_artifact_versions (
   FOREIGN KEY (artifact_id) REFERENCES internship_artifacts(id) ON DELETE RESTRICT,
   FOREIGN KEY (internship_id, task_id) REFERENCES internship_tasks(internship_id, task_id) ON DELETE RESTRICT,
   FOREIGN KEY (object_id) REFERENCES tutor_objects(object_id) ON DELETE RESTRICT,
-  FOREIGN KEY (created_by) REFERENCES tutor_accounts(actor_id) ON DELETE RESTRICT
+  FOREIGN KEY (created_by) REFERENCES tutor_accounts(actor_id) ON DELETE RESTRICT,
+  FOREIGN KEY (prior_review_id) REFERENCES internship_artifact_reviews(id) ON DELETE RESTRICT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS internship_artifact_submissions (
@@ -143,6 +146,56 @@ CREATE INDEX IF NOT EXISTS idx_internship_artifact_activity_time
 CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_artifact_task_completed_once
   ON internship_artifact_activity(internship_id, task_id, event_type)
   WHERE event_type = 'task_completed';
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_versions_no_update
+BEFORE UPDATE ON internship_artifact_versions
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_version_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_versions_no_delete
+BEFORE DELETE ON internship_artifact_versions
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_version_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_submissions_pin_immutable
+BEFORE UPDATE OF artifact_id, artifact_version_id, internship_id, task_id, submission_number,
+  prior_submission_id, request_id, submitted_at
+ON internship_artifact_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_submission_pin_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_submissions_no_delete
+BEFORE DELETE ON internship_artifact_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_submission_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_reviews_no_update
+BEFORE UPDATE ON internship_artifact_reviews
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_review_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_reviews_no_delete
+BEFORE DELETE ON internship_artifact_reviews
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_review_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_activity_no_update
+BEFORE UPDATE ON internship_artifact_activity
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_activity_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_internship_artifact_activity_no_delete
+BEFORE DELETE ON internship_artifact_activity
+BEGIN
+  SELECT RAISE(ABORT, 'artifact_activity_immutable');
+END;
 
 INSERT INTO persistence_meta(key, value, updated_at)
 VALUES ('virtual_internship_phase5_artifact_schema_version', '1', unixepoch())
