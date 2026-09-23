@@ -164,6 +164,20 @@ async function taskContract(db:P5Database,internshipId:string,scenarioVersionId:
     : [];
   return {status:row.status,assigned_by_actor_id:row.assigned_by_actor_id,definition,deliverables};
 }
+async function taskDeliverablesAccepted(
+  db:P5Database,
+  internshipId:string,
+  scenarioVersionId:string,
+  taskId:string,
+):Promise<boolean> {
+  const contract=await taskContract(db,internshipId,scenarioVersionId,taskId);
+  if (!contract || contract.deliverables.length === 0) return false;
+  const acceptedRows=(await db.prepare(
+    "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
+  ).bind(internshipId,taskId).all<{deliverable_type:string}>()).results || [];
+  const accepted=new Set(acceptedRows.map(row=>row.deliverable_type));
+  return contract.deliverables.every(deliverable=>accepted.has(deliverable));
+}
 function activityStatement(
   db:P5Database,
   internshipId:string,
@@ -487,17 +501,9 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
     ).bind(internshipId,submissionId).first<Record<string,unknown>>();
     if (existingReview) {
-      let taskReady=false;
-      if (existingReview.decision === 'accepted') {
-        const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
-        if (contract) {
-          const acceptedRows=(await env.TUTOR_DB.prepare(
-            "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
-          ).bind(internshipId,String(submission.task_id||'')).all<{deliverable_type:string}>()).results || [];
-          const accepted=new Set(acceptedRows.map(row=>row.deliverable_type));
-          taskReady=contract.deliverables.length > 0 && contract.deliverables.every(deliverable=>accepted.has(deliverable));
-        }
-      }
+      const taskReady=existingReview.decision === 'accepted' && await taskDeliverablesAccepted(
+        env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''),
+      );
       return json({ok:true,already_reviewed:true,review:existingReview,submission,task_ready_for_completion:taskReady});
     }
     if (submission.status === 'submitted') {
@@ -571,7 +577,12 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const existing=await env.TUTOR_DB.prepare(
       'SELECT * FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
     ).bind(internshipId,submissionId).first<Record<string,unknown>>();
-    if (existing) return json({ok:true,idempotent_replay:true,review:existing});
+    if (existing) {
+      const taskReady=existing.decision === 'accepted' && await taskDeliverablesAccepted(
+        env.TUTOR_DB,internshipId,owned.scenario_version_id,String(existing.task_id||''),
+      );
+      return json({ok:true,idempotent_replay:true,review:existing,task_ready_for_completion:taskReady});
+    }
     const submission=await env.TUTOR_DB.prepare(
       'SELECT s.*, a.deliverable_type FROM internship_artifact_submissions s JOIN internship_artifacts a ON a.id = s.artifact_id ' +
       'JOIN internship_instances i ON i.id = s.internship_id WHERE s.id = ? AND s.internship_id = ? AND i.learner_id = ? LIMIT 1',
@@ -607,15 +618,17 @@ export async function handlePhase5ArtifactPersistenceRoute(
       const racedReview=await env.TUTOR_DB.prepare(
         'SELECT * FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
       ).bind(internshipId,submissionId).first<Record<string,unknown>>();
-      if (racedReview) return json({ok:true,idempotent_replay:true,review:racedReview});
+      if (racedReview) {
+        const taskReady=racedReview.decision === 'accepted' && await taskDeliverablesAccepted(
+          env.TUTOR_DB,internshipId,owned.scenario_version_id,String(racedReview.task_id||''),
+        );
+        return json({ok:true,idempotent_replay:true,review:racedReview,task_ready_for_completion:taskReady});
+      }
       return json({error:'review_conflict'},409);
     }
-    const acceptedRows=(await env.TUTOR_DB.prepare(
-      "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
-    ).bind(internshipId,String(submission.task_id||'')).all<{deliverable_type:string}>()).results || [];
-    const accepted=new Set(acceptedRows.map(x=>x.deliverable_type));
-    if (decision === 'accepted') accepted.add(String(submission.deliverable_type||''));
-    const taskReady=contract.deliverables.length > 0 && contract.deliverables.every(x=>accepted.has(x));
+    const taskReady=decision === 'accepted' && await taskDeliverablesAccepted(
+      env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''),
+    );
     const review=await env.TUTOR_DB.prepare(
       'SELECT id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, created_at FROM internship_artifact_reviews WHERE id = ?',
     ).bind(reviewId).first<Record<string,unknown>>();
