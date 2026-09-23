@@ -89,6 +89,34 @@ Stored metadata is limited to role/object identifiers, provider/model/profile id
 
 Phase 3 model calls continue to use the existing Murikah model catalog, account/deployment grants, model-selection resolver and LLM factory. No internship-specific provider credential configuration is introduced.
 
+## Virtual Internship Phase 5 work artifacts
+
+`0011_virtual_internship_phase5_artifacts.sql` adds the durable work-product lineage used by the existing Virtual Internship Work surface. Phase 5 keeps the established split: D1 is the ownership and workflow control plane, while private `TUTOR_FILES` R2 stores artifact bytes. It does not add a second ownership registry and does not make R2 public.
+
+The Phase 5 lineage is explicit and auditable:
+
+`task -> logical artifact -> immutable artifact version -> submission attempt -> workflow review`
+
+D1 adds `internship_task_acknowledgements`, `internship_artifacts`, `internship_artifact_versions`, `internship_artifact_submissions`, `internship_artifact_reviews` and `internship_artifact_activity`. Artifact versions and submission attempts are append-oriented. A saved version is never overwritten in place, and a later resubmission does not change the version referenced by an earlier submission.
+
+Every file-backed or text-backed version has one corresponding `tutor_objects` row owned by the authenticated Tutor member. The canonical object key is generated server-side:
+
+`users/<learner-id>/virtual-internships/<internship-id>/artifact-version/<artifact-version-id>`
+
+The original filename remains display metadata and is never part of the authorization key. The browser receives artifact/version IDs, not an R2 key as a trust token. Downloads re-check internship ownership, artifact/version lineage and the matching `tutor_objects` owner before reading private R2.
+
+Phase 5 calculates SHA-256, size and normalized content type on the server before finalizing a version. The checksum stored with `tutor_objects` is the integrity value; an R2 ETag is not treated as SHA-256. Ordinary downloads validate expected object size without recomputing a full hash on every request. The internal owner-scoped `/internships/artifacts/integrity` persistence route provides deterministic reconciliation of registered versions, missing objects, size mismatches and unregistered Phase 5 objects under the learner/internship prefix. It reports discrepancies and does not destructively delete uncertain objects.
+
+Upload finalization is deliberately compensating because D1 and R2 are not one transaction: authorization and validation happen first, the private R2 object is written, `tutor_objects` and version metadata are finalized in D1, and the R2 object is removed if D1 finalization fails. An artifact version is not considered usable when ownership registration fails.
+
+Current Phase 5 limits are explicit: one file per artifact version, 10 MiB maximum per file/version request, 100 immutable versions per logical artifact, 120,000 characters for text drafting and 512 KiB maximum for the text representation supplied to automated workflow review. Supported stored formats include PDF, DOCX, XLSX, CSV, PPTX, TXT, Markdown, common raster images, JSON/notebook data and common source-code text. Executable formats are rejected. Source code, HTML, SVG and notebooks are stored as data only; learner-supplied code is never executed, and active HTML/SVG is not rendered into the Tutor origin.
+
+Automated simulated-supervisor review reuses the Phase 3 provider/orchestration and invocation-audit path. Phase 5 review has only `accepted` and `changes_requested` workflow decisions with feedback/requested changes. It does not create scores, competency levels, Competency Passport evidence, final ratings or internship completion. Because the current Tutor repository has no safe PDF/DOCX/XLSX extraction pipeline, those binary formats remain securely stored and downloadable but automated review fails closed with the submission remaining under review. Text-oriented versions use bounded extracted text only.
+
+A Phase 2 task is transitioned to `completed` through `ScenarioStateService.transition_task` only after every authored required deliverable for that task has an accepted Phase 5 artifact. The frontend never marks a task complete directly. Any authored Phase 2 events caused by task completion continue through the existing deterministic event engine.
+
+Stopped internships keep artifact/version/submission/review history and owner downloads available in read-only mode. Guests cannot create, upload, submit, review or retrieve member artifacts. Phase 5 does not add artifact deletion; submitted and accepted lineage therefore cannot be erased through a new convenience endpoint.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:
