@@ -2131,6 +2131,22 @@ The authenticated router is `tutor/railway/murikah_virtual_internship.py`, mount
 
 The dashboard and all passive workplace surfaces are deterministic D1/scenario reads. Loading the dashboard, Work, Company, Documents, Meetings or Activity does not call an LLM.
 
+### Learner API and DTO contract
+
+The browser calls only the authenticated application router under `/api/murikah/virtual-internship`:
+
+- `GET /workspace` for the aggregated learner-safe workplace read model;
+- `POST /start` for the existing Phase 1 start flow using safe published start options;
+- `GET /threads/{thread_id}` for an owned workplace or Mentor conversation;
+- `GET /documents/{document_id}` for one currently learner-visible scenario source document;
+- `POST /reflections` for the learner-owned current-period reflection;
+- `POST /actor/messages/stream` for workplace actor interaction through Phase 3;
+- `POST /mentor/messages/stream` for Murikah Mentor interaction through Phase 3.
+
+The frontend contract is explicit rather than raw D1 rows. `MurikahVirtualInternshipWorkspace.tsx.txt` defines `InternshipWorkspaceSummary`, `InternshipTaskSummary`, `InternshipPerson`, `InternshipThread`, `InternshipMessage`, `InternshipCompanyView`, `InternshipDocument`, `InternshipMeeting`, `InternshipTimelineItem` and `InternshipReflection`. Server timestamps remain authoritative Unix seconds and are formatted locally only for display.
+
+The Overview displays the simulated company and role, active/stopped lifecycle state, scenario version, server-derived internship day and week, workload band, active work count, next real deadline, next real meeting when present, recent workplace threads and recent learner-visible activity. It deliberately does not expose a synthetic completion percentage, score or competency level.
+
 ### Durable Phase 4 records
 
 Migration `0010_virtual_internship_phase4_workspace.sql` adds only the UI state Phase 4 genuinely requires:
@@ -2177,9 +2193,17 @@ The UI uses semantic headings, navigation landmarks, links for navigation, butto
 
 Backend coverage remains in `tutor/tests/test_virtual_internship_phase4_backend.py`, including learner isolation, hidden-state filtering, deterministic/model-free dashboard reads, stopped state, durable idempotency and secure document visibility.
 
-Frontend integration coverage is in `tutor/tests/virtual-internship-workspace.spec.tsx.txt`, including dashboard truthfulness, navigation semantics, Work detail without Phase 5 controls, learner-safe company rendering, secure document loading, actor streaming, Mentor separation/streaming, reflection persistence, stopped read-only behavior and guest/no-internship states.
+Frontend integration coverage is in `tutor/tests/virtual-internship-workspace.spec.tsx.txt`, including dashboard truthfulness, stable deep links and active navigation semantics, Work detail without Phase 5 controls, learner-safe company rendering, secure document loading, meeting and empty states, actor streaming, Mentor separation/streaming, reflection persistence, stopped read-only behavior, guest/no-internship states, narrow-screen access to core controls and learner-safe loading/error behavior.
 
 The Tutor Docker build restores the overlay component into the pinned DeepTutor checkout and runs this integration test alongside the existing Tutor integration suite before the production Next.js build.
+
+### Regression, preflight and known Phase 4 limitations
+
+Phase 1 ownership, one-active-internship, duration, pinned scenario version, stop behavior and object-key contracts remain authoritative and unchanged. Phase 2 remains authoritative for canonical scenario truth, actor knowledge, task/event graphs and learner visibility. Phase 3 remains authoritative for model roles, bounded context, provider reuse, timeouts/fallback, structured output, safe failures and model audit metadata.
+
+`tutor/cloudflare/preflight.py` protects the shared workspace source, stable route labels, authenticated Phase 4 router endpoints, frontend integration test, completed Phase 4 checklist, this implementation record and the subsequent-workplace-UI requirement. `tutor/railway/validate_guest_overlay.py` protects the installed workspace route and guest/auth navigation invariants in the pinned DeepTutor overlay.
+
+Known Phase 4 limitations are intentional phase boundaries. Meetings are rendered only when Phase 2 exposes a learner-visible authored meeting/check-in event; the current demo pack may therefore show the deliberate empty state. Phase 4 has no learner artifact drafting/upload/submission/review workflow, no rubric or assessor workflow, no competency evidence or Competency Passport UI, no final completion/certificate/report/letter flow, no browser push/email notifications and no global workplace search. Reflection text is stored but is not silently model-assessed.
 
 ## SUBSEQUENT WORKPLACE UI REQUIREMENT
 
