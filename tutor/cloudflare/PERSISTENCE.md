@@ -78,6 +78,17 @@ The runtime state revision is monotonic. `(internship_id, revision)` and request
 
 Ordinary task dependency evaluation, actor/learner knowledge views and event evaluation use indexed D1 rows. They do not require R2 or container-local memory for correctness.
 
+
+## Virtual Internship Phase 3 AI invocation audit
+
+`0009_virtual_internship_phase3_ai.sql` adds `internship_ai_invocations` for bounded model-invocation metadata. This table is separate from Phase 1 lifecycle audit and Phase 2 canonical scenario-transition history because model calls are observability records, not simulation truth.
+
+The existing HMAC persistence bridge exposes only `POST /__muri/persist/internships/ai/invocation` for this Phase 3 audit record. The Worker verifies the authenticated account and binds ownership through `internship_instances.learner_id` before accepting a row. There is no learner-facing invocation-history browser in Phase 3.
+
+Stored metadata is limited to role/object identifiers, provider/model/profile identifiers, prompt and output-schema versions, context/output hashes, latency, retry/fallback counts, normalized status/error metadata, Mentor assistance level and timestamps. Raw prompts, raw responses, provider credentials, authorization headers, scratchpads and chain-of-thought are deliberately excluded.
+
+Phase 3 model calls continue to use the existing Murikah model catalog, account/deployment grants, model-selection resolver and LLM factory. No internship-specific provider credential configuration is introduced.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:

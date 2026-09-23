@@ -1196,14 +1196,14 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 3 — AI orchestration
 
-- [ ] Add model-role abstraction for actor, mentor, assessor and scenario director.
-- [ ] Reuse Murikah provider/model configuration.
-- [ ] Add bounded timeouts.
-- [ ] Add retry/fallback.
-- [ ] Add structured-output schemas.
-- [ ] Add learner-safe failure messages.
-- [ ] Add model/audit metadata.
-- [ ] Test provider failure and malformed structured output.
+- [x] Add model-role abstraction for actor, mentor, assessor and scenario director.
+- [x] Reuse Murikah provider/model configuration.
+- [x] Add bounded timeouts.
+- [x] Add retry/fallback.
+- [x] Add structured-output schemas.
+- [x] Add learner-safe failure messages.
+- [x] Add model/audit metadata.
+- [x] Test provider failure and malformed structured output.
 
 ### Phase 4 — internship workplace UI
 
@@ -1916,7 +1916,199 @@ Deliberately deferred:
 - reports and completion letters;
 - final internship completion.
 
-Phase 3 remains unchecked in the build sequence.
+Phase 3 was implemented subsequently through the Phase 3 orchestration layer described below. Phase 4 remains unchecked.
+
+
+## Phase 3 Implementation Record
+
+Phase 3 implements AI orchestration infrastructure only. It does not implement the Phase 4 workplace UI, Phase 5 artifact workflow, Phase 6 production assessment/scoring, Phase 7 Competency Passport evidence, final completion gates, reports, completion letters, or Kev.
+
+### AI orchestration location and role vocabulary
+
+The common orchestration package is:
+
+`tutor/railway/virtual_internship/ai/`
+
+The common entry point is:
+
+`tutor/railway/virtual_internship/ai/orchestrator.py`
+
+The authoritative role enum is `VirtualInternshipModelRole` in `roles.py` with exactly four roles:
+
+- `actor`
+- `mentor`
+- `assessor`
+- `scenario_director`
+
+All four roles use one common orchestrator and one provider-resolution abstraction. There are no role-specific Gemini, Qwen, NVIDIA, OpenAI, Claude, or other duplicate provider clients.
+
+### Role policies, prompt versions and limits
+
+Phase 3 uses orchestration schema version 1. Actor, Mentor, assessor and director prompt versions are all version 1. Assessor and scenario-director structured-output schemas are version 1.
+
+The deterministic role policies are:
+
+| Role | Streaming | Max output tokens | First-token timeout | Total timeout | Max attempts |
+|---|---:|---:|---:|---:|---:|
+| actor | yes | 500 | 7 seconds | 25 seconds | 2 |
+| mentor | yes | 1,200 | 9 seconds | 40 seconds | 2 |
+| assessor | no partial JSON | 1,400 | n/a | 55 seconds | 2 |
+| scenario director | no partial JSON | 800 | n/a | 35 seconds | 2 |
+
+A role uses at most two authorized configured candidates. Provider failure or first-token failure may use one fallback. Structured roles may use the second attempt after a provider failure or malformed/schema-invalid first response. There is no unbounded repair loop.
+
+### Existing Murikah provider and model-access reuse
+
+`providers.py` resolves candidates through the existing Tutor runtime:
+
+- `deeptutor.multi_user.model_access.allowed_llm_options()`
+- `deeptutor.services.model_selection.runtime.resolve_llm_config_for_selection()`
+- `deeptutor.services.llm.factory.stream()`
+
+The requested model is considered only if it is already present in the current account/deployment allowed options. Candidate ordering is deterministic and role-aware: an authorized explicit selection remains first, then the remaining authorized catalog rows are ranked by the role policy (`latency`, `balanced`, or `reasoning`) while preserving catalog order inside each rank. Provider/model duplicates are removed. No unauthorized model can be introduced by role preference.
+
+Phase 3 adds no internship-specific provider API-key environment variables and does not persist credentials. Existing deployment/admin model policy and account grants therefore remain authoritative.
+
+### Role-specific context construction
+
+Role contexts live in:
+
+`tutor/railway/virtual_internship/ai/context.py`
+
+The explicit builders are:
+
+- `build_actor_context(...)`
+- `build_mentor_context(...)`
+- `build_assessor_context(...)`
+- `build_scenario_director_context(...)`
+
+The actor builder begins with the owner-bound Phase 2 `ScenarioStateService.actor_view(...)`. It receives only that actor's Phase 2 knowledge view, selected non-secret actor metadata, the relevant learner-visible task/event context, bounded actor conversation data, and the current learner message. It does not read the raw Phase 2 canonical fact table.
+
+The Mentor builder uses the Phase 2 learner-safe view, relevant learner-visible task information, the requested/recorded assistance level, bounded Mentor-only conversation context, and the learner question. Mentor-private conversation is not passed to workplace actor context.
+
+The Phase 3 assessor is infrastructure only. Its context is restricted to the relevant task, supplied test criteria/evidence, learner-visible permitted scenario facts and the validated assistance level. It does not receive unrelated Mentor history and it writes no competency evidence.
+
+The scenario director receives learner-safe current state plus a reduced list of authored event choices and authored decision options from the exact pinned definition. It does not receive a generic state-patch capability or private workplace/Mentor transcripts.
+
+### Bounded internship conversation context
+
+Persistent internship conversations do not replay an unlimited 90-day transcript. The hard Phase 3 context limit is 14,000 characters with up to six recent turns. `bounded_conversation(...)` reuses `deeptutor.murikah_context_packet.build_context_packet(...)` when the installed Tutor runtime is available. A deterministic recent-turn fallback exists for source-only tests.
+
+Conversation memory is placed inside an untrusted contextual-data envelope. It is never canonical scenario truth. If conversation memory conflicts with D1, Phase 2 canonical state and its bounded views remain authoritative.
+
+### Prompt-injection and role boundaries
+
+Versioned system contracts are stored in `prompts.py`.
+
+Learner text and conversation memory are explicitly treated as untrusted data. They cannot change role, permissions, knowledge scope or state authority. Actor prompts require the model to remain a workplace actor, not become the Murikah Mentor, and to acknowledge unknown information rather than fabricate hidden facts. Mentor prompts require coaching within the allowed support level without revealing hidden truth or completing prohibited learner work.
+
+No prompt asks for chain-of-thought, scratchpad or hidden reasoning.
+
+### Natural-language streaming
+
+Actor and Mentor calls stream visible chunks after a bounded first-token race. If a provider fails before first visible output, one authorized fallback may be attempted. Losing streams are closed. A hard role total deadline also bounds the selected stream.
+
+Learner-visible actor/Mentor text reuses the existing `deeptutor.murikah_visible_text.sanitize_murikah_visible_text` runtime sanitizer. Structured assessor/director JSON is not altered by the visible-text sanitizer; it is parsed and schema-validated instead.
+
+An interrupted stream after visible output is not silently treated as success. The orchestrator returns the role-safe temporary-unavailable message and records a failed invocation.
+
+### Structured assessor output
+
+Strict validation lives in `outputs.py`.
+
+The Phase 3 assessor test schema is version 1 and contains:
+
+- `schema_version`
+- `summary`
+- `criteria[]`
+- `limitations[]`
+
+Each criterion has a known `criterion_id`, a result from `met | partially_met | not_met | not_assessed`, and known supplied `evidence_refs`. Unknown fields, unknown criterion IDs, unknown evidence references, invalid enums, missing required fields and malformed JSON are rejected.
+
+This infrastructure does not create competency evidence, Passport records, midpoint/final reviews, or completion state.
+
+### Scenario-director structured proposals
+
+The director schema is version 1 and accepts only:
+
+- `select_authored_event` for an event ID already present in the pinned authored definition; or
+- `choose_authored_option` for a decision/option pair already present in the pinned authored definition.
+
+Unknown fields, events, decisions and options are rejected.
+
+A `choose_authored_option` proposal may enter canonical state only through Phase 2 `record_decision(...)` followed by Phase 2 `evaluate(...)`. Phase 2 has intentionally exposed no force-fire event operation, so `select_authored_event` remains advisory in Phase 3 and actual event eligibility/application remains the deterministic Phase 2 evaluator's authority. Phase 3 does not create a parallel event mutation language.
+
+### Canonical-state protection
+
+Models are never given database write tools, SQL execution, generic fact mutation, task-state mutation or arbitrary scenario-patch operations.
+
+Actor and Mentor output is dialogue/coaching only. Assessor output is a validated infrastructure result only. Director output is an advisory validated proposal only. The only Phase 3 helper that can lead to canonical change calls the existing typed Phase 2 `record_decision` and `evaluate` service methods. Phase 1 ownership, pinned `scenario_version_id`, duration, qualifying status and completion authority are untouched.
+
+### Learner-safe failures
+
+Role-safe failure messages are centralized in `orchestrator.py`:
+
+- actor: `This workplace response is temporarily unavailable. Please try again.`
+- Mentor: `The Mentor is temporarily unavailable. Please try again.`
+- assessor: `The assessment service is temporarily unavailable. Please try again.`
+- scenario director: `The scenario service is temporarily unavailable. Please try again.`
+
+Raw provider HTTP bodies, hostnames, credentials, stack traces and D1 errors are not returned as learner messages.
+
+### AI invocation audit persistence
+
+Migration:
+
+`tutor/cloudflare/migrations/0009_virtual_internship_phase3_ai.sql`
+
+The dedicated `internship_ai_invocations` table is used because Phase 1 `internship_activity` is lifecycle audit and Phase 2 state-change tables are canonical scenario-transition audit. AI invocation telemetry has different semantics and does not belong in either authority.
+
+The table stores bounded metadata including invocation ID, internship/scenario version, role, relevant actor/task/event/decision IDs, provider/model/profile identifiers, prompt/schema versions, context/output hashes, status, TTFT/total latency, retry/fallback counts, normalized error code, Mentor assistance level, and timestamps.
+
+Indexes support internship/time, role/time and actor/time lookup. The HMAC persistence route is `POST /__muri/persist/internships/ai/invocation`. It independently checks active account status and `internship_instances.learner_id` ownership before inserting metadata. No learner-facing audit-browser route is added.
+
+Prompts, raw responses, API keys, bearer headers and chain-of-thought are not persisted.
+
+### Fast Path compatibility
+
+Phase 3 does not modify `accelerate_chat.py`, `murikah_fast_lane.py`, ordinary `/chat` routing, or the existing Fast Path V2 context/provider race. Internship orchestration code is imported only by Virtual Internship callers. It reuses the solved bounded-context and stream-closing principles without loading scenario orchestration on ordinary Tutor turns.
+
+### Phase 3 tests and release protection
+
+Focused tests live in:
+
+- `tutor/tests/test_virtual_internship_ai_roles.py`
+- `tutor/tests/test_virtual_internship_actor_ai.py`
+- `tutor/tests/test_virtual_internship_mentor_ai.py`
+- `tutor/tests/test_virtual_internship_structured_ai.py`
+- `tutor/tests/test_virtual_internship_ai_failover.py`
+- `tutor/tests/test_virtual_internship_ai_audit.py`
+
+They use fake provider streams and require no live internet or model provider. Coverage includes authorized/unauthorized model resolution, all four role policies, actor/learner knowledge boundaries, Mentor privacy, assistance levels, prompt injection, natural streaming, provider fallback, losing-stream closure, malformed structured output, one-repair maximum, director proposal validation, Phase 2 application boundary, foreign-owner rejection, audit secrecy and all three Phase 2 demo career families.
+
+Cloudflare preflight protects the role vocabulary/policies, context builders, existing provider reuse, timeout/attempt limits, structured validators, migration, HMAC audit route, persistence adapter, tests and this implementation record.
+
+### Phase 3 limitations and deliberately deferred work
+
+Phase 3 deliberately does not add:
+
+- production workplace/inbox/Mentor UI;
+- persistent workplace messages, which remain Phase 4 responsibility;
+- artifact upload/version/review workflow;
+- production rubric scoring or final assessor decisions;
+- competency evidence or Competency Passport scoring;
+- AI-generated tasks or arbitrary new events;
+- repeatable/seeded-random Phase 2 event extensions;
+- completion report, letter or credential generation;
+- Kev, System One, a decision-model microservice or new model weights.
+
+Phase 4 remains completely unchecked. Real assessment/scoring and Competency Passport evidence remain unimplemented.
+
+## SUBSEQUENT AI ORCHESTRATION REQUIREMENT
+
+Future Virtual Internship AI development must use the Phase 3 orchestrator and role contracts. Workplace UI must not call model providers directly. Future work must preserve current model grants, use Phase 2 actor/learner bounded views, avoid raw full-canonical-state actor prompts, keep conversation context bounded, reuse prompt/schema versions and learner-safe errors, retain invocation audit metadata, preserve prompt-injection boundaries, close losing/expired streams, and never allow model output to patch canonical scenario state.
+
+Do not create duplicate provider/fallback logic or a second Virtual Internship model configuration system. Canonical changes must continue through typed deterministic Phase 2 operations. Ordinary Tutor Fast Path V2 must remain independent.
 
 ## SUBSEQUENT SCENARIO DEVELOPMENT REQUIREMENT
 

@@ -522,6 +522,51 @@ def scenario_evaluate(
     return _json_request("POST", f"{PERSIST_PREFIX}/internships/scenario/evaluate", payload)
 
 
+
+def internship_ai_invocation_record(
+    actor_id: str,
+    internship_id: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist bounded Phase 3 model invocation metadata through the HMAC bridge.
+
+    Raw prompts, responses, provider credentials and model-private reasoning are
+    intentionally excluded from this contract.
+    """
+    if not enabled():
+        return {}
+    payload: dict[str, Any] = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+        "invocation_id": _learning_text(metadata.get("invocation_id"), 128),
+        "scenario_version_id": _learning_text(metadata.get("scenario_version_id"), 128),
+        "model_role": _learning_text(metadata.get("model_role"), 32),
+        "scenario_actor_id": _learning_text(metadata.get("actor_id"), 128),
+        "task_id": _learning_text(metadata.get("task_id"), 128),
+        "event_id": _learning_text(metadata.get("event_id"), 128),
+        "decision_id": _learning_text(metadata.get("decision_id"), 128),
+        "provider": _learning_text(metadata.get("provider"), 128),
+        "model_id": _learning_text(metadata.get("model_id"), 256),
+        "profile_id": _learning_text(metadata.get("profile_id"), 128),
+        "orchestration_schema_version": max(0, int(metadata.get("orchestration_schema_version") or 0)),
+        "prompt_version": max(0, int(metadata.get("prompt_version") or 0)),
+        "output_schema_version": max(0, int(metadata.get("output_schema_version") or 0)),
+        "context_hash": _learning_text(metadata.get("context_hash"), 64),
+        "output_hash": _learning_text(metadata.get("output_hash"), 64),
+        "status": _learning_text(metadata.get("status"), 16),
+        "first_token_ms": max(0, int(metadata.get("first_token_ms") or 0)),
+        "total_ms": max(0, int(metadata.get("total_ms") or 0)),
+        "retry_count": max(0, min(1, int(metadata.get("retry_count") or 0))),
+        "fallback_count": max(0, min(1, int(metadata.get("fallback_count") or 0))),
+        "error_code": _learning_text(metadata.get("error_code"), 128),
+        "started_at": max(0, int(metadata.get("started_at") or 0)),
+        "completed_at": max(0, int(metadata.get("completed_at") or 0)),
+    }
+    if metadata.get("assistance_level") is not None:
+        payload["assistance_level"] = int(metadata["assistance_level"])
+    return _json_request("POST", f"{PERSIST_PREFIX}/internships/ai/invocation", payload)
+
+
 def email_verification_start(
     email: str,
     *,
