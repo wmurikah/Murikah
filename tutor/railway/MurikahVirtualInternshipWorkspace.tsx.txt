@@ -768,7 +768,8 @@ function TaskDetail({
             const artifact = artifactFor(deliverable);
             const latestReview = artifact ? [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0] : undefined;
             const latestSubmission = artifact ? [...(artifact.submissions || [])].sort((a,b)=>b.submission_number-a.submission_number)[0] : undefined;
-            const canWork = Boolean(task.acknowledged_at) && task.status === "in_progress" && !readOnly && artifact?.status !== "accepted";
+            const canWork = Boolean(task.acknowledged_at) && task.status === "in_progress" && !readOnly &&
+              (!artifact || ["draft","changes_requested"].includes(artifact.status));
             return (
               <section key={deliverable} className="rounded-xl border border-[var(--border)] p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
