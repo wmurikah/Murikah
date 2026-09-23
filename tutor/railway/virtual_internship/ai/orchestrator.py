@@ -45,6 +45,7 @@ SAFE_MESSAGES = {
     VirtualInternshipModelRole.MENTOR: "The Mentor is temporarily unavailable. Please try again.",
     VirtualInternshipModelRole.ASSESSOR: "The assessment service is temporarily unavailable. Please try again.",
     VirtualInternshipModelRole.SCENARIO_DIRECTOR: "The scenario service is temporarily unavailable. Please try again.",
+    VirtualInternshipModelRole.WORKFLOW_REVIEW: "Supervisor review is temporarily unavailable. Please try again later.",
 }
 
 _SYSTEM_PROMPTS = {
@@ -52,6 +53,7 @@ _SYSTEM_PROMPTS = {
     VirtualInternshipModelRole.MENTOR: MENTOR_SYSTEM_PROMPT,
     VirtualInternshipModelRole.ASSESSOR: ASSESSOR_SYSTEM_PROMPT,
     VirtualInternshipModelRole.SCENARIO_DIRECTOR: DIRECTOR_SYSTEM_PROMPT,
+    VirtualInternshipModelRole.WORKFLOW_REVIEW: WORKFLOW_REVIEW_SYSTEM_PROMPT,
 }
 
 
@@ -404,7 +406,7 @@ class VirtualInternshipAIOrchestrator:
             task_id=task_id,
         )
         async for item in self._natural_stream(
-            role=VirtualInternshipModelRole.ACTOR,
+            role=VirtualInternshipModelRole.WORKFLOW_REVIEW,
             owner_actor_id=owner_actor_id,
             internship_id=internship_id,
             context=context,
@@ -579,7 +581,7 @@ class VirtualInternshipAIOrchestrator:
         )
         actor_view = actor_result.get("view") if isinstance(actor_result, dict) else None
         if not isinstance(actor_view, dict):
-            raise AIOrchestrationError(VirtualInternshipModelRole.ACTOR, "reviewer_unavailable")
+            raise AIOrchestrationError(VirtualInternshipModelRole.WORKFLOW_REVIEW, "reviewer_unavailable")
         learner_result = self.state_service.learner_view(owner_actor_id, internship_id)
         learner_view = learner_result.get("view") if isinstance(learner_result, dict) else {}
         reviewer = actor_view.get("actor") if isinstance(actor_view.get("actor"), dict) else {}
