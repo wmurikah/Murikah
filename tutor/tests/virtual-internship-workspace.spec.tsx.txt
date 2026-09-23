@@ -356,12 +356,14 @@ describe("Virtual Internship workplace through Phase 5", () => {
         current.tasks[0].work_artifacts = [artifact];
         return jsonResponse({ ok: true, artifact }, 201);
       }
-      if (url.endsWith("/artifacts/art_sheet/versions/upload") && init?.method === "POST") {
-        expect(init.body).toBeInstanceOf(FormData);
-        const form = init.body as FormData;
-        const uploaded = form.get("file") as File;
+      if (url.includes("/artifacts/art_sheet/versions/upload?internship_id=vi_1") && init?.method === "POST") {
+        expect(init.body).toBeInstanceOf(File);
+        const uploaded = init.body as File;
+        const headers = init.headers as Record<string,string>;
         expect(uploaded.name).toBe("reconciliation.xlsx");
-        expect(form.get("internship_id")).toBe("vi_1");
+        expect(headers["x-murikah-artifact-filename"]).toBe("reconciliation.xlsx");
+        expect(headers["x-murikah-request-id"]).toMatch(/^upload-/);
+        expect(headers["content-type"]).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         const artifact = current.tasks[0].work_artifacts[0];
         artifact.current_version_id = "ver_sheet_1";
         artifact.current_version_number = 1;
