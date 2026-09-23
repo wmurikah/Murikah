@@ -1,0 +1,1457 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  Activity,
+  AlertCircle,
+  Bot,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  FileText,
+  Inbox,
+  LayoutDashboard,
+  RefreshCw,
+  Send,
+  Users,
+} from "lucide-react";
+
+type WorkspaceState = "guest" | "none" | "active" | "stopped";
+
+type InternshipTaskSummary = {
+  task_id: string;
+  title: string;
+  category: string;
+  assigned_by_actor_id: string;
+  business_context: string;
+  learner_objective: string;
+  brief: string;
+  expected_effort: string;
+  difficulty: string;
+  due_at: number;
+  status: string;
+  dependencies: Array<{ task_id: string; title: string; status: string }>;
+  deliverable_types: string[];
+  allowed_tools: string[];
+  mentor_support: { key: string; level: number; label: string };
+  stakeholder_actor_ids: string[];
+};
+
+type InternshipPerson = {
+  actor_id: string;
+  name: string;
+  actor_class: string;
+  job_title: string;
+  department_id: string;
+  reports_to_actor_id: string;
+  learner_relationship: string;
+  active: boolean;
+};
+
+type InternshipThread = {
+  thread_id: string;
+  thread_kind: "workplace" | "mentor";
+  scenario_actor_id: string;
+  title: string;
+  related_task_id: string;
+  last_message: string;
+  last_sender_type: string;
+  last_message_at: number;
+  message_count: number;
+};
+
+type InternshipMessage = {
+  id: string;
+  sender_type: "learner" | "actor" | "mentor" | string;
+  sender_actor_id?: string;
+  body: string;
+  created_at: number;
+  related_task_id?: string;
+  request_id?: string;
+};
+
+type InternshipDocument = {
+  document_id: string;
+  title: string;
+  kind: string;
+  source: string;
+  summary: string;
+  content?: unknown;
+};
+
+type InternshipMeeting = {
+  meeting_id: string;
+  title: string;
+  scheduled_at: number;
+  status: string;
+  participants: Array<{ actor_id: string; name: string; job_title: string }>;
+  purpose: string;
+  related_event_id: string;
+};
+
+type InternshipTimelineItem = {
+  id: string;
+  type: string;
+  title: string;
+  detail: string;
+  timestamp: number;
+  href: string;
+};
+
+type InternshipReflection = {
+  reflection_id: string;
+  period_key: string;
+  content: string;
+  created_at: number;
+  updated_at: number;
+};
+
+type InternshipCompanyView = {
+  name: string;
+  fictional: boolean;
+  sector: string;
+  country_region: string;
+  description: string;
+  products_services: string[];
+  departments: Array<{ id: string; name: string }>;
+  systems: string[];
+  process_references: string[];
+  communication_norms: string[];
+  work_calendar: Record<string, unknown>;
+  reporting_relationships: Array<{ manager_actor_id: string; direct_report_actor_id: string }>;
+};
+
+type StartOption = {
+  scenario_slug: string;
+  title: string;
+  role_title: string;
+  scenario_version: number;
+  minimum_duration_days: number;
+  expected_workload_band: string;
+};
+
+type InternshipWorkspaceSummary = {
+  state: WorkspaceState;
+  simulation: boolean;
+  title?: string;
+  description?: string;
+  sections: string[];
+  start_options?: StartOption[];
+  internship?: {
+    internship_id: string;
+    status: string;
+    lifecycle_stage: string;
+    role_title: string;
+    scenario_title: string;
+    scenario_version: number;
+    classification: string;
+    qualifying: boolean;
+    started_at: number;
+    target_end_at: number;
+    current_server_time: number;
+    minimum_duration_days: number;
+    elapsed_days: number;
+    current_day: number;
+    current_week: number;
+    expected_workload_band: string;
+    stopped_at: number;
+  };
+  overview?: {
+    active_task_count: number;
+    completed_task_count: number;
+    next_deadline: number;
+    next_meeting: number;
+    recent_threads: InternshipThread[];
+    recent_activity: InternshipTimelineItem[];
+  };
+  company?: InternshipCompanyView;
+  people?: InternshipPerson[];
+  tasks?: InternshipTaskSummary[];
+  documents?: InternshipDocument[];
+  meetings?: InternshipMeeting[];
+  threads?: InternshipThread[];
+  reflections?: InternshipReflection[];
+  activity?: InternshipTimelineItem[];
+};
+
+type StreamEvent = {
+  type: string;
+  text?: string;
+  message?: string;
+  message_id?: string;
+  assistance_label?: string;
+  retryable?: boolean;
+};
+
+const API = "/api/murikah/virtual-internship";
+const GOLD = "#A9822E";
+
+const SECTIONS = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard, href: "/virtual-internship" },
+  { id: "inbox", label: "Inbox", icon: Inbox, href: "/virtual-internship/inbox" },
+  { id: "work", label: "Work", icon: ClipboardList, href: "/virtual-internship/work" },
+  { id: "company", label: "Company", icon: Building2, href: "/virtual-internship/company" },
+  { id: "documents", label: "Documents", icon: FileText, href: "/virtual-internship/documents" },
+  { id: "meetings", label: "Meetings", icon: CalendarDays, href: "/virtual-internship/meetings" },
+  { id: "mentor", label: "Mentor", icon: Bot, href: "/virtual-internship/mentor" },
+  { id: "activity", label: "Activity", icon: Activity, href: "/virtual-internship/activity" },
+] as const;
+
+function formatDate(timestamp: number, withTime = false) {
+  if (!timestamp) return "Not scheduled";
+  const date = new Date(timestamp * 1000);
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    hour: withTime ? "numeric" : undefined,
+    minute: withTime ? "2-digit" : undefined,
+  }).format(date);
+}
+
+function sentenceLabel(value: string) {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function requestId(prefix: string) {
+  const value =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+  return prefix + "-" + value;
+}
+
+async function responseError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { detail?: string; message?: string };
+    return payload.detail || payload.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function readNdjson(response: Response, onEvent: (event: StreamEvent) => void) {
+  if (!response.body) throw new Error("The response connection ended before any content arrived.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      onEvent(JSON.parse(line) as StreamEvent);
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer) as StreamEvent);
+}
+
+function Panel({
+  children,
+  className = "",
+  ariaLabel,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  return (
+    <section
+      aria-label={ariaLabel}
+      className={"rounded-xl border border-[var(--border)] bg-[var(--card)] " + className}
+    >
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--border)] px-5 py-9 text-center">
+      <p className="text-sm font-semibold">{title}</p>
+      <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
+    </div>
+  );
+}
+
+function LoadingWorkspace() {
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-6 text-[var(--foreground)] sm:px-6 lg:px-8" aria-busy="true">
+      <div className="mx-auto max-w-7xl animate-pulse">
+        <div className="h-3 w-36 rounded bg-[var(--border)]" />
+        <div className="mt-4 h-9 w-72 max-w-full rounded bg-[var(--border)]" />
+        <div className="mt-3 h-5 w-96 max-w-full rounded bg-[var(--border)]" />
+        <div className="mt-7 flex gap-2 overflow-hidden">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="h-10 w-28 shrink-0 rounded-lg bg-[var(--border)]" />
+          ))}
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="h-28 rounded-xl bg-[var(--card)] ring-1 ring-[var(--border)]" />
+          ))}
+        </div>
+        <div className="mt-4 h-72 rounded-xl bg-[var(--card)] ring-1 ring-[var(--border)]" />
+      </div>
+    </main>
+  );
+}
+
+function ErrorWorkspace({ message, retry }: { message: string; retry: () => void }) {
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6">
+      <div className="mx-auto max-w-3xl">
+        <Panel className="p-6">
+          <div className="flex items-start gap-3" role="alert">
+            <AlertCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
+            <div>
+              <h1 className="text-xl font-semibold">Virtual Internship</h1>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{message}</p>
+              <button
+                type="button"
+                onClick={retry}
+                className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+              >
+                <RefreshCw size={16} />
+                Try again
+              </button>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </main>
+  );
+}
+
+function GuestPreview() {
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-5xl">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
+        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">Virtual Internship</h1>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--muted-foreground)] sm:text-lg">
+          Practise professional knowledge work in a persistent simulated company, with assignments, workplace conversations,
+          meetings, source documents, reflection and a separate Murikah Mentor.
+        </p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          {[
+            ["A real work rhythm", "Your internship keeps its state across visits and follows the existing minimum duration policy."],
+            ["Workplace actors", "Communicate with learner-visible supervisors and stakeholders inside the simulation."],
+            ["Murikah Mentor", "Get coaching and explanations without turning workplace actors into tutors."],
+          ].map(([title, copy]) => (
+            <Panel key={title} className="p-5">
+              <h2 className="font-semibold">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
+            </Panel>
+          ))}
+        </div>
+        <Panel className="mt-6 p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">Sign in to enter your workplace</h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+            Internship records, messages, tasks, company information, Mentor context and reflections are available only to the signed-in learner who owns them.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <a href="/login?next=%2Fvirtual-internship" className="inline-flex min-h-11 items-center rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white">
+              Sign in
+            </a>
+            <a href="/register?next=%2Fvirtual-internship" className="inline-flex min-h-11 items-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold">
+              Create account
+            </a>
+          </div>
+        </Panel>
+      </div>
+    </main>
+  );
+}
+
+function NoInternship({
+  options,
+  onStart,
+  starting,
+}: {
+  options: StartOption[];
+  onStart: (slug: string) => void;
+  starting: string;
+}) {
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-5xl">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
+        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Virtual Internship</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+          You do not have an active internship. Only internship scenarios that the current server says are available are shown here.
+        </p>
+        <div className="mt-7 space-y-4">
+          {options.length === 0 ? (
+            <EmptyState title="No internship is available right now." detail="When a qualifying scenario is available to your account, it will appear here." />
+          ) : (
+            options.map((option) => (
+              <Panel key={option.scenario_slug} className="p-5 sm:p-6">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <h2 className="text-lg font-semibold">{option.title}</h2>
+                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">{option.role_title}</p>
+                    <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                      Minimum {option.minimum_duration_days} days
+                      {option.expected_workload_band ? " · " + sentenceLabel(option.expected_workload_band) + " workload" : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={Boolean(starting)}
+                    onClick={() => onStart(option.scenario_slug)}
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {starting === option.scenario_slug ? "Starting…" : "Start internship"}
+                  </button>
+                </div>
+              </Panel>
+            ))
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+}) {
+  return (
+    <Panel className="p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{label}</p>
+      <p className="mt-2 text-xl font-semibold">{value}</p>
+      {detail ? <p className="mt-1 text-xs text-[var(--muted-foreground)]">{detail}</p> : null}
+    </Panel>
+  );
+}
+
+function TaskCard({
+  task,
+  person,
+  onOpen,
+}: {
+  task: InternshipTaskSummary;
+  person?: InternshipPerson;
+  onOpen: () => void;
+}) {
+  return (
+    <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+            {sentenceLabel(task.category || "Work")}
+          </p>
+          <h3 className="mt-1 font-semibold leading-6">{task.title}</h3>
+        </div>
+        <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-medium">{sentenceLabel(task.status)}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--muted-foreground)]">
+        <span>{task.due_at ? "Due " + formatDate(task.due_at) : "No deadline set"}</span>
+        <span>{person?.name ? "Assigned by " + person.name : "Assigned by workplace"}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-4 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+      >
+        View assignment
+      </button>
+    </article>
+  );
+}
+
+function TaskDetail({
+  task,
+  people,
+  onClose,
+}: {
+  task: InternshipTaskSummary;
+  people: InternshipPerson[];
+  onClose: () => void;
+}) {
+  const person = people.find((item) => item.actor_id === task.assigned_by_actor_id);
+  return (
+    <Panel className="p-5" ariaLabel="Assignment detail">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#A9822E]">Assignment</p>
+          <h2 className="mt-2 text-xl font-semibold">{task.title}</h2>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            {person?.name ? "Assigned by " + person.name : "Workplace assignment"}
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">
+          Close
+        </button>
+      </div>
+      <dl className="mt-5 grid gap-5 sm:grid-cols-2">
+        {[
+          ["Status", sentenceLabel(task.status)],
+          ["Deadline", task.due_at ? formatDate(task.due_at, true) : "No deadline set"],
+          ["Expected effort", task.expected_effort || "Not specified"],
+          ["Difficulty", task.difficulty ? sentenceLabel(task.difficulty) : "Not specified"],
+          ["Mentor support", task.mentor_support?.label || "Clarification only"],
+          ["Expected deliverable", task.deliverable_types?.length ? task.deliverable_types.map(sentenceLabel).join(", ") : "Not specified"],
+        ].map(([term, description]) => (
+          <div key={term}>
+            <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{term}</dt>
+            <dd className="mt-1 text-sm leading-6">{description}</dd>
+          </div>
+        ))}
+      </dl>
+      {[
+        ["Business context", task.business_context],
+        ["Objective", task.learner_objective],
+        ["Brief", task.brief],
+      ].map(([title, copy]) =>
+        copy ? (
+          <div key={title} className="mt-5">
+            <h3 className="text-sm font-semibold">{title}</h3>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
+          </div>
+        ) : null,
+      )}
+      {task.dependencies?.length ? (
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold">Dependencies</h3>
+          <ul className="mt-2 space-y-2 text-sm text-[var(--muted-foreground)]">
+            {task.dependencies.map((dependency) => (
+              <li key={dependency.task_id} className="flex justify-between gap-4 rounded-lg border border-[var(--border)] px-3 py-2">
+                <span>{dependency.title}</span><span>{sentenceLabel(dependency.status)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {task.allowed_tools?.length ? (
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold">Permitted tools</h3>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{task.allowed_tools.map(sentenceLabel).join(", ")}</p>
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+function OverviewView({
+  workspace,
+  people,
+  onTask,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  people: InternshipPerson[];
+  onTask: (task: InternshipTaskSummary) => void;
+}) {
+  const internship = workspace.internship!;
+  const overview = workspace.overview!;
+  const tasks = (workspace.tasks || []).filter((task) => ["available", "in_progress"].includes(task.status));
+  const workplaceThreads = (overview.recent_threads || []).filter((thread) => thread.thread_kind === "workplace");
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Time elapsed" value={"Day " + internship.current_day} detail={"Week " + internship.current_week + " · minimum " + internship.minimum_duration_days + " days"} />
+        <Metric label="Current work" value={String(overview.active_task_count)} detail="Active assignments" />
+        <Metric label="Next deadline" value={overview.next_deadline ? formatDate(overview.next_deadline) : "None"} detail="From current assignments" />
+        <Metric label="Next meeting" value={overview.next_meeting ? formatDate(overview.next_meeting, true) : "None"} detail="From learner-visible meeting state" />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
+        <Panel className="p-5">
+          <h2 className="text-lg font-semibold">Current priorities</h2>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">Assignments that currently need your attention.</p>
+          <div className="mt-4 space-y-3">
+            {tasks.length ? tasks.slice(0, 5).map((task) => (
+              <TaskCard key={task.task_id} task={task} person={people.find((person) => person.actor_id === task.assigned_by_actor_id)} onOpen={() => onTask(task)} />
+            )) : <EmptyState title="No active work is available right now." detail="New assignments will appear here when the scenario makes them available." />}
+          </div>
+        </Panel>
+        <div className="space-y-5">
+          <Panel className="p-5">
+            <h2 className="text-base font-semibold">Recent workplace inbox</h2>
+            <div className="mt-3 space-y-3">
+              {workplaceThreads.length ? workplaceThreads.map((thread) => (
+                <a key={thread.thread_id} href={"/virtual-internship/inbox?thread=" + encodeURIComponent(thread.thread_id)} className="block rounded-lg border border-[var(--border)] p-3 hover:bg-[var(--background)]">
+                  <p className="text-sm font-semibold">{thread.title}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">{thread.last_message || "Conversation started"}</p>
+                </a>
+              )) : <p className="text-sm text-[var(--muted-foreground)]">No workplace messages yet.</p>}
+            </div>
+          </Panel>
+          <Panel className="p-5">
+            <h2 className="text-base font-semibold">Recent activity</h2>
+            <div className="mt-3 space-y-3">
+              {(overview.recent_activity || []).length ? overview.recent_activity.map((item) => (
+                <div key={item.id} className="border-l-2 border-[var(--border)] pl-3">
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{formatDate(item.timestamp, true)}</p>
+                </div>
+              )) : <p className="text-sm text-[var(--muted-foreground)]">Your internship activity will appear here.</p>}
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkView({
+  tasks,
+  people,
+  selected,
+  onSelect,
+}: {
+  tasks: InternshipTaskSummary[];
+  people: InternshipPerson[];
+  selected: InternshipTaskSummary | null;
+  onSelect: (task: InternshipTaskSummary | null) => void;
+}) {
+  const groups = [
+    { title: "Current", items: tasks.filter((task) => ["available", "in_progress"].includes(task.status)) },
+    { title: "Completed", items: tasks.filter((task) => task.status === "completed") },
+    { title: "Cancelled", items: tasks.filter((task) => task.status === "cancelled") },
+  ].filter((group) => group.items.length || group.title === "Current");
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="space-y-5">
+        {groups.map((group) => (
+          <Panel key={group.title} className="p-5">
+            <h2 className="text-lg font-semibold">{group.title}</h2>
+            <div className="mt-4 grid gap-3">
+              {group.items.length ? group.items.map((task) => (
+                <TaskCard key={task.task_id} task={task} person={people.find((person) => person.actor_id === task.assigned_by_actor_id)} onOpen={() => onSelect(task)} />
+              )) : <EmptyState title="No active work is available right now." detail="This is an empty work queue, not an error." />}
+            </div>
+          </Panel>
+        ))}
+      </div>
+      <div>{selected ? <TaskDetail task={selected} people={people} onClose={() => onSelect(null)} /> : (
+        <Panel className="p-5">
+          <h2 className="font-semibold">Assignment detail</h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">Open an assignment to review its context, objective, deadline, dependencies and permitted Mentor support.</p>
+        </Panel>
+      )}</div>
+    </div>
+  );
+}
+
+function CompanyView({
+  company,
+  people,
+  onMessage,
+}: {
+  company: InternshipCompanyView;
+  people: InternshipPerson[];
+  onMessage: (person: InternshipPerson) => void;
+}) {
+  const departmentNames = new Map(company.departments.map((item) => [item.id, item.name]));
+  return (
+    <div className="space-y-5">
+      <Panel className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-semibold">{company.name || "Simulated company"}</h2>
+          <span className="rounded-full border border-[#A9822E]/30 bg-[#A9822E]/[0.06] px-2.5 py-1 text-xs font-semibold text-[#A9822E]">Fictional workplace</span>
+        </div>
+        <p className="mt-2 text-sm text-[var(--muted-foreground)]">{[company.sector, company.country_region].filter(Boolean).join(" · ")}</p>
+        {company.description ? <p className="mt-4 max-w-4xl text-sm leading-6">{company.description}</p> : null}
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            ["Products and services", company.products_services],
+            ["Systems", company.systems],
+            ["Process references", company.process_references],
+            ["Communication norms", company.communication_norms],
+          ].map(([title, values]) => {
+            const rows = values as string[];
+            if (!rows.length) return null;
+            return (
+              <div key={title as string}>
+                <h3 className="text-sm font-semibold">{title}</h3>
+                <ul className="mt-2 space-y-1 text-sm leading-6 text-[var(--muted-foreground)]">
+                  {rows.map((value) => <li key={value}>{value}</li>)}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+      <Panel className="p-5 sm:p-6">
+        <div className="flex items-center gap-2">
+          <Users size={19} />
+          <h2 className="text-lg font-semibold">People</h2>
+        </div>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">Only workplace actors currently visible to you are shown.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {people.length ? people.map((person) => {
+            const manager = people.find((candidate) => candidate.actor_id === person.reports_to_actor_id);
+            return (
+              <article key={person.actor_id} id={"person-" + person.actor_id} className="rounded-xl border border-[var(--border)] p-4">
+                <h3 className="font-semibold">{person.name || person.job_title}</h3>
+                <p className="mt-1 text-sm text-[var(--muted-foreground)]">{person.job_title}</p>
+                <dl className="mt-3 space-y-2 text-xs">
+                  {person.department_id ? <div><dt className="inline font-semibold">Department: </dt><dd className="inline">{departmentNames.get(person.department_id) || sentenceLabel(person.department_id)}</dd></div> : null}
+                  {person.learner_relationship ? <div><dt className="inline font-semibold">Relationship: </dt><dd className="inline">{person.learner_relationship}</dd></div> : null}
+                  {manager ? <div><dt className="inline font-semibold">Reports to: </dt><dd className="inline">{manager.name}</dd></div> : null}
+                </dl>
+                {person.active ? (
+                  <button type="button" onClick={() => onMessage(person)} className="mt-4 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold hover:bg-[var(--background)]">
+                    Open conversation
+                  </button>
+                ) : <p className="mt-4 text-xs text-[var(--muted-foreground)]">Currently unavailable</p>}
+              </article>
+            );
+          }) : <EmptyState title="No workplace contacts are visible yet." detail="People become available only when the scenario discloses them to you." />}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function renderDocumentContent(content: unknown) {
+  if (typeof content === "string" || typeof content === "number" || typeof content === "boolean") {
+    return <p className="whitespace-pre-wrap text-sm leading-7">{String(content)}</p>;
+  }
+  if (Array.isArray(content)) {
+    return (
+      <ul className="space-y-2 text-sm leading-6">
+        {content.map((item, index) => <li key={index} className="rounded-lg border border-[var(--border)] p-3">{typeof item === "object" ? JSON.stringify(item) : String(item)}</li>)}
+      </ul>
+    );
+  }
+  if (content && typeof content === "object") {
+    return (
+      <dl className="space-y-3">
+        {Object.entries(content as Record<string, unknown>).map(([key, value]) => (
+          <div key={key} className="grid gap-1 sm:grid-cols-[180px_1fr]">
+            <dt className="text-xs font-semibold text-[var(--muted-foreground)]">{sentenceLabel(key)}</dt>
+            <dd className="text-sm leading-6">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "")}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+  return <p className="text-sm text-[var(--muted-foreground)]">This document has no displayable content.</p>;
+}
+
+function DocumentsView({
+  documents,
+  internshipId,
+}: {
+  documents: InternshipDocument[];
+  internshipId: string;
+}) {
+  const [selected, setSelected] = useState<InternshipDocument | null>(null);
+  const [loading, setLoading] = useState("");
+  const [error, setError] = useState("");
+
+  async function openDocument(document: InternshipDocument) {
+    setLoading(document.document_id);
+    setError("");
+    try {
+      const response = await fetch(API + "/documents/" + encodeURIComponent(document.document_id) + "?internship_id=" + encodeURIComponent(internshipId), {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await responseError(response, "That document could not be loaded. Try again."));
+      const payload = (await response.json()) as { document?: InternshipDocument };
+      setSelected(payload.document || null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That document could not be loaded. Try again.");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.25fr)]">
+      <Panel className="p-5">
+        <h2 className="text-lg font-semibold">Scenario documents</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">Source material and scenario evidence currently disclosed to you.</p>
+        <div className="mt-4 space-y-3">
+          {documents.length ? documents.map((document) => (
+            <article key={document.document_id} className="rounded-lg border border-[var(--border)] p-3">
+              <h3 className="text-sm font-semibold">{document.title}</h3>
+              <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--muted-foreground)]">{document.summary}</p>
+              <button type="button" disabled={Boolean(loading)} onClick={() => openDocument(document)} className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
+                {loading === document.document_id ? "Opening…" : "Open document"}
+              </button>
+            </article>
+          )) : <EmptyState title="No documents are available yet." detail="Only learner-visible scenario source material appears here." />}
+        </div>
+      </Panel>
+      <Panel className="p-5" ariaLabel="Document preview">
+        <h2 className="text-lg font-semibold">{selected?.title || "Document preview"}</h2>
+        {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+        <div className="mt-4">
+          {selected ? renderDocumentContent(selected.content) : <p className="text-sm leading-6 text-[var(--muted-foreground)]">Open a document to review its learner-visible content.</p>}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function MeetingsView({
+  meetings,
+  activity,
+}: {
+  meetings: InternshipMeeting[];
+  activity: InternshipTimelineItem[];
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <Panel className="p-5">
+        <h2 className="text-lg font-semibold">Meetings</h2>
+        <div className="mt-4 space-y-3">
+          {meetings.length ? meetings.map((meeting) => (
+            <article key={meeting.meeting_id} className="rounded-xl border border-[var(--border)] p-4">
+              <div className="flex flex-wrap justify-between gap-2">
+                <h3 className="font-semibold">{meeting.title}</h3>
+                <span className="text-xs font-medium text-[var(--muted-foreground)]">{sentenceLabel(meeting.status)}</span>
+              </div>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">{formatDate(meeting.scheduled_at, true)}</p>
+              {meeting.purpose ? <p className="mt-3 text-sm leading-6">{meeting.purpose}</p> : null}
+              {meeting.participants.length ? <p className="mt-3 text-xs text-[var(--muted-foreground)]">Participants: {meeting.participants.map((person) => person.name).join(", ")}</p> : null}
+            </article>
+          )) : <EmptyState title="No meetings are scheduled." detail="Learner-visible scenario meetings will appear here when they occur." />}
+        </div>
+      </Panel>
+      <Timeline title="Workplace timeline" items={activity} />
+    </div>
+  );
+}
+
+function Timeline({ title, items }: { title: string; items: InternshipTimelineItem[] }) {
+  return (
+    <Panel className="p-5">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="mt-4 space-y-4">
+        {items.length ? items.map((item) => (
+          <article key={item.id} className="relative border-l-2 border-[var(--border)] pl-4">
+            <p className="text-sm font-semibold">{item.title}</p>
+            {item.detail ? <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{item.detail}</p> : null}
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{formatDate(item.timestamp, true)}</p>
+          </article>
+        )) : <EmptyState title="Your internship activity will appear here." detail="Only learner-facing workplace activity is shown." />}
+      </div>
+    </Panel>
+  );
+}
+
+function Conversation({
+  title,
+  messages,
+  loading,
+  error,
+  draft,
+  disabled,
+  sending,
+  onDraft,
+  onSend,
+  onRetry,
+  assistanceLabel,
+  mentor = false,
+}: {
+  title: string;
+  messages: InternshipMessage[];
+  loading: boolean;
+  error: string;
+  draft: string;
+  disabled: boolean;
+  sending: boolean;
+  onDraft: (value: string) => void;
+  onSend: () => void;
+  onRetry?: () => void;
+  assistanceLabel?: string;
+  mentor?: boolean;
+}) {
+  return (
+    <Panel className="flex min-h-[520px] flex-col overflow-hidden">
+      <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+        <div className="flex items-center gap-2">
+          {mentor ? <Bot size={18} /> : <Users size={18} />}
+          <h2 className="font-semibold">{title}</h2>
+        </div>
+        {mentor ? <p className="mt-1 text-xs text-[var(--muted-foreground)]">Coaching and explanation, separate from workplace actors.</p> : null}
+        {assistanceLabel ? <p className="mt-1 text-xs font-medium text-[#A9822E]">Coaching level: {assistanceLabel}</p> : null}
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5" aria-live="polite">
+        {loading ? <p className="text-sm text-[var(--muted-foreground)]">Loading conversation…</p> : null}
+        {!loading && !messages.length ? <p className="text-sm text-[var(--muted-foreground)]">{mentor ? "Ask the Murikah Mentor for guidance when you need it." : "No workplace messages yet."}</p> : null}
+        {messages.map((message) => (
+          <div key={message.id} className={"max-w-[88%] rounded-xl border border-[var(--border)] px-4 py-3 text-sm leading-6 " + (message.sender_type === "learner" ? "ml-auto bg-[#A9822E]/[0.07]" : "bg-[var(--background)]")}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+              {message.sender_type === "learner" ? "You" : mentor ? "Murikah Mentor" : "Workplace"}
+            </p>
+            <p className="whitespace-pre-wrap">{message.body}</p>
+          </div>
+        ))}
+        {error ? (
+          <div className="rounded-lg border border-red-300/60 bg-red-50/50 p-3 text-sm dark:bg-red-950/10" role="alert">
+            <p>{error}</p>
+            {onRetry ? <button type="button" onClick={onRetry} className="mt-2 min-h-9 rounded-md border border-[var(--border)] px-3 font-semibold">Try again</button> : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="border-t border-[var(--border)] p-3 sm:p-4">
+        <label htmlFor={mentor ? "mentor-message" : "workplace-message"} className="sr-only">{mentor ? "Message Murikah Mentor" : "Workplace message"}</label>
+        <textarea
+          id={mentor ? "mentor-message" : "workplace-message"}
+          value={draft}
+          onChange={(event) => onDraft(event.target.value)}
+          disabled={disabled || sending}
+          rows={3}
+          placeholder={disabled ? "This internship is read-only." : mentor ? "Ask for guidance, explanation or help planning…" : "Write a workplace message…"}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              if (!disabled && !sending && draft.trim()) onSend();
+            }
+          }}
+          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <div className="mt-2 flex justify-end">
+          <button type="button" onClick={onSend} disabled={disabled || sending || !draft.trim()} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <Send size={15} />
+            {sending ? "Sending…" : mentor ? "Ask Mentor" : "Send"}
+          </button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function InboxView({
+  workspace,
+  onWorkspaceRefresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  onWorkspaceRefresh: () => Promise<void>;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const workplaceThreads = (workspace.threads || []).filter((thread) => thread.thread_kind === "workplace");
+  const people = workspace.people || [];
+  const requestedThread = searchParams.get("thread") || "";
+  const requestedActor = searchParams.get("actor") || "";
+  const initialThread = workplaceThreads.find((thread) => thread.thread_id === requestedThread) || null;
+  const [selectedThread, setSelectedThread] = useState<InternshipThread | null>(initialThread);
+  const [selectedActorId, setSelectedActorId] = useState(initialThread?.scenario_actor_id || requestedActor);
+  const [messages, setMessages] = useState<InternshipMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [failed, setFailed] = useState<{ text: string; requestId: string; actorId: string; taskId: string } | null>(null);
+  const internshipId = workspace.internship!.internship_id;
+  const stopped = workspace.state === "stopped";
+
+  useEffect(() => {
+    const thread = workplaceThreads.find((item) => item.thread_id === requestedThread) || null;
+    if (thread) {
+      setSelectedThread(thread);
+      setSelectedActorId(thread.scenario_actor_id);
+    } else if (requestedActor) {
+      setSelectedThread(null);
+      setSelectedActorId(requestedActor);
+    }
+  }, [requestedThread, requestedActor, workspace.threads]);
+
+  useEffect(() => {
+    if (!selectedThread) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    fetch(API + "/threads/" + encodeURIComponent(selectedThread.thread_id) + "?internship_id=" + encodeURIComponent(internshipId), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await responseError(response, "This conversation could not be loaded. Try again."));
+        return response.json();
+      })
+      .then((payload: { messages?: InternshipMessage[] }) => {
+        if (!cancelled) setMessages(Array.isArray(payload.messages) ? payload.messages : []);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "This conversation could not be loaded. Try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedThread?.thread_id, internshipId]);
+
+  function chooseThread(thread: InternshipThread) {
+    setSelectedThread(thread);
+    setSelectedActorId(thread.scenario_actor_id);
+    router.push("/virtual-internship/inbox?thread=" + encodeURIComponent(thread.thread_id));
+  }
+
+  function choosePerson(person: InternshipPerson) {
+    const existing = workplaceThreads.find((thread) => thread.scenario_actor_id === person.actor_id);
+    if (existing) return chooseThread(existing);
+    setSelectedThread(null);
+    setSelectedActorId(person.actor_id);
+    setMessages([]);
+    router.push("/virtual-internship/inbox?actor=" + encodeURIComponent(person.actor_id));
+  }
+
+  async function sendWith(payload: { text: string; requestId: string; actorId: string; taskId: string }, optimistic: boolean) {
+    if (!payload.actorId || !payload.text.trim()) return;
+    setSending(true);
+    setError("");
+    setFailed(null);
+    if (optimistic) {
+      setMessages((current) => current.concat({
+        id: "optimistic-" + payload.requestId,
+        sender_type: "learner",
+        body: payload.text,
+        created_at: Math.floor(Date.now() / 1000),
+        request_id: payload.requestId,
+      }));
+      setDraft("");
+    }
+    let streamed = "";
+    try {
+      const response = await fetch(API + "/actor/messages/stream", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          internship_id: internshipId,
+          scenario_actor_id: payload.actorId,
+          text: payload.text,
+          request_id: payload.requestId,
+          task_id: payload.taskId,
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "This workplace response is temporarily unavailable. Try again."));
+      const replyId = "stream-" + payload.requestId;
+      await readNdjson(response, (event) => {
+        if (event.type === "chunk") {
+          streamed += event.text || "";
+          setMessages((current) => {
+            const without = current.filter((message) => message.id !== replyId);
+            return without.concat({ id: replyId, sender_type: "actor", body: streamed, created_at: Math.floor(Date.now() / 1000) });
+          });
+        }
+        if (event.type === "error") throw new Error(event.message || "This workplace response is temporarily unavailable. Try again.");
+      });
+      await onWorkspaceRefresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This workplace response is temporarily unavailable. Try again.");
+      setFailed(payload);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function send() {
+    void sendWith({ text: draft.trim(), requestId: requestId("actor"), actorId: selectedActorId, taskId: selectedThread?.related_task_id || "" }, true);
+  }
+
+  const person = people.find((item) => item.actor_id === selectedActorId);
+  return (
+    <div className="grid min-h-0 gap-5 md:grid-cols-[300px_minmax(0,1fr)]">
+      <Panel className={(selectedActorId ? "hidden md:block " : "") + "p-3"}>
+        <h2 className="px-2 py-2 text-base font-semibold">Workplace inbox</h2>
+        <div className="mt-1 space-y-1">
+          {workplaceThreads.map((thread) => (
+            <button key={thread.thread_id} type="button" onClick={() => chooseThread(thread)} className={"w-full rounded-lg px-3 py-3 text-left text-sm " + (selectedThread?.thread_id === thread.thread_id ? "bg-[#A9822E]/10" : "hover:bg-[var(--background)]")}>
+              <span className="block font-semibold">{thread.title}</span>
+              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{thread.last_message || "Conversation started"}</span>
+            </button>
+          ))}
+          {!workplaceThreads.length ? <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">No workplace messages yet.</p> : null}
+        </div>
+        <h3 className="mt-4 px-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">People</h3>
+        <div className="mt-1 space-y-1">
+          {people.filter((item) => item.active).map((item) => (
+            <button key={item.actor_id} type="button" onClick={() => choosePerson(item)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--background)]">
+              <span className="block font-medium">{item.name}</span>
+              <span className="block text-xs text-[var(--muted-foreground)]">{item.job_title}</span>
+            </button>
+          ))}
+        </div>
+      </Panel>
+      <div>
+        {selectedActorId ? (
+          <>
+            <button type="button" onClick={() => { router.push("/virtual-internship/inbox"); setSelectedActorId(""); setSelectedThread(null); }} className="mb-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold md:hidden">
+              Back to inbox
+            </button>
+            <Conversation
+              title={person?.name || selectedThread?.title || "Workplace conversation"}
+              messages={messages}
+              loading={loading}
+              error={error}
+              draft={draft}
+              disabled={stopped}
+              sending={sending}
+              onDraft={setDraft}
+              onSend={send}
+              onRetry={failed ? () => void sendWith(failed, false) : undefined}
+            />
+          </>
+        ) : (
+          <Panel className="p-5">
+            <EmptyState title="Choose a workplace conversation." detail="Select a learner-visible person or an existing thread. Workplace messages are separate from ordinary Tutor chat." />
+          </Panel>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MentorView({
+  workspace,
+  onWorkspaceRefresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  onWorkspaceRefresh: () => Promise<void>;
+}) {
+  const mentorThread = (workspace.threads || []).find((thread) => thread.thread_kind === "mentor") || null;
+  const internshipId = workspace.internship!.internship_id;
+  const tasks = (workspace.tasks || []).filter((task) => ["available", "in_progress"].includes(task.status));
+  const [taskId, setTaskId] = useState(mentorThread?.related_task_id || "");
+  const [messages, setMessages] = useState<InternshipMessage[]>([]);
+  const [loading, setLoading] = useState(Boolean(mentorThread));
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [assistanceLabel, setAssistanceLabel] = useState("");
+  const [failed, setFailed] = useState<{ text: string; requestId: string; taskId: string } | null>(null);
+  const stopped = workspace.state === "stopped";
+
+  useEffect(() => {
+    if (!mentorThread) {
+      setLoading(false);
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetch(API + "/threads/" + encodeURIComponent(mentorThread.thread_id) + "?internship_id=" + encodeURIComponent(internshipId), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await responseError(response, "This Mentor conversation could not be loaded. Try again."));
+        return response.json();
+      })
+      .then((payload: { messages?: InternshipMessage[] }) => {
+        if (!cancelled) setMessages(Array.isArray(payload.messages) ? payload.messages : []);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "This Mentor conversation could not be loaded. Try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [mentorThread?.thread_id, internshipId]);
+
+  async function sendWith(payload: { text: string; requestId: string; taskId: string }, optimistic: boolean) {
+    if (!payload.text.trim()) return;
+    setSending(true);
+    setError("");
+    setFailed(null);
+    if (optimistic) {
+      setMessages((current) => current.concat({ id: "optimistic-" + payload.requestId, sender_type: "learner", body: payload.text, created_at: Math.floor(Date.now() / 1000) }));
+      setDraft("");
+    }
+    let streamed = "";
+    try {
+      const response = await fetch(API + "/mentor/messages/stream", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ internship_id: internshipId, text: payload.text, request_id: payload.requestId, task_id: payload.taskId }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "The Mentor is temporarily unavailable. Try again."));
+      const replyId = "stream-" + payload.requestId;
+      await readNdjson(response, (event) => {
+        if (event.assistance_label) setAssistanceLabel(event.assistance_label);
+        if (event.type === "chunk") {
+          streamed += event.text || "";
+          setMessages((current) => current.filter((message) => message.id !== replyId).concat({ id: replyId, sender_type: "mentor", body: streamed, created_at: Math.floor(Date.now() / 1000) }));
+        }
+        if (event.type === "error") throw new Error(event.message || "The Mentor is temporarily unavailable. Try again.");
+      });
+      await onWorkspaceRefresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The Mentor is temporarily unavailable. Try again.");
+      setFailed(payload);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function send() {
+    void sendWith({ text: draft.trim(), requestId: requestId("mentor"), taskId }, true);
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <Conversation
+        title="Murikah Mentor"
+        messages={messages}
+        loading={loading}
+        error={error}
+        draft={draft}
+        disabled={stopped}
+        sending={sending}
+        onDraft={setDraft}
+        onSend={send}
+        onRetry={failed ? () => void sendWith(failed, false) : undefined}
+        assistanceLabel={assistanceLabel || tasks.find((task) => task.task_id === taskId)?.mentor_support?.label}
+        mentor
+      />
+      <Panel className="p-5">
+        <h2 className="font-semibold">What the Mentor can help with</h2>
+        <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted-foreground)]">
+          <li>Explain a concept or workplace feedback.</li>
+          <li>Help you plan how to approach an assignment.</li>
+          <li>Coach a skill or ask reflective questions.</li>
+          <li>Prepare with you within the permitted support level.</li>
+        </ul>
+        <label htmlFor="mentor-task-context" className="mt-5 block text-sm font-semibold">Assignment context</label>
+        <select id="mentor-task-context" value={taskId} onChange={(event) => setTaskId(event.target.value)} className="mt-2 min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm">
+          <option value="">General coaching</option>
+          {tasks.map((task) => <option key={task.task_id} value={task.task_id}>{task.title}</option>)}
+        </select>
+        <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">The Mentor does not submit, complete or approve your work.</p>
+      </Panel>
+    </div>
+  );
+}
+
+function ReflectionView({
+  workspace,
+  onWorkspaceRefresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  onWorkspaceRefresh: () => Promise<void>;
+}) {
+  const internshipId = workspace.internship!.internship_id;
+  const periodKey = "week-" + workspace.internship!.current_week;
+  const existing = (workspace.reflections || []).find((reflection) => reflection.period_key === periodKey);
+  const [content, setContent] = useState(existing?.content || "");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const stopped = workspace.state === "stopped";
+
+  useEffect(() => setContent(existing?.content || ""), [existing?.reflection_id, existing?.content]);
+
+  async function save() {
+    if (!content.trim() || stopped) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(API + "/reflections", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ internship_id: internshipId, period_key: periodKey, content: content.trim() }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "That reflection could not be saved. Try again."));
+      setMessage("Reflection saved.");
+      await onWorkspaceRefresh();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "That reflection could not be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel className="p-5">
+      <h2 className="text-lg font-semibold">Reflection</h2>
+      <p className="mt-1 text-sm text-[var(--muted-foreground)]">Week {workspace.internship!.current_week} learning journal</p>
+      <div className="mt-4 rounded-lg bg-[var(--background)] p-4">
+        <p className="text-sm font-semibold">Prompts you can use</p>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+          What did I work on? What was difficult? What did I learn? What feedback did I receive? What evidence supports my conclusion? What will I do differently next week?
+        </p>
+      </div>
+      <label htmlFor="internship-reflection" className="mt-4 block text-sm font-semibold">Your reflection</label>
+      <textarea id="internship-reflection" rows={8} value={content} onChange={(event) => setContent(event.target.value)} disabled={stopped || saving} className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:opacity-60" />
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-[var(--muted-foreground)]" role="status">{message}</p>
+        <button type="button" onClick={save} disabled={stopped || saving || !content.trim()} className="min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving…" : existing ? "Update reflection" : "Save reflection"}</button>
+      </div>
+    </Panel>
+  );
+}
+
+function ActivityView({
+  workspace,
+  refresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  refresh: () => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <Timeline title="Activity" items={workspace.activity || []} />
+      <div className="space-y-5">
+        <ReflectionView workspace={workspace} onWorkspaceRefresh={refresh} />
+        <Panel className="p-5">
+          <h2 className="text-base font-semibold">Past reflections</h2>
+          <div className="mt-3 space-y-3">
+            {(workspace.reflections || []).length ? (workspace.reflections || []).map((reflection) => (
+              <article key={reflection.reflection_id} className="rounded-lg border border-[var(--border)] p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{sentenceLabel(reflection.period_key)}</p>
+                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-6">{reflection.content}</p>
+              </article>
+            )) : <p className="text-sm text-[var(--muted-foreground)]">No reflections saved yet.</p>}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+export default function MurikahVirtualInternshipWorkspace() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [workspace, setWorkspace] = useState<InternshipWorkspaceSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [starting, setStarting] = useState("");
+  const [selectedTask, setSelectedTask] = useState<InternshipTaskSummary | null>(null);
+
+  const section = useMemo(() => {
+    const suffix = pathname.replace(/^\/virtual-internship\/?/, "").split("/")[0];
+    return SECTIONS.some((item) => item.id === suffix) ? suffix : "overview";
+  }, [pathname]);
+
+  async function loadWorkspace() {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(API + "/workspace", { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error(await responseError(response, "We could not load your internship right now. Try again."));
+      setWorkspace((await response.json()) as InternshipWorkspaceSummary);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We could not load your internship right now. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshWorkspace() {
+    try {
+      const response = await fetch(API + "/workspace", { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error(await responseError(response, "We could not refresh your internship right now."));
+      setWorkspace((await response.json()) as InternshipWorkspaceSummary);
+    } catch {
+      // Preserve the durable view already on screen when a targeted refresh fails.
+    }
+  }
+
+  useEffect(() => { void loadWorkspace(); }, []);
+
+  async function startInternship(scenarioSlug: string) {
+    setStarting(scenarioSlug);
+    setError("");
+    try {
+      const response = await fetch(API + "/start", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ scenario_slug: scenarioSlug, request_id: requestId("start") }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "We could not start that internship right now. Try again."));
+      setWorkspace((await response.json()) as InternshipWorkspaceSummary);
+      router.push("/virtual-internship");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We could not start that internship right now. Try again.");
+    } finally {
+      setStarting("");
+    }
+  }
+
+  if (loading) return <LoadingWorkspace />;
+  if (error && !workspace) return <ErrorWorkspace message={error} retry={() => void loadWorkspace()} />;
+  if (!workspace) return <ErrorWorkspace message="We could not load your internship right now. Try again." retry={() => void loadWorkspace()} />;
+  if (workspace.state === "guest") return <GuestPreview />;
+  if (workspace.state === "none") return <NoInternship options={workspace.start_options || []} onStart={(slug) => void startInternship(slug)} starting={starting} />;
+
+  const internship = workspace.internship!;
+  const company = workspace.company!;
+  const people = workspace.people || [];
+  const tasks = workspace.tasks || [];
+  const stopped = workspace.state === "stopped";
+
+  let body: React.ReactNode;
+  if (section === "inbox") body = <InboxView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
+  else if (section === "work") body = <WorkView tasks={tasks} people={people} selected={selectedTask} onSelect={setSelectedTask} />;
+  else if (section === "company") body = <CompanyView company={company} people={people} onMessage={(person) => router.push("/virtual-internship/inbox?actor=" + encodeURIComponent(person.actor_id))} />;
+  else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} />;
+  else if (section === "meetings") body = <MeetingsView meetings={workspace.meetings || []} activity={workspace.activity || []} />;
+  else if (section === "mentor") body = <MentorView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
+  else if (section === "activity") body = <ActivityView workspace={workspace} refresh={refreshWorkspace} />;
+  else body = <OverviewView workspace={workspace} people={people} onTask={setSelectedTask} />;
+
+  return (
+    <main className="min-h-full overflow-x-hidden bg-[var(--background)] px-3 py-5 text-[var(--foreground)] sm:px-5 lg:px-8">
+      <div className="mx-auto w-full max-w-7xl">
+        <header>
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#A9822E]">
+                <span>Murikah Virtual Internship</span>
+                <span aria-hidden="true">·</span>
+                <span>Simulated workplace</span>
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{company.name || internship.scenario_title || "Virtual Internship"}</h1>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">{internship.role_title}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={"rounded-full border px-3 py-1.5 text-xs font-semibold " + (stopped ? "border-red-300 text-red-700 dark:text-red-300" : "border-emerald-300 text-emerald-700 dark:text-emerald-300")}>
+                {stopped ? "Stopped" : "Active"}
+              </span>
+              <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted-foreground)]">
+                Scenario v{internship.scenario_version}
+              </span>
+            </div>
+          </div>
+          {stopped ? (
+            <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3 text-sm leading-6 dark:bg-amber-950/10" role="status">
+              This internship is stopped. Your history remains available, but workplace messages, Mentor requests and new reflections are read-only.
+            </div>
+          ) : null}
+          {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+          <nav aria-label="Virtual Internship workspace" className="mt-6 overflow-x-auto overscroll-x-contain pb-1">
+            <div className="flex min-w-max gap-1 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1">
+              {SECTIONS.map(({ id, label, icon: Icon, href }) => (
+                <a key={id} href={href} aria-current={section === id ? "page" : undefined} className={"inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] " + (section === id ? "bg-[#A9822E]/10 text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--background)]")}>
+                  <Icon size={15} />
+                  {label}
+                </a>
+              ))}
+            </div>
+          </nav>
+        </header>
+        <div className="mt-5">
+          {section === "overview" && selectedTask ? <div className="mb-5"><TaskDetail task={selectedTask} people={people} onClose={() => setSelectedTask(null)} /></div> : null}
+          {body}
+        </div>
+      </div>
+    </main>
+  );
+}
