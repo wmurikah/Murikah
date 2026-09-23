@@ -164,6 +164,7 @@ class Phase5ArtifactTests(unittest.TestCase):
             db.execute("INSERT INTO internship_tasks VALUES ('vi_1','task_1','in_progress')")
             db.execute("INSERT INTO tutor_objects VALUES ('obj_1')")
             db.execute("INSERT INTO tutor_objects VALUES ('obj_2')")
+            db.execute("INSERT INTO tutor_objects VALUES ('obj_x')")
             db.execute("""INSERT INTO internship_artifacts(
                 id,internship_id,task_id,deliverable_type,artifact_type,title,status,current_version_number,
                 created_at,updated_at,create_request_id
@@ -194,13 +195,17 @@ class Phase5ArtifactTests(unittest.TestCase):
         required = (
             "crypto.subtle.digest('SHA-256'", "owner_kind = ? AND o.owner_id = ?",
             "TUTOR_FILES.delete(key)", "private, no-store", "content-disposition",
-            "PHASE5_MAX_FILE_BYTES", "DANGEROUS_EXT", "artifact-version",
-            "invalid_actor_override", "task_ready_for_completion",
+            "PHASE5_MAX_FILE_BYTES", "PHASE5_MAX_VERSIONS", "PHASE5_MAX_FILES_PER_VERSION",
+            "DANGEROUS_EXT", "artifact-version", "/internships/artifacts/integrity",
+            "orphan_object_count", "invalid_actor_override", "task_ready_for_completion",
         )
         for marker in required:
             self.assertIn(marker, worker)
         for forbidden in ("r2.dev", "public R2", "competency_level", "rubric_score", "pass_percentage"):
             self.assertNotIn(forbidden, worker)
+        self.assertNotIn("UPDATE internship_tasks", worker)
+        self.assertIn("for (let attempt=0;attempt<3;attempt++)", worker)
+        self.assertIn("normalized && !accepted.has(normalized)", worker)
 
     def test_router_and_ui_use_typed_actions_not_status_patch(self):
         router = ROUTER.read_text()
