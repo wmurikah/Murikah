@@ -2259,13 +2259,48 @@ The canonical object key is:
 
 Original filenames remain metadata and are sanitized for `Content-Disposition`; they are never appended to the R2 key. R2 is not public and no `r2.dev` URL is used.
 
-D1 and R2 are finalized with compensation. If R2 write succeeds but D1 ownership/version finalization fails, the known Phase 5 object is deleted rather than silently left unregistered. The owner-scoped `/internships/artifacts/integrity` bridge route deterministically reconciles registered versions, missing R2 objects, byte-size mismatches and unregistered objects under the exact Phase 5 learner/internship prefix without automatically deleting uncertain objects.
+D1 and R2 are finalized with compensation. If R2 write succeeds but D1 ownership/version finalization fails, the known Phase 5 object is deleted rather than silently left unregistered. The owner-scoped `/internships/artifacts/integrity` bridge route deterministically reconciles registered versions, missing R2 objects, byte-size mismatches, full SHA-256 mismatches and unregistered objects under the exact Phase 5 learner/internship prefix without automatically deleting uncertain objects.
 
 ### Secure retrieval
 
 Artifact history responses expose opaque artifact/version identifiers and learner-safe metadata, not raw R2 keys. A download re-authenticates the member, verifies internship ownership, verifies the version belongs to the artifact/internship, verifies the matching `tutor_objects` owner, reads the private R2 object and checks expected size. Downloads use safe `Content-Disposition`, `private, no-store` cache policy and `nosniff`.
 
 Previous versions remain retrievable by their owner after later saves. Submitted and accepted versions are immutable. Phase 5 deliberately adds no destructive artifact-delete endpoint.
+
+### Authenticated API and persistence adapter
+
+The browser uses only the normal authenticated application router under `/api/murikah/virtual-internship`. Phase 5 adds typed actions rather than a generic status patch:
+
+- `POST /tasks/{task_id}/acknowledge`;
+- `GET /artifacts?internship_id=...`;
+- `POST /artifacts`;
+- `GET /artifacts/{artifact_id}?internship_id=...`;
+- `POST /artifacts/{artifact_id}/versions/text`;
+- `POST /artifacts/{artifact_id}/versions/upload?internship_id=...`;
+- `GET /artifacts/{artifact_id}/versions/{version_id}/text?internship_id=...`;
+- `GET /artifacts/{artifact_id}/versions/{version_id}/download?internship_id=...`;
+- `POST /artifacts/{artifact_id}/submit`;
+- `POST /submissions/{submission_id}/review` to retry the server-controlled simulated-supervisor workflow review.
+
+The upload endpoint consumes one bounded raw file request and therefore does not introduce a new multipart package dependency. Filename, content type and request ID are metadata headers on the same-origin authenticated application request; the application derives the member identity and then forwards the bytes through the protected HMAC persistence bridge.
+
+`murikah_persistence.py` adds owner-bound methods for artifact summary/history, assignment acknowledgement, artifact creation, text save, file upload, submission, review start/material/persistence, secure download/text retrieval, task-completed activity and the read-only artifact integrity check. None accepts an arbitrary owner parameter from browser state.
+
+### Phase 5 state machines
+
+Artifact workflow state is explicit:
+
+`draft -> submitted -> changes_requested -> submitted -> accepted`
+
+`accepted` is terminal in Phase 5. A reviewed/submitted version is not edited in place; a revision creates another immutable version.
+
+Submission workflow state is explicit:
+
+`submitted -> under_review -> changes_requested | accepted`
+
+Retries with the same logical request ID are idempotent. Distinct later submissions receive monotonically increasing submission numbers and preserve prior submission rows.
+
+"Completion" in the Phase 5 checklist means task/work-artifact workflow completion after all authored deliverables are accepted. It does **not** mean internship completion; final internship completion remains a later phase.
 
 ### Submission, revision and review history
 
@@ -2316,9 +2351,9 @@ Intentional Phase 5 boundaries remain: no rubric engine, competency score, compe
 
 ## SUBSEQUENT ARTIFACT DEVELOPMENT REQUIREMENT
 
-Future assessment, Competency Passport, reporting and completion work must treat the Phase 5 artifact lineage as immutable historical evidence. Do not overwrite a submitted version, repoint an old submission to a newer version, replace `tutor_objects` with a second ownership truth, publish R2 objects, authorize with raw object keys, or let the browser patch workflow/task status.
+Future assessment, Competency Passport, reporting and completion work must treat the Phase 5 artifact lineage as immutable historical evidence. Future phases must preserve artifact IDs, immutable artifact versions, immutable submission snapshots, review history, SHA-256 integrity metadata and private R2 ownership through `tutor_objects`. Do not overwrite a submitted version, repoint an old submission to a newer version, replace `tutor_objects` with a second ownership truth, publish R2 objects, authorize with raw object keys, expose another learner's artifact, or let the browser patch workflow/task status.
 
-Phase 6/7 may reference accepted artifact versions and their assistance/review lineage, but any score, competency judgment or Passport evidence must be a separate later-phase record. A Phase 5 `accepted` decision means only that the work product is ready to move forward in the simulated workflow.
+Phase 6 must build assessment on top of the Phase 5 task/artifact/version/submission/review lineage rather than create a second work-product system. Phase 6/7 may reference accepted artifact versions and their assistance/review lineage, but any score, competency judgment or Passport evidence must be a separate later-phase record that references actual artifact/submission evidence. AI-generated reviewer reasoning is not evidence by itself. A Phase 5 `accepted` decision means only that the work product is ready to move forward in the simulated workflow.
 
 Later phases must continue to use authenticated actor ownership, the pinned scenario version, Phase 2 typed task transitions/events, Phase 3 provider/orchestration and bounded-context rules, private R2, server-computed integrity metadata, learner-safe errors and retry-safe request IDs.
 
