@@ -210,6 +210,7 @@ class Phase5ArtifactTests(unittest.TestCase):
     def test_router_and_ui_use_typed_actions_not_status_patch(self):
         router = ROUTER.read_text()
         ui = UI.read_text()
+        orchestrator = (ROOT / "railway/virtual_internship/ai/orchestrator.py").read_text()
         for marker in (
             "/tasks/{task_id}/acknowledge", "/versions/text", "/versions/upload",
             "/artifacts/{artifact_id}/submit", "/submissions/{submission_id}/review",
@@ -225,6 +226,11 @@ class Phase5ArtifactTests(unittest.TestCase):
             self.assertIn(marker, ui)
         self.assertNotIn("<table", ui)
         self.assertNotIn("100% competency", ui)
+        actor_method = orchestrator.split("async def stream_actor(", 1)[1].split("async def stream_mentor(", 1)[0]
+        review_method = orchestrator.split("async def invoke_workflow_review(", 1)[1].split("async def invoke_assessor(", 1)[0]
+        self.assertIn("role=VirtualInternshipModelRole.ACTOR", actor_method)
+        self.assertNotIn("WORKFLOW_REVIEW", actor_method)
+        self.assertIn("role=VirtualInternshipModelRole.WORKFLOW_REVIEW", review_method)
 
     def test_migration_has_no_phase6_or_phase7_fields(self):
         sql = MIGRATION.read_text().lower()
