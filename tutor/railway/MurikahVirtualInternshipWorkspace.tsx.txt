@@ -8,9 +8,7 @@ import {
   Bot,
   Building2,
   CalendarDays,
-  CheckCircle2,
   ClipboardList,
-  Clock3,
   FileText,
   Inbox,
   LayoutDashboard,
@@ -187,8 +185,6 @@ type StreamEvent = {
 };
 
 const API = "/api/murikah/virtual-internship";
-const GOLD = "#A9822E";
-
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, href: "/virtual-internship" },
   { id: "inbox", label: "Inbox", icon: Inbox, href: "/virtual-internship/inbox" },
