@@ -486,7 +486,20 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'SELECT id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, created_at ' +
       'FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
     ).bind(internshipId,submissionId).first<Record<string,unknown>>();
-    if (existingReview) return json({ok:true,already_reviewed:true,review:existingReview,submission});
+    if (existingReview) {
+      let taskReady=false;
+      if (existingReview.decision === 'accepted') {
+        const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
+        if (contract) {
+          const acceptedRows=(await env.TUTOR_DB.prepare(
+            "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
+          ).bind(internshipId,String(submission.task_id||'')).all<{deliverable_type:string}>()).results || [];
+          const accepted=new Set(acceptedRows.map(row=>row.deliverable_type));
+          taskReady=contract.deliverables.length > 0 && contract.deliverables.every(deliverable=>accepted.has(deliverable));
+        }
+      }
+      return json({ok:true,already_reviewed:true,review:existingReview,submission,task_ready_for_completion:taskReady});
+    }
     if (submission.status === 'submitted') {
       await env.TUTOR_DB.prepare(
         "UPDATE internship_artifact_submissions SET status = 'under_review' WHERE id = ? AND internship_id = ? AND status = 'submitted'",
