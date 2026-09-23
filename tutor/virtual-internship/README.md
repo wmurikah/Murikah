@@ -1219,15 +1219,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 5 — work artifact workflow
 
-- [ ] Assignment open/acknowledge.
-- [ ] Artifact drafting/upload.
-- [ ] Submission.
-- [ ] Version history.
-- [ ] Supervisor review.
-- [ ] Revision/resubmission.
-- [ ] Completion.
-- [ ] R2 object ownership.
-- [ ] Artifact integrity metadata.
+- [x] Assignment open/acknowledge.
+- [x] Artifact drafting/upload.
+- [x] Submission.
+- [x] Version history.
+- [x] Supervisor review.
+- [x] Revision/resubmission.
+- [x] Completion.
+- [x] R2 object ownership.
+- [x] Artifact integrity metadata.
 
 ### Phase 6 — assessment and workplace dynamics
 
