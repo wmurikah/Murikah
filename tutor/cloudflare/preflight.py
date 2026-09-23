@@ -1258,6 +1258,7 @@ def main() -> int:
             "- [x] Add model-role abstraction for actor, mentor, assessor and scenario director.",
             "- [x] Test provider failure and malformed structured output.",
             "## Phase 4 Implementation Record",
+            "## SUBSEQUENT WORKPLACE UI REQUIREMENT",
             "- [x] Build Virtual Internship dashboard.",
             "- [x] Build inbox.",
             "- [x] Build task/work queue.",
