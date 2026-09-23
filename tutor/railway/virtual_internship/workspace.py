@@ -1,7 +1,7 @@
-"""Phase 4 learner-safe Virtual Internship workspace read model.
+"""Learner-safe Virtual Internship workplace read model through Phase 5.
 
 This module consumes Phase 1 lifecycle state, Phase 2 learner-safe state and
-Phase 4 durable UI records. It never returns raw canonical scenario state.
+Phase 4 UI records and Phase 5 owner-bound artifact summaries. It never returns raw canonical scenario state.
 """
 from __future__ import annotations
 
@@ -54,6 +54,7 @@ class WorkspaceContext:
     definition: dict[str, Any]
     threads: list[dict[str, Any]]
     reflections: list[dict[str, Any]]
+    artifacts: dict[str, Any]
 
 
 class VirtualInternshipWorkspaceService:
@@ -96,7 +97,9 @@ class VirtualInternshipWorkspaceService:
         definition = _dict(definition_result.get("definition"))
         threads = _list(_dict(self.persistence.internship_ui_threads(actor_id, internship_id)).get("threads"))
         reflections = _list(_dict(self.persistence.internship_ui_reflections(actor_id, internship_id)).get("reflections"))
-        return WorkspaceContext(status,status and learner or {},definition,threads,reflections)
+        artifact_reader = getattr(self.persistence,"internship_artifact_summary",None)
+        artifacts = _dict(artifact_reader(actor_id,internship_id)) if callable(artifact_reader) else {}
+        return WorkspaceContext(status,status and learner or {},definition,threads,reflections,artifacts)
 
     def _visible_tasks(self, context: WorkspaceContext) -> list[dict[str, Any]]:
         authored = {
@@ -109,6 +112,14 @@ class VirtualInternshipWorkspaceService:
             for row in _list(context.learner.get("tasks"))
             if isinstance(row,dict)
         }
+        acknowledgements = {
+            _text(_dict(row).get("task_id"),128): int(_dict(row).get("acknowledged_at") or 0)
+            for row in _list(context.artifacts.get("acknowledgements"))
+        }
+        artifact_rows = [_dict(row) for row in _list(context.artifacts.get("artifacts"))]
+        version_rows = [_dict(row) for row in _list(context.artifacts.get("versions"))]
+        submission_rows = [_dict(row) for row in _list(context.artifacts.get("submissions"))]
+        review_rows = [_dict(row) for row in _list(context.artifacts.get("reviews"))]
         visible: list[dict[str,Any]] = []
         for task_id, current in runtime.items():
             status = _text(current.get("status"),32)
@@ -129,6 +140,32 @@ class VirtualInternshipWorkspaceService:
                     "title":_text(dep_source.get("title") or dep_id,160),
                     "status":_text(dep_runtime.get("status"),32),
                 })
+            task_artifacts = [row for row in artifact_rows if _text(row.get("task_id"),128) == task_id]
+            work_artifacts = []
+            for artifact in task_artifacts:
+                artifact_id = _text(artifact.get("id"),128)
+                versions = [row for row in version_rows if _text(row.get("artifact_id"),128) == artifact_id]
+                submissions = [row for row in submission_rows if _text(row.get("artifact_id"),128) == artifact_id]
+                reviews = [row for row in review_rows if _text(row.get("artifact_id"),128) == artifact_id]
+                work_artifacts.append({
+                    **artifact,
+                    "versions":versions,
+                    "submissions":submissions,
+                    "reviews":reviews,
+                })
+            artifact_statuses = {_text(row.get("status"),32) for row in task_artifacts}
+            if status == "completed" or (task_artifacts and artifact_statuses == {"accepted"}):
+                work_status = "accepted"
+            elif "changes_requested" in artifact_statuses:
+                work_status = "changes_requested"
+            elif "submitted" in artifact_statuses:
+                work_status = "submitted"
+            elif any(int(row.get("current_version_number") or 0) > 0 for row in task_artifacts):
+                work_status = "draft_saved"
+            elif acknowledgements.get(task_id):
+                work_status = "in_progress"
+            else:
+                work_status = "not_acknowledged"
             visible.append({
                 "task_id":task_id,
                 "title":_text(source.get("title") or current.get("title"),160),
@@ -146,6 +183,9 @@ class VirtualInternshipWorkspaceService:
                 "allowed_tools":[_text(x,80) for x in _list(source.get("allowed_tools")) if _text(x,80)],
                 "mentor_support":{"key":support_key,"level":support[0],"label":support[1]},
                 "stakeholder_actor_ids":[_text(x,128) for x in _list(source.get("stakeholder_actor_ids")) if _text(x,128)],
+                "acknowledged_at":acknowledgements.get(task_id,0),
+                "work_status":work_status,
+                "work_artifacts":work_artifacts,
             })
         return visible
 
@@ -357,6 +397,29 @@ class VirtualInternshipWorkspaceService:
                 "detail":_label(row.get("period_key")) or "Learning reflection",
                 "timestamp":int(row.get("updated_at") or 0),
                 "href":"/virtual-internship/activity",
+            })
+        activity_labels = {
+            "assignment_acknowledged":("Assignment acknowledged","You acknowledged the assignment."),
+            "draft_created":("Work product created","You created a work product for this assignment."),
+            "artifact_version_saved":("Draft saved","You saved a new immutable work version."),
+            "artifact_submitted":("Work submitted","You submitted a work version for supervisor review."),
+            "artifact_resubmitted":("Work resubmitted","You submitted a revised work version for supervisor review."),
+            "changes_requested":("Changes requested","Your simulated supervisor requested changes."),
+            "artifact_accepted":("Work accepted","Your simulated supervisor accepted the work product."),
+            "task_completed":("Assignment completed","All required work products for the assignment were accepted."),
+        }
+        for raw in _list(context.artifacts.get("activity")):
+            row = _dict(raw)
+            kind = _text(row.get("event_type"),64)
+            title, detail = activity_labels.get(kind,("Work updated","Your internship work record changed."))
+            task_id = _text(row.get("task_id"),128)
+            items.append({
+                "id":"artifact-activity:" + _text(row.get("id"),128),
+                "type":kind,
+                "title":title,
+                "detail":detail,
+                "timestamp":int(row.get("event_time") or 0),
+                "href":"/virtual-internship/work" + (("?task=" + task_id) if task_id else ""),
             })
         if status.get("status") == "stopped" and int(status.get("stopped_at") or 0) > 0:
             items.append({
