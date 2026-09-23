@@ -188,7 +188,23 @@ class Phase5ArtifactTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT artifact_version_id FROM internship_artifact_submissions ORDER BY submission_number"
             ).fetchall(), [("ver_1",),("ver_2",)])
+            db.commit()
             db.close()
+
+            reopened = sqlite3.connect(handle.name)
+            self.assertEqual(
+                reopened.execute(
+                    "SELECT id, version_number FROM internship_artifact_versions WHERE artifact_id='art_1' ORDER BY version_number"
+                ).fetchall(),
+                [("ver_1", 1), ("ver_2", 2)],
+            )
+            self.assertEqual(
+                reopened.execute(
+                    "SELECT id, artifact_version_id FROM internship_artifact_submissions WHERE artifact_id='art_1' ORDER BY submission_number"
+                ).fetchall(),
+                [("sub_1", "ver_1"), ("sub_2", "ver_2")],
+            )
+            reopened.close()
 
     def test_worker_security_and_integrity_contracts_are_explicit(self):
         worker = WORKER.read_text()
@@ -231,6 +247,42 @@ class Phase5ArtifactTests(unittest.TestCase):
         self.assertIn("role=VirtualInternshipModelRole.ACTOR", actor_method)
         self.assertNotIn("WORKFLOW_REVIEW", actor_method)
         self.assertIn("role=VirtualInternshipModelRole.WORKFLOW_REVIEW", review_method)
+
+    def test_owner_isolation_and_r2_key_contract_are_server_authoritative(self):
+        worker = WORKER.read_text()
+        self.assertIn(
+            "SELECT id, scenario_version_id, status FROM internship_instances WHERE id = ? AND learner_id = ?",
+            worker,
+        )
+        self.assertIn("['users',actorId,'virtual-internships',internshipId,'artifact-version',versionId].join('/')", worker)
+        self.assertIn("if (!isRawUpload && ['learner_id','owner_id','user_id','object_key','status','reviewer_actor_id'].some", worker)
+        self.assertIn("o.owner_kind = ? AND o.owner_id = ?", worker)
+        self.assertIn("safeFilename", worker)
+        self.assertNotIn("filename].join('/')", worker)
+        self.assertNotIn("r2.dev", worker)
+        self.assertNotIn("public_url", worker)
+        self.assertNotIn("runtime_path = body", worker)
+
+    def test_phase2_completion_is_multi_deliverable_and_exactly_once_by_contract(self):
+        worker = WORKER.read_text()
+        router = ROUTER.read_text()
+        self.assertIn("contract.deliverables.every(x=>accepted.has(x))", worker)
+        self.assertIn("task_ready_for_completion:taskReady", worker)
+        self.assertIn('ScenarioStateService().transition_task(', router)
+        self.assertIn('"completed"', router)
+        self.assertIn("state.evaluate(", router)
+        self.assertNotIn("UPDATE internship_tasks", worker)
+        self.assertNotIn("internship completed", worker.lower())
+
+    def test_artifact_bytes_use_r2_not_container_local_storage(self):
+        worker = WORKER.read_text()
+        router = ROUTER.read_text()
+        self.assertIn("TUTOR_FILES.put", worker)
+        self.assertIn("TUTOR_FILES.get", worker)
+        self.assertIn("tutor_objects", worker)
+        for forbidden in ("/tmp/", "/app/data", "open(filename", "Path(filename"):
+            self.assertNotIn(forbidden, worker)
+            self.assertNotIn(forbidden, router)
 
     def test_migration_has_no_phase6_or_phase7_fields(self):
         sql = MIGRATION.read_text().lower()
