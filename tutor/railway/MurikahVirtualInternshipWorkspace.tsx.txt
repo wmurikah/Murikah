@@ -1060,7 +1060,7 @@ function InboxView({
   }
 
   function send() {
-    void sendWith({ text: draft.trim(), requestId: requestId("actor"), actorId: selectedActorId, taskId: selectedThread?.related_task_id || "" }, true);
+    void sendWith({ text: draft, requestId: requestId("actor"), actorId: selectedActorId, taskId: selectedThread?.related_task_id || "" }, true);
   }
 
   const person = people.find((item) => item.actor_id === selectedActorId);
@@ -1201,7 +1201,7 @@ function MentorView({
   }
 
   function send() {
-    void sendWith({ text: draft.trim(), requestId: requestId("mentor"), taskId }, true);
+    void sendWith({ text: draft, requestId: requestId("mentor"), taskId }, true);
   }
 
   return (
