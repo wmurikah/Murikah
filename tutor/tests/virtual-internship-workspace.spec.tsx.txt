@@ -410,7 +410,7 @@ describe("Virtual Internship Phase 4 workplace", () => {
     expect(workspaceNav.className).toContain("overflow-x-auto");
     const linaButtons = await screen.findAllByRole("button", { name: /Lina A\./ });
     fireEvent.click(linaButtons[linaButtons.length - 1]);
-    expect(screen.getByRole("button", { name: "Back to conversations" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Back to inbox" })).toBeVisible();
     expect(screen.getByLabelText("Workplace message")).toBeVisible();
     inbox.unmount();
 
