@@ -685,6 +685,7 @@ function TaskDetail({
         artifact_version_id: artifact.current_version_id,
         request_id: requestId("submit"),
       });
+      setEditing((current)=>({...current,[artifact.deliverable_type]:false}));
       await onChanged();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "The work could not be submitted.");
@@ -785,6 +786,9 @@ function TaskDetail({
                       {artifact ? sentenceLabel(artifact.status) : "No draft yet"}
                       {artifact?.current_version_number ? " · Latest Version " + artifact.current_version_number : ""}
                     </p>
+                    {artifact?.current_filename ? (
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">{artifact.current_filename}</p>
+                    ) : null}
                   </div>
                   {artifact?.status === "accepted" ? (
                     <span className="w-fit rounded-full border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Accepted</span>
@@ -878,7 +882,7 @@ function TaskDetail({
                                 <p className="font-semibold">Version {version.version_number}</p>
                                 <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                                   {formatDate(version.created_at,true)}
-                                  {version.original_filename ? " · " + version.original_filename : ""}
+                                  {version.original_filename && version.id !== artifact.current_version_id ? " · " + version.original_filename : ""}
                                   {version.size_bytes ? " · " + Math.ceil(version.size_bytes/1024) + " KB" : ""}
                                 </p>
                               </div>
@@ -1800,7 +1804,7 @@ export default function MurikahVirtualInternshipWorkspace() {
           </div>
           {stopped ? (
             <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3 text-sm leading-6 dark:bg-amber-950/10" role="status">
-              This internship is stopped. Your history, artifact versions, submissions and reviews remain available, but new workplace messages, Mentor requests, reflections and work changes are read-only.
+              This internship is stopped. Your history remains available, including artifact versions, submissions and reviews, but new workplace messages, Mentor requests, reflections and work changes are read-only.
             </div>
           ) : null}
           {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
