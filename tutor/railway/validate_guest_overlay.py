@@ -83,7 +83,7 @@ def main() -> None:
             'href={USERNAME_SIGN_IN}',
             'href={SIGN_UP}',
             'href="/register?next=%2Fvirtual-internship"',
-            'aria-label="Virtual Internship, coming soon"',
+            'aria-label="Virtual Internship"',
         ),
     )
     forbid_markers(
