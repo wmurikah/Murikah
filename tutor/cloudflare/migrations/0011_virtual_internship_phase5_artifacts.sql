@@ -133,10 +133,16 @@ CREATE INDEX IF NOT EXISTS idx_internship_artifact_submissions_history
   ON internship_artifact_submissions(artifact_id, submission_number DESC);
 CREATE INDEX IF NOT EXISTS idx_internship_artifact_submissions_status
   ON internship_artifact_submissions(internship_id, status, submitted_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_artifact_one_active_submission
+  ON internship_artifact_submissions(artifact_id)
+  WHERE status IN ('submitted','under_review');
 CREATE INDEX IF NOT EXISTS idx_internship_artifact_reviews_task
   ON internship_artifact_reviews(internship_id, task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_internship_artifact_activity_time
   ON internship_artifact_activity(internship_id, event_time DESC, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_internship_artifact_task_completed_once
+  ON internship_artifact_activity(internship_id, task_id, event_type)
+  WHERE event_type = 'task_completed';
 
 INSERT INTO persistence_meta(key, value, updated_at)
 VALUES ('virtual_internship_phase5_artifact_schema_version', '1', unixepoch())
