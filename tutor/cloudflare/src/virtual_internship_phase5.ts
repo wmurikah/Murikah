@@ -176,7 +176,7 @@ async function taskDeliverablesAccepted(
     "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
   ).bind(internshipId,taskId).all<{deliverable_type:string}>()).results || [];
   const accepted=new Set(acceptedRows.map(row=>row.deliverable_type));
-  return contract.deliverables.every(deliverable=>accepted.has(deliverable));
+  return contract.deliverables.every(x=>accepted.has(x));
 }
 function activityStatement(
   db:P5Database,
