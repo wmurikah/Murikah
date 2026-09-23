@@ -687,6 +687,8 @@ def internship_ui_reflection_save(
 
 
 PHASE5_MAX_FILE_BYTES = 10 * 1024 * 1024
+PHASE5_MAX_FILES_PER_VERSION = 1
+PHASE5_MAX_VERSIONS = 100
 PHASE5_MAX_TEXT_CHARS = 120_000
 
 
@@ -712,6 +714,13 @@ def internship_artifact_summary(actor_id: str, internship_id: str) -> dict[str, 
 def internship_artifact_history(actor_id: str, internship_id: str, artifact_id: str) -> dict[str, Any]:
     return _internship_artifact_get(
         "/internships/artifacts/history", actor_id, internship_id, artifact_id=artifact_id
+    )
+
+
+def internship_artifact_integrity_check(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Read-only owner-scoped D1/R2 reconciliation for Phase 5 artifact objects."""
+    return _internship_artifact_get(
+        "/internships/artifacts/integrity", actor_id, internship_id
     )
 
 
