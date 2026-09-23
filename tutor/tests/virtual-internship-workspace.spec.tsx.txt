@@ -103,6 +103,9 @@ const workspace = {
     allowed_tools: ["notes"],
     mentor_support: { key: "light_coaching", level: 2, label: "Light guidance" },
     stakeholder_actor_ids: ["actor_supervisor"],
+    acknowledged_at: 0,
+    work_status: "not_acknowledged",
+    work_artifacts: [],
   }],
   documents: [{
     document_id: "fact:policy_1",
@@ -160,7 +163,7 @@ afterEach(() => {
   nav.push.mockReset();
 });
 
-describe("Virtual Internship Phase 4 workplace", () => {
+describe("Virtual Internship workplace through Phase 5", () => {
   it("renders the real dashboard without fake completion scoring", async () => {
     vi.stubGlobal("fetch", workspaceFetch());
     render(<MurikahVirtualInternshipWorkspace />);
@@ -176,17 +179,32 @@ describe("Virtual Internship Phase 4 workplace", () => {
     expect(screen.queryByText(/competency score/i)).toBeNull();
   });
 
-  it("shows assignment detail but no Phase 5 artifact actions", async () => {
+  it("requires deliberate acknowledgement before Phase 5 work actions", async () => {
     nav.pathname = "/virtual-internship/work";
-    vi.stubGlobal("fetch", workspaceFetch());
+    const fetchMock = workspaceFetch((url, init) => {
+      if (url.includes("/tasks/task_1/acknowledge")) {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body));
+        expect(body.internship_id).toBe("vi_1");
+        expect(body.request_id).toMatch(/^ack-/);
+        return jsonResponse({ ok: true, acknowledgement: { task_id: "task_1", acknowledged_at: 1_790_700_000 } }, 201);
+      }
+      return undefined;
+    });
+    vi.stubGlobal("fetch", fetchMock);
     render(<MurikahVirtualInternshipWorkspace />);
 
     fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
     expect(screen.getAllByRole("heading", { name: "Review inventory reconciliation" }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Light guidance")).toBeVisible();
     expect(screen.getByText("Memo")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /upload/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Acknowledge assignment" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /submit version/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge assignment" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/tasks/task_1/acknowledge"),
+      expect.objectContaining({ method: "POST" }),
+    ));
     expect(screen.queryByRole("button", { name: /mark complete/i })).toBeNull();
   });
 
