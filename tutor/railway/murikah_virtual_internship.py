@@ -169,6 +169,49 @@ def _member(current: TokenPayload, action: str) -> str:
     return actor_id
 
 
+def _ensure_phase2_task_completed(
+    actor_id: str,
+    internship_id: str,
+    task_id: str,
+    *,
+    logical_request_id: str,
+    persistence: Any,
+) -> None:
+    state = ScenarioStateService()
+    try:
+        state.transition_task(
+            actor_id,
+            internship_id,
+            task_id,
+            "completed",
+            request_id=logical_request_id + ":task-complete",
+        )
+    except Exception:
+        learner = state.learner_view(actor_id, internship_id)
+        view = learner.get("view") if isinstance(learner,dict) else {}
+        rows = view.get("tasks") if isinstance(view,dict) else []
+        current = next(
+            (
+                row for row in (rows if isinstance(rows,list) else [])
+                if isinstance(row,dict) and str(row.get("task_id") or "") == task_id
+            ),
+            None,
+        )
+        if not isinstance(current,dict) or str(current.get("status") or "") != "completed":
+            raise
+    state.evaluate(
+        actor_id,
+        internship_id,
+        request_id=logical_request_id + ":events",
+    )
+    persistence.internship_artifact_task_completed(
+        actor_id,
+        internship_id,
+        task_id,
+        request_id=logical_request_id + ":activity-complete",
+    )
+
+
 async def _run_workflow_review(
     *,
     actor_id: str,
@@ -180,9 +223,28 @@ async def _run_workflow_review(
     start_request_id = logical_request_id + ":start"
     review_request_id = logical_request_id + ":decision"
     try:
-        persistence.internship_artifact_review_start(
+        start_result = persistence.internship_artifact_review_start(
             actor_id,internship_id,submission_id,request_id=start_request_id
         )
+        if isinstance(start_result,dict) and start_result.get("already_reviewed"):
+            review = start_result.get("review") if isinstance(start_result.get("review"),dict) else {}
+            task_id = str(review.get("task_id") or "")
+            completed = False
+            if start_result.get("task_ready_for_completion") and task_id:
+                _ensure_phase2_task_completed(
+                    actor_id,
+                    internship_id,
+                    task_id,
+                    logical_request_id=logical_request_id,
+                    persistence=persistence,
+                )
+                completed = True
+            return {
+                "status":"reviewed",
+                "idempotent_replay":True,
+                "review":review,
+                "task_completed":completed,
+            }
         material_result = persistence.internship_artifact_review_material(
             actor_id,internship_id,submission_id
         )
@@ -225,32 +287,13 @@ async def _run_workflow_review(
             request_id=review_request_id,
         )
         if persisted.get("task_ready_for_completion"):
-            transition_id = logical_request_id + ":task-complete"
-            state = ScenarioStateService()
-            state.transition_task(
+            _ensure_phase2_task_completed(
                 actor_id,
                 internship_id,
                 task_id,
-                "completed",
-                request_id=transition_id,
+                logical_request_id=logical_request_id,
+                persistence=persistence,
             )
-            try:
-                state.evaluate(
-                    actor_id,
-                    internship_id,
-                    request_id=logical_request_id + ":events",
-                )
-            except Exception:
-                pass
-            try:
-                persistence.internship_artifact_task_completed(
-                    actor_id,
-                    internship_id,
-                    task_id,
-                    request_id=logical_request_id + ":activity-complete",
-                )
-            except Exception:
-                pass
             persisted["task_completed"] = True
         return {"status":"reviewed",**persisted}
     except AIOrchestrationError:
