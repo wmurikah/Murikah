@@ -36,6 +36,69 @@ type InternshipTaskSummary = {
   allowed_tools: string[];
   mentor_support: { key: string; level: number; label: string };
   stakeholder_actor_ids: string[];
+  acknowledged_at: number;
+  work_status: string;
+  work_artifacts: InternshipWorkArtifact[];
+};
+
+type InternshipArtifactVersion = {
+  id: string;
+  artifact_id: string;
+  task_id: string;
+  version_number: number;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  source_type: "text" | "upload";
+  prior_review_id?: string;
+  created_at: number;
+  submitted: number;
+};
+
+type InternshipArtifactSubmission = {
+  id: string;
+  artifact_id: string;
+  artifact_version_id: string;
+  task_id: string;
+  submission_number: number;
+  prior_submission_id?: string;
+  submitted_at: number;
+  status: string;
+};
+
+type InternshipArtifactReview = {
+  id: string;
+  task_id: string;
+  artifact_id: string;
+  submission_id: string;
+  reviewer_actor_id: string;
+  review_type: string;
+  decision: "accepted" | "changes_requested";
+  feedback: string;
+  requested_changes: string[];
+  created_at: number;
+};
+
+type InternshipWorkArtifact = {
+  id: string;
+  task_id: string;
+  deliverable_type: string;
+  artifact_type: string;
+  title: string;
+  status: "draft" | "submitted" | "changes_requested" | "accepted";
+  current_version_id?: string;
+  current_version_number: number;
+  current_filename?: string;
+  current_content_type?: string;
+  current_size_bytes?: number;
+  current_source_type?: string;
+  accepted_submission_id?: string;
+  created_at: number;
+  updated_at: number;
+  accepted_at?: number;
+  versions: InternshipArtifactVersion[];
+  submissions: InternshipArtifactSubmission[];
+  reviews: InternshipArtifactReview[];
 };
 
 type InternshipPerson = {
@@ -455,7 +518,7 @@ function TaskCard({
           </p>
           <h3 className="mt-1 font-semibold leading-6">{task.title}</h3>
         </div>
-        <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-medium">{sentenceLabel(task.status)}</span>
+        <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-medium">{sentenceLabel(task.work_status || task.status)}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--muted-foreground)]">
         <span>{task.due_at ? "Due " + formatDate(task.due_at) : "No deadline set"}</span>
@@ -475,16 +538,170 @@ function TaskCard({
 function TaskDetail({
   task,
   people,
+  internshipId,
+  readOnly,
+  onChanged,
   onClose,
 }: {
   task: InternshipTaskSummary;
   people: InternshipPerson[];
+  internshipId: string;
+  readOnly: boolean;
+  onChanged: () => Promise<void> | void;
   onClose: () => void;
 }) {
   const person = people.find((item) => item.actor_id === task.assigned_by_actor_id);
+  const [busy, setBusy] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<Record<string, boolean>>({});
+
+  const textDeliverables = new Set([
+    "memo","report","working_paper","issue_summary","research_brief","policy_draft",
+    "email","client_response","meeting_notes","requirements_document","test_plan",
+    "risk_register","procurement_evaluation","project_plan","design_brief","incident_report",
+  ]);
+  const artifactFor = (deliverable: string) =>
+    (task.work_artifacts || []).find((item) => item.deliverable_type === deliverable);
+
+  async function callJson(path: string, payload: Record<string, unknown>) {
+    const response = await fetch(API + path, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await responseError(response, "That work update could not be completed. Try again."));
+    return (await response.json()) as Record<string, any>;
+  }
+
+  async function acknowledge() {
+    setBusy("ack"); setActionError("");
+    try {
+      await callJson("/tasks/" + encodeURIComponent(task.task_id) + "/acknowledge", {
+        internship_id: internshipId,
+        request_id: requestId("ack"),
+      });
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "The assignment could not be acknowledged.");
+    } finally { setBusy(""); }
+  }
+
+  async function createArtifact(deliverable: string) {
+    const existing = artifactFor(deliverable);
+    if (existing) return existing;
+    const result = await callJson("/artifacts", {
+      internship_id: internshipId,
+      task_id: task.task_id,
+      deliverable_type: deliverable,
+      title: sentenceLabel(deliverable) + " - " + task.title,
+      request_id: requestId("artifact"),
+    });
+    return result.artifact as InternshipWorkArtifact;
+  }
+
+  async function startText(deliverable: string) {
+    setBusy("edit:" + deliverable); setActionError("");
+    try {
+      const artifact = await createArtifact(deliverable);
+      let text = "";
+      if (artifact?.current_version_id && artifact.current_source_type === "text") {
+        const response = await fetch(
+          API + "/artifacts/" + encodeURIComponent(artifact.id) + "/versions/" +
+          encodeURIComponent(String(artifact.current_version_id)) + "/text?internship_id=" +
+          encodeURIComponent(internshipId),
+          { credentials: "include", cache: "no-store" },
+        );
+        if (response.ok) {
+          const payload = await response.json() as { content?: string };
+          text = payload.content || "";
+        }
+      }
+      setDrafts((current) => ({ ...current, [deliverable]: text }));
+      setEditing((current) => ({ ...current, [deliverable]: true }));
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "The draft could not be opened.");
+    } finally { setBusy(""); }
+  }
+
+  async function saveText(deliverable: string) {
+    setBusy("save:" + deliverable); setActionError("");
+    try {
+      const artifact = await createArtifact(deliverable);
+      const latestReview = [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0];
+      await callJson("/artifacts/" + encodeURIComponent(artifact.id) + "/versions/text", {
+        internship_id: internshipId,
+        content: drafts[deliverable] || "",
+        request_id: requestId("version"),
+        prior_review_id: latestReview?.decision === "changes_requested" ? latestReview.id : "",
+      });
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "The draft could not be saved.");
+    } finally { setBusy(""); }
+  }
+
+  async function upload(deliverable: string, file: File | null) {
+    if (!file) return;
+    setBusy("upload:" + deliverable); setActionError("");
+    try {
+      const artifact = await createArtifact(deliverable);
+      const latestReview = [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0];
+      const form = new FormData();
+      form.append("internship_id", internshipId);
+      form.append("request_id", requestId("upload"));
+      form.append("prior_review_id", latestReview?.decision === "changes_requested" ? latestReview.id : "");
+      form.append("file", file);
+      const response = await fetch(API + "/artifacts/" + encodeURIComponent(artifact.id) + "/versions/upload", {
+        method: "POST", credentials: "include", body: form,
+      });
+      if (!response.ok) throw new Error(await responseError(response, "The file could not be uploaded."));
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "The file could not be uploaded.");
+    } finally { setBusy(""); }
+  }
+
+  async function submit(artifact: InternshipWorkArtifact) {
+    if (!artifact.current_version_id) return;
+    const confirmed = window.confirm(
+      "Submit Version " + artifact.current_version_number +
+      " for supervisor review? This version will remain in your submission history.",
+    );
+    if (!confirmed) return;
+    setBusy("submit:" + artifact.id); setActionError("");
+    try {
+      await callJson("/artifacts/" + encodeURIComponent(artifact.id) + "/submit", {
+        internship_id: internshipId,
+        artifact_version_id: artifact.current_version_id,
+        request_id: requestId("submit"),
+      });
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "The work could not be submitted.");
+    } finally { setBusy(""); }
+  }
+
+  async function retryReview(artifact: InternshipWorkArtifact) {
+    const latest = [...(artifact.submissions || [])].sort((a,b)=>b.submission_number-a.submission_number)[0];
+    if (!latest || !["submitted","under_review"].includes(latest.status)) return;
+    setBusy("review:" + artifact.id); setActionError("");
+    try {
+      await callJson("/submissions/" + encodeURIComponent(latest.id) + "/review", {
+        internship_id: internshipId,
+        request_id: requestId("review"),
+      });
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Supervisor review is temporarily unavailable.");
+    } finally { setBusy(""); }
+  }
+
   return (
-    <Panel className="p-5" ariaLabel="Assignment detail">
-      <div className="flex items-start justify-between gap-4">
+    <Panel className="p-4 sm:p-5" ariaLabel="Assignment detail">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#A9822E]">Assignment</p>
           <h2 className="mt-2 text-xl font-semibold">{task.title}</h2>
@@ -498,12 +715,12 @@ function TaskDetail({
       </div>
       <dl className="mt-5 grid gap-5 sm:grid-cols-2">
         {[
-          ["Status", sentenceLabel(task.status)],
+          ["Assignment status", sentenceLabel(task.status)],
+          ["Work status", sentenceLabel(task.work_status || "not_acknowledged")],
           ["Deadline", task.due_at ? formatDate(task.due_at, true) : "No deadline set"],
           ["Expected effort", task.expected_effort || "Not specified"],
           ["Difficulty", task.difficulty ? sentenceLabel(task.difficulty) : "Not specified"],
           ["Mentor support", task.mentor_support?.label || "Clarification only"],
-          ["Expected deliverable", task.deliverable_types?.length ? task.deliverable_types.map(sentenceLabel).join(", ") : "Not specified"],
         ].map(([term, description]) => (
           <div key={term}>
             <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{term}</dt>
@@ -515,32 +732,160 @@ function TaskDetail({
         ["Business context", task.business_context],
         ["Objective", task.learner_objective],
         ["Brief", task.brief],
-      ].map(([title, copy]) =>
-        copy ? (
-          <div key={title} className="mt-5">
-            <h3 className="text-sm font-semibold">{title}</h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
-          </div>
-        ) : null,
-      )}
-      {task.dependencies?.length ? (
-        <div className="mt-5">
-          <h3 className="text-sm font-semibold">Dependencies</h3>
-          <ul className="mt-2 space-y-2 text-sm text-[var(--muted-foreground)]">
-            {task.dependencies.map((dependency) => (
-              <li key={dependency.task_id} className="flex justify-between gap-4 rounded-lg border border-[var(--border)] px-3 py-2">
-                <span>{dependency.title}</span><span>{sentenceLabel(dependency.status)}</span>
-              </li>
-            ))}
-          </ul>
+      ].map(([title, copy]) => copy ? (
+        <div key={title} className="mt-5">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
+        </div>
+      ) : null)}
+
+      {!task.acknowledged_at && task.status === "available" && !readOnly ? (
+        <div className="mt-6 rounded-xl border border-[var(--border)] p-4">
+          <h3 className="font-semibold">Ready to begin?</h3>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">Opening the assignment does not acknowledge it. Acknowledge it when you are ready to start work.</p>
+          <button type="button" disabled={Boolean(busy)} onClick={() => void acknowledge()}
+            className="mt-3 min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">
+            {busy === "ack" ? "Acknowledging..." : "Acknowledge assignment"}
+          </button>
         </div>
       ) : null}
-      {task.allowed_tools?.length ? (
-        <div className="mt-5">
-          <h3 className="text-sm font-semibold">Permitted tools</h3>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{task.allowed_tools.map(sentenceLabel).join(", ")}</p>
+
+      <div className="mt-6">
+        <h3 className="text-base font-semibold">Work product / Deliverables</h3>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Saving creates a new immutable version. Submitting is a separate action and keeps the submitted version in history.
+        </p>
+        {actionError ? <p className="mt-3 rounded-lg border border-red-300/60 px-3 py-2 text-sm text-red-700 dark:text-red-300" role="alert">{actionError}</p> : null}
+        <div className="mt-4 space-y-4">
+          {(task.deliverable_types || []).map((deliverable) => {
+            const artifact = artifactFor(deliverable);
+            const latestReview = artifact ? [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0] : undefined;
+            const latestSubmission = artifact ? [...(artifact.submissions || [])].sort((a,b)=>b.submission_number-a.submission_number)[0] : undefined;
+            const canWork = Boolean(task.acknowledged_at) && task.status === "in_progress" && !readOnly && artifact?.status !== "accepted";
+            return (
+              <section key={deliverable} className="rounded-xl border border-[var(--border)] p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h4 className="font-semibold">{sentenceLabel(deliverable)}</h4>
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      {artifact ? sentenceLabel(artifact.status) : "No draft yet"}
+                      {artifact?.current_version_number ? " · Latest Version " + artifact.current_version_number : ""}
+                    </p>
+                  </div>
+                  {artifact?.status === "accepted" ? (
+                    <span className="w-fit rounded-full border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Accepted</span>
+                  ) : null}
+                </div>
+
+                {latestReview ? (
+                  <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em]">{sentenceLabel(latestReview.decision)}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{latestReview.feedback}</p>
+                    {latestReview.requested_changes?.length ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--muted-foreground)]">
+                        {latestReview.requested_changes.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    ) : null}
+                    <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                      {person?.name || "Simulated supervisor"} · {formatDate(latestReview.created_at, true)}
+                    </p>
+                  </div>
+                ) : latestSubmission ? (
+                  <div className="mt-4 rounded-lg border border-[var(--border)] p-3 text-sm">
+                    Submitted for review · Submission {latestSubmission.submission_number} · {formatDate(latestSubmission.submitted_at, true)}
+                  </div>
+                ) : null}
+
+                {textDeliverables.has(deliverable) && canWork ? (
+                  <div className="mt-4">
+                    {!editing[deliverable] ? (
+                      <button type="button" disabled={Boolean(busy)} onClick={() => void startText(deliverable)}
+                        className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">
+                        {artifact?.current_version_number ? "Continue editing" : "Create draft"}
+                      </button>
+                    ) : (
+                      <div>
+                        <label htmlFor={"draft-" + deliverable} className="text-sm font-semibold">Draft</label>
+                        <textarea id={"draft-" + deliverable} rows={10} value={drafts[deliverable] || ""}
+                          onChange={(event) => setDrafts((current)=>({...current,[deliverable]:event.target.value}))}
+                          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-sm leading-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+                          placeholder="Draft your work here. Markdown is supported as plain text." />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" disabled={Boolean(busy) || !(drafts[deliverable] || "").trim()} onClick={() => void saveText(deliverable)}
+                            className="min-h-10 rounded-lg bg-[#1E2A30] px-3 text-sm font-semibold text-white disabled:opacity-60">
+                            {busy === "save:" + deliverable ? "Saving..." : "Save draft"}
+                          </button>
+                          <button type="button" onClick={() => setEditing((current)=>({...current,[deliverable]:false}))}
+                            className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">Close editor</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {canWork ? (
+                  <div className="mt-4">
+                    <label htmlFor={"upload-" + deliverable} className="block text-sm font-semibold">Upload file</label>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                      Up to 10 MB. Supported: PDF, DOCX, XLSX, CSV, PPTX, TXT, Markdown, common images and safe text/code files. Uploaded code is stored as data and is never executed.
+                    </p>
+                    <input id={"upload-" + deliverable} type="file"
+                      onChange={(event) => { const file = event.target.files?.[0] || null; void upload(deliverable,file); event.currentTarget.value = ""; }}
+                      className="mt-2 block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-[var(--border)] file:bg-transparent file:px-3 file:py-2 file:text-sm file:font-semibold"
+                      aria-describedby={"upload-help-" + deliverable} />
+                    <span id={"upload-help-" + deliverable} className="sr-only">Select one supported file up to 10 MB.</span>
+                  </div>
+                ) : null}
+
+                {artifact?.current_version_id && canWork && !["submitted"].includes(artifact.status) ? (
+                  <button type="button" disabled={Boolean(busy)} onClick={() => void submit(artifact)}
+                    className="mt-4 min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">
+                    {busy === "submit:" + artifact.id ? "Submitting..." : "Submit Version " + artifact.current_version_number + " for review"}
+                  </button>
+                ) : null}
+                {latestSubmission && ["submitted","under_review"].includes(latestSubmission.status) && !readOnly ? (
+                  <button type="button" disabled={Boolean(busy)} onClick={() => void retryReview(artifact!)}
+                    className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
+                    {busy === "review:" + artifact?.id ? "Requesting review..." : "Retry supervisor review"}
+                  </button>
+                ) : null}
+
+                {artifact?.versions?.length ? (
+                  <details className="mt-5">
+                    <summary className="cursor-pointer text-sm font-semibold">Version and submission history</summary>
+                    <div className="mt-3 space-y-2">
+                      {[...artifact.versions].sort((a,b)=>b.version_number-a.version_number).map((version) => {
+                        const submission = (artifact.submissions || []).find((item)=>item.artifact_version_id===version.id);
+                        const review = submission ? (artifact.reviews || []).find((item)=>item.submission_id===submission.id) : undefined;
+                        return (
+                          <div key={version.id} className="rounded-lg border border-[var(--border)] p-3 text-sm">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="font-semibold">Version {version.version_number}</p>
+                                <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                                  {formatDate(version.created_at,true)}
+                                  {version.original_filename ? " · " + version.original_filename : ""}
+                                  {version.size_bytes ? " · " + Math.ceil(version.size_bytes/1024) + " KB" : ""}
+                                </p>
+                              </div>
+                              <a href={API + "/artifacts/" + encodeURIComponent(artifact.id) + "/versions/" + encodeURIComponent(version.id) + "/download?internship_id=" + encodeURIComponent(internshipId)}
+                                className="inline-flex min-h-9 w-fit items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold">
+                                Download
+                              </a>
+                            </div>
+                            {submission ? <p className="mt-2 text-xs">Submission {submission.submission_number}: {sentenceLabel(submission.status)}</p> : <p className="mt-2 text-xs text-[var(--muted-foreground)]">Not submitted</p>}
+                            {review ? <p className="mt-1 text-xs text-[var(--muted-foreground)]">Review: {sentenceLabel(review.decision)}</p> : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ) : null}
+              </section>
+            );
+          })}
         </div>
-      ) : null}
+      </div>
     </Panel>
   );
 }
@@ -608,13 +953,19 @@ function OverviewView({
 function WorkView({
   tasks,
   people,
+  internshipId,
+  readOnly,
   selected,
   onSelect,
+  onChanged,
 }: {
   tasks: InternshipTaskSummary[];
   people: InternshipPerson[];
+  internshipId: string;
+  readOnly: boolean;
   selected: InternshipTaskSummary | null;
   onSelect: (task: InternshipTaskSummary | null) => void;
+  onChanged: () => Promise<void> | void;
 }) {
   const groups = [
     { title: "Current", items: tasks.filter((task) => ["available", "in_progress"].includes(task.status)) },
@@ -635,7 +986,7 @@ function WorkView({
           </Panel>
         ))}
       </div>
-      <div>{selected ? <TaskDetail task={selected} people={people} onClose={() => onSelect(null)} /> : (
+      <div>{selected ? <TaskDetail task={selected} people={people} internshipId={internshipId} readOnly={readOnly} onChanged={onChanged} onClose={() => onSelect(null)} /> : (
         <Panel className="p-5">
           <h2 className="font-semibold">Assignment detail</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">Open an assignment to review its context, objective, deadline, dependencies and permitted Mentor support.</p>
@@ -1396,10 +1747,13 @@ export default function MurikahVirtualInternshipWorkspace() {
   const people = workspace.people || [];
   const tasks = workspace.tasks || [];
   const stopped = workspace.state === "stopped";
+  const selectedTaskCurrent = selectedTask
+    ? tasks.find((task) => task.task_id === selectedTask.task_id) || selectedTask
+    : null;
 
   let body: React.ReactNode;
   if (section === "inbox") body = <InboxView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
-  else if (section === "work") body = <WorkView tasks={tasks} people={people} selected={selectedTask} onSelect={setSelectedTask} />;
+  else if (section === "work") body = <WorkView tasks={tasks} people={people} internshipId={internship.internship_id} readOnly={stopped} selected={selectedTaskCurrent} onSelect={setSelectedTask} onChanged={refreshWorkspace} />;
   else if (section === "company") body = <CompanyView company={company} people={people} onMessage={(person) => router.push("/virtual-internship/inbox?actor=" + encodeURIComponent(person.actor_id))} />;
   else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} />;
   else if (section === "meetings") body = <MeetingsView meetings={workspace.meetings || []} activity={workspace.activity || []} />;
@@ -1432,7 +1786,7 @@ export default function MurikahVirtualInternshipWorkspace() {
           </div>
           {stopped ? (
             <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3 text-sm leading-6 dark:bg-amber-950/10" role="status">
-              This internship is stopped. Your history remains available, but workplace messages, Mentor requests and new reflections are read-only.
+              This internship is stopped. Your history, artifact versions, submissions and reviews remain available, but new workplace messages, Mentor requests, reflections and work changes are read-only.
             </div>
           ) : null}
           {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
@@ -1448,7 +1802,7 @@ export default function MurikahVirtualInternshipWorkspace() {
           </nav>
         </header>
         <div className="mt-5">
-          {section === "overview" && selectedTask ? <div className="mb-5"><TaskDetail task={selectedTask} people={people} onClose={() => setSelectedTask(null)} /></div> : null}
+          {section === "overview" && selectedTaskCurrent ? <div className="mb-5"><TaskDetail task={selectedTaskCurrent} people={people} internshipId={internship.internship_id} readOnly={stopped} onChanged={refreshWorkspace} onClose={() => setSelectedTask(null)} /></div> : null}
           {body}
         </div>
       </div>
