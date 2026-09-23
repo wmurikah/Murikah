@@ -649,14 +649,21 @@ function TaskDetail({
     try {
       const artifact = await createArtifact(deliverable);
       const latestReview = [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0];
-      const form = new FormData();
-      form.append("internship_id", internshipId);
-      form.append("request_id", requestId("upload"));
-      form.append("prior_review_id", latestReview?.decision === "changes_requested" ? latestReview.id : "");
-      form.append("file", file);
-      const response = await fetch(API + "/artifacts/" + encodeURIComponent(artifact.id) + "/versions/upload", {
-        method: "POST", credentials: "include", body: form,
-      });
+      const uploadRequestId = requestId("upload");
+      const response = await fetch(
+        API + "/artifacts/" + encodeURIComponent(artifact.id) + "/versions/upload?internship_id=" + encodeURIComponent(internshipId),
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": file.type || "application/octet-stream",
+            "x-murikah-artifact-filename": encodeURIComponent(file.name),
+            "x-murikah-request-id": uploadRequestId,
+            "x-murikah-prior-review-id": latestReview?.decision === "changes_requested" ? latestReview.id : "",
+          },
+          body: file,
+        },
+      );
       if (!response.ok) throw new Error(await responseError(response, "The file could not be uploaded."));
       await onChanged();
     } catch (cause) {
