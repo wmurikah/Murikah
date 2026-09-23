@@ -5,8 +5,9 @@ import json
 import uuid
 from typing import Any, AsyncIterator
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from urllib.parse import unquote
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
@@ -361,32 +362,43 @@ async def save_text_version(
 async def upload_artifact_version(
     artifact_id: str,
     request: Request,
-    internship_id: str = Form(...),
-    request_id: str = Form(...),
-    prior_review_id: str = Form(default=""),
-    file: UploadFile = File(...),
+    internship_id: str = Query(min_length=1,max_length=128),
     current: TokenPayload = Depends(require_auth),
 ):
     check_origin(request)
     actor_id = _member(current,"upload internship work")
+    max_bytes = _persistence().PHASE5_MAX_FILE_BYTES
     try:
-        data = await file.read(_persistence().PHASE5_MAX_FILE_BYTES + 1)
-        if len(data) > _persistence().PHASE5_MAX_FILE_BYTES:
+        declared_length = request.headers.get("content-length")
+        if declared_length and int(declared_length) > max_bytes:
             raise HTTPException(413,"That file is larger than the 10 MB internship upload limit.")
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > max_bytes:
+                raise HTTPException(413,"That file is larger than the 10 MB internship upload limit.")
+            chunks.append(bytes(chunk))
+        data = b"".join(chunks)
+        if not data:
+            raise HTTPException(400,"Choose a file to upload.")
+        filename = unquote(str(request.headers.get("x-murikah-artifact-filename") or "artifact"))
+        request_id = str(request.headers.get("x-murikah-request-id") or "")
+        prior_review_id = str(request.headers.get("x-murikah-prior-review-id") or "")
         return _persistence().internship_artifact_upload(
             actor_id,internship_id,artifact_id,
             data=data,
-            filename=file.filename or "artifact",
-            content_type=file.content_type or "application/octet-stream",
+            filename=filename,
+            content_type=request.headers.get("content-type") or "application/octet-stream",
             request_id=request_id,
             prior_review_id=prior_review_id,
         )
     except HTTPException:
         raise
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400,"That upload request is invalid.") from exc
     except Exception as exc:
         raise _artifact_http(exc) from exc
-    finally:
-        await file.close()
 
 
 @router.get("/artifacts/{artifact_id}/versions/{version_id}/text")
