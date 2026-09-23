@@ -406,6 +406,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
     if (!artifact) return json({error:'artifact_not_found'},404);
     if (artifact.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(artifact.task_id||''));
+    if (!contract || contract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const bytes=new TextEncoder().encode(content).buffer;
     return saveVersion(env,actorId,internshipId,artifact,bytes,{
       req,filename:safeFilename(String(artifact.title||'work') + '.md'),contentType:'text/markdown',sourceType:'text',priorReviewId,now,
@@ -425,6 +427,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
     if (!artifact) return json({error:'artifact_not_found'},404);
     if (artifact.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(artifact.task_id||''));
+    if (!contract || contract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const bytes=await request.arrayBuffer();
     if (bytes.byteLength <= 0) return json({error:'invalid_artifact_upload'},400);
     if (bytes.byteLength > PHASE5_MAX_FILE_BYTES) return json({error:'upload_too_large',max_bytes:PHASE5_MAX_FILE_BYTES},413);
@@ -440,6 +444,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
     if (!artifact) return json({error:'artifact_not_found'},404);
     if (artifact.status === 'accepted') return json({error:'invalid_artifact_state'},409);
+    const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(artifact.task_id||''));
+    if (!contract || contract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const replay=await env.TUTOR_DB.prepare(
       'SELECT * FROM internship_artifact_submissions WHERE internship_id = ? AND request_id = ? LIMIT 1',
     ).bind(internshipId,req).first<Record<string,unknown>>();
@@ -496,6 +502,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'JOIN internship_instances i ON i.id = s.internship_id WHERE s.id = ? AND s.internship_id = ? AND i.learner_id = ? LIMIT 1',
     ).bind(submissionId,internshipId,actorId).first<Record<string,unknown>>();
     if (!submission) return json({error:'submission_not_found'},404);
+    const reviewContract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
+    if (!reviewContract || reviewContract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const existingReview=await env.TUTOR_DB.prepare(
       'SELECT id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, created_at ' +
       'FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
@@ -590,7 +598,7 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (!submission) return json({error:'submission_not_found'},404);
     if (!['submitted','under_review'].includes(String(submission.status||''))) return json({error:'invalid_submission_state'},409);
     const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
-    if (!contract || !contract.assigned_by_actor_id) return json({error:'review_unavailable'},409);
+    if (!contract || contract.status !== 'in_progress' || !contract.assigned_by_actor_id) return json({error:'review_unavailable'},409);
     const reviewId=generated('rev');
     const eventType=decision === 'accepted' ? 'artifact_accepted' : 'changes_requested';
     try {
