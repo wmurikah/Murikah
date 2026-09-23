@@ -456,7 +456,12 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (active) return json({error:'submission_already_active'},409);
     const version=await versionOwned(env.TUTOR_DB,actorId,internshipId,versionId);
     if (!version || String(version.artifact_id||'') !== artifactId) return json({error:'artifact_version_not_found'},404);
+    if (String(artifact.current_version_id||'') !== versionId) return json({error:'artifact_version_not_current'},409);
     if (!version.sha256 || Number(version.size_bytes||0) < 0) return json({error:'artifact_integrity_failed'},409);
+    const priorVersionSubmission=await env.TUTOR_DB.prepare(
+      'SELECT id FROM internship_artifact_submissions WHERE artifact_id = ? AND artifact_version_id = ? LIMIT 1',
+    ).bind(artifactId,versionId).first<{id:string}>();
+    if (priorVersionSubmission) return json({error:'artifact_version_already_submitted'},409);
     const previous=await env.TUTOR_DB.prepare(
       'SELECT id, submission_number FROM internship_artifact_submissions WHERE artifact_id = ? ORDER BY submission_number DESC LIMIT 1',
     ).bind(artifactId).first<{id:string;submission_number:number}>();
