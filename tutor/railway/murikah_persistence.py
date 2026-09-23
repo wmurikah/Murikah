@@ -567,6 +567,124 @@ def internship_ai_invocation_record(
     return _json_request("POST", f"{PERSIST_PREFIX}/internships/ai/invocation", payload)
 
 
+
+def internship_ui_current(actor_id: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship workspace persistence is unavailable.")
+    query=urlencode({"actor_id":_learning_text(actor_id,128)})
+    _,raw,_=_request("GET",f"{PERSIST_PREFIX}/internships/ui/current?{query}")
+    value=json.loads(raw.decode("utf-8"))
+    if not isinstance(value,dict): raise PersistenceError("Virtual Internship current response is invalid.")
+    return value
+
+
+def internship_ui_start_options(actor_id: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship workspace persistence is unavailable.")
+    query=urlencode({"actor_id":_learning_text(actor_id,128)})
+    _,raw,_=_request("GET",f"{PERSIST_PREFIX}/internships/ui/start-options?{query}")
+    value=json.loads(raw.decode("utf-8"))
+    if not isinstance(value,dict): raise PersistenceError("Virtual Internship start options response is invalid.")
+    return value
+
+
+def _internship_ui_get(route: str, actor_id: str, internship_id: str, **params: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship workspace persistence is unavailable.")
+    query={"actor_id":_learning_text(actor_id,128),"internship_id":_learning_text(internship_id,128)}
+    query.update({key:_learning_text(value,128) for key,value in params.items()})
+    _,raw,_=_request("GET",f"{PERSIST_PREFIX}{route}?{urlencode(query)}")
+    value=json.loads(raw.decode("utf-8"))
+    if not isinstance(value,dict): raise PersistenceError("Virtual Internship workspace response is invalid.")
+    return value
+
+
+def internship_ui_threads(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _internship_ui_get("/internships/ui/threads",actor_id,internship_id)
+
+
+def internship_ui_thread(actor_id: str, internship_id: str, thread_id: str) -> dict[str, Any]:
+    return _internship_ui_get("/internships/ui/thread",actor_id,internship_id,thread_id=thread_id)
+
+
+def internship_ui_message_by_request(actor_id: str, internship_id: str, request_id: str) -> dict[str, Any]:
+    return _internship_ui_get("/internships/ui/message-by-request",actor_id,internship_id,request_id=request_id)
+
+
+def internship_ui_message_by_request_optional(actor_id: str, internship_id: str, request_id: str) -> dict[str, Any]:
+    try:
+        return internship_ui_message_by_request(actor_id,internship_id,request_id)
+    except PersistenceError as exc:
+        if "HTTP 404" in str(exc):
+            return {}
+        raise
+
+
+def internship_ui_message_record(
+    actor_id: str,
+    internship_id: str,
+    *,
+    thread_kind: str,
+    scenario_actor_id: str,
+    sender_type: str,
+    body: str,
+    request_id: str,
+    thread_title: str,
+    related_task_id: str = "",
+    related_event_id: str = "",
+    related_model_invocation_id: str = "",
+) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship workspace persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/ui/message",
+        {
+            "actor_id":_learning_text(actor_id,128),
+            "internship_id":_learning_text(internship_id,128),
+            "message_id":"vim_" + uuid.uuid4().hex,
+            "thread_id":"vit_" + uuid.uuid4().hex,
+            "thread_kind":_learning_text(thread_kind,32),
+            "scenario_actor_id":_learning_text(scenario_actor_id,128),
+            "sender_type":_learning_text(sender_type,16),
+            "body":_learning_text(body,20000),
+            "request_id":_learning_text(request_id,128),
+            "thread_title":_learning_text(thread_title,160),
+            "related_task_id":_learning_text(related_task_id,128),
+            "related_event_id":_learning_text(related_event_id,128),
+            "related_model_invocation_id":_learning_text(related_model_invocation_id,128),
+        },
+    )
+
+
+def internship_ui_reflections(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _internship_ui_get("/internships/ui/reflections",actor_id,internship_id)
+
+
+def internship_ui_reflection_save(
+    actor_id: str,
+    internship_id: str,
+    *,
+    period_key: str,
+    content: str,
+    prompt_version: int = 1,
+) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship workspace persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/ui/reflection",
+        {
+            "actor_id":_learning_text(actor_id,128),
+            "internship_id":_learning_text(internship_id,128),
+            "reflection_id":"vir_" + uuid.uuid4().hex,
+            "period_key":_learning_text(period_key,80),
+            "prompt_version":max(1,int(prompt_version)),
+            "content":_learning_text(content,20000),
+        },
+    )
+
+
 def email_verification_start(
     email: str,
     *,
