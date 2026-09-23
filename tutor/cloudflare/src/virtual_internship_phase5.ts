@@ -326,13 +326,21 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'SELECT task_id, acknowledged_at FROM internship_task_acknowledgements WHERE internship_id = ? AND task_id = ? LIMIT 1',
     ).bind(internshipId,taskId).first<Record<string,unknown>>();
     if (existing) return json({ok:true,idempotent_replay:true,acknowledgement:existing});
-    await env.TUTOR_DB.batch([
-      env.TUTOR_DB.prepare(
-        'INSERT INTO internship_task_acknowledgements(internship_id, task_id, acknowledged_at, request_id) VALUES (?, ?, ?, ?)',
-      ).bind(internshipId,taskId,now,req),
-      activityStatement(env.TUTOR_DB,internshipId,taskId,'assignment_acknowledged',now,req),
-    ]);
-    return json({ok:true,acknowledgement:{task_id:taskId,acknowledged_at:now}},201);
+    try {
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          'INSERT INTO internship_task_acknowledgements(internship_id, task_id, acknowledged_at, request_id) VALUES (?, ?, ?, ?)',
+        ).bind(internshipId,taskId,now,req),
+        activityStatement(env.TUTOR_DB,internshipId,taskId,'assignment_acknowledged',now,req),
+      ]);
+      return json({ok:true,acknowledgement:{task_id:taskId,acknowledged_at:now}},201);
+    } catch {
+      const raced=await env.TUTOR_DB.prepare(
+        'SELECT task_id, acknowledged_at FROM internship_task_acknowledgements WHERE internship_id = ? AND task_id = ? LIMIT 1',
+      ).bind(internshipId,taskId).first<Record<string,unknown>>();
+      if (raced) return json({ok:true,idempotent_replay:true,acknowledgement:raced});
+      return json({error:'acknowledgement_conflict'},409);
+    }
   }
 
   if (route === '/internships/artifacts/create' && request.method === 'POST') {
@@ -353,15 +361,27 @@ export async function handlePhase5ArtifactPersistenceRoute(
     ).bind(internshipId,taskId,deliverable).first<{id:string}>();
     if (occupied) return json({error:'artifact_already_exists',artifact_id:occupied.id},409);
     const artifactId=generated('art');
-    await env.TUTOR_DB.batch([
-      env.TUTOR_DB.prepare(
-        "INSERT INTO internship_artifacts(id, internship_id, task_id, deliverable_type, artifact_type, title, status, current_version_number, created_at, updated_at, create_request_id) " +
-        "VALUES (?, ?, ?, ?, ?, ?, 'draft', 0, ?, ?, ?)",
-      ).bind(artifactId,internshipId,taskId,deliverable,deliverable,title,now,now,req),
-      activityStatement(env.TUTOR_DB,internshipId,taskId,'draft_created',now,req,{artifactId,detail:{deliverable_type:deliverable}}),
-    ]);
-    const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
-    return json({ok:true,artifact},201);
+    try {
+      await env.TUTOR_DB.batch([
+        env.TUTOR_DB.prepare(
+          "INSERT INTO internship_artifacts(id, internship_id, task_id, deliverable_type, artifact_type, title, status, current_version_number, created_at, updated_at, create_request_id) " +
+          "VALUES (?, ?, ?, ?, ?, ?, 'draft', 0, ?, ?, ?)",
+        ).bind(artifactId,internshipId,taskId,deliverable,deliverable,title,now,now,req),
+        activityStatement(env.TUTOR_DB,internshipId,taskId,'draft_created',now,req,{artifactId,detail:{deliverable_type:deliverable}}),
+      ]);
+      const artifact=await artifactOwned(env.TUTOR_DB,actorId,internshipId,artifactId);
+      return json({ok:true,artifact},201);
+    } catch {
+      const racedReplay=await env.TUTOR_DB.prepare(
+        'SELECT * FROM internship_artifacts WHERE internship_id = ? AND create_request_id = ? LIMIT 1',
+      ).bind(internshipId,req).first<Record<string,unknown>>();
+      if (racedReplay) return json({ok:true,idempotent_replay:true,artifact:racedReplay});
+      const racedOccupied=await env.TUTOR_DB.prepare(
+        'SELECT id FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND deliverable_type = ? LIMIT 1',
+      ).bind(internshipId,taskId,deliverable).first<{id:string}>();
+      if (racedOccupied) return json({error:'artifact_already_exists',artifact_id:racedOccupied.id},409);
+      return json({error:'artifact_create_conflict'},409);
+    }
   }
 
   if (route === '/internships/artifacts/version-text' && request.method === 'POST') {
@@ -444,6 +464,10 @@ export async function handlePhase5ArtifactPersistenceRoute(
           'SELECT * FROM internship_artifact_submissions WHERE internship_id = ? AND request_id = ? LIMIT 1',
         ).bind(internshipId,req).first<Record<string,unknown>>();
         if (found) return json({ok:true,idempotent_replay:true,submission:found});
+        const racedActive=await env.TUTOR_DB.prepare(
+          "SELECT id FROM internship_artifact_submissions WHERE artifact_id = ? AND status IN ('submitted','under_review') ORDER BY submission_number DESC LIMIT 1",
+        ).bind(artifactId).first<{id:string}>();
+        if (racedActive) return json({error:'submission_already_active'},409);
       }
     }
     return json({error:'submission_conflict'},409);
@@ -458,6 +482,11 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'JOIN internship_instances i ON i.id = s.internship_id WHERE s.id = ? AND s.internship_id = ? AND i.learner_id = ? LIMIT 1',
     ).bind(submissionId,internshipId,actorId).first<Record<string,unknown>>();
     if (!submission) return json({error:'submission_not_found'},404);
+    const existingReview=await env.TUTOR_DB.prepare(
+      'SELECT id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, created_at ' +
+      'FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
+    ).bind(internshipId,submissionId).first<Record<string,unknown>>();
+    if (existingReview) return json({ok:true,already_reviewed:true,review:existingReview,submission});
     if (submission.status === 'submitted') {
       await env.TUTOR_DB.prepare(
         "UPDATE internship_artifact_submissions SET status = 'under_review' WHERE id = ? AND internship_id = ? AND status = 'submitted'",
@@ -540,7 +569,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (!contract || !contract.assigned_by_actor_id) return json({error:'review_unavailable'},409);
     const reviewId=generated('rev');
     const eventType=decision === 'accepted' ? 'artifact_accepted' : 'changes_requested';
-    await env.TUTOR_DB.batch([
+    try {
+      await env.TUTOR_DB.batch([
       env.TUTOR_DB.prepare(
         'INSERT INTO internship_artifact_reviews(id, internship_id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, request_id, created_at) ' +
         "VALUES (?, ?, ?, ?, ?, ?, 'workflow', ?, ?, ?, ?, ?, ?)",
@@ -559,7 +589,14 @@ export async function handlePhase5ArtifactPersistenceRoute(
         artifactId:String(submission.artifact_id||''),versionId:String(submission.artifact_version_id||''),submissionId,reviewId,
         detail:{decision},
       }),
-    ]);
+      ]);
+    } catch {
+      const racedReview=await env.TUTOR_DB.prepare(
+        'SELECT * FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
+      ).bind(internshipId,submissionId).first<Record<string,unknown>>();
+      if (racedReview) return json({ok:true,idempotent_replay:true,review:racedReview});
+      return json({error:'review_conflict'},409);
+    }
     const acceptedRows=(await env.TUTOR_DB.prepare(
       "SELECT deliverable_type FROM internship_artifacts WHERE internship_id = ? AND task_id = ? AND status = 'accepted'",
     ).bind(internshipId,String(submission.task_id||'')).all<{deliverable_type:string}>()).results || [];
