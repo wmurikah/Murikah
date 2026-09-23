@@ -649,17 +649,73 @@ def main() -> int:
             'href: "/virtual-internship"',
             'label: "Virtual Internship"',
             "icon: GraduationCap",
-            "3+ month simulated workplace",
+            "Enter your persistent simulated workplace",
         ),
     )
     require_markers(
         "tutor/railway/murikah-virtual-internship-page.tsx.txt",
         (
-            "Virtual Internship",
-            "at least three months",
-            "AI workplace actors",
-            "Competency Passport",
-            "Start internship, coming later",
+            "MurikahVirtualInternshipWorkspace",
+            "<MurikahVirtualInternshipWorkspace />",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt",
+        (
+            'const API = "/api/murikah/virtual-internship"',
+            'label: "Overview"',
+            'label: "Inbox"',
+            'label: "Work"',
+            'label: "Company"',
+            'label: "Documents"',
+            'label: "Meetings"',
+            'label: "Mentor"',
+            'label: "Activity"',
+            "Murikah Mentor",
+            "Save reflection",
+            "No active work is available right now.",
+            "No workplace messages yet.",
+            "No meetings are scheduled.",
+            "overflow-x-auto",
+            'aria-current={section === id ? "page" : undefined}',
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt",
+        (
+            "Mark complete",
+            "Upload work",
+            "Submit work",
+            "Competency score",
+            "100% complete",
+            "Generate letter",
+            "Claim certificate",
+            "\u2014",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_virtual_internship.py",
+        (
+            '@router.get("/workspace")',
+            '@router.post("/start")',
+            '@router.get("/threads/{thread_id}")',
+            '@router.get("/documents/{document_id}")',
+            '@router.post("/reflections")',
+            '@router.post("/actor/messages/stream")',
+            '@router.post("/mentor/messages/stream")',
+            "VirtualInternshipAIOrchestrator",
+        ),
+    )
+    require_markers(
+        "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
+        (
+            "Virtual Internship Phase 4 workplace",
+            "without fake completion scoring",
+            "no Phase 5 artifact actions",
+            "streams a workplace actor reply",
+            "keeps Murikah Mentor separate",
+            "persists the learner reflection",
+            "stopped internship historical and read-only",
         ),
     )
     require_markers(
@@ -1201,7 +1257,16 @@ def main() -> int:
             "## SUBSEQUENT AI ORCHESTRATION REQUIREMENT",
             "- [x] Add model-role abstraction for actor, mentor, assessor and scenario director.",
             "- [x] Test provider failure and malformed structured output.",
-            "Phase 4 remains completely unchecked.",
+            "## Phase 4 Implementation Record",
+            "- [x] Build Virtual Internship dashboard.",
+            "- [x] Build inbox.",
+            "- [x] Build task/work queue.",
+            "- [x] Build company/people view.",
+            "- [x] Build document/evidence browser.",
+            "- [x] Build meetings/timeline.",
+            "- [x] Build Mentor surface.",
+            "- [x] Build activity/reflection view.",
+            "- [x] Preserve responsive/mobile behavior.",
         ),
     )
     require_markers(
