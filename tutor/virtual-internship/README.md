@@ -1207,15 +1207,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 4 — internship workplace UI
 
-- [ ] Build Virtual Internship dashboard.
-- [ ] Build inbox.
-- [ ] Build task/work queue.
-- [ ] Build company/people view.
-- [ ] Build document/evidence browser.
-- [ ] Build meetings/timeline.
-- [ ] Build Mentor surface.
-- [ ] Build activity/reflection view.
-- [ ] Preserve responsive/mobile behavior.
+- [x] Build Virtual Internship dashboard.
+- [x] Build inbox.
+- [x] Build task/work queue.
+- [x] Build company/people view.
+- [x] Build document/evidence browser.
+- [x] Build meetings/timeline.
+- [x] Build Mentor surface.
+- [x] Build activity/reflection view.
+- [x] Preserve responsive/mobile behavior.
 
 ### Phase 5 — work artifact workflow
 
@@ -2102,7 +2102,84 @@ Phase 3 deliberately does not add:
 - completion report, letter or credential generation;
 - Kev, System One, a decision-model microservice or new model weights.
 
-Phase 4 remains completely unchecked. Real assessment/scoring and Competency Passport evidence remain unimplemented.
+Phase 4 is implemented through the dedicated workplace UI record below. Real assessment/scoring and Competency Passport evidence remain unimplemented.
+
+## Phase 4 Implementation Record
+
+Status: **implemented for the learner-facing workplace UI only**. Phase 4 consumes the Phase 1 lifecycle contract, the Phase 2 learner-safe scenario state and the Phase 3 actor/Mentor orchestration contract. It does not implement learner artifact submission, production assessment, Competency Passport scoring, final completion, reports, completion letters or a career catalog.
+
+### Learner route and shared shell
+
+The canonical learner route remains `/virtual-internship`. The pinned DeepTutor overlay installs one optional catch-all route at `web/app/(workspace)/virtual-internship/[[...section]]/page.tsx`, backed by one shared `MurikahVirtualInternshipWorkspace` component. The stable learner URLs are:
+
+- `/virtual-internship`
+- `/virtual-internship/inbox`
+- `/virtual-internship/work`
+- `/virtual-internship/company`
+- `/virtual-internship/documents`
+- `/virtual-internship/meetings`
+- `/virtual-internship/mentor`
+- `/virtual-internship/activity`
+
+The global Tutor sidebar retains one Virtual Internship entry. Phase 4 adds only secondary workspace navigation inside that feature.
+
+### Server-authoritative read model and security
+
+`tutor/railway/virtual_internship/workspace.py` builds the learner-safe workspace DTO. It derives day/week and lifecycle display from Phase 1 server timestamps, consumes only Phase 2 learner-safe facts/tasks/events, and joins Phase 4 durable threads/reflections. It never returns raw canonical scenario state, hidden actor knowledge, unrevealed documents, future events, completion criteria, assessor state or competency evidence.
+
+The authenticated router is `tutor/railway/murikah_virtual_internship.py`, mounted at `/api/murikah/virtual-internship`. Ownership is resolved from the authenticated member and the persisted internship. Browser-supplied learner/owner IDs are not accepted as authority.
+
+The dashboard and all passive workplace surfaces are deterministic D1/scenario reads. Loading the dashboard, Work, Company, Documents, Meetings or Activity does not call an LLM.
+
+### Durable Phase 4 records
+
+Migration `0010_virtual_internship_phase4_workspace.sql` adds only the UI state Phase 4 genuinely requires:
+
+- `internship_message_threads`
+- `internship_messages`
+- `internship_reflections`
+
+Messages have request-level idempotency. Mentor and workplace threads remain logically separate. Reflections are owned through the internship. Meetings continue to come from learner-visible Phase 2 scenario events, so Phase 4 does not duplicate authored meeting definitions.
+
+### Workplace inbox and Murikah Mentor
+
+Workplace actor messages and Murikah Mentor messages call the existing Phase 3 `VirtualInternshipAIOrchestrator` on the server. React never calls a model provider directly. Learner messages are persisted before generation; final learner-visible actor/Mentor text is persisted after streaming. Retrying with the same request ID does not duplicate the learner message. Provider/model failures are limited to the attempted interaction and do not break the rest of the workspace.
+
+The Mentor is a distinct surface and thread kind. It can explain, coach and help plan within the permitted assistance metadata, but Phase 4 provides no task-completion shortcut.
+
+### Work, documents, meetings and activity
+
+The Work queue renders only task state returned by the learner-safe read model and is read-only for Phase 4. It provides no Submit, Upload, Mark complete, Approve or Pass task control.
+
+Documents are learner-visible scenario source material only. Detailed content is fetched through the owned document endpoint. Phase 4 does not accept learner work artifacts.
+
+Meetings are text-based and come only from learner-visible scenario state. The timeline normalizes learner-facing internship events, messages, meetings/reflections and stopped state, ordered by server timestamps with a stable secondary key.
+
+### Reflections
+
+The Activity surface includes a durable weekly reflection interface. Reflections are learner-authored records and are not scored, assessed or converted to competency evidence in Phase 4.
+
+### Guest, stopped and failure states
+
+Guests receive only a polished product preview and the existing account sign-in/sign-up path. They do not receive workplace data, actor access, Mentor internship context or reflection history.
+
+A stopped internship remains historical and read-only. It is never relabelled as completed. Actor sends, Mentor sends and new reflection writes are disabled while existing state remains reviewable.
+
+Each surface has intentional loading, empty and learner-safe error states. No SQL/provider/Cloudflare exception is intentionally rendered to the learner.
+
+### Responsive and accessibility contract
+
+The workplace uses cards/lists rather than desktop-only tables, horizontally scrollable secondary navigation, a mobile inbox list-to-thread pattern and responsive company/task layouts. It is designed for 320, 375, 768, 1024 and 1440 pixel widths without requiring hover-only interaction.
+
+The UI uses semantic headings, navigation landmarks, links for navigation, buttons for actions, labelled form fields, visible focus treatment and `aria-current` for the active workspace section. Phase 4 user-visible strings follow the existing Murikah no-em-dash contract.
+
+### Phase 4 regression coverage
+
+Backend coverage remains in `tutor/tests/test_virtual_internship_phase4_backend.py`, including learner isolation, hidden-state filtering, deterministic/model-free dashboard reads, stopped state, durable idempotency and secure document visibility.
+
+Frontend integration coverage is in `tutor/tests/virtual-internship-workspace.spec.tsx.txt`, including dashboard truthfulness, navigation semantics, Work detail without Phase 5 controls, learner-safe company rendering, secure document loading, actor streaming, Mentor separation/streaming, reflection persistence, stopped read-only behavior and guest/no-internship states.
+
+The Tutor Docker build restores the overlay component into the pinned DeepTutor checkout and runs this integration test alongside the existing Tutor integration suite before the production Next.js build.
 
 ## SUBSEQUENT AI ORCHESTRATION REQUIREMENT
 
