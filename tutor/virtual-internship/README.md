@@ -2203,7 +2203,124 @@ Phase 1 ownership, one-active-internship, duration, pinned scenario version, sto
 
 `tutor/cloudflare/preflight.py` protects the shared workspace source, stable route labels, authenticated Phase 4 router endpoints, frontend integration test, completed Phase 4 checklist, this implementation record and the subsequent-workplace-UI requirement. `tutor/railway/validate_guest_overlay.py` protects the installed workspace route and guest/auth navigation invariants in the pinned DeepTutor overlay.
 
-Known Phase 4 limitations are intentional phase boundaries. Meetings are rendered only when Phase 2 exposes a learner-visible authored meeting/check-in event; the current demo pack may therefore show the deliberate empty state. Phase 4 has no learner artifact drafting/upload/submission/review workflow, no rubric or assessor workflow, no competency evidence or Competency Passport UI, no final completion/certificate/report/letter flow, no browser push/email notifications and no global workplace search. Reflection text is stored but is not silently model-assessed.
+Known Phase 4 limitations are intentional phase boundaries. Meetings are rendered only when Phase 2 exposes a learner-visible authored meeting/check-in event; the current demo pack may therefore show the deliberate empty state. Phase 4 itself did not implement learner artifact drafting/upload/submission/review; Phase 5 now extends that same Work surface without changing the Phase 4 shell. Rubric assessment, competency evidence, Competency Passport UI, final completion/certificate/report/letter flow, browser push/email notifications and global workplace search remain outside Phase 4. Reflection text is stored but is not silently model-assessed.
+
+## Phase 5 Implementation Record
+
+Status: **implemented for the work-artifact workflow only**. Phase 5 adds real learner work products and workflow review to the existing Phase 4 Work surface while preserving the Phase 1 ownership/R2 contract, Phase 2 task/event state machine and Phase 3 model orchestration boundary. It does not implement Phase 6 scoring or competency assessment, Phase 7 Competency Passport evidence, Phase 8 internship completion, a performance report or a completion letter.
+
+### Durable model and lineage
+
+Migration `0011_virtual_internship_phase5_artifacts.sql` adds:
+
+- `internship_task_acknowledgements`;
+- `internship_artifacts`;
+- `internship_artifact_versions`;
+- `internship_artifact_submissions`;
+- `internship_artifact_reviews`;
+- `internship_artifact_activity`.
+
+The canonical lineage is:
+
+`learner -> internship -> pinned scenario version -> task -> artifact -> artifact version -> submission -> review`
+
+A task remains the authored Phase 2 assignment. An artifact is one logical learner work product for an authored deliverable slot. A version is one immutable saved representation. A submission explicitly references one exact version. A review explicitly references one exact submission. Phase 5 never collapses those records into one mutable row.
+
+A task may require multiple authored deliverables. `UNIQUE (internship_id, task_id, deliverable_type)` prevents duplicate logical artifacts for one deliverable slot while allowing one task to have several distinct work products. Version and submission numbers are monotonically increasing per artifact and protected by database uniqueness plus retry-safe server logic.
+
+### Assignment acknowledgement and Phase 2 integration
+
+Opening an assignment does not acknowledge it. The learner uses the explicit `Acknowledge assignment` action. The application first invokes the existing Phase 2 typed transition from `available` to `in_progress`, then persists acknowledgement metadata and learner-visible activity. Repeated acknowledgement is idempotent and does not duplicate activity.
+
+Phase 5 never patches `internship_tasks.status` directly. When the final required deliverable is accepted, the server verifies all authored `deliverable_types` are satisfied and calls `ScenarioStateService.transition_task(..., "completed")`. It then reuses the Phase 2 deterministic event evaluation path. Task completion is not internship completion.
+
+### Artifact creation, drafting and upload
+
+The learner creates work only for an owned active internship, an eligible Phase 2 task and a deliverable type declared by the task definition. Text-oriented deliverables use a lightweight plain-text/Markdown drafting surface. Each explicit Save draft creates a new immutable version. Phase 5 does not autosave on each keystroke.
+
+File versions accept a bounded allowlist including PDF, DOCX, XLSX, CSV, PPTX, TXT, Markdown, common raster images, JSON/notebook data and common source-code text. The current limits are one file per version, 10 MiB per file/version request, 100 versions per logical artifact and 120,000 characters for a text draft. Dangerous executable formats are rejected. Code, notebooks, HTML and SVG are data only and are never executed; active learner HTML/SVG is not injected into the Tutor DOM.
+
+The Worker normalizes the extension and declared MIME type, rejects dangerous or contradictory types, computes SHA-256 and authoritative byte size server-side, and generates the final R2 key. The browser cannot supply the final object key or an owner identity.
+
+### Private R2 ownership and integrity
+
+D1 remains the ownership/control plane and private `TUTOR_FILES` R2 remains the object plane. Every artifact version is registered through the existing global `tutor_objects` ownership authority with:
+
+- `owner_kind = user`;
+- `owner_id = authenticated learner actor ID`;
+- `object_type = artifact-version`;
+- the canonical generated object key;
+- server-computed SHA-256;
+- byte size and normalized content type.
+
+The canonical object key is:
+
+`users/<learner-id>/virtual-internships/<internship-id>/artifact-version/<artifact-version-id>`
+
+Original filenames remain metadata and are sanitized for `Content-Disposition`; they are never appended to the R2 key. R2 is not public and no `r2.dev` URL is used.
+
+D1 and R2 are finalized with compensation. If R2 write succeeds but D1 ownership/version finalization fails, the known Phase 5 object is deleted rather than silently left unregistered. The owner-scoped `/internships/artifacts/integrity` bridge route deterministically reconciles registered versions, missing R2 objects, byte-size mismatches and unregistered objects under the exact Phase 5 learner/internship prefix without automatically deleting uncertain objects.
+
+### Secure retrieval
+
+Artifact history responses expose opaque artifact/version identifiers and learner-safe metadata, not raw R2 keys. A download re-authenticates the member, verifies internship ownership, verifies the version belongs to the artifact/internship, verifies the matching `tutor_objects` owner, reads the private R2 object and checks expected size. Downloads use safe `Content-Disposition`, `private, no-store` cache policy and `nosniff`.
+
+Previous versions remain retrievable by their owner after later saves. Submitted and accepted versions are immutable. Phase 5 deliberately adds no destructive artifact-delete endpoint.
+
+### Submission, revision and review history
+
+Save draft and Submit for review are separate learner actions. Submission is explicit and immutable. The UI shows which version is being submitted and confirms that it will remain in submission history.
+
+If changes are requested, the prior submitted version remains read-only. The learner creates a new version, optionally linked to the prior review, and creates a new submission attempt. Submission 1 is never overwritten by Submission 2. The Work surface shows version history, submission history, reviewer feedback and requested changes as responsive stacked cards rather than a desktop-only table.
+
+### Simulated supervisor workflow review
+
+Supervisor workflow review is Phase 5 workflow control, not Phase 6 assessment. The authorized reviewer is derived server-side from the authored task's assigned supervisor relationship. The learner cannot choose an arbitrary reviewer and has no public `accept submission` status endpoint.
+
+Automated review reuses the existing Phase 3 `VirtualInternshipAIOrchestrator`, provider/model configuration, bounded timeouts/fallback and model-invocation audit path. It uses a dedicated strict workflow schema with only:
+
+- `schema_version`;
+- `decision = accepted | changes_requested`;
+- `feedback`;
+- `requested_changes`.
+
+Unknown fields are rejected. The Phase 5 reviewer cannot return a score, grade, competency level, evidence strength, final rating, internship pass result or Competency Passport evidence. Only validated learner-visible feedback, requested changes, workflow decision and `model_invocation_id` are persisted; chain-of-thought is never stored.
+
+Supervisor context is minimized to the learner-safe reviewer identity, relevant task brief, one submitted artifact representation and bounded prior workflow feedback. It does not receive the full internship database, unrelated artifacts, full Mentor history or other learners.
+
+The repository currently has no safe PDF/DOCX/XLSX extraction pipeline. Those formats are therefore stored and downloaded securely, but Phase 5 does not invent a parser or pretend to review their contents. Automated review fails closed for unsupported binary representations: the submission remains submitted/under review, no accepted decision is created and no task completion occurs. Text-oriented artifacts are bounded before model use.
+
+### Work UI, activity, accessibility and mobile
+
+Phase 5 extends the existing `Work` route. It does not create Work V2, Assignment Center or another competing navigation surface. Task detail now shows assignment/work status, expected deliverables, acknowledgement, current work product, latest version, submission state, simulated-supervisor feedback and version/submission history.
+
+Meaningful activity is durable and learner-visible: assignment acknowledged, work product created, version saved, submitted, resubmitted, changes requested, accepted and task completed. Internal D1/R2 implementation details are not shown as workplace activity.
+
+Primary actions use semantic buttons and labelled controls. File upload has a normal file chooser rather than drag-and-drop-only behavior. Version history uses stacked responsive cards so the workflow remains usable on narrow mobile widths, including 320, 375 and 430 pixels. Submitted versions cannot be edited; revisions create new versions.
+
+### Guest, stopped and failure behavior
+
+Guests remain on the existing preview/auth flow and cannot create artifacts, upload work, submit, retrieve member artifacts or receive supervisor review. A stopped internship keeps its owned artifacts, historical versions, submissions, reviews and downloads available, but all new Phase 5 writes are read-only.
+
+R2/storage/integrity failures fail closed. A missing R2 object does not return an empty file. Ownership mismatches do not self-correct from browser input. AI timeout/provider/schema failure leaves the submission under review and returns learner-safe review-unavailable text rather than inventing a decision.
+
+### Phase 5 verification coverage
+
+Backend coverage is in `tutor/tests/test_virtual_internship_phase5_artifacts.py`. It protects the strict workflow-review schema, absence of Phase 6/7 scoring fields, workspace artifact state, immutable version/submission lineage, ownership/integrity controls, typed learner actions, upload bounds and the no-direct-task-status-patch rule.
+
+The existing frontend integration suite `tutor/tests/virtual-internship-workspace.spec.tsx.txt` is extended to protect deliberate acknowledgement and the Phase 5 Work surface while retaining Phase 4 dashboard, inbox, company, documents, meetings, Mentor, activity, guest and stopped-state regressions.
+
+Cloudflare preflight protects the Phase 5 migration, private-storage/integrity markers, strict workflow-review contract, authenticated API actions and Work UI controls. The Docker production-image build runs the full Python unit-test discovery and the Virtual Internship frontend integration suite before building the pinned Next.js Tutor image.
+
+Intentional Phase 5 boundaries remain: no rubric engine, competency score, competency level, Competency Evidence Record, Competency Passport entry, internship completion gate, performance report or completion letter is created here.
+
+## SUBSEQUENT ARTIFACT DEVELOPMENT REQUIREMENT
+
+Future assessment, Competency Passport, reporting and completion work must treat the Phase 5 artifact lineage as immutable historical evidence. Do not overwrite a submitted version, repoint an old submission to a newer version, replace `tutor_objects` with a second ownership truth, publish R2 objects, authorize with raw object keys, or let the browser patch workflow/task status.
+
+Phase 6/7 may reference accepted artifact versions and their assistance/review lineage, but any score, competency judgment or Passport evidence must be a separate later-phase record. A Phase 5 `accepted` decision means only that the work product is ready to move forward in the simulated workflow.
+
+Later phases must continue to use authenticated actor ownership, the pinned scenario version, Phase 2 typed task transitions/events, Phase 3 provider/orchestration and bounded-context rules, private R2, server-computed integrity metadata, learner-safe errors and retry-safe request IDs.
 
 ## SUBSEQUENT WORKPLACE UI REQUIREMENT
 
