@@ -629,7 +629,7 @@ def main() -> int:
             'href={SIGN_UP}',
             'Sign up',
             'href="/register?next=%2Fvirtual-internship"',
-            'aria-label="Virtual Internship, coming soon"',
+            'aria-label="Virtual Internship"',
         ),
     )
     require_markers(
