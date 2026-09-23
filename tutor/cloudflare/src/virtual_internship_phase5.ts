@@ -502,8 +502,6 @@ export async function handlePhase5ArtifactPersistenceRoute(
       'JOIN internship_instances i ON i.id = s.internship_id WHERE s.id = ? AND s.internship_id = ? AND i.learner_id = ? LIMIT 1',
     ).bind(submissionId,internshipId,actorId).first<Record<string,unknown>>();
     if (!submission) return json({error:'submission_not_found'},404);
-    const reviewContract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
-    if (!reviewContract || reviewContract.status !== 'in_progress') return json({error:'task_not_available'},409);
     const existingReview=await env.TUTOR_DB.prepare(
       'SELECT id, task_id, artifact_id, submission_id, reviewer_actor_id, review_type, decision, feedback, requested_changes_json, model_invocation_id, created_at ' +
       'FROM internship_artifact_reviews WHERE internship_id = ? AND submission_id = ? LIMIT 1',
@@ -514,6 +512,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
       );
       return json({ok:true,already_reviewed:true,review:existingReview,submission,task_ready_for_completion:taskReady});
     }
+    const reviewContract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,String(submission.task_id||''));
+    if (!reviewContract || reviewContract.status !== 'in_progress') return json({error:'task_not_available'},409);
     if (submission.status === 'submitted') {
       await env.TUTOR_DB.prepare(
         "UPDATE internship_artifact_submissions SET status = 'under_review' WHERE id = ? AND internship_id = ? AND status = 'submitted'",
