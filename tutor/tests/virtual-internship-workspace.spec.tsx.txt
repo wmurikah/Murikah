@@ -256,9 +256,9 @@ describe("Virtual Internship workplace through Phase 5", () => {
         artifact.current_content_type = row.content_type;
         artifact.current_size_bytes = row.size_bytes;
         artifact.current_source_type = "text";
-        artifact.status = "draft";
+        if (version === 1) artifact.status = "draft";
         artifact.versions = [row, ...artifact.versions];
-        current.tasks[0].work_status = "draft_saved";
+        current.tasks[0].work_status = artifact.status === "changes_requested" ? "changes_requested" : "draft_saved";
         return jsonResponse({ ok: true, version: row }, 201);
       }
       if (url.endsWith("/artifacts/art_1/submit") && init?.method === "POST") {
