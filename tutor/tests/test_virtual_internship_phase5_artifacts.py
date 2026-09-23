@@ -210,6 +210,15 @@ class Phase5ArtifactTests(unittest.TestCase):
                 db.execute("""INSERT INTO internship_artifact_activity(
                     id,internship_id,task_id,event_type,event_time,request_id
                 ) VALUES ('act_done_2','vi_1','task_1','task_completed',8,'task_done_2')""")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("UPDATE internship_artifact_versions SET size_bytes=999 WHERE id='ver_1'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("DELETE FROM internship_artifact_versions WHERE id='ver_1'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("UPDATE internship_artifact_submissions SET artifact_version_id='ver_1' WHERE id='sub_2'")
+            db.execute("UPDATE internship_artifact_submissions SET status='accepted' WHERE id='sub_2'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("UPDATE internship_artifact_reviews SET feedback='Changed' WHERE id='rev_2'")
             db.commit()
             db.close()
 
@@ -310,6 +319,13 @@ class Phase5ArtifactTests(unittest.TestCase):
 
     def test_migration_has_no_phase6_or_phase7_fields(self):
         sql = MIGRATION.read_text().lower()
+        for marker in (
+            "trg_internship_artifact_versions_no_update",
+            "trg_internship_artifact_versions_no_delete",
+            "trg_internship_artifact_submissions_pin_immutable",
+            "trg_internship_artifact_reviews_no_update",
+        ):
+            self.assertIn(marker, sql)
         for forbidden in ("competency_level", "evidence_strength", "rubric_score", "pass_percentage", "passport"):
             self.assertNotIn(forbidden, sql)
 
