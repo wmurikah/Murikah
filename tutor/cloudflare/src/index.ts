@@ -1,6 +1,7 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { buildScenarioInitializationStatements, handleScenarioPersistenceRoute } from './virtual_internship_phase2';
 import { handlePhase3AIPersistenceRoute } from './virtual_internship_phase3';
+import { handlePhase4WorkspacePersistenceRoute } from './virtual_internship_phase4';
 
 type PersistenceRunResult = { meta?: { changes?: number } };
 type PersistenceStatement = {
@@ -621,6 +622,9 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
   const phase3Response = await handlePhase3AIPersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
   if (phase3Response) return phase3Response;
+
+  const phase4Response = await handlePhase4WorkspacePersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
+  if (phase4Response) return phase4Response;
 
   if (route === '/scenario-version/resolve' && request.method === 'POST') {
     const body = await requestJson(request);
