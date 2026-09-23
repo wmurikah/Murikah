@@ -768,8 +768,14 @@ function TaskDetail({
             const artifact = artifactFor(deliverable);
             const latestReview = artifact ? [...(artifact.reviews || [])].sort((a,b)=>b.created_at-a.created_at)[0] : undefined;
             const latestSubmission = artifact ? [...(artifact.submissions || [])].sort((a,b)=>b.submission_number-a.submission_number)[0] : undefined;
+            const currentVersion = artifact?.current_version_id
+              ? (artifact.versions || []).find((version) => version.id === artifact.current_version_id)
+              : undefined;
             const canWork = Boolean(task.acknowledged_at) && task.status === "in_progress" && !readOnly &&
               (!artifact || ["draft","changes_requested"].includes(artifact.status));
+            const canSubmit = Boolean(
+              artifact?.current_version_id && canWork && !currentVersion?.submitted
+            );
             return (
               <section key={deliverable} className="rounded-xl border border-[var(--border)] p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -845,7 +851,7 @@ function TaskDetail({
                   </div>
                 ) : null}
 
-                {artifact?.current_version_id && canWork && !["submitted"].includes(artifact.status) ? (
+                {artifact && canSubmit ? (
                   <button type="button" disabled={Boolean(busy)} onClick={() => void submit(artifact)}
                     className="mt-4 min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">
                     {busy === "submit:" + artifact.id ? "Submitting..." : "Submit Version " + artifact.current_version_number + " for review"}
