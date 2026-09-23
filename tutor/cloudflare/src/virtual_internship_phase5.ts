@@ -278,21 +278,25 @@ export async function handlePhase5ArtifactPersistenceRoute(
   }
   if (route === '/internships/artifacts/integrity' && request.method === 'GET') {
     const rows=(await env.TUTOR_DB.prepare(
-      'SELECT v.id, v.size_bytes, o.object_key FROM internship_artifact_versions v ' +
+      'SELECT v.id, v.size_bytes, v.sha256, o.object_key, o.sha256 AS ownership_sha256 FROM internship_artifact_versions v ' +
       'JOIN internship_instances i ON i.id = v.internship_id ' +
       'JOIN tutor_objects o ON o.object_id = v.object_id AND o.deleted_at IS NULL ' +
       'WHERE v.internship_id = ? AND i.learner_id = ? AND o.owner_kind = ? AND o.owner_id = ?',
-    ).bind(internshipId,actorId,'user',actorId).all<{id:string;size_bytes:number;object_key:string}>()).results || [];
-    let missingObjects=0, sizeMismatches=0;
+    ).bind(internshipId,actorId,'user',actorId).all<{
+      id:string;size_bytes:number;sha256:string;object_key:string;ownership_sha256:string
+    }>()).results || [];
+    let missingObjects=0, sizeMismatches=0, hashMismatches=0;
     const registeredKeys=new Set<string>();
     for (const row of rows) {
       registeredKeys.add(row.object_key);
       const object=await env.TUTOR_FILES.get(row.object_key);
       if (!object) {
         missingObjects += 1;
-      } else if (object.size !== Number(row.size_bytes||0)) {
-        sizeMismatches += 1;
+        continue;
       }
+      if (object.size !== Number(row.size_bytes||0)) sizeMismatches += 1;
+      const actualHash=await sha256Hex(await new Response(object.body).arrayBuffer());
+      if (actualHash !== row.sha256 || actualHash !== row.ownership_sha256) hashMismatches += 1;
     }
     const prefix=['users',actorId,'virtual-internships',internshipId,'artifact-version'].join('/') + '/';
     let cursor:string|undefined, orphanObjects=0;
@@ -302,10 +306,11 @@ export async function handlePhase5ArtifactPersistenceRoute(
       cursor=listed.truncated ? listed.cursor : undefined;
     } while (cursor);
     return json({
-      ok:missingObjects===0 && sizeMismatches===0 && orphanObjects===0,
+      ok:missingObjects===0 && sizeMismatches===0 && hashMismatches===0 && orphanObjects===0,
       registered_version_count:rows.length,
       missing_object_count:missingObjects,
       size_mismatch_count:sizeMismatches,
+      hash_mismatch_count:hashMismatches,
       orphan_object_count:orphanObjects,
     });
   }
