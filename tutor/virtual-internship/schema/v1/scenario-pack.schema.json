@@ -201,6 +201,38 @@
         "content_hash": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "review_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "midpoint_day",
+            "final_review_day",
+            "demo_accelerated_midpoint_day",
+            "demo_accelerated_final_day"
+          ],
+          "properties": {
+            "midpoint_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 730
+            },
+            "final_review_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 730
+            },
+            "demo_accelerated_midpoint_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 730
+            },
+            "demo_accelerated_final_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 730
+            }
+          }
         }
       }
     },
@@ -799,6 +831,16 @@
             "pattern": "^[a-z][a-z0-9_]{2,63}$",
             "maxLength": 64
           }
+        },
+        "rubric": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/rubric"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -1071,6 +1113,155 @@
           }
         }
       ]
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rubric_id",
+        "schema_version",
+        "title",
+        "purpose",
+        "calculation",
+        "rating_levels",
+        "criteria"
+      ],
+      "properties": {
+        "rubric_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$",
+          "maxLength": 128
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "calculation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "weight_total",
+            "rounding"
+          ],
+          "properties": {
+            "method": {
+              "enum": [
+                "weighted_average",
+                "none"
+              ]
+            },
+            "weight_total": {
+              "const": 100
+            },
+            "rounding": {
+              "const": "half_up_2dp"
+            }
+          }
+        },
+        "rating_levels": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rating_id",
+              "label",
+              "value"
+            ],
+            "properties": {
+              "rating_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{1,79}$",
+                "maxLength": 80
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          }
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "criterion_id",
+              "description",
+              "evidence_expectations",
+              "weight",
+              "allowed_rating_ids",
+              "deliverable_types",
+              "allow_not_assessed"
+            ],
+            "properties": {
+              "criterion_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{1,127}$",
+                "maxLength": 128
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              },
+              "evidence_expectations": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0
+              },
+              "allowed_rating_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{1,79}$",
+                  "maxLength": 80
+                }
+              },
+              "deliverable_types": {
+                "type": "array",
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "maxLength": 64
+                }
+              },
+              "allow_not_assessed": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
