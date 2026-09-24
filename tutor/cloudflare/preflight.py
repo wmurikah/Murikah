@@ -1809,6 +1809,7 @@ def main() -> int:
             "CREATE TABLE IF NOT EXISTS competency_definitions",
             "CREATE TABLE IF NOT EXISTS competency_assessment_mappings",
             "CREATE TABLE IF NOT EXISTS competency_evidence",
+            "mapping_version INTEGER NOT NULL",
             "CREATE TABLE IF NOT EXISTS competency_passports",
             "CREATE TABLE IF NOT EXISTS competency_passport_history",
             "CREATE TABLE IF NOT EXISTS competency_derivation_status",
@@ -1834,7 +1835,10 @@ def main() -> int:
             "competency_assessment_mappings",
             "a.status='completed'",
             "event_time<=?",
-            "DELETE FROM competency_passports WHERE learner_id=?",
+            "LEFT JOIN competency_derivation_status",
+            "p7RefreshPassport",
+            "expires_after_days",
+            "mapping_version",
         ),
     )
     require_markers(
@@ -1843,7 +1847,7 @@ def main() -> int:
     )
     require_markers(
         "tutor/railway/virtual_internship/passport/definitions.py",
-        ("LEVEL_FRAMEWORK_VERSION", "applied_with_support", "LEVEL_SEMANTICS"),
+        ("LEVEL_FRAMEWORK_VERSION", "LEVEL_LABELS", "applied_with_support", "LEVEL_SEMANTICS"),
     )
     require_markers(
         "tutor/railway/virtual_internship/passport/evidence.py",
@@ -1855,7 +1859,7 @@ def main() -> int:
     )
     require_markers(
         "tutor/railway/virtual_internship/passport/export.py",
-        ("SIMULATION_DISCLOSURE", "def build_passport_export(", "evidence_id"),
+        ("SIMULATION_DISCLOSURE", "def build_passport_export(", "evidence_id", "mapping_version"),
     )
     require_markers(
         "tutor/railway/murikah_virtual_internship.py",
@@ -1864,6 +1868,7 @@ def main() -> int:
             '@router.get("/passport/evidence")',
             '@router.post("/passport/export")',
             "internship_passport_reconcile",
+            "personalization_for_actor(actor_id,username)",
         ),
     )
     require_markers(
@@ -1874,6 +1879,7 @@ def main() -> int:
             "No verified competency evidence yet.",
             "Review evidence",
             "Export JSON",
+            "Include my display name in this export",
             "not an AI opinion or an overall employability score",
         ),
     )
