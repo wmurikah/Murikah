@@ -482,8 +482,8 @@ def _build_performance_review(
     if not isinstance(internship,dict):
         raise HTTPException(404,"That internship is not available.")
     state = str(workspace.get("state") or "")
-    if state not in {"active","stopped"}:
-        raise HTTPException(409,"That performance review is not available in the current internship state.")
+    if state != "active":
+        raise HTTPException(409,"This internship is read-only. Performance reviews cannot be created after it is stopped.")
     definition_result = ScenarioStateService().definition(actor_id,internship_id)
     definition = definition_result.get("definition") if isinstance(definition_result,dict) else None
     manifest = definition.get("manifest") if isinstance(definition,dict) and isinstance(definition.get("manifest"),dict) else {}
