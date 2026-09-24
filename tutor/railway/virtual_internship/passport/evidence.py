@@ -23,6 +23,13 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
         return None
     if str(criterion.get("result_state") or "")!="assessed":
         return None
+    competency_id=str(mapping.get("competency_id") or "").strip()
+    definition_version=int(mapping.get("definition_version") or 0)
+    mapping_version=int(mapping.get("mapping_version") or 0)
+    if not competency_id or definition_version < 1 or mapping_version < 1:
+        return None
+    if isinstance(assistance_level,bool) or not isinstance(assistance_level,int) or not 0 <= assistance_level <= 5:
+        return None
     refs=criterion.get("evidence_refs")
     if not isinstance(refs,list) or not refs:
         return None
@@ -55,11 +62,11 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
         if strength["strength"] == "strong":
             strength={**strength,"strength":"supporting","factors":{**strength["factors"],"physical_simulation_limitation":True}}
     return {
-        "competency_id":str(mapping.get("competency_id") or ""),
-        "definition_version":int(mapping.get("definition_version") or 0),
+        "competency_id":competency_id,
+        "definition_version":definition_version,
         "sub_competency_id":str(mapping.get("sub_competency_id") or ""),
         "criterion_id":str(criterion.get("criterion_id") or ""),
-        "mapping_version":int(mapping.get("mapping_version") or 0),
+        "mapping_version":mapping_version,
         "criterion_rating_id":str(criterion.get("rating_id") or ""),
         "criterion_numeric":criterion.get("numeric_value"),
         "demonstrated_level":candidate,
