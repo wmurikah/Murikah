@@ -462,6 +462,15 @@ class VirtualInternshipWorkspaceService:
                 "timestamp":int(status.get("stopped_at") or 0),
                 "href":"/virtual-internship",
             })
+        if status.get("status") == "completed" and int(status.get("completed_at") or 0) > 0:
+            items.append({
+                "id":"internship:completed",
+                "type":"internship_completed",
+                "title":"Internship completed",
+                "detail":"Qualifying completion was finalized from the deterministic requirements record.",
+                "timestamp":int(status.get("completed_at") or 0),
+                "href":"/virtual-internship",
+            })
         meeting_ids = {m["meeting_id"] for m in meetings}
         items.sort(key=lambda item:(int(item.get("timestamp") or 0),str(item.get("id") or "")),reverse=True)
         return items[:100]
@@ -510,7 +519,7 @@ class VirtualInternshipWorkspaceService:
             now=int(status.get("current_server_time") or 0),
         )
         return {
-            "state":"stopped" if status.get("status") == "stopped" else "active",
+            "state":status.get("status") if status.get("status") in {"stopped","completed"} else "active",
             "simulation":True,
             "internship":{
                 "internship_id":_text(status.get("internship_id"),128),
@@ -530,6 +539,7 @@ class VirtualInternshipWorkspaceService:
                 "current_week":elapsed_days // 7 + 1,
                 "expected_workload_band":_text(manifest.get("expected_workload_band"),32),
                 "stopped_at":int(status.get("stopped_at") or 0),
+                "completed_at":int(status.get("completed_at") or 0),
             },
             "overview":{
                 "active_task_count":len(active_tasks),
