@@ -917,10 +917,7 @@ async def competency_passport(
     actor_id=_member(current,"view your Competency Passport")
     persistence=_persistence()
     try:
-        try:
-            persistence.internship_passport_reconcile(actor_id)
-        except Exception:
-            pass
+        persistence.internship_passport_reconcile(actor_id)
         return persistence.internship_passport_summary(actor_id)
     except Exception as exc:
         raise _safe_http(exc,"Your Competency Passport could not be loaded. Try again.") from exc
@@ -932,8 +929,10 @@ async def competency_passport_evidence(
     current: TokenPayload = Depends(require_auth),
 ):
     actor_id=_member(current,"view your Competency Passport evidence")
+    persistence=_persistence()
     try:
-        return _persistence().internship_passport_evidence(actor_id,competency_id)
+        persistence.internship_passport_reconcile(actor_id)
+        return persistence.internship_passport_evidence(actor_id,competency_id)
     except Exception as exc:
         raise _safe_http(exc,"Your competency evidence could not be loaded. Try again.") from exc
 
@@ -949,10 +948,7 @@ async def export_competency_passport(
     _actor_id, username, _guest = _identity(current)
     persistence=_persistence()
     try:
-        try:
-            persistence.internship_passport_reconcile(actor_id)
-        except Exception:
-            pass
+        persistence.internship_passport_reconcile(actor_id)
         source=persistence.internship_passport_export_source(actor_id)
         display_name=""
         if body.include_display_name:
