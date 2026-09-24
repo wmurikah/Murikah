@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
 from deeptutor.murikah_access import check_origin
+from deeptutor.murikah_personalization import personalization_for_actor
 from deeptutor.services.auth import TokenPayload
 from deeptutor.virtual_internship.ai.orchestrator import AIOrchestrationError, VirtualInternshipAIOrchestrator
 from deeptutor.virtual_internship.ai.roles import ASSESSOR_PROMPT_VERSION
@@ -945,6 +946,7 @@ async def export_competency_passport(
 ):
     check_origin(request)
     actor_id=_member(current,"export your Competency Passport")
+    _actor_id, username, _guest = _identity(current)
     persistence=_persistence()
     try:
         try:
@@ -952,11 +954,20 @@ async def export_competency_passport(
         except Exception:
             pass
         source=persistence.internship_passport_export_source(actor_id)
+        display_name=""
+        if body.include_display_name:
+            personalization=personalization_for_actor(actor_id,username)
+            display_name=str(
+                personalization.get("preferred_name")
+                or personalization.get("derived_name")
+                or ""
+            )
         payload=build_passport_export(
             passport={"competencies":source.get("competencies",[])},
             evidence=[row for row in source.get("evidence",[]) if isinstance(row,dict)],
             definitions=[row for row in source.get("definitions",[]) if isinstance(row,dict)],
-            include_display_name=False,
+            include_display_name=body.include_display_name,
+            display_name=display_name,
         )
         return Response(
             content=json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2).encode("utf-8"),
