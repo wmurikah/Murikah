@@ -952,7 +952,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getByText("task_reconcile_sample")).toBeVisible();
     expect(screen.getAllByText("Reconciliation").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Why this evidence has this strength/)).toBeVisible();
-    expect(await screen.findByText("Exact lineage valid")).toBeVisible();
+    expect(screen.getByText(/Exact lineage valid/)).toBeVisible();
     expect(screen.getByText(/Only the submitted artifact version was assessed/)).toBeVisible();
     expect(screen.queryByText(/hidden scenario|system prompt|chain-of-thought/i)).toBeNull();
   });
