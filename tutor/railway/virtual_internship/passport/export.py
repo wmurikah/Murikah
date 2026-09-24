@@ -23,6 +23,7 @@ def build_passport_export(*, passport:dict[str,Any], evidence:list[dict[str,Any]
         "submission_id":str(row.get("submission_id") or ""),
         "assessment_id":str(row.get("assessment_id") or ""),
         "criterion_id":str(row.get("criterion_id") or ""),
+        "mapping_version":int(row.get("mapping_version") or 0),
         "demonstrated_level":str(row.get("demonstrated_level") or ""),
         "evidence_strength":str(row.get("evidence_strength") or ""),
         "assistance_level":int(row.get("assistance_level") or 0),
