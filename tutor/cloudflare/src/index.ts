@@ -851,6 +851,9 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         ).bind(activityId, internshipId, actorId, now, requestId, internshipId),
       ]);
       const status = await internshipStatusForActor(env, internshipId, actorId, now);
+      if (!status || status.status !== 'stopped') {
+        return persistenceJson({ error: 'internship_not_active', internship: status }, 409);
+      }
       return persistenceJson({ ok: true, internship: status });
     } catch (error) {
       try {
