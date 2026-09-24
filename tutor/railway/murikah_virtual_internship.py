@@ -23,6 +23,7 @@ from deeptutor.virtual_internship.assessment.rubrics import (
     validate_rubric,
 )
 from deeptutor.virtual_internship.assessment.reviews import (
+    attach_review_signals,
     build_review_snapshot,
     deterministic_review_findings,
     review_eligibility,
@@ -505,13 +506,29 @@ def _build_performance_review(
     phase6 = persistence.internship_assessment_summary(actor_id,internship_id)
     phase5 = persistence.internship_artifact_summary(actor_id,internship_id)
     reflections_result = persistence.internship_ui_reflections(actor_id,internship_id)
+    definition_tasks = (
+        definition.get("tasks",[])
+        if isinstance(definition,dict) and isinstance(definition.get("tasks"),list)
+        else []
+    )
+    rubrics_by_task = {
+        str(task.get("task_id") or ""):task.get("rubric")
+        for task in definition_tasks
+        if isinstance(task,dict) and isinstance(task.get("rubric"),dict)
+    }
+    review_assessments = []
+    for row in phase6.get("assessments",[]) if isinstance(phase6,dict) else []:
+        if not isinstance(row,dict):
+            continue
+        authored_rubric=rubrics_by_task.get(str(row.get("task_id") or ""))
+        review_assessments.append(
+            attach_review_signals(row,authored_rubric)
+            if isinstance(authored_rubric,dict) else dict(row)
+        )
     snapshot = build_review_snapshot(
         review_type=review_type,
         cutoff_at=now,
-        assessments=[
-            row for row in phase6.get("assessments",[])
-            if isinstance(row,dict)
-        ] if isinstance(phase6,dict) else [],
+        assessments=review_assessments,
         workflow_reviews=[
             row for row in phase5.get("reviews",[])
             if isinstance(row,dict)
