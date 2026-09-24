@@ -395,6 +395,88 @@ def internship_completion_integrity(actor_id: str, internship_id: str) -> dict[s
     return value
 
 
+def internship_completion_document_generate(
+    actor_id: str,
+    internship_id: str,
+    *,
+    document_type: str,
+    request_id: str,
+    learner_name_snapshot: str,
+) -> dict[str, Any]:
+    """Issue or idempotently return one immutable Phase 9 completion document."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship completion document persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/completion-documents/generate",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "document_type": _learning_text(document_type, 32),
+            "request_id": _learning_text(request_id, 128),
+            # This value is derived from the authenticated server-side personalization
+            # contract. It is never accepted from the learner's browser.
+            "learner_name_snapshot": _learning_text(learner_name_snapshot, 100),
+        },
+    )
+
+
+def internship_completion_documents(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """List learner-owned immutable Phase 9 completion document versions."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship completion document persistence is unavailable.")
+    query = urlencode({
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+    })
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/internships/completion-documents/list?{query}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship completion document list response is invalid.")
+    return value
+
+
+def internship_completion_document_download(
+    actor_id: str,
+    internship_id: str,
+    document_id: str,
+    *,
+    export_format: str = "html",
+) -> tuple[bytes, dict[str, str]]:
+    """Download exact private issued HTML bytes or the immutable structured source export."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship completion document persistence is unavailable.")
+    query = urlencode({
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+        "document_id": _learning_text(document_id, 128),
+        "format": _learning_text(export_format, 16),
+    })
+    _, raw, headers = _request(
+        "GET",
+        f"{PERSIST_PREFIX}/internships/completion-documents/download?{query}",
+        timeout=30.0,
+    )
+    return raw, headers
+
+
+def internship_completion_document_verify(
+    reference_id: str,
+    verification_code: str = "",
+) -> dict[str, Any]:
+    """Resolve one high-entropy document reference through the signed Worker bridge."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship document verification is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/completion-documents/verify",
+        {
+            "reference_id": _learning_text(reference_id, 96),
+            "verification_code": _learning_text(verification_code, 96),
+        },
+    )
+
+
 def internship_object_key(
     actor_id: str,
     internship_id: str,

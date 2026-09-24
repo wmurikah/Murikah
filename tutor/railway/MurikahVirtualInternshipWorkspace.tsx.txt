@@ -280,6 +280,26 @@ type InternshipDocument = {
   content?: unknown;
 };
 
+
+type CompletionDocument = {
+  document_id: string;
+  internship_id: string;
+  completion_record_id: string;
+  document_type: "performance_report" | "completion_letter";
+  document_version: number;
+  template_version: string;
+  issued_at: number;
+  issuance_status: "current" | "superseded";
+  verification_reference_id: string;
+  sha256: string;
+  size_bytes: number;
+  content_type: string;
+  simulation_disclosure: string;
+  simulation_disclosure_version: string;
+  superseded_at?: number | null;
+  superseded_by_document_id?: string | null;
+};
+
 type InternshipMeeting = {
   meeting_id: string;
   title: string;
@@ -1674,13 +1694,72 @@ function renderDocumentContent(content: unknown) {
 function DocumentsView({
   documents,
   internshipId,
+  completed,
 }: {
   documents: InternshipDocument[];
   internshipId: string;
+  completed: boolean;
 }) {
   const [selected, setSelected] = useState<InternshipDocument | null>(null);
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
+  const [completionDocuments, setCompletionDocuments] = useState<CompletionDocument[]>([]);
+  const [completionLoading, setCompletionLoading] = useState(completed);
+  const [issuing, setIssuing] = useState("");
+  const [completionError, setCompletionError] = useState("");
+
+  const currentCompletionDocuments = completionDocuments.filter((document) => document.issuance_status === "current");
+
+  async function loadCompletionDocuments() {
+    if (!completed) {
+      setCompletionDocuments([]);
+      setCompletionLoading(false);
+      return;
+    }
+    setCompletionLoading(true);
+    try {
+      const response = await fetch(
+        API + "/completion-documents?internship_id=" + encodeURIComponent(internshipId),
+        { credentials: "include", cache: "no-store" },
+      );
+      if (!response.ok) throw new Error(await responseError(response, "Completion documents could not be loaded."));
+      const payload = (await response.json()) as { documents?: CompletionDocument[] };
+      setCompletionDocuments(Array.isArray(payload.documents) ? payload.documents : []);
+      setCompletionError("");
+    } catch (cause) {
+      setCompletionError(cause instanceof Error ? cause.message : "Completion documents could not be loaded.");
+    } finally {
+      setCompletionLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCompletionDocuments();
+  }, [completed, internshipId]);
+
+  async function issueCompletionDocument(documentType: "performance_report" | "completion_letter") {
+    setIssuing(documentType);
+    setCompletionError("");
+    try {
+      const response = await fetch(API + "/completion-documents", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          internship_id: internshipId,
+          document_type: documentType,
+          request_id: requestId("completion-document"),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "That completion document could not be issued."));
+      await loadCompletionDocuments();
+    } catch (cause) {
+      setCompletionError(cause instanceof Error ? cause.message : "That completion document could not be issued.");
+    } finally {
+      setIssuing("");
+    }
+  }
 
   async function openDocument(document: InternshipDocument) {
     setLoading(document.document_id);
@@ -1700,30 +1779,133 @@ function DocumentsView({
     }
   }
 
+  function currentDocument(documentType: CompletionDocument["document_type"]) {
+    return currentCompletionDocuments.find((document) => document.document_type === documentType);
+  }
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.25fr)]">
-      <Panel className="p-5">
-        <h2 className="text-lg font-semibold">Scenario documents</h2>
-        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">Source material and scenario evidence currently disclosed to you.</p>
-        <div className="mt-4 space-y-3">
-          {documents.length ? documents.map((document) => (
-            <article key={document.document_id} className="rounded-lg border border-[var(--border)] p-3">
-              <h3 className="text-sm font-semibold">{document.title}</h3>
-              <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--muted-foreground)]">{document.summary}</p>
-              <button type="button" disabled={Boolean(loading)} onClick={() => openDocument(document)} className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
-                {loading === document.document_id ? "Opening…" : "Open document"}
-              </button>
-            </article>
-          )) : <EmptyState title="No documents are available yet." detail="Only learner-visible scenario source material appears here." />}
+    <div className="space-y-5">
+      <Panel className="p-5 sm:p-6" ariaLabel="Completion documents">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText size={19} />
+              <h2 className="text-lg font-semibold">Completion documents</h2>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+              Murikah-issued documents are generated only from the immutable qualifying completion record and its completion-time evidence snapshot.
+            </p>
+          </div>
+          {completed ? <span className="rounded-full border border-emerald-300 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Available after completion</span> : null}
         </div>
-      </Panel>
-      <Panel className="p-5" ariaLabel="Document preview">
-        <h2 className="text-lg font-semibold">{selected?.title || "Document preview"}</h2>
-        {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
-        <div className="mt-4">
-          {selected ? renderDocumentContent(selected.content) : <p className="text-sm leading-6 text-[var(--muted-foreground)]">Open a document to review its learner-visible content.</p>}
+
+        {!completed ? (
+          <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-6 text-[var(--muted-foreground)]">
+            Performance Report and Completion Letter become available after all qualifying completion requirements are met. No certificate is issued.
+          </div>
+        ) : completionLoading ? (
+          <p className="mt-4 text-sm text-[var(--muted-foreground)]" aria-live="polite">Loading completion documents…</p>
+        ) : (
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {([
+              ["performance_report", "Internship Performance Report", "Evidence-backed performance, competency, development and provenance detail."],
+              ["completion_letter", "Virtual Internship Completion Letter", "A concise portfolio letter confirming completion of the Murikah simulation."],
+            ] as const).map(([documentType, title, detail]) => {
+              const issued = currentDocument(documentType);
+              return (
+                <article key={documentType} className="rounded-xl border border-[var(--border)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">{title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
+                    </div>
+                    {issued ? <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Issued · v{issued.document_version}</span> : null}
+                  </div>
+                  {issued ? (
+                    <div className="mt-4 space-y-2 text-xs">
+                      <p><span className="font-semibold">Issued:</span> {formatDate(issued.issued_at, true)}</p>
+                      <p className="break-all"><span className="font-semibold">Verification/reference:</span> {issued.verification_reference_id}</p>
+                      <p className="break-all text-[var(--muted-foreground)]"><span className="font-semibold text-[var(--foreground)]">Integrity:</span> {issued.sha256.slice(0, 20)}…</p>
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <a
+                          href={API + "/completion-documents/" + encodeURIComponent(issued.document_id) + "/view?internship_id=" + encodeURIComponent(internshipId)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-semibold"
+                        >
+                          View
+                        </a>
+                        <a
+                          href={API + "/completion-documents/" + encodeURIComponent(issued.document_id) + "/download?internship_id=" + encodeURIComponent(internshipId) + "&format=html"}
+                          className="inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-semibold"
+                        >
+                          Download HTML
+                        </a>
+                        <a
+                          href={API + "/completion-documents/" + encodeURIComponent(issued.document_id) + "/download?internship_id=" + encodeURIComponent(internshipId) + "&format=json"}
+                          className="inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-semibold"
+                        >
+                          Export source
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={Boolean(issuing)}
+                      onClick={() => issueCompletionDocument(documentType)}
+                      className="mt-4 min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {issuing === documentType ? "Issuing…" : "Generate " + title}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+        {completionError ? <p className="mt-4 text-sm text-red-600" role="alert">{completionError}</p> : null}
+        <div className="mt-5 rounded-lg border-l-4 border-[#A9822E] bg-[#A9822E]/[0.06] px-4 py-3 text-sm leading-6">
+          <strong>Simulation disclosure.</strong> These documents cover a Murikah Virtual Internship simulation. They do not represent employment by the simulated organization, a real-employer reference, statutory industrial attachment approval, or institution endorsement unless a separately verified endorsement is explicitly shown.
         </div>
+        {completionDocuments.some((document) => document.issuance_status === "superseded") ? (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm font-semibold">Superseded document versions</summary>
+            <ul className="mt-3 space-y-2 text-xs text-[var(--muted-foreground)]">
+              {completionDocuments.filter((document) => document.issuance_status === "superseded").map((document) => (
+                <li key={document.document_id} className="break-all">
+                  {sentenceLabel(document.document_type)} v{document.document_version} · {document.verification_reference_id}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.25fr)]">
+        <Panel className="p-5">
+          <h2 className="text-lg font-semibold">Scenario documents</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">Source material and scenario evidence currently disclosed to you.</p>
+          <div className="mt-4 space-y-3">
+            {documents.length ? documents.map((document) => (
+              <article key={document.document_id} className="rounded-lg border border-[var(--border)] p-3">
+                <h3 className="text-sm font-semibold">{document.title}</h3>
+                <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--muted-foreground)]">{document.summary}</p>
+                <button type="button" disabled={Boolean(loading)} onClick={() => openDocument(document)} className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
+                  {loading === document.document_id ? "Opening…" : "Open document"}
+                </button>
+              </article>
+            )) : <EmptyState title="No documents are available yet." detail="Only learner-visible scenario source material appears here." />}
+          </div>
+        </Panel>
+        <Panel className="p-5" ariaLabel="Document preview">
+          <h2 className="text-lg font-semibold">{selected?.title || "Document preview"}</h2>
+          {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+          <div className="mt-4">
+            {selected ? renderDocumentContent(selected.content) : <p className="text-sm leading-6 text-[var(--muted-foreground)]">Open a document to review its learner-visible content.</p>}
+          </div>
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -2200,7 +2382,7 @@ function ReflectionView({
       });
       if (!response.ok) throw new Error(await responseError(response, "That reflection could not be saved. Try again."));
       setMessage("Reflection saved.");
-      await onWorkspaceRefresh();
+      void onWorkspaceRefresh();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "That reflection could not be saved. Try again.");
     } finally {
@@ -2743,7 +2925,7 @@ export default function MurikahVirtualInternshipWorkspace() {
   if (section === "inbox") body = <InboxView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
   else if (section === "work") body = <WorkView tasks={tasks} people={people} internshipId={internship.internship_id} readOnly={readOnly} selected={selectedTaskCurrent} onSelect={setSelectedTask} onChanged={refreshWorkspace} />;
   else if (section === "company") body = <CompanyView company={company} people={people} onMessage={(person) => router.push("/virtual-internship/inbox?actor=" + encodeURIComponent(person.actor_id))} />;
-  else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} />;
+  else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} completed={completed} />;
   else if (section === "meetings") body = <MeetingsView meetings={workspace.meetings || []} activity={workspace.activity || []} />;
   else if (section === "mentor") body = <MentorView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
   else if (section === "passport") body = <PassportView />;
