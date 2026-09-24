@@ -30,6 +30,13 @@ class Phase6PerformanceReviewTests(unittest.TestCase):
         self.assertEqual([x["id"] for x in snapshot["assessments"]],["a1"])
         self.assertEqual(len(snapshot["snapshot_hash"]),64)
 
+    def test_snapshot_excludes_undated_records(self):
+        snapshot=build_review_snapshot(review_type="midpoint",cutoff_at=100,assessments=[
+            {"id":"a1","status":"completed","criteria":[]},
+            {"id":"a2","created_at":90,"status":"completed","criteria":[]},
+        ],workflow_reviews=[],reflections=[],assistance_events=[],activity=[])
+        self.assertEqual([x["id"] for x in snapshot["assessments"]],["a2"])
+
     def test_review_findings_are_evidence_id_grounded_and_not_completion(self):
         snapshot={"assessments":[{"id":"a1","status":"completed","criteria":[
             {"criterion_id":"c1","result_state":"assessed","rating_id":"meets","feedback":"The work ties the variance to source evidence."}
