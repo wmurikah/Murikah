@@ -5,21 +5,7 @@ from typing import Any
 
 LEVEL_FRAMEWORK_VERSION = "phase7-levels-v1"
 LEVELS = ("emerging","developing","applied_with_support","independent","advanced")
-LEVEL_LABELS = {
-    "emerging":"Emerging",
-    "developing":"Developing",
-    "applied_with_support":"Applied with support",
-    "independent":"Independent",
-    "advanced":"Advanced",
-}
 LEVEL_ORDER = {level:index for index,level in enumerate(LEVELS)}
-LEVEL_SEMANTICS = {
-    "emerging":"Early demonstrated evidence exists; exposure alone is not evidence.",
-    "developing":"Repeated partial or improving demonstration is supported by evidence.",
-    "applied_with_support":"Credible application is demonstrated with material assistance in context.",
-    "independent":"Successful performance includes qualifying low-assistance evidence.",
-    "advanced":"Repeated independent performance is demonstrated across sufficiently distinct contexts.",
-}
 
 class CompetencyDefinitionError(ValueError):
     pass
