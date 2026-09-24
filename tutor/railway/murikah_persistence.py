@@ -951,6 +951,48 @@ def internship_assessment_summary(actor_id: str, internship_id: str) -> dict[str
     )
 
 
+def _internship_passport_get(route: str, actor_id: str, **params: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship Competency Passport persistence is unavailable.")
+    query={"actor_id":_learning_text(actor_id,128)}
+    query.update({key:_learning_text(value,128) for key,value in params.items() if value})
+    _,raw,_=_request("GET",f"{PERSIST_PREFIX}{route}?{urlencode(query)}")
+    value=json.loads(raw.decode("utf-8"))
+    if not isinstance(value,dict):
+        raise PersistenceError("Virtual Internship Competency Passport response is invalid.")
+    return value
+
+
+def internship_passport_reconcile(actor_id: str, internship_id: str = "") -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/passport/reconcile",
+        {"actor_id":_learning_text(actor_id,128),"internship_id":_learning_text(internship_id,128)},
+    )
+
+
+def internship_passport_rebuild(actor_id: str) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/passport/rebuild",
+        {"actor_id":_learning_text(actor_id,128)},
+    )
+
+
+def internship_passport_summary(actor_id: str) -> dict[str, Any]:
+    return _internship_passport_get("/internships/passport/summary",actor_id)
+
+
+def internship_passport_evidence(actor_id: str, competency_id: str = "") -> dict[str, Any]:
+    return _internship_passport_get(
+        "/internships/passport/evidence",actor_id,competency_id=competency_id
+    )
+
+
+def internship_passport_export_source(actor_id: str) -> dict[str, Any]:
+    return _internship_passport_get("/internships/passport/export-source",actor_id)
+
+
 def internship_assessment_start(
     actor_id: str,
     internship_id: str,
