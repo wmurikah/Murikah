@@ -251,6 +251,42 @@ async function loadCompletionRecord(db: P8Database, internshipId: string, learne
   ).bind(internshipId, learnerId).first<Record<string, unknown>>();
 }
 
+async function recoverCompletionLifecycle(
+  db: P8Database,
+  actorId: string,
+  internshipId: string,
+  record: Record<string, unknown>,
+  now: number,
+): Promise<Record<string, unknown> | null> {
+  const completedAt = Number(record.completed_at || 0);
+  const requestId = cleanId(record.request_id);
+  if (completedAt <= 0 || !requestId) return ownedInternship(db, actorId, internshipId);
+  const activityId = generated('ia');
+  const snapshotHash = String(record.gate_snapshot_hash || '');
+  const recordId = String(record.id || '');
+  try {
+    await db.batch([
+      db.prepare(
+        "UPDATE internship_instances SET status='completed', lifecycle_stage='completed', completed_at=?, updated_at=? " +
+        "WHERE id=? AND learner_id=? AND status='active' AND EXISTS (" +
+        'SELECT 1 FROM completion_records c WHERE c.id=? AND c.internship_id=internship_instances.id AND c.learner_id=internship_instances.learner_id)',
+      ).bind(completedAt, now, internshipId, actorId, recordId),
+      db.prepare(
+        "UPDATE internship_memberships SET status='completed', updated_at=? WHERE internship_id=? AND actor_id=? AND role='learner' " +
+        "AND EXISTS (SELECT 1 FROM internship_instances i WHERE i.id=? AND i.learner_id=? AND i.status='completed')",
+      ).bind(now, internshipId, actorId, internshipId, actorId),
+      db.prepare(
+        "INSERT OR IGNORE INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) " +
+        "SELECT ?, ?, ?, 'internship_completed', ?, ?, ? WHERE EXISTS (" +
+        "SELECT 1 FROM internship_instances i WHERE i.id=? AND i.learner_id=? AND i.status='completed')",
+      ).bind(activityId, internshipId, actorId, completedAt, requestId, snapshotHash, internshipId, actorId),
+    ]);
+  } catch {
+    // Re-read authoritative state below. Never rewrite the immutable completion record.
+  }
+  return ownedInternship(db, actorId, internshipId);
+}
+
 function completedEvaluation(row: Record<string, unknown>, record: Record<string, unknown>, now: number): Evaluation {
   const snapshot = parse(record.gate_snapshot_json, {}) as Record<string, any>;
   return {
@@ -546,8 +582,14 @@ async function finalizeCompletion(
 ): Promise<Response> {
   const replay = await loadCompletionRecord(db, internshipId, actorId);
   if (replay) {
-    const row = await ownedInternship(db, actorId, internshipId);
+    let row = await ownedInternship(db, actorId, internshipId);
     if (!row) return json({ error: 'internship_not_found' }, 404);
+    if (String(row.status) === 'active') {
+      row = await recoverCompletionLifecycle(db, actorId, internshipId, replay, now);
+    }
+    if (!row || String(row.status) !== 'completed') {
+      return json({ error: 'internship_completion_integrity_conflict' }, 409);
+    }
     const evaluation = completedEvaluation(row, replay, now);
     return json({
       ok: true,
