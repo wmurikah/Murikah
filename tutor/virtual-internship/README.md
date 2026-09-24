@@ -1255,13 +1255,13 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 8 — 90-day completion system
 
-- [ ] Duration gate.
-- [ ] Required-task gate.
-- [ ] Required-review gate.
-- [ ] Evidence gate.
-- [ ] Capstone/final review gate.
-- [ ] Completion state machine.
-- [ ] Prevent demo/test internships from issuing qualifying completion.
+- [x] Duration gate.
+- [x] Required-task gate.
+- [x] Required-review gate.
+- [x] Evidence gate.
+- [x] Capstone/final review gate.
+- [x] Completion state machine.
+- [x] Prevent demo/test internships from issuing qualifying completion.
 
 ### Phase 9 — reports and letters
 
@@ -2497,7 +2497,7 @@ Qualifying protection is server-side. A completion requires the lifecycle row to
 
 After completion, Phase 2 scenario mutations, Phase 3 AI-invocation/assistance writes, Phase 4 workplace mutations, Phase 5 artifact mutations and Phase 6 assessment/review mutations remain blocked by the existing active-status checks. The shared Phase 4 workspace stays readable and now renders a professional Completion requirements area with separate duration, required-work, review, competency-evidence, capstone and final-review states. The final action appears only after the latest server evaluation is eligible and does not optimistically render completion. Completed work, reviews and the Competency Passport remain reviewable in read-only form, with the Murikah simulation disclosure retained.
 
-Focused Phase 8 coverage is in `test_virtual_internship_completion_policy.py`, `test_virtual_internship_completion_state.py` and the existing `virtual-internship-workspace.spec.tsx.txt`. Cloudflare preflight protects the migration, policy schema/validator, evaluator, state constants, demo/test denial, APIs, UI, tests, documentation, Phase 1 minimum-duration authority and production-image packaging. Verification results are recorded in the Phase 8 pull request after the required scenario validator, both preflights, Python regressions, frontend integration tests, Worker dry-run and pinned Tutor production image workflow have actually run.
+Focused Phase 8 coverage is in `test_virtual_internship_completion_policy.py`, `test_virtual_internship_completion_state.py` and the existing `virtual-internship-workspace.spec.tsx.txt`. Cloudflare preflight protects the migration, policy schema/validator, evaluator, state constants, demo/test denial, APIs, UI, tests, documentation, Phase 1 minimum-duration authority and production-image packaging. Release-gate verification on Tutor workflow run `35999806898` recorded: Tutor preflight PASS, Cloudflare migration preflight PASS, persistence binding validation PASS, Worker `wrangler deploy --dry-run` PASS, scenario validation PASS for 6 packs, packaged Python regressions 334/334 PASS, frontend integration 8/8 files and 52/52 tests PASS, Cloudflare container image build PASS and pinned Tutor production image build PASS.
 
 **Phase 9 remains unimplemented. Phase 9 performance reports, completion letters, certificates and public verification IDs remain unimplemented. Phase 8 does not generate an Internship Performance Report, completion letter, certificate, completion PDF, public verification/reference ID or institution endorsement.**
 
