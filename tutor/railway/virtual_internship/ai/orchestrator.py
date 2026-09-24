@@ -17,6 +17,7 @@ from .audit import invocation_id, output_hash, persist_invocation
 from .context import (
     build_actor_context,
     build_assessor_context,
+    build_formal_assessor_context,
     build_mentor_context,
     build_scenario_director_context,
     normalized_context_hash,
@@ -683,6 +684,51 @@ class VirtualInternshipAIOrchestrator:
                 allowed_evidence_refs=evidence_refs,
             ),
         )
+
+
+    async def invoke_formal_assessor(
+        self,
+        *,
+        owner_actor_id: str,
+        internship_id: str,
+        task_id: str,
+        assessment_id: str,
+        rubric: dict[str, Any],
+        evidence_packet: dict[str, Any],
+        assistance_events: list[dict[str, Any]] | None = None,
+        workflow_feedback: list[dict[str, Any]] | None = None,
+        requested_selection: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Run the production Phase 6 assessor through the Phase 3 role pipeline."""
+        from ..assessment.engine import validate_and_calculate_assessment
+
+        context = build_formal_assessor_context(
+            self.state_service,
+            account_actor_id=owner_actor_id,
+            internship_id=internship_id,
+            task_id=task_id,
+            assessment_id=assessment_id,
+            rubric=rubric,
+            evidence_packet=evidence_packet,
+            assistance_events=assistance_events,
+            workflow_feedback=workflow_feedback,
+        )
+        return await self._structured_call(
+            role=VirtualInternshipModelRole.ASSESSOR,
+            owner_actor_id=owner_actor_id,
+            internship_id=internship_id,
+            context=context,
+            requested_selection=requested_selection,
+            task_id=task_id,
+            system_prompt=ASSESSOR_SYSTEM_PROMPT,
+            validator=lambda value: validate_and_calculate_assessment(
+                value,
+                assessment_id=assessment_id,
+                rubric=rubric,
+                evidence_packet=evidence_packet,
+            ),
+        )
+
 
     async def invoke_scenario_director(
         self,
