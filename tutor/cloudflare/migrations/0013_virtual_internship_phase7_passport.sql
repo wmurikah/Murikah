@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS competency_derivation_status (
   learner_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending','completed','excluded','failed')),
   evidence_ruleset_version TEXT NOT NULL,
+  mapping_version INTEGER NOT NULL DEFAULT 0 CHECK (mapping_version >= 0),
   derived_count INTEGER NOT NULL DEFAULT 0 CHECK (derived_count >= 0),
   last_error TEXT NOT NULL DEFAULT '' CHECK (length(last_error) <= 1000),
   updated_at INTEGER NOT NULL,
