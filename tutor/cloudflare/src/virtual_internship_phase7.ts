@@ -297,13 +297,13 @@ async function p7DeriveAssessmentasync function p7DeriveAssessment(db:P7Database
       const evidenceId=p7Generated('ce');
       try{
         await db.prepare(
-          'INSERT INTO competency_evidence(id,learner_id,competency_id,definition_version,sub_competency_id,internship_id,scenario_pack_id,scenario_version_id,task_id,artifact_id,artifact_version_id,submission_id,assessment_id,criterion_id,criterion_rating_id,criterion_numeric,demonstrated_level,assistance_level,assistance_context_json,revision_context_json,evidence_strength,strength_factors_json,transfer_context_json,limitations_json,source_type,evidence_ruleset_version,created_at) '+
-          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'virtual_internship',?,?)"
+          'INSERT INTO competency_evidence(id,learner_id,competency_id,definition_version,sub_competency_id,internship_id,scenario_pack_id,scenario_version_id,task_id,artifact_id,artifact_version_id,submission_id,assessment_id,criterion_id,mapping_version,criterion_rating_id,criterion_numeric,demonstrated_level,assistance_level,assistance_context_json,revision_context_json,evidence_strength,strength_factors_json,transfer_context_json,limitations_json,source_type,evidence_ruleset_version,created_at) '+
+          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'virtual_internship',?,?)"
         ).bind(
           evidenceId,actorId,mapping.competency_id,definitionVersion,String(mapping.sub_competency_id||''),
           internshipId,assessment.scenario_pack_id,assessment.scenario_version_id,assessment.task_id,
           assessment.artifact_id,assessment.artifact_version_id,assessment.submission_id,assessmentId,criterion.criterion_id,
-          criterion.rating_id,criterion.numeric_value,candidate,maxAssistance,
+          Number(mapping.mapping_version||0),criterion.rating_id,criterion.numeric_value,candidate,maxAssistance,
           JSON.stringify({maximum_level:maxAssistance,recorded_event_count:assistance.length,system_observed_count:observed,learner_declared_count:declared,
             label:maxAssistance===0?'Independent demonstration':maxAssistance===1?'Clarification only':maxAssistance===2?'Light coaching used':maxAssistance===3?'Moderate coaching used':maxAssistance===4?'Substantial coaching used':'Solution-level assistance used'}),
           JSON.stringify({artifact_version_number:Number(submission.version_number||0),submission_number:Number(submission.submission_number||0),
@@ -404,7 +404,7 @@ async function p7Evidence(db:P7Database,actorId:string,competencyId:string){
     scenario_title:row.scenario_title,task_id:row.task_id,artifact_id:row.artifact_id,
     artifact_title:row.artifact_title,artifact_type:row.deliverable_type,artifact_version_id:row.artifact_version_id,
     submission_id:row.submission_id,assessment_id:row.assessment_id,criterion_id:row.criterion_id,
-    criterion_rating_id:row.criterion_rating_id,criterion_numeric:row.criterion_numeric,
+    mapping_version:row.mapping_version,criterion_rating_id:row.criterion_rating_id,criterion_numeric:row.criterion_numeric,
     demonstrated_level:row.demonstrated_level,evidence_strength:row.evidence_strength,
     assistance_level:row.assistance_level,assistance_context:p7Parse(row.assistance_context_json,{}),
     revision_context:p7Parse(row.revision_context_json,{}),strength_factors:p7Parse(row.strength_factors_json,{}),
