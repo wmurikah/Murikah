@@ -51,6 +51,16 @@ class Phase7EvidenceTests(unittest.TestCase):
         self.assertEqual(row["demonstrated_level"],"applied_with_support")
         self.assertEqual(row["assistance_context"]["label"],"Substantial coaching used")
 
+
+    def test_physical_simulation_evidence_is_explicitly_limited_and_not_strong(self):
+        mapping={**MAPPING,"context_metadata":{"physical":True}}
+        row=derive_evidence_contribution(
+            assessment=assessment(),criterion=criterion(),mapping=mapping,assistance_level=0
+        )
+        self.assertEqual(row["evidence_strength"],"supporting")
+        self.assertTrue(row["strength_factors"]["physical_simulation_limitation"])
+        self.assertTrue(any("physical or manual competence" in value for value in row["limitations"]))
+
     def test_migration_enforces_idempotency_and_immutability(self):
         sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
         self.assertIn("UNIQUE (learner_id, assessment_id, criterion_id, competency_id, definition_version, mapping_version, evidence_ruleset_version)",sql)
