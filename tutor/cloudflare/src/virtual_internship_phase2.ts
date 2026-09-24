@@ -405,6 +405,7 @@ export async function handleScenarioPersistenceRoute(request:Request,env:Scenari
   const account=await env.TUTOR_DB.prepare("SELECT role, account_status FROM tutor_accounts WHERE actor_id = ? LIMIT 1").bind(actorId).first<{role:string;account_status:string}>();
   if(!account||!['member','admin'].includes(account.role)||account.account_status!=='active')return json({error:'authentication_required'},401);
   const owned=await ownedInternship(env.TUTOR_DB,internshipId,actorId);if(!owned)return json({error:'internship_not_found'},404);
+  if(request.method==='POST'&&owned.status!=='active')return json({error:'internship_not_active'},409);
 
   if(route==='/internships/scenario/initialize'&&request.method==='POST'){
     const req=requestId(body.request_id)||'scenario:init';
