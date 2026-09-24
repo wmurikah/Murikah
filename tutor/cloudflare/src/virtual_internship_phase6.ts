@@ -197,18 +197,23 @@ export async function handlePhase6AssessmentPersistenceRoute(
       }
       seen.add(criterionId);
       inserts.push(env.TUTOR_DB.prepare(
-        'INSERT INTO internship_assessment_criteria(assessment_id, criterion_id, result_state, rating_id, numeric_value, feedback, evidence_refs_json, limitation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(assessmentId,criterionId,state,ratingId,numeric||null,feedback,JSON.stringify(refs),limitation));
+        'INSERT INTO internship_assessment_criteria(assessment_id, criterion_id, result_state, rating_id, numeric_value, feedback, evidence_refs_json, limitation) '+
+        "SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS ("+
+        "SELECT 1 FROM internship_instances i WHERE i.id = ? AND i.learner_id = ? AND i.status = 'active')"
+      ).bind(assessmentId,criterionId,state,ratingId,numeric||null,feedback,JSON.stringify(refs),limitation,internshipId,actorId));
     }
     if(seen.size!==criteria.length)return json({error:'invalid_assessment_result'},400);
     try{
       await env.TUTOR_DB.batch([
         ...inserts,
         env.TUTOR_DB.prepare(
-          "UPDATE internship_assessments SET status = 'completed', assessor_model_invocation_id = ?, aggregate_numeric = ?, overall_summary = ?, limitations_json = ?, completed_at = ? WHERE id = ? AND status IN ('pending','assessing')"
-        ).bind(modelInvocationId,aggregate||null,summary,JSON.stringify(limitations),now,assessmentId),
+          "UPDATE internship_assessments SET status = 'completed', assessor_model_invocation_id = ?, aggregate_numeric = ?, overall_summary = ?, limitations_json = ?, completed_at = ? "+
+          "WHERE id = ? AND status IN ('pending','assessing') AND EXISTS ("+
+          "SELECT 1 FROM internship_instances i WHERE i.id = internship_assessments.internship_id AND i.learner_id = ? AND i.status = 'active')"
+        ).bind(modelInvocationId,aggregate||null,summary,JSON.stringify(limitations),now,assessmentId,actorId),
       ]);
       const completed=await env.TUTOR_DB.prepare('SELECT * FROM internship_assessments WHERE id = ?').bind(assessmentId).first<Record<string,unknown>>();
+      if(String(completed?.status||'')!=='completed')return json({error:'internship_not_active'},409);
       return json({ok:true,assessment:completed,criteria_count:criteria.length,evidence_reference_count:evidenceCount});
     }catch(error){console.error('Phase 6 assessment completion failed',error);return json({error:'assessment_persistence_failed'},503);}
   }
@@ -221,9 +226,12 @@ export async function handlePhase6AssessmentPersistenceRoute(
     ).bind(assessmentId,internshipId,actorId).first<Record<string,unknown>>();
     if(!assessment)return json({error:'assessment_not_found'},404);
     if(assessment.status==='completed')return json({error:'assessment_already_completed'},409);
-    await env.TUTOR_DB.prepare(
-      "UPDATE internship_assessments SET status = 'failed', limitations_json = ?, failed_at = ? WHERE id = ? AND status IN ('pending','assessing','failed')"
-    ).bind(JSON.stringify(reason?[reason]:['Formal assessment could not be completed.']),now,assessmentId).run();
+    const failed=await env.TUTOR_DB.prepare(
+      "UPDATE internship_assessments SET status = 'failed', limitations_json = ?, failed_at = ? "+
+      "WHERE id = ? AND status IN ('pending','assessing','failed') AND EXISTS ("+
+      "SELECT 1 FROM internship_instances i WHERE i.id = internship_assessments.internship_id AND i.learner_id = ? AND i.status = 'active')"
+    ).bind(JSON.stringify(reason?[reason]:['Formal assessment could not be completed.']),now,assessmentId,actorId).run();
+    if(Number(failed.meta?.changes||0)===0)return json({error:'internship_not_active'},409);
     return json({ok:true,status:'failed'});
   }
 
