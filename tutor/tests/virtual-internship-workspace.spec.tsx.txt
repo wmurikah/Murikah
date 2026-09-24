@@ -878,6 +878,28 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.queryByRole("button", { name: /certificate|completion letter|performance report/i })).toBeNull();
   });
 
+  it("keeps the completed workplace inbox composer read-only", async () => {
+    nav.pathname = "/virtual-internship/inbox";
+    nav.search = "?actor=actor_supervisor";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) {
+        return jsonResponse({
+          ...workspace,
+          state: "completed",
+          internship: { ...workspace.internship, status: "completed", completed_at: 1_797_900_000 },
+        });
+      }
+      if (url.includes("/threads/")) return jsonResponse({ messages: [] });
+      throw new Error("Unexpected request: " + url);
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByText("Completed")).toBeVisible();
+    expect(screen.getByLabelText("Message Lina A.")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
   it("keeps a stopped internship historical and read-only", async () => {
     nav.pathname = "/virtual-internship/mentor";
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
