@@ -9,6 +9,8 @@ MIGRATIONS = ROOT / "cloudflare/migrations"
 PHASE1 = MIGRATIONS / "0006_virtual_internship_phase1.sql"
 PHASE8 = MIGRATIONS / "0014_virtual_internship_phase8_completion.sql"
 WORKER = ROOT / "cloudflare/src/virtual_internship_phase8.ts"
+PHASE5_WORKER = ROOT / "cloudflare/src/virtual_internship_phase5.ts"
+PHASE6_WORKER = ROOT / "cloudflare/src/virtual_internship_phase6.ts"
 ROUTER = ROOT / "railway/murikah_virtual_internship.py"
 
 
@@ -179,6 +181,27 @@ class CompletionPersistenceTests(unittest.TestCase):
         self.assertIn("recoverCompletionLifecycle(db, actorId, internshipId, replay, now)", source)
         self.assertIn("internship_completion_integrity_conflict", source)
         self.assertIn("Never rewrite the immutable completion record", source)
+
+    def test_completed_internship_blocks_late_artifact_and_assessment_mutations(self):
+        phase5 = PHASE5_WORKER.read_text()
+        phase6 = PHASE6_WORKER.read_text()
+        self.assertRegex(
+            phase5,
+            re.compile(
+                r"route === '/internships/artifacts/task-completed'.*?"
+                r"owned\.status !== 'active'.*?internship_not_active",
+                re.S,
+            ),
+        )
+        for route in ("complete", "fail"):
+            self.assertRegex(
+                phase6,
+                re.compile(
+                    rf"route==='/internships/assessments/{route}'.*?"
+                    rf"owned\.status!=='active'.*?internship_not_active",
+                    re.S,
+                ),
+            )
 
     def test_learner_route_accepts_only_request_identity_not_gate_assertions(self):
         source = ROUTER.read_text()
