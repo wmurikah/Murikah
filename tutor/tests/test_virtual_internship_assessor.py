@@ -51,8 +51,10 @@ class Phase6AssessorTests(unittest.TestCase):
         self.assertIn("criterion-level feedback",result["overall_summary"].lower())
         self.assertEqual(result["limitations"],["Only the submitted text representation was assessed."])
 
-    def test_unknown_criterion_and_rating_are_rejected(self):
+    def test_unknown_duplicate_criterion_and_rating_are_rejected(self):
         value=output();value["criterion_results"][0]["criterion_id"]="invented"
+        with self.assertRaises(AssessmentValidationError):validate_and_calculate_assessment(value,assessment_id="asm_1",rubric=rubric(),evidence_packet=packet())
+        value=output();value["criterion_results"].append(dict(value["criterion_results"][0]))
         with self.assertRaises(AssessmentValidationError):validate_and_calculate_assessment(value,assessment_id="asm_1",rubric=rubric(),evidence_packet=packet())
         value=output();value["criterion_results"][0]["rating"]="full_marks"
         with self.assertRaises(AssessmentValidationError):validate_and_calculate_assessment(value,assessment_id="asm_1",rubric=rubric(),evidence_packet=packet())
@@ -73,6 +75,15 @@ class Phase6AssessorTests(unittest.TestCase):
         ]).lower()
         self.assertNotIn("system prompt",visible)
         self.assertNotIn("full marks",visible)
+
+    def test_no_chain_of_thought_field_is_requested_or_persisted(self):
+        prompt=(ROOT/"railway/virtual_internship/ai/prompts.py").read_text().lower()
+        engine=(ROOT/"railway/virtual_internship/assessment/engine.py").read_text().lower()
+        migration=(ROOT/"cloudflare/migrations/0012_virtual_internship_phase6_assessment.sql").read_text().lower()
+        self.assertIn("do not return chain-of-thought",prompt)
+        for source in (engine,migration):
+            self.assertNotIn("chain_of_thought",source)
+            self.assertNotIn("reasoning_trace",source)
 
     def test_persistence_worker_is_owner_bound_and_not_browser_score_driven(self):
         worker=(ROOT/"cloudflare/src/virtual_internship_phase6.ts").read_text()
