@@ -193,6 +193,8 @@ class CompletionPersistenceTests(unittest.TestCase):
                 re.S,
             ),
         )
+        self.assertIn("i.status = 'active'", phase5)
+        self.assertIn("idempotent_replay:true", phase5)
         for route in ("complete", "fail"):
             self.assertRegex(
                 phase6,
@@ -202,6 +204,9 @@ class CompletionPersistenceTests(unittest.TestCase):
                     re.S,
                 ),
             )
+        self.assertGreaterEqual(phase6.count("i.status = 'active'"), 2)
+        self.assertIn("if(String(completed?.status||'')!=='completed')", phase6)
+        self.assertIn("if(Number(failed.meta?.changes||0)===0)", phase6)
 
     def test_learner_route_accepts_only_request_identity_not_gate_assertions(self):
         source = ROUTER.read_text()
