@@ -1265,13 +1265,13 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 9 — reports and letters
 
-- [ ] Internship Performance Report.
-- [ ] Virtual Internship Completion Letter.
-- [ ] Evidence references.
-- [ ] Simulation disclosure.
-- [ ] Verification/reference ID.
-- [ ] PDF/export if required.
-- [ ] Institution endorsement extension point.
+- [x] Internship Performance Report.
+- [x] Virtual Internship Completion Letter.
+- [x] Evidence references.
+- [x] Simulation disclosure.
+- [x] Verification/reference ID.
+- [x] PDF/export if required.
+- [x] Institution endorsement extension point.
 
 ### Phase 10 — career catalog
 
@@ -2503,7 +2503,7 @@ At the Phase 8 implementation head, Phase 9 was intentionally absent: Phase 8 it
 
 ## Phase 9 Implementation Record
 
-**Status:** implemented on `feat/tutor-virtual-internship-phase9`; the Phase 9 checklist above remains open until the dedicated Tutor release gate passes on the final implementation/documentation head.
+**Status:** verified on `feat/tutor-virtual-internship-phase9`. The Phase 9 implementation head passed the dedicated Tutor release gate; the checklist above is closed because the report/letter, evidence, disclosure, verification, export and endorsement-extension requirements are implemented and packaged.
 
 ### Scope and completion authority
 
@@ -2634,7 +2634,7 @@ Focused Phase 9 Python coverage is in:
 
 The existing `virtual-internship-workspace.spec.tsx.txt` covers completed-only issuance UI, safe generation payloads, reference display and view/download/export actions. Cloudflare preflight protects migration `0015`, the source/template/disclosure versions, Worker generation/verification/integrity implementation, persistence client/API/UI, focused tests, this implementation record and the durable subsequent-development requirement.
 
-`tutor/Dockerfile.railway` already copies the full Cloudflare source/migrations, Virtual Internship Python package, overlay component, committed scenarios and full Tutor tests into the production build and runs the scenario validator and packaged regressions. Phase 9 adds no new runtime dependency or model/provider. Final release-gate run details and exact test counts are recorded only after the dedicated workflow passes on the final documentation head.
+`tutor/Dockerfile.railway` already copies the full Cloudflare source/migrations, Virtual Internship Python package, overlay component, committed scenarios and full Tutor tests into the production build and runs the scenario validator and packaged regressions. Phase 9 adds no new runtime dependency or model/provider. Release-gate verification on Tutor workflow run `36014885177` for implementation head `6d48a62cb70cdb8457f084413a0ac59d34331466` recorded: Tutor deployment preflight PASS, Cloudflare migration preflight PASS, persistence binding validation PASS, Worker `wrangler deploy --dry-run` PASS, scenario validation PASS for 6 packs, packaged Python regressions 364/364 PASS, frontend integration 8/8 files and 54/54 tests PASS, and the pinned Tutor production image build PASS. The final documentation head must pass the same dedicated workflow before merge.
 
 ### Known intentional limitations and later phases
 
