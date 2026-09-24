@@ -208,6 +208,19 @@ def build_formal_assessor_context(
         "task": task,
         "rubric": rubric,
         "evidence_packet": evidence_packet,
+        "output_contract": {
+            "schema_version": 1,
+            "assessment_id": str(assessment_id or "")[:128],
+            "criterion_results": [{
+                "criterion_id": "one exact authored criterion_id",
+                "rating": "one authored rating_id or not_assessed when explicitly allowed",
+                "evidence_refs": ["only evidence_ref IDs from evidence_packet.references"],
+                "feedback": "concise observable evidence-grounded feedback",
+                "limitation": "required when rating is not_assessed; otherwise empty when no limitation applies",
+            }],
+            "overall_summary": "concise evidence-grounded summary",
+            "limitations": ["only material limitations supported by the supplied evidence packet"],
+        },
         "assistance_events": [
             {
                 "source": str(row.get("source") or "")[:40],
