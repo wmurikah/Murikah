@@ -88,18 +88,18 @@ class CompletionPersistenceTests(unittest.TestCase):
                 ("a" * 64,),
             )
             db.execute(
-                "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,created_at,updated_at) "
-                "VALUES ('vi_1','learner_a','sp_1','sv_1','standard',1,'active','started',1,90,7776001,1,1)"
+                "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,start_request_id,created_at,updated_at) "
+                "VALUES ('vi_1','learner_a','sp_1','sv_1','standard',1,'active','started',1,90,7776001,'start-vi-1',1,1)"
             )
             with self.assertRaises(sqlite3.IntegrityError):
                 db.execute(
-                    "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,created_at,updated_at) "
-                    "VALUES ('vi_conflict','learner_a','sp_1','sv_1','standard',1,'active','started',2,90,7776002,2,2)"
+                    "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,start_request_id,created_at,updated_at) "
+                    "VALUES ('vi_conflict','learner_a','sp_1','sv_1','standard',1,'active','started',2,90,7776002,'start-vi-conflict',2,2)"
                 )
             db.execute("UPDATE internship_instances SET status='completed', completed_at=7776001 WHERE id='vi_1'")
             db.execute(
-                "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,created_at,updated_at) "
-                "VALUES ('vi_2','learner_a','sp_1','sv_1','standard',1,'active','started',7776002,90,15552002,7776002,7776002)"
+                "INSERT INTO internship_instances(id,learner_id,scenario_pack_id,scenario_version_id,mode,qualifying,status,lifecycle_stage,started_at,minimum_duration_days,target_end_at,start_request_id,created_at,updated_at) "
+                "VALUES ('vi_2','learner_a','sp_1','sv_1','standard',1,'active','started',7776002,90,15552002,'start-vi-2',7776002,7776002)"
             )
             self.assertEqual(
                 db.execute("SELECT status FROM internship_instances WHERE id='vi_1'").fetchone()[0],
