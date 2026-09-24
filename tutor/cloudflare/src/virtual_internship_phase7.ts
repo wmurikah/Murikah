@@ -29,9 +29,12 @@ function p7Parse(value:unknown,fallback:unknown):any{try{return JSON.parse(Strin
 function p7Generated(prefix:string):string{return prefix+'_'+crypto.randomUUID().replace(/-/g,'');}
 function p7Array(value:unknown):unknown[]{return Array.isArray(value)?value:[];}
 
+async function p7Account(db:P7Database,actorId:string){
+  return db.prepare("SELECT actor_id,role,account_status FROM tutor_accounts WHERE actor_id = ? LIMIT 1")
+    .bind(actorId).first<{actor_id:string;role:string;account_status:string}>();
+}
 async function p7ActiveAccount(db:P7Database,actorId:string):Promise<boolean>{
-  const row=await db.prepare("SELECT role, account_status FROM tutor_accounts WHERE actor_id = ? LIMIT 1")
-    .bind(actorId).first<{role:string;account_status:string}>();
+  const row=await p7Account(db,actorId);
   return Boolean(row&&['member','admin'].includes(row.role)&&row.account_status==='active');
 }
 async function p7OwnedInternship(db:P7Database,actorId:string,internshipId:string){
@@ -203,6 +206,12 @@ async function p7RefreshPassport(
         await db.prepare(
           'DELETE FROM competency_passports WHERE learner_id=? AND competency_id=? AND definition_version=?'
         ).bind(actorId,cid,version).run();
+        await db.prepare(
+          'INSERT INTO competency_passport_history(id,learner_id,competency_id,definition_version,previous_level,new_level,aggregation_ruleset_version,explanation_json,changed_at) VALUES (?,?,?,?,?,NULL,?,?,?)'
+        ).bind(
+          p7Generated('cph'),actorId,cid,version,String(previous.current_level||''),
+          AGGREGATION_RULESET,JSON.stringify({reason:'no_current_qualifying_evidence'}),now
+        ).run();
       }
       continue;
     }
@@ -444,6 +453,41 @@ export async function handlePhase7PassportPersistenceRoute(
   const actorId=p7Id(request.method==='GET'?url.searchParams.get('actor_id'):body.actor_id);
   if(!actorId||!await p7ActiveAccount(env.TUTOR_DB,actorId))return p7Json({error:'authentication_required'},401);
 
+  if(route==='/internships/passport/evidence-adjust'&&request.method==='POST'){
+    const account=await p7Account(env.TUTOR_DB,actorId);
+    if(!account||account.account_status!=='active'||account.role!=='admin')return p7Json({error:'admin_required'},403);
+    const evidenceId=p7Id(body.evidence_id),action=p7Text(body.action,32);
+    const replacementId=p7Id(body.replacement_evidence_id)||'';
+    const reason=p7Text(body.reason,1000),requestId=p7Id(body.request_id);
+    if(!evidenceId||!['revoked','superseded'].includes(action)||!reason||!requestId)return p7Json({error:'invalid_evidence_adjustment'},400);
+    if(action==='superseded'&&!replacementId)return p7Json({error:'replacement_evidence_required'},400);
+    const evidence=await env.TUTOR_DB.prepare(
+      'SELECT id,learner_id,competency_id,definition_version FROM competency_evidence WHERE id=? LIMIT 1'
+    ).bind(evidenceId).first<Record<string,unknown>>();
+    if(!evidence)return p7Json({error:'evidence_not_found'},404);
+    if(replacementId){
+      const replacement=await env.TUTOR_DB.prepare(
+        'SELECT learner_id,competency_id FROM competency_evidence WHERE id=? LIMIT 1'
+      ).bind(replacementId).first<Record<string,unknown>>();
+      if(!replacement||String(replacement.learner_id||'')!==String(evidence.learner_id||'')||
+        String(replacement.competency_id||'')!==String(evidence.competency_id||'')){
+        return p7Json({error:'invalid_replacement_evidence'},400);
+      }
+    }
+    const existing=await env.TUTOR_DB.prepare(
+      'SELECT id FROM competency_evidence_adjustments WHERE admin_actor_id=? AND request_id=? LIMIT 1'
+    ).bind(actorId,requestId).first<Record<string,unknown>>();
+    if(!existing){
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO competency_evidence_adjustments(id,evidence_id,action,replacement_evidence_id,reason,admin_actor_id,request_id,created_at) VALUES (?,?,?,?,?,?,?,?)'
+      ).bind(p7Generated('cea'),evidenceId,action,replacementId||null,reason,actorId,requestId,now).run();
+    }
+    const key=p7Key(String(evidence.competency_id||''),Number(evidence.definition_version||0));
+    const passports=await p7RefreshPassport(
+      env.TUTOR_DB,String(evidence.learner_id||''),new Set([key]),now
+    );
+    return p7Json({ok:true,idempotent_replay:Boolean(existing),passports});
+  }
   if(route==='/internships/passport/reconcile'&&request.method==='POST'){
     const internshipId=p7Id(body.internship_id)||'';
     if(internshipId&&!await p7OwnedInternship(env.TUTOR_DB,actorId,internshipId))return p7Json({error:'internship_not_found'},404);
