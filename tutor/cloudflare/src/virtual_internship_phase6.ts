@@ -251,7 +251,7 @@ export async function handlePhase6AssessmentPersistenceRoute(
   }
 
   if(route==='/internships/performance-reviews/record'&&request.method==='POST'){
-    if(owned.status!=='active'&&owned.status!=='stopped')return json({error:'review_unavailable'},409);
+    if(owned.status!=='active')return json({error:'internship_not_active'},409);
     const req=requestId(body.request_id),reviewType=text(body.review_type,16),cutoff=int(body.cutoff_at);
     const snapshot=body.evidence_snapshot,providedHash=text(body.evidence_snapshot_hash,64);
     if(!req||!['midpoint','final'].includes(reviewType)||!cutoff||!snapshot||typeof snapshot!=='object'||Array.isArray(snapshot))return json({error:'invalid_performance_review'},400);
