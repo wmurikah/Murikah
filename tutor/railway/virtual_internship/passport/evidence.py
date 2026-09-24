@@ -45,6 +45,15 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
         assessment_completed=True,evidence_refs=refs,lineage_valid=True,
         assistance_level=int(assistance_level),
     )
+    context_metadata=mapping.get("context_metadata") or {}
+    physical=bool(context_metadata.get("physical")) if isinstance(context_metadata,dict) else False
+    limitations=[str(x) for x in assessment.get("limitations",[]) if isinstance(x,str)]
+    if physical:
+        limitations.append(
+            "Virtual Internship simulation evidence does not fully verify physical or manual competence."
+        )
+        if strength["strength"] == "strong":
+            strength={**strength,"strength":"supporting","factors":{**strength["factors"],"physical_simulation_limitation":True}}
     return {
         "competency_id":str(mapping.get("competency_id") or ""),
         "definition_version":int(mapping.get("definition_version") or 0),
@@ -60,7 +69,7 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
         "evidence_strength":strength["strength"],
         "strength_factors":strength["factors"],
         "transfer_context":normalized_transfer_context(mapping.get("context_tags") or mapping.get("context_tags_json") or {}),
-        "limitations":[str(x) for x in assessment.get("limitations",[]) if isinstance(x,str)],
+        "limitations":limitations,
         "source_type":"virtual_internship",
         "evidence_ruleset_version":EVIDENCE_STRENGTH_RULESET_VERSION,
     }
