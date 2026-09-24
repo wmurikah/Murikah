@@ -31,32 +31,68 @@ _OPTION_LABELS = {
 }
 
 _SCENARIOS = (
-    ("conflict_of_interest", "A potential conflict of interest affects the assigned work."),
-    ("soften_material_issue", "A stakeholder pressures the learner to ignore or soften a material issue."),
-    ("confidentiality_privacy", "A request creates a confidentiality or privacy concern."),
-    ("inappropriate_data_access", "A stakeholder requests access or data use beyond the authored procedure."),
-    ("control_override", "A manager requests an undocumented control override."),
-    ("questionable_reporting", "A reporting instruction conflicts with the available evidence."),
-    ("policy_compliance_conflict", "A business request conflicts with an authored policy or compliance requirement."),
-    ("safety_escalation", "A work decision raises a career-appropriate safety or escalation concern."),
-    ("client_instruction_conflict", "A client or stakeholder instruction conflicts with the authored procedure."),
+    (
+        "conflict_of_interest",
+        "A potential conflict of interest affects the assigned work.",
+        ("ask_for_clarification","document_issue","consult_authored_policy","use_authored_ethics_route"),
+    ),
+    (
+        "soften_material_issue",
+        "A stakeholder pressures the learner to ignore or soften a material issue.",
+        ("document_issue","consult_authored_policy","raise_to_authored_supervisor","use_authored_ethics_route","decline_inappropriate_action"),
+    ),
+    (
+        "confidentiality_privacy",
+        "A request creates a confidentiality or privacy concern.",
+        ("ask_for_clarification","document_issue","consult_authored_policy","decline_inappropriate_action"),
+    ),
+    (
+        "inappropriate_data_access",
+        "A stakeholder requests access or data use beyond the authored procedure.",
+        ("ask_for_clarification","consult_authored_policy","raise_to_authored_supervisor","decline_inappropriate_action"),
+    ),
+    (
+        "control_override",
+        "A manager requests an undocumented control override.",
+        ("document_issue","consult_authored_policy","raise_to_authored_supervisor","decline_inappropriate_action"),
+    ),
+    (
+        "questionable_reporting",
+        "A reporting instruction conflicts with the available evidence.",
+        ("ask_for_clarification","document_issue","raise_to_authored_supervisor","decline_inappropriate_action"),
+    ),
+    (
+        "policy_compliance_conflict",
+        "A business request conflicts with an authored policy or compliance requirement.",
+        ("ask_for_clarification","consult_authored_policy","use_authored_ethics_route","decline_inappropriate_action"),
+    ),
+    (
+        "safety_escalation",
+        "A work decision raises a career-appropriate safety or escalation concern.",
+        ("ask_for_clarification","document_issue","raise_to_authored_supervisor","decline_inappropriate_action"),
+    ),
+    (
+        "client_instruction_conflict",
+        "A client or stakeholder instruction conflicts with the authored procedure.",
+        ("ask_for_clarification","document_issue","consult_authored_policy","raise_to_authored_supervisor","decline_inappropriate_action"),
+    ),
 )
 
 
-def _event(category: str, purpose: str) -> dict[str, Any]:
+def _event(category: str, purpose: str, allowed_options: tuple[str, ...]) -> dict[str, Any]:
     return {
         "template_id": f"eth_{category}_v1",
         "library_version": ETHICS_LIBRARY_VERSION,
         "category": category,
         "learning_purpose": purpose,
-        "allowed_options": list(_OPTION_LABELS),
+        "allowed_options": list(allowed_options),
         "allowed_trigger_types": sorted(_PHASE2_TRIGGERS),
         "allowed_mutation_types": sorted(_PHASE2_MUTATIONS),
         "consequence_authority": "phase2_authored_only",
     }
 
 
-ETHICS_EVENTS = tuple(_event(category, purpose) for category, purpose in _SCENARIOS)
+ETHICS_EVENTS = tuple(_event(category, purpose, options) for category, purpose, options in _SCENARIOS)
 
 
 def validate_ethics_template(template: dict[str, Any]) -> dict[str, Any]:
@@ -76,7 +112,11 @@ def validate_ethics_template(template: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("unsupported ethics library version")
     if template["consequence_authority"] != "phase2_authored_only":
         raise ValueError("ethics consequences must remain Phase 2 authored")
-    if list(template["allowed_options"]) != list(_OPTION_LABELS):
+    options=template["allowed_options"]
+    if (
+        not isinstance(options,list) or len(options)<2 or len(options)!=len(set(options))
+        or any(option not in _OPTION_LABELS for option in options)
+    ):
         raise ValueError("ethics response options are invalid")
     if set(template["allowed_trigger_types"]) != _PHASE2_TRIGGERS:
         raise ValueError("ethics trigger authority must remain Phase 2")
