@@ -1,12 +1,13 @@
 """Authenticated learner-facing API for Virtual Internship workplace and Phase 5 work artifacts."""
 from __future__ import annotations
 
+import html as html_lib
 import json
 import uuid
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from urllib.parse import unquote
 from pydantic import BaseModel, Field
 
@@ -116,6 +117,12 @@ class PassportExportRequest(BaseModel):
 
 class CompletionRequest(BaseModel):
     internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class CompletionDocumentRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    document_type: str = Field(min_length=1,max_length=32)
     request_id: str = Field(min_length=3,max_length=128)
 
 
@@ -1013,6 +1020,147 @@ async def complete_internship(
     except Exception as exc:
         raise _safe_http(exc,"The internship could not be completed. Try again.") from exc
 
+
+
+
+@router.get("/completion-documents")
+async def completion_documents(
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"view internship completion documents")
+    try:
+        return _persistence().internship_completion_documents(actor_id,internship_id)
+    except Exception as exc:
+        raise _safe_http(exc,"Completion documents could not be loaded. Try again.") from exc
+
+
+@router.post("/completion-documents")
+async def generate_completion_document(
+    body: CompletionDocumentRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id, username, guest = _identity(current)
+    if guest:
+        raise HTTPException(401,"Sign in to create completion documents.")
+    if body.document_type not in {"performance_report","completion_letter"}:
+        raise HTTPException(400,"That completion document type is not supported.")
+    personalization=personalization_for_actor(actor_id,username)
+    learner_name=str(
+        personalization.get("preferred_name")
+        or personalization.get("derived_name")
+        or ""
+    ).strip()
+    try:
+        return _persistence().internship_completion_document_generate(
+            actor_id,
+            body.internship_id,
+            document_type=body.document_type,
+            request_id=body.request_id,
+            learner_name_snapshot=learner_name,
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"That completion document could not be issued. Try again.") from exc
+
+
+@router.get("/completion-documents/{document_id}/download")
+async def download_completion_document(
+    document_id: str,
+    internship_id: str = Query(min_length=1,max_length=128),
+    export_format: str = Query(default="html",alias="format",max_length=16),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"download internship completion documents")
+    if export_format not in {"html","json"}:
+        raise HTTPException(400,"That export format is not supported.")
+    try:
+        payload, headers = _persistence().internship_completion_document_download(
+            actor_id,internship_id,document_id,export_format=export_format
+        )
+        response_headers={
+            "cache-control":"private, no-store",
+            "x-content-type-options":"nosniff",
+        }
+        if headers.get("content-disposition"):
+            response_headers["content-disposition"]=headers["content-disposition"]
+        if headers.get("content-length"):
+            response_headers["content-length"]=headers["content-length"]
+        return Response(
+            content=payload,
+            media_type=headers.get("content-type") or (
+                "application/json" if export_format == "json" else "text/html"
+            ),
+            headers=response_headers,
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"That completion document could not be downloaded. Try again.") from exc
+
+
+@router.get("/verify",response_class=HTMLResponse)
+async def verify_completion_document(
+    reference_id: str = Query(default="",max_length=96),
+    code: str = Query(default="",max_length=96),
+):
+    reference=reference_id.strip()
+    if not reference:
+        return HTMLResponse(
+            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Murikah Virtual Internship Verification</title><meta name='robots' content='noindex,nofollow'>"
+            "<style>body{font-family:Arial,sans-serif;background:#f6f7f7;color:#172333;margin:0;padding:32px}"
+            "main{max-width:720px;margin:auto;background:white;padding:28px;border:1px solid #dde2e6}label{display:block;margin-top:14px}"
+            "input{width:100%;padding:10px;margin-top:5px}button{margin-top:18px;padding:10px 16px;background:#071D35;color:white;border:0}"
+            ".note{margin-top:20px;padding:12px;background:#fbf8f0;border-left:4px solid #A9822E}</style></head><body><main>"
+            "<h1>Verify a Murikah Virtual Internship document</h1>"
+            "<form method='get'><label for='reference_id'>Verification/reference ID</label>"
+            "<input id='reference_id' name='reference_id' autocomplete='off' required>"
+            "<label for='code'>Verification code (required to reveal the learner name)</label>"
+            "<input id='code' name='code' autocomplete='off'><button type='submit'>Verify</button></form>"
+            "<div class='note'>This verification service covers Murikah Virtual Internship simulations. "
+            "It does not establish employment by a simulated organization or statutory industrial attachment recognition.</div>"
+            "</main></body></html>",
+            headers={"cache-control":"no-store","x-robots-tag":"noindex, nofollow"},
+        )
+    try:
+        result=_persistence().internship_completion_document_verify(reference,code.strip())
+    except Exception:
+        result={"ok":False,"verification_status":"not_found"}
+    status=str(result.get("verification_status") or "not_found")
+    valid=bool(result.get("valid"))
+    identity_verified=bool(result.get("identity_verified"))
+    learner_name=str(result.get("learner_name") or "") if identity_verified else ""
+    disclosure=str(result.get("simulation_disclosure") or "This verification covers a Murikah Virtual Internship simulation.")
+    title="Valid current document" if valid else ("Superseded document" if status == "superseded" else "Document could not be verified")
+    details=[
+        ("Status",status),
+        ("Document type",str(result.get("document_type") or "")),
+        ("Internship",str(result.get("internship_title") or "")),
+        ("Reference",str(result.get("reference_id") or reference)),
+        ("Integrity fingerprint",str(result.get("integrity_fingerprint") or "")),
+        ("Document version",str(result.get("document_version") or "")),
+        ("Template version",str(result.get("template_version") or "")),
+    ]
+    if learner_name:
+        details.insert(1,("Learner name",learner_name))
+    rows="".join(
+        "<dt style='font-weight:700;margin-top:10px'>" + html_lib.escape(label) + "</dt><dd style='margin:2px 0'>" + html_lib.escape(value) + "</dd>"
+        for label,value in details if value
+    )
+    page=(
+        "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Murikah Virtual Internship Verification</title><meta name='robots' content='noindex,nofollow'></head>"
+        "<body style='font-family:Arial,sans-serif;background:#f6f7f7;color:#172333;margin:0;padding:32px'>"
+        "<main style='max-width:720px;margin:auto;background:white;padding:28px;border:1px solid #dde2e6'>"
+        "<div style='font-weight:800;letter-spacing:.08em;color:#071D35'>MURIKAH</div>"
+        "<h1>" + html_lib.escape(title) + "</h1><dl>" + rows + "</dl>"
+        "<div style='margin-top:22px;padding:12px;background:#fbf8f0;border-left:4px solid #A9822E'><strong>Simulation disclosure</strong><p>"
+        + html_lib.escape(disclosure) + "</p></div>"
+        "<p style='margin-top:20px;font-size:13px'>A reference alone never exposes private evidence, artifact contents, email, or the learner's full internship history. "
+        "The learner name is shown only when the document-specific verification code is also correct.</p>"
+        "</main></body></html>"
+    )
+    return HTMLResponse(page,headers={"cache-control":"no-store","x-robots-tag":"noindex, nofollow"})
 
 
 @router.get("/workspace")
