@@ -276,7 +276,9 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
       String(raw.submission_id||'')===String(assessment.submission_id||''));
     if(!lineageValid)continue;
     const mappings=(await db.prepare(
-      'SELECT * FROM competency_assessment_mappings WHERE scenario_version_id=? AND task_id=? AND rubric_id=? AND criterion_id=? ORDER BY mapping_version DESC'
+      'SELECT m.*,d.context_metadata_json FROM competency_assessment_mappings m '+
+      'JOIN competency_definitions d ON d.competency_id=m.competency_id AND d.definition_version=m.definition_version '+
+      'WHERE m.scenario_version_id=? AND m.task_id=? AND m.rubric_id=? AND m.criterion_id=? ORDER BY m.mapping_version DESC'
     ).bind(assessment.scenario_version_id,assessment.task_id,assessment.rubric_id,criterion.criterion_id).all<Record<string,unknown>>()).results||[];
     if(!mappings.length)continue;
 
@@ -292,8 +294,15 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
     const candidate=p7Candidate(String(criterion.rating_id||''),maxAssistance);
     if(!candidate)continue;
     const specific=refs.every((raw:any)=>raw&&typeof raw.locator==='object');
-    const strength=!specific?'limited':(maxAssistance<=1?'strong':'supporting');
     for(const mapping of mappings){
+      const contextMetadata=p7Parse(mapping.context_metadata_json,{}) as Record<string,unknown>;
+      const physical=Boolean(contextMetadata.physical);
+      const strength=!specific?'limited':(maxAssistance<=1&&!physical?'strong':'supporting');
+      const limitations=[
+        String(criterion.limitation||''),
+        ...p7Array(p7Parse(assessment.limitations_json,[])).map(String),
+      ].filter(Boolean);
+      if(physical)limitations.push('Virtual Internship simulation evidence does not fully verify physical or manual competence.');
       const definitionVersion=Number(mapping.definition_version||0);
       if(!p7Id(mapping.competency_id)||definitionVersion<1)continue;
       const evidenceId=p7Generated('ce');
@@ -310,9 +319,9 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
             label:maxAssistance===0?'Independent demonstration':maxAssistance===1?'Clarification only':maxAssistance===2?'Light coaching used':maxAssistance===3?'Moderate coaching used':maxAssistance===4?'Substantial coaching used':'Solution-level assistance used'}),
           JSON.stringify({artifact_version_number:Number(submission.version_number||0),submission_number:Number(submission.submission_number||0),
             revision_count:Math.max(0,Number(submission.version_number||1)-1)}),
-          strength,JSON.stringify({formal_assessment_completed:true,exact_lineage_valid:true,specific_evidence_references:specific,low_assistance_context:maxAssistance<=1,source_type:'virtual_internship'}),
+          strength,JSON.stringify({formal_assessment_completed:true,exact_lineage_valid:true,specific_evidence_references:specific,low_assistance_context:maxAssistance<=1,physical_simulation_limitation:physical,source_type:'virtual_internship'}),
           String(mapping.context_tags_json||'{}'),
-          JSON.stringify([String(criterion.limitation||''),...p7Array(p7Parse(assessment.limitations_json,[])).map(String)].filter(Boolean)),
+          JSON.stringify(limitations),
           EVIDENCE_RULESET,Number(assessment.completed_at||now)
         ).run();
         derived+=1;
