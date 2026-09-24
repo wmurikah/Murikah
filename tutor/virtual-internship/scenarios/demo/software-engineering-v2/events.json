@@ -1,0 +1,117 @@
+[
+  {
+    "event_id": "event_reproduction_clue",
+    "authored_sequence": 1,
+    "event_type": "reproduction_information",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_understand_issue",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_hidden_trigger"
+      },
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_reproduction_status",
+        "value": "reproducible"
+      }
+    ],
+    "message_template_id": "msg_reproduction_clue",
+    "actor_ids": [
+      "actor_senior_engineer"
+    ],
+    "once": true,
+    "audit_label": "Reproduction clue disclosed",
+    "learning_objective": "Update a technical hypothesis when new evidence appears."
+  },
+  {
+    "event_id": "event_priority_change",
+    "authored_sequence": 2,
+    "event_type": "priority_change",
+    "priority": 30,
+    "triggers": [
+      {
+        "trigger_type": "prior_event",
+        "event_id": "event_reproduction_clue"
+      },
+      {
+        "trigger_type": "fact_equals",
+        "fact_id": "fact_reproduction_status",
+        "expected": "reproducible"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_priority",
+        "value": "high"
+      }
+    ],
+    "message_template_id": "msg_priority_change",
+    "actor_ids": [
+      "actor_product_manager",
+      "actor_engineering_manager"
+    ],
+    "once": true,
+    "audit_label": "Issue priority raised",
+    "learning_objective": "Replan work after an authored priority change."
+  },
+  {
+    "event_id": "event_regression_risk",
+    "authored_sequence": 3,
+    "event_type": "regression_risk",
+    "priority": 50,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_fix_plan",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_future_regression_risk"
+      }
+    ],
+    "message_template_id": "msg_regression_risk",
+    "actor_ids": [
+      "actor_qa_engineer"
+    ],
+    "once": true,
+    "audit_label": "QA regression risk disclosed",
+    "learning_objective": "Include regression risk in technical planning."
+  },
+  {
+    "event_id": "event_day8_review",
+    "authored_sequence": 4,
+    "event_type": "time_review",
+    "priority": 20,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 8
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "adjust_deadline",
+        "task_id": "task_fix_plan",
+        "offset_days": 1
+      }
+    ],
+    "message_template_id": "msg_day8_review",
+    "actor_ids": [
+      "actor_engineering_manager"
+    ],
+    "once": true,
+    "audit_label": "Day 8 plan review",
+    "learning_objective": "Adjust a plan to an authored scheduling change."
+  }
+]
