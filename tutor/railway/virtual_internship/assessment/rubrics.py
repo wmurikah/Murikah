@@ -91,7 +91,7 @@ def validate_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
             "criterion_id", "description", "evidence_expectations",
             "allowed_rating_ids", "deliverable_types", "allow_not_assessed",
         }
-        allowed_criterion = required_criterion | {"weight"}
+        allowed_criterion = required_criterion | {"weight", "uses_assistance_context"}
         if not required_criterion.issubset(row) or not set(row).issubset(allowed_criterion):
             raise RubricError("criterion fields are invalid")
         criterion_id = str(row.get("criterion_id") or "").strip()
@@ -119,6 +119,8 @@ def validate_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
             raise RubricError("criterion deliverable type is invalid")
         if not isinstance(row.get("allow_not_assessed"), bool):
             raise RubricError("allow_not_assessed must be boolean")
+        if "uses_assistance_context" in row and not isinstance(row.get("uses_assistance_context"), bool):
+            raise RubricError("uses_assistance_context must be boolean")
         criterion_ids.add(criterion_id)
         if weight is not None:
             weight_sum += weight
@@ -132,6 +134,8 @@ def validate_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
         }
         if weight is not None:
             normalized_criterion["weight"] = str(weight.normalize())
+        if "uses_assistance_context" in row:
+            normalized_criterion["uses_assistance_context"] = bool(row["uses_assistance_context"])
         normalized_criteria.append(normalized_criterion)
     if calculation["method"] == "weighted_average" and weight_sum != authored_total:
         raise RubricError("criterion weights must total 100")
