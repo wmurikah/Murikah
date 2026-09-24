@@ -38,7 +38,8 @@ class Phase7EvidenceTests(unittest.TestCase):
     def test_incomplete_missing_reference_and_not_yet_fail_closed(self):
         self.assertIsNone(derive_evidence_contribution(assessment=assessment("assessing"),criterion=criterion(),mapping=MAPPING,assistance_level=0))
         self.assertIsNone(derive_evidence_contribution(assessment=assessment(),criterion=criterion(refs=False),mapping=MAPPING,assistance_level=0))
-        self.assertIsNone(derive_evidence_contribution(assessment=assessment(),criterion=criterion("not_yet"),mapping=MAPPING,assistance_level=0))
+        negative=derive_evidence_contribution(assessment=assessment(),criterion=criterion("not_yet"),mapping=MAPPING,assistance_level=0)
+        self.assertEqual(negative["demonstrated_level"],"not_demonstrated")
 
     def test_broken_lineage_creates_no_evidence(self):
         bad=criterion(); bad["evidence_refs"][0]["artifact_version_id"]="other"
