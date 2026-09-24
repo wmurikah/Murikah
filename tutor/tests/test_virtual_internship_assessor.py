@@ -40,6 +40,17 @@ class Phase6AssessorTests(unittest.TestCase):
         self.assertEqual(result["aggregate_numeric"],"75.00")
         self.assertEqual(result["calculation_version"],RUBRIC_CALCULATION_VERSION)
 
+    def test_model_overall_claims_do_not_become_authoritative_assessment_truth(self):
+        value=output(overall_summary="The learner is exceptionally talented and completed unrelated achievements.")
+        evidence=packet()
+        evidence["limitations"]=["Only the submitted text representation was assessed."]
+        result=validate_and_calculate_assessment(
+            value,assessment_id="asm_1",rubric=rubric(),evidence_packet=evidence,
+        )
+        self.assertNotIn("exceptionally talented",result["overall_summary"].lower())
+        self.assertIn("criterion-level feedback",result["overall_summary"].lower())
+        self.assertEqual(result["limitations"],["Only the submitted text representation was assessed."])
+
     def test_unknown_criterion_and_rating_are_rejected(self):
         value=output();value["criterion_results"][0]["criterion_id"]="invented"
         with self.assertRaises(AssessmentValidationError):validate_and_calculate_assessment(value,assessment_id="asm_1",rubric=rubric(),evidence_packet=packet())
