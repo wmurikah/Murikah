@@ -26,12 +26,14 @@ from .outputs import (
     parse_json_object,
     validate_assessor_output,
     validate_director_output,
+    validate_workflow_review_output,
 )
 from .prompts import (
     ACTOR_SYSTEM_PROMPT,
     ASSESSOR_SYSTEM_PROMPT,
     DIRECTOR_SYSTEM_PROMPT,
     MENTOR_SYSTEM_PROMPT,
+    WORKFLOW_REVIEW_SYSTEM_PROMPT,
 )
 from .providers import ProviderCandidate, provider_stream, resolve_role_candidates
 from .roles import ORCHESTRATION_SCHEMA_VERSION, VirtualInternshipModelRole, role_policy
@@ -43,6 +45,7 @@ SAFE_MESSAGES = {
     VirtualInternshipModelRole.MENTOR: "The Mentor is temporarily unavailable. Please try again.",
     VirtualInternshipModelRole.ASSESSOR: "The assessment service is temporarily unavailable. Please try again.",
     VirtualInternshipModelRole.SCENARIO_DIRECTOR: "The scenario service is temporarily unavailable. Please try again.",
+    VirtualInternshipModelRole.WORKFLOW_REVIEW: "Supervisor review is temporarily unavailable. Please try again later.",
 }
 
 _SYSTEM_PROMPTS = {
@@ -50,6 +53,7 @@ _SYSTEM_PROMPTS = {
     VirtualInternshipModelRole.MENTOR: MENTOR_SYSTEM_PROMPT,
     VirtualInternshipModelRole.ASSESSOR: ASSESSOR_SYSTEM_PROMPT,
     VirtualInternshipModelRole.SCENARIO_DIRECTOR: DIRECTOR_SYSTEM_PROMPT,
+    VirtualInternshipModelRole.WORKFLOW_REVIEW: WORKFLOW_REVIEW_SYSTEM_PROMPT,
 }
 
 
@@ -105,9 +109,14 @@ def _sanitize_visible(text: str) -> str:
         return str(text or "").replace("—", "-")
 
 
-def _messages(role: VirtualInternshipModelRole, context: dict[str, Any]) -> list[dict[str, str]]:
+def _messages(
+    role: VirtualInternshipModelRole,
+    context: dict[str, Any],
+    *,
+    system_prompt: str | None = None,
+) -> list[dict[str, str]]:
     return [
-        {"role": "system", "content": _SYSTEM_PROMPTS[role]},
+        {"role": "system", "content": system_prompt or _SYSTEM_PROMPTS[role]},
         {
             "role": "user",
             "content": (
@@ -449,12 +458,14 @@ class VirtualInternshipAIOrchestrator:
         validator: Callable[[dict[str, Any]], dict[str, Any]],
         task_id: str = "",
         ref_extractor: Callable[[dict[str, Any]], dict[str, str]] | None = None,
+        system_prompt: str | None = None,
+        actor_id: str = "",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         policy = role_policy(role)
         invocation = invocation_id()
         started_wall = _now_ms()
         started = time.perf_counter()
-        messages = _messages(role, context)
+        messages = _messages(role, context, system_prompt=system_prompt)
         try:
             candidates = self._candidates(role, requested_selection)
         except AIOrchestrationError as exc:
@@ -469,6 +480,7 @@ class VirtualInternshipAIOrchestrator:
                 started_at=started_wall,
                 total_ms=_elapsed_ms(started),
                 error_code=exc.code,
+                actor_id=actor_id,
                 task_id=task_id,
             )
             raise AIOrchestrationError(role, metadata["error_code"])
@@ -516,6 +528,7 @@ class VirtualInternshipAIOrchestrator:
                     retry_count=attempt,
                     fallback_count=attempt,
                     result=validated,
+                    actor_id=actor_id,
                     task_id=task_id,
                     event_id=str(refs.get("event_id") or ""),
                     decision_id=str(refs.get("decision_id") or ""),
@@ -544,9 +557,96 @@ class VirtualInternshipAIOrchestrator:
             retry_count=max(0, attempts - 1),
             fallback_count=max(0, attempts - 1),
             error_code=last_code,
+            actor_id=actor_id,
             task_id=task_id,
         )
         raise AIOrchestrationError(role, metadata["error_code"])
+
+    async def invoke_workflow_review(
+        self,
+        *,
+        owner_actor_id: str,
+        internship_id: str,
+        task_id: str,
+        reviewer_actor_id: str,
+        task: dict[str, Any],
+        artifact: dict[str, Any],
+        prior_reviews: list[dict[str, Any]] | None = None,
+        requested_selection: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        actor_result = self.state_service.actor_view(
+            owner_actor_id,
+            internship_id,
+            reviewer_actor_id,
+        )
+        actor_view = actor_result.get("view") if isinstance(actor_result, dict) else None
+        if not isinstance(actor_view, dict):
+            raise AIOrchestrationError(VirtualInternshipModelRole.WORKFLOW_REVIEW, "reviewer_unavailable")
+        learner_result = self.state_service.learner_view(owner_actor_id, internship_id)
+        learner_view = learner_result.get("view") if isinstance(learner_result, dict) else {}
+        reviewer = actor_view.get("actor") if isinstance(actor_view.get("actor"), dict) else {}
+        content = str(artifact.get("content") or "")[:24000]
+        context = {
+            "context_type": "workflow_supervisor_review",
+            "internship_id": internship_id,
+            "scenario_version_id": learner_view.get("scenario_version_id"),
+            "reviewer": {
+                "actor_id": reviewer_actor_id,
+                "name": reviewer.get("name"),
+                "job_title": reviewer.get("job_title"),
+                "department_id": reviewer.get("department_id"),
+            },
+            "task": {
+                "task_id": task_id,
+                "title": str(task.get("title") or "")[:160],
+                "brief": str(task.get("brief") or "")[:2000],
+                "business_context": str(task.get("business_context") or "")[:2000],
+                "learner_objective": str(task.get("learner_objective") or "")[:2000],
+            },
+            "submitted_work": {
+                "artifact_id": str(artifact.get("artifact_id") or ""),
+                "version_id": str(artifact.get("artifact_version_id") or ""),
+                "deliverable_type": str(artifact.get("deliverable_type") or "")[:64],
+                "title": str(artifact.get("title") or "")[:200],
+                "filename": str(artifact.get("original_filename") or "")[:180],
+                "content_type": str(artifact.get("content_type") or "")[:160],
+                "content": content,
+            },
+            "prior_workflow_feedback": [
+                {
+                    "decision": str(row.get("decision") or "")[:32],
+                    "feedback": str(row.get("feedback") or "")[:2500],
+                    "requested_changes": [
+                        str(item)[:500]
+                        for item in (row.get("requested_changes") or [])[:12]
+                    ],
+                }
+                for row in (prior_reviews or [])[-3:]
+                if isinstance(row, dict)
+            ],
+            "workflow_review_rules": {
+                "decisions": ["accepted", "changes_requested"],
+                "purpose": "workflow readiness and practical revision only",
+                "forbidden": [
+                    "scores",
+                    "grades",
+                    "competency levels",
+                    "Competency Passport evidence",
+                    "internship completion",
+                ],
+            },
+        }
+        return await self._structured_call(
+            role=VirtualInternshipModelRole.WORKFLOW_REVIEW,
+            owner_actor_id=owner_actor_id,
+            internship_id=internship_id,
+            context=context,
+            requested_selection=requested_selection,
+            task_id=task_id,
+            actor_id=reviewer_actor_id,
+            system_prompt=WORKFLOW_REVIEW_SYSTEM_PROMPT,
+            validator=validate_workflow_review_output,
+        )
 
     async def invoke_assessor(
         self,
