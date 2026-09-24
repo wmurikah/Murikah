@@ -259,7 +259,7 @@ async function recoverCompletionLifecycle(
   now: number,
 ): Promise<Record<string, unknown> | null> {
   const completedAt = Number(record.completed_at || 0);
-  const requestId = cleanId(record.request_id);
+  const requestId = cleanRequestId(record.request_id);
   if (completedAt <= 0 || !requestId) return ownedInternship(db, actorId, internshipId);
   const activityId = generated('ia');
   const snapshotHash = String(record.gate_snapshot_hash || '');
