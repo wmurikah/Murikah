@@ -969,8 +969,11 @@ def main() -> int:
     require_markers(
         ".github/workflows/tutor-image.yml",
         (
+            "pull_request:",
             "fetch-depth: 0",
+            "MURIKAH_TUTOR_BASE_REF: origin/main",
             "git diff --check origin/main...HEAD",
+            "if: github.event_name != 'pull_request'",
             "python tutor/scripts/preflight.py",
             "python tutor/cloudflare/preflight.py",
             "npm --prefix tutor/cloudflare run check",
