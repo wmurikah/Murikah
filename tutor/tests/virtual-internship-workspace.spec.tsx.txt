@@ -927,7 +927,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
     render(<MurikahVirtualInternshipWorkspace />);
 
     expect(await screen.findByRole("heading", { name: "Competency Passport" })).toBeVisible();
-    expect(screen.getByText("Independent")).toBeVisible();
+    expect(screen.getAllByText("Independent").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Strong")).toBeVisible();
     expect(screen.getByText("3")).toBeVisible();
     expect(screen.queryByText(/employability percentage|job ready|percentile/i)).toBeNull();
@@ -937,6 +937,9 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getByText("sub_2")).toBeVisible();
     expect(screen.getByText("v1")).toBeVisible();
     expect(screen.getByText(/Independent demonstration/)).toBeVisible();
+    expect(screen.getByText("vi_1")).toBeVisible();
+    expect(screen.getByText("task_reconcile_sample")).toBeVisible();
+    expect(screen.getByText("Reconciliation")).toBeVisible();
     expect(screen.getByText(/Only the submitted artifact version was assessed/)).toBeVisible();
     expect(screen.queryByText(/hidden scenario|system prompt|chain-of-thought/i)).toBeNull();
   });
