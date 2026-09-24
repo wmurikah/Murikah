@@ -1803,6 +1803,111 @@ def main() -> int:
         "tutor/virtual-internship/README.md",
         ("Learner naming and visible-language contract",),
     )
+    require_markers(
+        "tutor/cloudflare/migrations/0013_virtual_internship_phase7_passport.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS competency_definitions",
+            "CREATE TABLE IF NOT EXISTS competency_assessment_mappings",
+            "CREATE TABLE IF NOT EXISTS competency_evidence",
+            "CREATE TABLE IF NOT EXISTS competency_passports",
+            "CREATE TABLE IF NOT EXISTS competency_passport_history",
+            "CREATE TABLE IF NOT EXISTS competency_derivation_status",
+            "trg_competency_evidence_no_update",
+            "idx_competency_evidence_learner_competency",
+            "virtual_internship_phase7_passport_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0013_virtual_internship_phase7_passport.sql",
+        ("completion_records", "completion_letter", "verification_id", "employability_score"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase7.ts",
+        (
+            "handlePhase7PassportPersistenceRoute",
+            "phase7-evidence-strength-v1",
+            "phase7-passport-aggregation-v1",
+            "/internships/passport/reconcile",
+            "/internships/passport/rebuild",
+            "/internships/passport/summary",
+            "/internships/passport/evidence",
+            "competency_assessment_mappings",
+            "a.status='completed'",
+            "event_time<=?",
+            "DELETE FROM competency_passports WHERE learner_id=?",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        ("handlePhase7PassportPersistenceRoute", "const phase7Response = await handlePhase7PassportPersistenceRoute"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/passport/definitions.py",
+        ("LEVEL_FRAMEWORK_VERSION", "applied_with_support", "LEVEL_SEMANTICS"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/passport/evidence.py",
+        ("not_demonstrated", "evidence_ruleset_version", "assistance_context"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/passport/aggregation.py",
+        ("PASSPORT_AGGREGATION_RULESET_VERSION", "def aggregate_competency(", "insufficient_evidence"),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/passport/export.py",
+        ("SIMULATION_DISCLOSURE", "def build_passport_export(", "evidence_id"),
+    )
+    require_markers(
+        "tutor/railway/murikah_virtual_internship.py",
+        (
+            '@router.get("/passport")',
+            '@router.get("/passport/evidence")',
+            '@router.post("/passport/export")',
+            "internship_passport_reconcile",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt",
+        (
+            'id: "passport"',
+            "function PassportView()",
+            "No verified competency evidence yet.",
+            "Review evidence",
+            "Export JSON",
+            "not an AI opinion or an overall employability score",
+        ),
+    )
+    for phase7_test, marker in (
+        ("tutor/tests/test_virtual_internship_competency_definitions.py", "class Phase7CompetencyDefinitionTests"),
+        ("tutor/tests/test_virtual_internship_competency_evidence.py", "class Phase7EvidenceTests"),
+        ("tutor/tests/test_virtual_internship_evidence_strength.py", "class Phase7EvidenceStrengthTests"),
+        ("tutor/tests/test_virtual_internship_passport_aggregation.py", "class Phase7AggregationTests"),
+        ("tutor/tests/test_virtual_internship_passport_transfer.py", "class Phase7TransferTests"),
+        ("tutor/tests/test_virtual_internship_passport_ownership.py", "class Phase7OwnershipContractTests"),
+        ("tutor/tests/test_virtual_internship_passport_export.py", "class Phase7ExportTests"),
+        ("tutor/tests/test_virtual_internship_passport_persistence.py", "class Phase7PersistenceTests"),
+    ):
+        require_markers(phase7_test, (marker,))
+    require_markers(
+        "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
+        ("evidence-backed Passport", "No verified competency evidence yet.", "Review evidence"),
+    )
+    require_markers(
+        "tutor/cloudflare/PERSISTENCE.md",
+        ("Virtual Internship Phase 7 Competency Passport", "0013_virtual_internship_phase7_passport.sql"),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "## Phase 7 Implementation Record",
+            "## SUBSEQUENT COMPETENCY PASSPORT DEVELOPMENT REQUIREMENT",
+            "phase7-evidence-strength-v1",
+            "phase7-passport-aggregation-v1",
+            "Phase 8 internship completion remains unimplemented",
+            "Phase 9 performance reports, completion letters",
+        ),
+    )
+
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
     validate_bootstrap_fixture()
