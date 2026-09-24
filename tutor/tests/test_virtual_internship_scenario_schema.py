@@ -62,6 +62,18 @@ class ScenarioSchemaTests(unittest.TestCase):
         td,path=self._mutate("internal-audit",event_cycle)
         with td,self.assertRaises(ScenarioValidationError):validate_pack(path,verify_hash=False)
 
+    def test_non_aggregating_scenario_rubric_may_omit_weights(self):
+        def make_unweighted(path):
+            def change(tasks):
+                rubric=tasks[0]["rubric"]
+                rubric["calculation"]["method"]="none"
+                for criterion in rubric["criteria"]:
+                    criterion.pop("weight",None)
+            self._edit(path/"tasks.json",change)
+        td,path=self._mutate("internal-audit-v2",make_unweighted)
+        with td:
+            validate_pack(path,verify_hash=False)
+
     def test_qualifying_final_review_cannot_precede_minimum_duration(self):
         def make_qualifying(path):
             def change(manifest):
