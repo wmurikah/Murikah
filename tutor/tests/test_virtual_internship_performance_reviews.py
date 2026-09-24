@@ -13,9 +13,14 @@ class Phase6PerformanceReviewTests(unittest.TestCase):
 
     def test_midpoint_and_final_use_server_time_policy(self):
         start=1_000_000
-        self.assertFalse(review_eligibility(review_type="midpoint",manifest=self.manifest(),started_at=start,now=start+44*86400)["eligible"])
-        self.assertTrue(review_eligibility(review_type="midpoint",manifest=self.manifest(),started_at=start,now=start+45*86400)["eligible"])
-        self.assertFalse(review_eligibility(review_type="final",manifest=self.manifest(),started_at=start,now=start+2*86400)["eligible"])
+        manifest=self.manifest()
+        self.assertFalse(review_eligibility(review_type="midpoint",manifest=manifest,started_at=start,now=start+44*86400)["eligible"])
+        self.assertTrue(review_eligibility(review_type="midpoint",manifest=manifest,started_at=start,now=start+45*86400)["eligible"])
+        self.assertFalse(review_eligibility(review_type="final",manifest=manifest,started_at=start,now=start+85*86400)["eligible"])
+        self.assertFalse(review_eligibility(review_type="final",manifest=manifest,started_at=start,now=start+89*86400)["eligible"])
+        final=review_eligibility(review_type="final",manifest=manifest,started_at=start,now=start+90*86400)
+        self.assertTrue(final["eligible"])
+        self.assertEqual(final["required_day"],90)
 
     def test_demo_acceleration_is_nonqualifying_policy_only(self):
         manifest=self.manifest();manifest["classification"]="demo"
