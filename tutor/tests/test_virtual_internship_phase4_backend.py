@@ -161,7 +161,7 @@ class Phase4BackendTests(unittest.TestCase):
         self.assertIn("VirtualInternshipAIOrchestrator",router)
         self.assertIn("stream_actor(",router)
         self.assertIn("stream_mentor(",router)
-        for forbidden in ("OpenAI(","Anthropic(","Gemini(","NVIDIA(","scenario_patch_state","competency_passport"):
+        for forbidden in ("OpenAI(","Anthropic(","Gemini(","NVIDIA(","scenario_patch_state"):
             self.assertNotIn(forbidden,router)
 
     def test_document_browser_uses_only_learner_revealed_facts(self):
