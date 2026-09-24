@@ -1098,6 +1098,31 @@ async def download_completion_document(
         raise _safe_http(exc,"That completion document could not be downloaded. Try again.") from exc
 
 
+
+@router.get("/completion-documents/{document_id}/view")
+async def view_completion_document(
+    document_id: str,
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"view internship completion documents")
+    try:
+        payload, _headers = _persistence().internship_completion_document_download(
+            actor_id,internship_id,document_id,export_format="html"
+        )
+        return HTMLResponse(
+            content=payload.decode("utf-8","replace"),
+            headers={
+                "cache-control":"private, no-store",
+                "x-content-type-options":"nosniff",
+                "content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+                "x-robots-tag":"noindex, nofollow",
+            },
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"That completion document could not be viewed. Try again.") from exc
+
+
 @router.get("/verify",response_class=HTMLResponse)
 async def verify_completion_document(
     reference_id: str = Query(default="",max_length=96),
