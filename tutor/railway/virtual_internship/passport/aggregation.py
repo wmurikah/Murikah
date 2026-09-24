@@ -23,6 +23,23 @@ def _trend(evidence:list[dict[str,Any]]) -> str:
         return "improving"
     return "mixed"
 
+def _latest_mapping_evidence(evidence:list[dict[str,Any]]) -> list[dict[str,Any]]:
+    selected:dict[tuple[str,str,str],dict[str,Any]]={}
+    passthrough:list[dict[str,Any]]=[]
+    for row in evidence:
+        assessment=str(row.get("assessment_id") or "")
+        criterion=str(row.get("criterion_id") or "")
+        competency=str(row.get("competency_id") or "")
+        if not (assessment and criterion and competency):
+            passthrough.append(row)
+            continue
+        key=(assessment,criterion,competency)
+        current=selected.get(key)
+        if current is None or int(row.get("mapping_version") or 0)>int(current.get("mapping_version") or 0):
+            selected[key]=row
+    return passthrough+list(selected.values())
+
+
 def _eligible_by_recency(
     definition:dict[str,Any],
     evidence:list[dict[str,Any]],
@@ -71,7 +88,9 @@ def aggregate_competency(
     evidence:list[dict[str,Any]],
     as_of:int|None=None,
 ) -> dict[str,Any] | None:
-    historical=[row for row in evidence if not row.get("revoked") and not row.get("superseded")]
+    historical=_latest_mapping_evidence([
+        row for row in evidence if not row.get("revoked") and not row.get("superseded")
+    ])
     if not historical:
         return None
     active,expired_count=_eligible_by_recency(definition,historical,as_of=as_of)
