@@ -1,0 +1,95 @@
+[
+  {
+    "id": "fact_public_policy",
+    "key": "inventory_policy",
+    "value": "Monthly cycle counts are required.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "policy_manual",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_team_procedure",
+    "key": "audit_sampling_procedure",
+    "value": "Samples require source-to-ledger tracing.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_audit"
+    ],
+    "source": "audit_methodology",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_manager_note",
+    "key": "management_priority",
+    "value": "Operations wants the review closed before month end.",
+    "mutability": "mutable",
+    "visibility": "role",
+    "visibility_scopes": [
+      "manager",
+      "supervisor"
+    ],
+    "source": "management_note",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_vendor_contract",
+    "key": "vendor_contract_term",
+    "value": "Vendor stock confirmations are due within two business days.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_contract",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_invoice_amount",
+    "key": "historical_invoice_amount",
+    "value": 100000,
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "historical_record",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_inventory_variance",
+    "key": "inventory_variance",
+    "value": "unconfirmed",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "reconciliation",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_control_exception",
+    "key": "known_control_exception",
+    "value": "A prior unapproved adjustment exists.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "sealed_review_note",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_future_request",
+    "key": "future_management_request",
+    "value": "Management will later request deprioritization.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "event_schedule",
+    "initially_revealed": false,
+    "future_only": true
+  }
+]

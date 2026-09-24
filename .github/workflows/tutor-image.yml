@@ -6,6 +6,11 @@ on:
       - "tutor/**"
       - "docs/images/murikah_6.png"
       - ".github/workflows/tutor-image.yml"
+  pull_request:
+    paths:
+      - "tutor/**"
+      - "docs/images/murikah_6.png"
+      - ".github/workflows/tutor-image.yml"
   workflow_dispatch:
 
 permissions:
@@ -23,11 +28,16 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate Tutor deployment invariants
+        env:
+          MURIKAH_TUTOR_BASE_REF: origin/main
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check origin/main...HEAD
           python tutor/scripts/preflight.py
           python tutor/cloudflare/preflight.py
 
@@ -50,6 +60,7 @@ jobs:
           echo "Tutor source revision: ${source_revision}"
 
       - name: Sign in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -71,6 +82,7 @@ jobs:
           test "$actual_revision" = "$SOURCE_REVISION"
 
       - name: Publish immutable source image
+        if: github.event_name != 'pull_request'
         env:
           SOURCE_REVISION: ${{ steps.revision.outputs.value }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor

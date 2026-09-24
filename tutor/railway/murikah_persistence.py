@@ -944,6 +944,167 @@ def internship_artifact_text(
     )
 
 
+
+def internship_assessment_summary(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _internship_artifact_get(
+        "/internships/assessments/summary", actor_id, internship_id
+    )
+
+
+def internship_assessment_start(
+    actor_id: str,
+    internship_id: str,
+    submission_id: str,
+    *,
+    rubric_id: str,
+    rubric_schema_version: int,
+    rubric_hash: str,
+    calculation_version: str,
+    assessor_prompt_version: int,
+    assessor_schema_version: int,
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/assessments/start",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "submission_id": _learning_text(submission_id, 128),
+            "rubric_id": _learning_text(rubric_id, 128),
+            "rubric_schema_version": max(1, int(rubric_schema_version)),
+            "rubric_hash": _learning_text(rubric_hash, 64),
+            "calculation_version": _learning_text(calculation_version, 80),
+            "assessor_prompt_version": max(1, int(assessor_prompt_version)),
+            "assessor_schema_version": max(1, int(assessor_schema_version)),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_assessment_complete(
+    actor_id: str,
+    internship_id: str,
+    assessment_id: str,
+    *,
+    model_invocation_id: str,
+    aggregate_numeric: str | None,
+    overall_summary: str,
+    limitations: list[str],
+    criterion_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/assessments/complete",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "assessment_id": _learning_text(assessment_id, 128),
+            "model_invocation_id": _learning_text(model_invocation_id, 128),
+            "aggregate_numeric": aggregate_numeric,
+            "overall_summary": _learning_text(overall_summary, 4000),
+            "limitations": [_learning_text(item, 1000) for item in limitations[:32]],
+            "criterion_results": criterion_results,
+        },
+    )
+
+
+def internship_assessment_fail(
+    actor_id: str,
+    internship_id: str,
+    assessment_id: str,
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/assessments/fail",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "assessment_id": _learning_text(assessment_id, 128),
+            "reason": _learning_text(reason, 1000),
+        },
+    )
+
+
+def internship_assistance_record(
+    actor_id: str,
+    internship_id: str,
+    *,
+    task_id: str = "",
+    artifact_id: str = "",
+    artifact_version_id: str = "",
+    source: str,
+    provenance: str,
+    assistance_level: int,
+    category: str,
+    summary: str = "",
+    model_invocation_id: str = "",
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/assistance/record",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "task_id": _learning_text(task_id, 128),
+            "artifact_id": _learning_text(artifact_id, 128),
+            "artifact_version_id": _learning_text(artifact_version_id, 128),
+            "source": _learning_text(source, 40),
+            "provenance": _learning_text(provenance, 40),
+            "assistance_level": int(assistance_level),
+            "category": _learning_text(category, 80),
+            "summary": _learning_text(summary, 1000),
+            "model_invocation_id": _learning_text(model_invocation_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_performance_review_record(
+    actor_id: str,
+    internship_id: str,
+    *,
+    review_type: str,
+    cutoff_at: int,
+    evidence_snapshot: dict[str, Any],
+    evidence_snapshot_hash: str,
+    strengths: list[dict[str, Any]],
+    development_areas: list[dict[str, Any]],
+    priorities: list[dict[str, Any]],
+    assistance_summary: dict[str, Any],
+    narrative: str,
+    model_invocation_id: str = "",
+    narrative_version: int = 1,
+    supersedes_review_id: str = "",
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/performance-reviews/record",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "review_type": _learning_text(review_type, 16),
+            "cutoff_at": int(cutoff_at),
+            "evidence_snapshot": evidence_snapshot,
+            "evidence_snapshot_hash": _learning_text(evidence_snapshot_hash, 64),
+            "strengths": strengths[:12],
+            "development_areas": development_areas[:12],
+            "priorities": priorities[:12],
+            "assistance_summary": assistance_summary,
+            "narrative": _learning_text(narrative, 8000),
+            "model_invocation_id": _learning_text(model_invocation_id, 128),
+            "narrative_version": max(1, int(narrative_version)),
+            "supersedes_review_id": _learning_text(supersedes_review_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+
 def email_verification_start(
     email: str,
     *,

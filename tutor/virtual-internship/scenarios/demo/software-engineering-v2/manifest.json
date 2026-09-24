@@ -1,0 +1,42 @@
+{
+  "id": "sp_demo_software_engineering",
+  "slug": "demo-software-engineering",
+  "scenario_version_id": "sv_demo_software_engineering_v2",
+  "schema_version": 1,
+  "scenario_version": 2,
+  "title": "Software Engineering Intern Demo",
+  "career_family": "software_engineering",
+  "role_title": "Software Engineering Intern",
+  "region_context": "Fictional software product company",
+  "company_ref": "org_pineforge_software",
+  "minimum_duration_days": 90,
+  "expected_workload_band": "standard",
+  "classification": "demo",
+  "qualifying": false,
+  "initial_task_ids": [
+    "task_understand_issue"
+  ],
+  "initial_event_ids": [],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "manager",
+    "colleague",
+    "project_sponsor",
+    "reviewer_qa"
+  ],
+  "content_hash": "bbb09ba16aefed5d304fd29949d2aab64de76f19a4993537b5d98b9670d1e940",
+  "review_policy": {
+    "midpoint_day": 45,
+    "final_review_day": 85,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

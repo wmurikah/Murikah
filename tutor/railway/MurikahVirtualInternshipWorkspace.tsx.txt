@@ -38,6 +38,12 @@ type InternshipTaskSummary = {
   stakeholder_actor_ids: string[];
   acknowledged_at: number;
   work_status: string;
+  assessment_rubric?: {
+    rubric_id: string;
+    title: string;
+    rating_levels: Array<{ rating_id: string; label: string }>;
+    criteria: Array<{ criterion_id: string; description: string; evidence_expectations: string }>;
+  } | null;
   work_artifacts: InternshipWorkArtifact[];
 };
 
@@ -79,6 +85,57 @@ type InternshipArtifactReview = {
   created_at: number;
 };
 
+
+type InternshipAssessmentEvidenceRef = {
+  evidence_ref: string;
+  artifact_id: string;
+  artifact_version_id: string;
+  submission_id: string;
+  source_kind: string;
+  locator: { kind: string; start_line?: number; end_line?: number };
+  excerpt?: string;
+};
+
+type InternshipAssessmentCriterion = {
+  assessment_id: string;
+  criterion_id: string;
+  result_state: "assessed" | "not_assessed";
+  rating_id: string;
+  numeric_value?: string | null;
+  feedback: string;
+  evidence_refs: InternshipAssessmentEvidenceRef[];
+  limitation: string;
+};
+
+type InternshipFormalAssessment = {
+  id: string;
+  task_id: string;
+  artifact_id: string;
+  artifact_version_id: string;
+  submission_id: string;
+  rubric_id: string;
+  status: "pending" | "assessing" | "completed" | "failed";
+  aggregate_numeric?: string | null;
+  overall_summary: string;
+  limitations: string[];
+  created_at: number;
+  completed_at?: number;
+  criteria: InternshipAssessmentCriterion[];
+};
+
+type InternshipPerformanceReview = {
+  id: string;
+  review_type: "midpoint" | "final";
+  cutoff_at: number;
+  status: string;
+  strengths: Array<{ text: string; assessment_id?: string; criterion_id?: string }>;
+  development_areas: Array<{ text: string; assessment_id?: string; criterion_id?: string }>;
+  priorities: Array<{ text: string; assessment_id?: string; criterion_id?: string }>;
+  assistance_summary: { event_counts_by_level?: Record<string, number> };
+  narrative: string;
+  finalized_at: number;
+};
+
 type InternshipWorkArtifact = {
   id: string;
   task_id: string;
@@ -99,6 +156,7 @@ type InternshipWorkArtifact = {
   versions: InternshipArtifactVersion[];
   submissions: InternshipArtifactSubmission[];
   reviews: InternshipArtifactReview[];
+  formal_assessments: InternshipFormalAssessment[];
 };
 
 type InternshipPerson = {
@@ -236,6 +294,17 @@ type InternshipWorkspaceSummary = {
   threads?: InternshipThread[];
   reflections?: InternshipReflection[];
   activity?: InternshipTimelineItem[];
+  assessment?: {
+    performance_reviews: InternshipPerformanceReview[];
+    review_eligibility: {
+      midpoint: { eligible: boolean; required_day: number; elapsed_days: number };
+      final: { eligible: boolean; required_day: number; elapsed_days: number };
+    };
+    assistance_context: {
+      event_count: number;
+      event_counts_by_level: Record<string, number>;
+    };
+  };
 };
 
 type StreamEvent = {
@@ -708,6 +777,22 @@ function TaskDetail({
     } finally { setBusy(""); }
   }
 
+  async function requestFormalAssessment(artifact: InternshipWorkArtifact) {
+    const submissionId = artifact.accepted_submission_id || "";
+    if (!submissionId) return;
+    setBusy("assessment:" + artifact.id); setActionError("");
+    try {
+      const result = await callJson("/submissions/" + encodeURIComponent(submissionId) + "/assessment", {
+        internship_id: internshipId,
+        request_id: requestId("assessment"),
+      });
+      if (result.status === "failed" && result.message) setActionError(String(result.message));
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Formal assessment is temporarily unavailable.");
+    } finally { setBusy(""); }
+  }
+
   return (
     <Panel className="p-4 sm:p-5" ariaLabel="Assignment detail">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -777,6 +862,14 @@ function TaskDetail({
               (!artifact || ["draft","changes_requested"].includes(artifact.status));
             const canSubmit = Boolean(
               artifact?.current_version_id && canWork && !currentVersion?.submitted
+            );
+            const formalAssessments = [...(artifact?.formal_assessments || [])].sort((a,b)=>b.created_at-a.created_at);
+            const acceptedAssessment = artifact?.accepted_submission_id
+              ? formalAssessments.find((item)=>item.submission_id===artifact.accepted_submission_id)
+              : undefined;
+            const canAssess = Boolean(
+              task.assessment_rubric && artifact?.accepted_submission_id &&
+              !acceptedAssessment && !readOnly
             );
             return (
               <section key={deliverable} className="rounded-xl border border-[var(--border)] p-4">
@@ -867,6 +960,75 @@ function TaskDetail({
                     className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
                     {busy === "review:" + artifact?.id ? "Requesting review..." : "Retry supervisor review"}
                   </button>
+                ) : null}
+
+                {canAssess ? (
+                  <button type="button" disabled={Boolean(busy)} onClick={() => void requestFormalAssessment(artifact!)}
+                    className="mt-3 min-h-10 rounded-lg border border-[#A9822E]/50 px-3 text-sm font-semibold disabled:opacity-60">
+                    {busy === "assessment:" + artifact?.id ? "Assessing submitted work..." : "Request formal assessment"}
+                  </button>
+                ) : null}
+
+                {acceptedAssessment ? (
+                  <div className="mt-4 rounded-lg border border-[#A9822E]/30 bg-[#A9822E]/[0.04] p-4" aria-label="Formal assessment">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#A9822E]">Formal assessment</p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {task.assessment_rubric?.title || "Authored rubric assessment"}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-semibold">
+                        {sentenceLabel(acceptedAssessment.status)}
+                      </span>
+                    </div>
+                    {acceptedAssessment.completed_at ? (
+                      <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                        Assessed Version {(artifact.versions || []).find((v)=>v.id===acceptedAssessment.artifact_version_id)?.version_number || ""} · {formatDate(acceptedAssessment.completed_at,true)}
+                      </p>
+                    ) : null}
+                    {acceptedAssessment.status === "completed" ? (
+                      <>
+                        {acceptedAssessment.overall_summary ? <p className="mt-3 text-sm leading-6">{acceptedAssessment.overall_summary}</p> : null}
+                        <div className="mt-4 space-y-3">
+                          {(acceptedAssessment.criteria || []).map((criterion) => {
+                            const authored = task.assessment_rubric?.criteria.find((item)=>item.criterion_id===criterion.criterion_id);
+                            return (
+                              <article key={criterion.criterion_id} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h5 className="text-sm font-semibold">{authored?.description || sentenceLabel(criterion.criterion_id)}</h5>
+                                  <span className="text-xs font-semibold">{criterion.result_state === "not_assessed" ? "Not assessed" : sentenceLabel(criterion.rating_id)}</span>
+                                </div>
+                                {criterion.feedback ? <p className="mt-2 text-sm leading-6">{criterion.feedback}</p> : null}
+                                {criterion.limitation ? <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">Limitation: {criterion.limitation}</p> : null}
+                                {criterion.evidence_refs?.length ? (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">Evidence</p>
+                                    <ul className="mt-1 space-y-1 text-xs text-[var(--muted-foreground)]">
+                                      {criterion.evidence_refs.map((ref) => (
+                                        <li key={ref.evidence_ref}>
+                                          {ref.locator?.kind === "line_range" ? "Lines " + ref.locator.start_line + "-" + ref.locator.end_line : sentenceLabel(ref.locator?.kind || "submitted evidence")}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </article>
+                            );
+                          })}
+                        </div>
+                        {acceptedAssessment.limitations?.length ? (
+                          <div className="mt-3 text-xs text-[var(--muted-foreground)]">
+                            <span className="font-semibold">Assessment limitations: </span>{acceptedAssessment.limitations.join(" ")}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : acceptedAssessment.status === "failed" ? (
+                      <p className="mt-3 text-sm text-[var(--muted-foreground)]">No formal result was recorded. The submitted work and supervisor review remain unchanged.</p>
+                    ) : (
+                      <p className="mt-3 text-sm text-[var(--muted-foreground)]">Assessment is in progress. No result is shown until structured validation completes.</p>
+                    )}
+                  </div>
                 ) : null}
 
                 {artifact?.versions?.length ? (
@@ -1667,6 +1829,102 @@ function ReflectionView({
   );
 }
 
+function PerformanceReviews({
+  workspace,
+  refresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  refresh: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const reviews = workspace.assessment?.performance_reviews || [];
+  const eligibility = workspace.assessment?.review_eligibility;
+  const stopped = workspace.state === "stopped";
+
+  async function createReview(kind: "midpoint" | "final") {
+    setBusy(kind); setError("");
+    try {
+      const response = await fetch(API + "/performance-reviews/" + kind, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          internship_id: workspace.internship?.internship_id || "",
+          request_id: requestId(kind + "-review"),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "That performance review could not be created."));
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That performance review could not be created.");
+    } finally { setBusy(""); }
+  }
+
+  return (
+    <Panel className="p-5" ariaLabel="Performance reviews">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Performance reviews</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
+            Midpoint and final performance reviews summarize durable internship evidence. They do not complete the internship or create a Competency Passport level.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["midpoint","final"] as const).map((kind) => {
+            const existing = reviews.some((review)=>review.review_type===kind && review.status==="finalized");
+            const allowed = Boolean(eligibility?.[kind]?.eligible) && !existing && !stopped;
+            return (
+              <button key={kind} type="button" disabled={!allowed || Boolean(busy)} onClick={() => void createReview(kind)}
+                className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50">
+                {busy === kind ? "Creating..." : existing ? sentenceLabel(kind) + " review available" :
+                  allowed ? "Create " + sentenceLabel(kind) + " review" :
+                  sentenceLabel(kind) + " review from day " + String(eligibility?.[kind]?.required_day || "")}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+      <div className="mt-4 space-y-4">
+        {reviews.length ? reviews.map((review) => (
+          <article key={review.id} className="rounded-xl border border-[var(--border)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold">{review.review_type === "final" ? "Final Performance Review" : "Midpoint Performance Review"}</h3>
+              <span className="text-xs text-[var(--muted-foreground)]">{formatDate(review.finalized_at || review.cutoff_at,true)}</span>
+            </div>
+            {review.narrative ? <p className="mt-3 text-sm leading-6">{review.narrative}</p> : null}
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {[
+                ["Evidence-grounded strengths", review.strengths || []],
+                ["Development areas", review.development_areas || []],
+                ["Next-period priorities", review.priorities || []],
+              ].map(([title, rows]) => (
+                <div key={title as string}>
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{title as string}</h4>
+                  {(rows as Array<{text:string}>).length ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-sm leading-6">
+                      {(rows as Array<{text:string}>).map((row,index)=><li key={index}>{row.text}</li>)}
+                    </ul>
+                  ) : <p className="mt-2 text-sm text-[var(--muted-foreground)]">No supported item recorded for this section.</p>}
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+              Assistance context: {Object.entries(review.assistance_summary?.event_counts_by_level || {})
+                .filter(([,count])=>Number(count)>0)
+                .map(([level,count])=>"Level " + level + ": " + count)
+                .join(" · ") || "No recorded assistance events before this review cutoff."}
+            </p>
+          </article>
+        )) : (
+          <p className="text-sm text-[var(--muted-foreground)]">No performance review has been finalized yet.</p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function ActivityView({
   workspace,
   refresh,
@@ -1678,6 +1936,7 @@ function ActivityView({
     <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <Timeline title="Activity" items={workspace.activity || []} />
       <div className="space-y-5">
+        <PerformanceReviews workspace={workspace} refresh={refresh} />
         <ReflectionView workspace={workspace} onWorkspaceRefresh={refresh} />
         <Panel className="p-5">
           <h2 className="text-base font-semibold">Past reflections</h2>

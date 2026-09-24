@@ -1,6 +1,7 @@
 """Strict, offline Virtual Internship scenario-pack validation."""
 from __future__ import annotations
 import copy, hashlib, json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,7 @@ def _validate_schema(value: Any, schema: dict[str, Any], root: dict[str, Any], p
         (kind=="array" and isinstance(value,list)) or
         (kind=="string" and isinstance(value,str)) or
         (kind=="integer" and isinstance(value,int) and not isinstance(value,bool)) or
+        (kind=="number" and isinstance(value,(int,float)) and not isinstance(value,bool)) or
         (kind=="boolean" and isinstance(value,bool)) or
         (kind=="null" and value is None)
     )
@@ -84,9 +86,14 @@ def _validate_schema(value: Any, schema: dict[str, Any], root: dict[str, Any], p
         if len(value)<schema.get("minLength",0): _err(path,"is too short")
         if len(value)>schema.get("maxLength",10**9): _err(path,"is too long")
         if schema.get("pattern") and not re.fullmatch(schema["pattern"],value): _err(path,"has invalid format")
-    if isinstance(value,int) and not isinstance(value,bool):
-        if value<schema.get("minimum",-10**18): _err(path,"is below minimum")
-        if value>schema.get("maximum",10**18): _err(path,"is above maximum")
+    if isinstance(value,(int,float)) and not isinstance(value,bool):
+        try:
+            numeric=Decimal(str(value))
+        except InvalidOperation:
+            _err(path,"is not a finite number")
+        if not numeric.is_finite(): _err(path,"is not a finite number")
+        if numeric<Decimal(str(schema.get("minimum",-10**18))): _err(path,"is below minimum")
+        if numeric>Decimal(str(schema.get("maximum",10**18))): _err(path,"is above maximum")
 
 def _load_json(path: Path) -> Any:
     try: return json.loads(path.read_text(encoding="utf-8"))
@@ -146,6 +153,60 @@ def _event_dependency_cycle(events:list[dict[str,Any]]) -> None:
         visiting.remove(node); visited.add(node)
     for node in sorted(ids):visit(node)
 
+
+def _validate_phase6_rubrics(pack: dict[str,Any]) -> None:
+    """Validate authored rubric semantics without creating a second authority."""
+    for task in pack.get("tasks", []):
+        rubric=task.get("rubric")
+        if rubric is None:
+            continue
+        levels=rubric.get("rating_levels", [])
+        level_ids=[str(row.get("rating_id","")) for row in levels]
+        if len(level_ids)!=len(set(level_ids)):
+            _err(f"tasks.{task['task_id']}.rubric.rating_levels","duplicate rating_id")
+        criteria=rubric.get("criteria", [])
+        criterion_ids=[str(row.get("criterion_id","")) for row in criteria]
+        if len(criterion_ids)!=len(set(criterion_ids)):
+            _err(f"tasks.{task['task_id']}.rubric.criteria","duplicate criterion_id")
+        allowed_levels=set(level_ids)
+        calculation=rubric.get("calculation", {})
+        weighted=calculation.get("method")=="weighted_average"
+        total=Decimal("0")
+        for criterion in criteria:
+            if not set(criterion.get("allowed_rating_ids", []))<=allowed_levels:
+                _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown rating_id")
+            if not set(criterion.get("deliverable_types", []))<=set(task.get("deliverable_types", [])):
+                _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown deliverable type")
+            if "weight" not in criterion:
+                if weighted:
+                    _err(f"tasks.{task['task_id']}.rubric","weighted criteria require weights")
+                continue
+            try:
+                weight=Decimal(str(criterion.get("weight")))
+            except (InvalidOperation, ValueError):
+                _err(f"tasks.{task['task_id']}.rubric","invalid criterion weight")
+            if weight < 0:
+                _err(f"tasks.{task['task_id']}.rubric","criterion weight must be non-negative")
+            total+=weight
+        if weighted and total!=Decimal("100"):
+            _err(f"tasks.{task['task_id']}.rubric","weighted criteria must total 100")
+
+def _validate_review_policy(manifest: dict[str,Any]) -> None:
+    policy=manifest.get("review_policy")
+    if not isinstance(policy,dict):
+        return
+    midpoint=int(policy["midpoint_day"]); final=int(policy["final_review_day"])
+    if final < midpoint:
+        _err("manifest.review_policy","final_review_day must not precede midpoint_day")
+    minimum=int(manifest["minimum_duration_days"])
+    if midpoint > minimum or final > minimum:
+        _err("manifest.review_policy","review days must fall within the authored internship duration")
+    if manifest.get("qualifying") is True and final < minimum:
+        _err("manifest.review_policy","qualifying final_review_day cannot precede the minimum internship duration")
+    demo_mid=int(policy["demo_accelerated_midpoint_day"]); demo_final=int(policy["demo_accelerated_final_day"])
+    if demo_final < demo_mid:
+        _err("manifest.review_policy","demo final review must not precede demo midpoint review")
+
 def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     schema=_load_json(SCHEMA_PATH)
     pack={name:_load_json(pack_dir/COMPONENT_FILES[name]) for name in COMPONENTS}
@@ -161,6 +222,8 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
         if manifest["minimum_duration_days"]<90:_err("manifest.minimum_duration_days","qualifying scenario cannot be below 90 days")
     elif manifest["classification"]=="qualifying":_err("manifest.classification","demo/test scenario cannot use qualifying classification")
     if pack["company"]["fictional"] is not True:_err("company.fictional","Phase 2 fixtures must be fictional")
+    _validate_review_policy(manifest)
+    _validate_phase6_rubrics(pack)
     actor_ids=_unique(pack["actors"],"actor_id","actors.json")
     fact_ids=_unique(pack["facts"],"id","facts.json")
     task_ids=_unique(pack["tasks"],"task_id","tasks.json")

@@ -1,0 +1,43 @@
+{
+  "id": "sp_demo_internal_audit",
+  "slug": "demo-internal-audit",
+  "scenario_version_id": "sv_demo_internal_audit_v2",
+  "schema_version": 1,
+  "scenario_version": 2,
+  "title": "Internal Audit Intern Demo",
+  "career_family": "internal_audit",
+  "role_title": "Internal Audit Intern",
+  "region_context": "Fictional East African services group",
+  "company_ref": "org_meridian_energy",
+  "minimum_duration_days": 90,
+  "expected_workload_band": "standard",
+  "classification": "demo",
+  "qualifying": false,
+  "initial_task_ids": [
+    "task_review_process"
+  ],
+  "initial_event_ids": [],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "manager",
+    "colleague",
+    "peer_intern",
+    "vendor"
+  ],
+  "content_hash": "877d0dd6575bde0cbcf87dc1d90cee4e7a595fd9325dc13160edddabac10ae54",
+  "review_policy": {
+    "midpoint_day": 45,
+    "final_review_day": 85,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

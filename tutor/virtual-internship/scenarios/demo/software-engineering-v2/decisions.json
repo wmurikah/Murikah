@@ -1,0 +1,16 @@
+[
+  {
+    "decision_id": "decision_priority_response",
+    "label": "How will you respond to the priority change?",
+    "options": [
+      {
+        "option_id": "clarify",
+        "label": "Clarify the acceptance criteria."
+      },
+      {
+        "option_id": "replan",
+        "label": "Replan the work against the new priority."
+      }
+    ]
+  }
+]

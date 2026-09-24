@@ -284,9 +284,16 @@ def check_stack_isolation() -> None:
         return
 
     changed = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
-    outside_tutor = [path for path in changed if not path.startswith("tutor/")]
+    # The Tutor image workflow is the one deliberate repository-level release
+    # dependency: Phase 6 adds full-history checkout so git diff --check can be
+    # enforced before the Tutor build. No other non-Tutor path is permitted.
+    allowed_release_paths = {".github/workflows/tutor-image.yml"}
+    outside_tutor = [
+        path for path in changed
+        if not path.startswith("tutor/") and path not in allowed_release_paths
+    ]
     if outside_tutor:
-        fail("Tutor feature work modifies paths outside tutor/: " + ", ".join(outside_tutor))
+        fail("Tutor feature work modifies paths outside the permitted Tutor boundary: " + ", ".join(outside_tutor))
 
 
 def main() -> int:

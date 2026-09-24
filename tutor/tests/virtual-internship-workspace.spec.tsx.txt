@@ -163,7 +163,7 @@ afterEach(() => {
   nav.push.mockReset();
 });
 
-describe("Virtual Internship workplace through Phase 5", () => {
+describe("Virtual Internship workplace through Phase 6", () => {
   it("renders the real dashboard without fake completion scoring", async () => {
     vi.stubGlobal("fetch", workspaceFetch());
     render(<MurikahVirtualInternshipWorkspace />);
@@ -556,7 +556,186 @@ describe("Virtual Internship workplace through Phase 5", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save reflection" }));
     expect(await screen.findByText("Reflection saved.")).toBeVisible();
     expect(screen.queryByText(/score/i)).toBeNull();
-    expect(screen.queryByText(/pass/i)).toBeNull();
+    expect(screen.queryByText(/\bpassed\b|\bfailed\b/i)).toBeNull();
+  });
+
+  it("renders Phase 6 formal assessment evidence for the exact submitted version", async () => {
+    nav.pathname = "/virtual-internship/work";
+    const assessed: any = structuredClone(workspace);
+    assessed.tasks[0] = {
+      ...assessed.tasks[0],
+      status: "completed",
+      acknowledged_at: 1_790_100_000,
+      work_status: "accepted",
+      assessment_rubric: {
+        rubric_id: "rubric_task_1_v1",
+        title: "Inventory reconciliation assessment rubric",
+        rating_levels: [
+          { rating_id: "developing", label: "Developing" },
+          { rating_id: "meets", label: "Meets expectations" },
+        ],
+        criteria: [{
+          criterion_id: "evidence_reasoning",
+          description: "Uses supplied evidence appropriately.",
+          evidence_expectations: "Cite the exact submitted reconciliation evidence.",
+        }],
+      },
+      work_artifacts: [{
+        id: "art_1",
+        task_id: "task_1",
+        deliverable_type: "memo",
+        artifact_type: "memo",
+        title: "Inventory reconciliation memo",
+        status: "accepted",
+        current_version_id: "ver_2",
+        current_version_number: 2,
+        current_filename: "reconciliation.md",
+        current_content_type: "text/markdown",
+        current_size_bytes: 420,
+        current_source_type: "text",
+        accepted_submission_id: "sub_2",
+        created_at: 1_790_110_000,
+        updated_at: 1_790_220_000,
+        accepted_at: 1_790_230_000,
+        versions: [{
+          id: "ver_2",
+          artifact_id: "art_1",
+          task_id: "task_1",
+          version_number: 2,
+          original_filename: "reconciliation.md",
+          content_type: "text/markdown",
+          size_bytes: 420,
+          source_type: "text",
+          created_at: 1_790_200_000,
+          submitted: 1,
+        }],
+        submissions: [{
+          id: "sub_2",
+          artifact_id: "art_1",
+          artifact_version_id: "ver_2",
+          task_id: "task_1",
+          submission_number: 2,
+          submitted_at: 1_790_210_000,
+          status: "accepted",
+        }],
+        reviews: [{
+          id: "review_2",
+          task_id: "task_1",
+          artifact_id: "art_1",
+          submission_id: "sub_2",
+          reviewer_actor_id: "actor_supervisor",
+          review_type: "workflow",
+          decision: "accepted",
+          feedback: "The revised work is ready to move forward.",
+          requested_changes: [],
+          created_at: 1_790_230_000,
+        }],
+        formal_assessments: [{
+          id: "asm_1",
+          task_id: "task_1",
+          artifact_id: "art_1",
+          artifact_version_id: "ver_2",
+          submission_id: "sub_2",
+          rubric_id: "rubric_task_1_v1",
+          status: "completed",
+          aggregate_numeric: "75.00",
+          overall_summary: "The submitted reconciliation is supported by the cited evidence.",
+          limitations: ["Only the submitted Version 2 text was assessed."],
+          created_at: 1_790_240_000,
+          completed_at: 1_790_241_000,
+          criteria: [{
+            assessment_id: "asm_1",
+            criterion_id: "evidence_reasoning",
+            result_state: "assessed",
+            rating_id: "meets",
+            numeric_value: "75",
+            feedback: "The reconciliation identifies the variance and cites the supporting source lines.",
+            evidence_refs: [{
+              evidence_ref: "ev_1",
+              artifact_id: "art_1",
+              artifact_version_id: "ver_2",
+              submission_id: "sub_2",
+              source_kind: "text",
+              locator: { kind: "line_range", start_line: 1, end_line: 3 },
+              excerpt: "Variance reconciled to the supplied source.",
+            }],
+            limitation: "",
+          }],
+        }],
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/workspace")) return jsonResponse(assessed);
+      throw new Error("Unexpected request: " + String(input));
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View assignment" }));
+    expect(await screen.findByLabelText("Formal assessment")).toBeVisible();
+    expect(screen.getByText("Inventory reconciliation assessment rubric")).toBeVisible();
+    expect(screen.getByText(/Assessed Version 2/)).toBeVisible();
+    expect(screen.getByText("Uses supplied evidence appropriately.")).toBeVisible();
+    expect(screen.getByText("The reconciliation identifies the variance and cites the supporting source lines.")).toBeVisible();
+    expect(screen.getByText("Lines 1-3")).toBeVisible();
+    expect(screen.getByText(/Only the submitted Version 2 text was assessed/)).toBeVisible();
+    expect(screen.queryByText(/Competency Passport level awarded/i)).toBeNull();
+  });
+
+  it("renders midpoint and final performance reviews without completion claims", async () => {
+    nav.pathname = "/virtual-internship/activity";
+    const reviewed: any = structuredClone(workspace);
+    reviewed.internship.current_day = 90;
+    reviewed.internship.elapsed_days = 89;
+    reviewed.assessment = {
+      performance_reviews: [
+        {
+          id: "pr_mid",
+          review_type: "midpoint",
+          cutoff_at: 1_793_888_000,
+          status: "finalized",
+          strengths: [{ text: "Assessment asm_1 demonstrates evidence-grounded reconciliation." }],
+          development_areas: [{ text: "Assessment asm_2 needs clearer treatment of unresolved items." }],
+          priorities: [{ text: "Document the next reconciliation using exact source references." }],
+          assistance_summary: { event_counts_by_level: { "2": 1 } },
+          narrative: "Midpoint review based on durable assessment and workflow evidence.",
+          finalized_at: 1_793_888_100,
+        },
+        {
+          id: "pr_final",
+          review_type: "final",
+          cutoff_at: 1_797_700_000,
+          status: "finalized",
+          strengths: [{ text: "Assessment asm_3 demonstrates consistent evidence traceability." }],
+          development_areas: [],
+          priorities: [{ text: "Carry forward the documented review approach." }],
+          assistance_summary: { event_counts_by_level: { "1": 1, "2": 1 } },
+          narrative: "Final performance review based only on durable records available at cutoff.",
+          finalized_at: 1_797_700_100,
+        },
+      ],
+      review_eligibility: {
+        midpoint: { eligible: true, required_day: 45, elapsed_days: 89 },
+        final: { eligible: true, required_day: 90, elapsed_days: 89 },
+      },
+      assistance_context: {
+        event_count: 2,
+        event_counts_by_level: { "1": 1, "2": 1 },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/workspace")) return jsonResponse(reviewed);
+      throw new Error("Unexpected request: " + String(input));
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Midpoint Performance Review" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final Performance Review" })).toBeVisible();
+    expect(screen.getByText("Assessment asm_1 demonstrates evidence-grounded reconciliation.")).toBeVisible();
+    expect(screen.getByText("Assessment asm_2 needs clearer treatment of unresolved items.")).toBeVisible();
+    expect(screen.getByText("Document the next reconciliation using exact source references.")).toBeVisible();
+    expect(screen.getAllByText(/Level 2: 1/)).toHaveLength(2);
+    expect(screen.queryByText("Completed internship")).toBeNull();
+    expect(screen.queryByRole("button", { name: /certificate|completion letter/i })).toBeNull();
   });
 
   it("keeps a stopped internship historical and read-only", async () => {
