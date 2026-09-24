@@ -208,6 +208,14 @@ class CompletionPersistenceTests(unittest.TestCase):
         self.assertIn("if(String(completed?.status||'')!=='completed')", phase6)
         self.assertIn("if(Number(failed.meta?.changes||0)===0)", phase6)
 
+    def test_completion_policy_cannot_be_attached_after_scenario_version_is_used(self):
+        source = WORKER.read_text()
+        self.assertIn(
+            "SELECT id FROM internship_instances WHERE scenario_version_id=? LIMIT 1",
+            source,
+        )
+        self.assertIn("completion_policy_historical_version_locked", source)
+
     def test_learner_route_accepts_only_request_identity_not_gate_assertions(self):
         source = ROUTER.read_text()
         self.assertIn('actor_id=_member(current,"view internship completion requirements")', source)
