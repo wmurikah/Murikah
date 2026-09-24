@@ -40,7 +40,7 @@ class Phase6FairnessTests(unittest.TestCase):
         rubric={
             "rubric_id":"r_technical","schema_version":1,"title":"Technical","purpose":"Technical evidence",
             "calculation":{"method":"weighted_average","weight_total":100,"rounding":"half_up_2dp"},
-            "rating_levels":[{"rating_id":"meets","label":"Meets","value":75}],
+            "rating_levels":[\n                {"rating_id":"needs_work","label":"Needs work","value":40},\n                {"rating_id":"meets","label":"Meets","value":75},\n            ],
             "criteria":[{
                 "criterion_id":"technical","description":"Technical analysis",
                 "evidence_expectations":"Cite the technical conclusion","weight":100,
