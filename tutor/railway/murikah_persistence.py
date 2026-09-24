@@ -979,6 +979,34 @@ def internship_passport_rebuild(actor_id: str) -> dict[str, Any]:
     )
 
 
+def internship_passport_adjust_evidence(
+    admin_actor_id: str,
+    evidence_id: str,
+    *,
+    action: str,
+    reason: str,
+    request_id: str,
+    replacement_evidence_id: str = "",
+) -> dict[str, Any]:
+    normalized_action=_learning_text(action,32)
+    if normalized_action not in {"revoked","superseded"}:
+        raise ValueError("Passport evidence adjustment action must be revoked or superseded.")
+    if normalized_action=="superseded" and not replacement_evidence_id:
+        raise ValueError("Superseded evidence requires a replacement evidence ID.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/passport/evidence-adjust",
+        {
+            "actor_id":_learning_text(admin_actor_id,128),
+            "evidence_id":_learning_text(evidence_id,128),
+            "action":normalized_action,
+            "replacement_evidence_id":_learning_text(replacement_evidence_id,128),
+            "reason":_learning_text(reason,1000),
+            "request_id":_learning_text(request_id,128),
+        },
+    )
+
+
 def internship_passport_summary(actor_id: str) -> dict[str, Any]:
     return _internship_passport_get("/internships/passport/summary",actor_id)
 
