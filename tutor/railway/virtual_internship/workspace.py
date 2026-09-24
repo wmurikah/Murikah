@@ -1,7 +1,7 @@
-"""Learner-safe Virtual Internship workplace read model through Phase 5.
+"""Learner-safe Virtual Internship workplace read model through Phase 6.
 
 This module consumes Phase 1 lifecycle state, Phase 2 learner-safe state and
-Phase 4 UI records and Phase 5 owner-bound artifact summaries. It never returns raw canonical scenario state.
+Phase 4 UI records, Phase 5 owner-bound artifact summaries and Phase 6 assessment records. It never returns raw canonical scenario state.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from .state import ScenarioStateService
+from .assessment.reviews import review_eligibility
 
 MENTOR_SUPPORT = {
     "none": (0, "No Mentor support"),
@@ -55,6 +56,7 @@ class WorkspaceContext:
     threads: list[dict[str, Any]]
     reflections: list[dict[str, Any]]
     artifacts: dict[str, Any]
+    assessments: dict[str, Any]
 
 
 class VirtualInternshipWorkspaceService:
@@ -99,7 +101,9 @@ class VirtualInternshipWorkspaceService:
         reflections = _list(_dict(self.persistence.internship_ui_reflections(actor_id, internship_id)).get("reflections"))
         artifact_reader = getattr(self.persistence,"internship_artifact_summary",None)
         artifacts = _dict(artifact_reader(actor_id,internship_id)) if callable(artifact_reader) else {}
-        return WorkspaceContext(status,status and learner or {},definition,threads,reflections,artifacts)
+        assessment_reader = getattr(self.persistence,"internship_assessment_summary",None)
+        assessments = _dict(assessment_reader(actor_id,internship_id)) if callable(assessment_reader) else {}
+        return WorkspaceContext(status,status and learner or {},definition,threads,reflections,artifacts,assessments)
 
     def _visible_tasks(self, context: WorkspaceContext) -> list[dict[str, Any]]:
         authored = {
@@ -120,6 +124,7 @@ class VirtualInternshipWorkspaceService:
         version_rows = [_dict(row) for row in _list(context.artifacts.get("versions"))]
         submission_rows = [_dict(row) for row in _list(context.artifacts.get("submissions"))]
         review_rows = [_dict(row) for row in _list(context.artifacts.get("reviews"))]
+        assessment_rows = [_dict(row) for row in _list(context.assessments.get("assessments"))]
         visible: list[dict[str,Any]] = []
         for task_id, current in runtime.items():
             status = _text(current.get("status"),32)
@@ -147,11 +152,16 @@ class VirtualInternshipWorkspaceService:
                 versions = [row for row in version_rows if _text(row.get("artifact_id"),128) == artifact_id]
                 submissions = [row for row in submission_rows if _text(row.get("artifact_id"),128) == artifact_id]
                 reviews = [row for row in review_rows if _text(row.get("artifact_id"),128) == artifact_id]
+                formal_assessments = [
+                    row for row in assessment_rows
+                    if _text(row.get("artifact_id"),128) == artifact_id
+                ]
                 work_artifacts.append({
                     **artifact,
                     "versions":versions,
                     "submissions":submissions,
                     "reviews":reviews,
+                    "formal_assessments":formal_assessments,
                 })
             artifact_statuses = {_text(row.get("status"),32) for row in task_artifacts}
             if status == "completed" or (task_artifacts and artifact_statuses == {"accepted"}):
@@ -180,6 +190,28 @@ class VirtualInternshipWorkspaceService:
                 "status":status,
                 "dependencies":dependency_rows,
                 "deliverable_types":[_text(x,64) for x in _list(source.get("deliverable_types")) if _text(x,64)],
+                "assessment_rubric":(
+                    {
+                        "rubric_id":_text(_dict(source.get("rubric")).get("rubric_id"),128),
+                        "title":_text(_dict(source.get("rubric")).get("title"),200),
+                        "rating_levels":[
+                            {
+                                "rating_id":_text(_dict(level).get("rating_id"),80),
+                                "label":_text(_dict(level).get("label"),120),
+                            }
+                            for level in _list(_dict(source.get("rubric")).get("rating_levels"))
+                        ],
+                        "criteria":[
+                            {
+                                "criterion_id":_text(_dict(criterion).get("criterion_id"),128),
+                                "description":_text(_dict(criterion).get("description"),1200),
+                                "evidence_expectations":_text(_dict(criterion).get("evidence_expectations"),1200),
+                            }
+                            for criterion in _list(_dict(source.get("rubric")).get("criteria"))
+                        ],
+                    }
+                    if isinstance(source.get("rubric"),dict) else None
+                ),
                 "allowed_tools":[_text(x,80) for x in _list(source.get("allowed_tools")) if _text(x,80)],
                 "mentor_support":{"key":support_key,"level":support[0],"label":support[1]},
                 "stakeholder_actor_ids":[_text(x,128) for x in _list(source.get("stakeholder_actor_ids")) if _text(x,128)],
@@ -459,6 +491,24 @@ class VirtualInternshipWorkspaceService:
         upcoming_meetings = [m for m in meetings if m["status"] == "upcoming"]
         next_meeting = min((int(m["scheduled_at"]) for m in upcoming_meetings if int(m["scheduled_at"]) > 0),default=0)
         manifest = _dict(context.definition.get("manifest"))
+        assistance_events = [_dict(row) for row in _list(context.assessments.get("assistance_events"))]
+        assistance_by_level = {str(level):0 for level in range(6)}
+        for event in assistance_events:
+            level = int(event.get("assistance_level") or 0)
+            if 0 <= level <= 5:
+                assistance_by_level[str(level)] += 1
+        midpoint = review_eligibility(
+            review_type="midpoint",
+            manifest=manifest,
+            started_at=int(status.get("started_at") or 0),
+            now=int(status.get("current_server_time") or 0),
+        )
+        final_review = review_eligibility(
+            review_type="final",
+            manifest=manifest,
+            started_at=int(status.get("started_at") or 0),
+            now=int(status.get("current_server_time") or 0),
+        )
         return {
             "state":"stopped" if status.get("status") == "stopped" else "active",
             "simulation":True,
@@ -488,6 +538,19 @@ class VirtualInternshipWorkspaceService:
                 "next_meeting":next_meeting,
                 "recent_threads":threads[:4],
                 "recent_activity":activity[:6],
+            },
+            "assessment":{
+                "performance_reviews":[
+                    _dict(row) for row in _list(context.assessments.get("performance_reviews"))
+                ],
+                "review_eligibility":{
+                    "midpoint":midpoint,
+                    "final":final_review,
+                },
+                "assistance_context":{
+                    "event_count":len(assistance_events),
+                    "event_counts_by_level":assistance_by_level,
+                },
             },
             "company":company,
             "people":people,
