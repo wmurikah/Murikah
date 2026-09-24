@@ -737,6 +737,12 @@ export async function handlePhase8CompletionPersistenceRoute(
         ? json({ ok: true, idempotent_replay: true, scenario_version_id: scenarioVersionId, policy_hash: suppliedHash })
         : json({ error: 'completion_policy_immutable_conflict' }, 409);
     }
+    const alreadyUsed = await env.TUTOR_DB.prepare(
+      'SELECT id FROM internship_instances WHERE scenario_version_id=? LIMIT 1',
+    ).bind(scenarioVersionId).first<{ id: string }>();
+    if (alreadyUsed) {
+      return json({ error: 'completion_policy_historical_version_locked' }, 409);
+    }
     try {
       await env.TUTOR_DB.prepare(
         'INSERT INTO scenario_completion_policies(scenario_version_id,schema_version,policy_json,policy_hash,created_at) VALUES (?,?,?,?,?)',
