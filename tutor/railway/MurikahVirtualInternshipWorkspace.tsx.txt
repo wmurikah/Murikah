@@ -2182,6 +2182,11 @@ function PassportView() {
                 across {item.explanation?.distinct_task_contexts ?? item.distinct_task_count} task context{(item.explanation?.distinct_task_contexts ?? item.distinct_task_count) === 1 ? "" : "s"} and
                 {" "}{item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count} transfer context{(item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count) === 1 ? "" : "s"}.
               </p>
+              {(Number(item.explanation?.expired_evidence_records || 0) > 0) ? (
+                <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                  {String(item.explanation.expired_evidence_records)} historical evidence record{Number(item.explanation.expired_evidence_records) === 1 ? "" : "s"} excluded from the current level by this competency&apos;s configured recency policy. The historical evidence remains available in drill-down.
+                </p>
+              ) : null}
               <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
                 Last demonstrated {formatDate(item.last_demonstrated_at, true)}. Evidence remains individually traceable to the assessed artifact version and submission.
               </p>
