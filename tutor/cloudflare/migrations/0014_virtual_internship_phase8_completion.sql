@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS completion_records (
   completion_policy_schema_version INTEGER NOT NULL CHECK (completion_policy_schema_version = 1),
   completion_policy_hash TEXT NOT NULL CHECK (length(completion_policy_hash) = 64),
   completed_at INTEGER NOT NULL,
-  required_duration_days INTEGER NOT NULL CHECK (required_duration_days >= 90),
+  required_duration_days INTEGER NOT NULL CHECK (required_duration_days > 0),
   gate_snapshot_json TEXT NOT NULL CHECK (length(gate_snapshot_json) BETWEEN 2 AND 200000),
   gate_snapshot_hash TEXT NOT NULL CHECK (length(gate_snapshot_hash) = 64),
   evaluator_version TEXT NOT NULL CHECK (length(evaluator_version) BETWEEN 1 AND 80),
