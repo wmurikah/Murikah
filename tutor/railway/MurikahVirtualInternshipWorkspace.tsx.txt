@@ -777,6 +777,22 @@ function TaskDetail({
     } finally { setBusy(""); }
   }
 
+  async function requestFormalAssessment(artifact: InternshipWorkArtifact) {
+    const submissionId = artifact.accepted_submission_id || "";
+    if (!submissionId) return;
+    setBusy("assessment:" + artifact.id); setActionError("");
+    try {
+      const result = await callJson("/submissions/" + encodeURIComponent(submissionId) + "/assessment", {
+        internship_id: internshipId,
+        request_id: requestId("assessment"),
+      });
+      if (result.status === "failed" && result.message) setActionError(String(result.message));
+      await onChanged();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Formal assessment is temporarily unavailable.");
+    } finally { setBusy(""); }
+  }
+
   return (
     <Panel className="p-4 sm:p-5" ariaLabel="Assignment detail">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -846,6 +862,14 @@ function TaskDetail({
               (!artifact || ["draft","changes_requested"].includes(artifact.status));
             const canSubmit = Boolean(
               artifact?.current_version_id && canWork && !currentVersion?.submitted
+            );
+            const formalAssessments = [...(artifact?.formal_assessments || [])].sort((a,b)=>b.created_at-a.created_at);
+            const acceptedAssessment = artifact?.accepted_submission_id
+              ? formalAssessments.find((item)=>item.submission_id===artifact.accepted_submission_id)
+              : undefined;
+            const canAssess = Boolean(
+              task.assessment_rubric && artifact?.accepted_submission_id &&
+              !acceptedAssessment && !readOnly
             );
             return (
               <section key={deliverable} className="rounded-xl border border-[var(--border)] p-4">
@@ -936,6 +960,75 @@ function TaskDetail({
                     className="mt-3 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60">
                     {busy === "review:" + artifact?.id ? "Requesting review..." : "Retry supervisor review"}
                   </button>
+                ) : null}
+
+                {canAssess ? (
+                  <button type="button" disabled={Boolean(busy)} onClick={() => void requestFormalAssessment(artifact!)}
+                    className="mt-3 min-h-10 rounded-lg border border-[#A9822E]/50 px-3 text-sm font-semibold disabled:opacity-60">
+                    {busy === "assessment:" + artifact?.id ? "Assessing submitted work..." : "Request formal assessment"}
+                  </button>
+                ) : null}
+
+                {acceptedAssessment ? (
+                  <div className="mt-4 rounded-lg border border-[#A9822E]/30 bg-[#A9822E]/[0.04] p-4" aria-label="Formal assessment">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#A9822E]">Formal assessment</p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {task.assessment_rubric?.title || "Authored rubric assessment"}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-semibold">
+                        {sentenceLabel(acceptedAssessment.status)}
+                      </span>
+                    </div>
+                    {acceptedAssessment.completed_at ? (
+                      <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                        Assessed Version {(artifact.versions || []).find((v)=>v.id===acceptedAssessment.artifact_version_id)?.version_number || ""} · {formatDate(acceptedAssessment.completed_at,true)}
+                      </p>
+                    ) : null}
+                    {acceptedAssessment.status === "completed" ? (
+                      <>
+                        {acceptedAssessment.overall_summary ? <p className="mt-3 text-sm leading-6">{acceptedAssessment.overall_summary}</p> : null}
+                        <div className="mt-4 space-y-3">
+                          {(acceptedAssessment.criteria || []).map((criterion) => {
+                            const authored = task.assessment_rubric?.criteria.find((item)=>item.criterion_id===criterion.criterion_id);
+                            return (
+                              <article key={criterion.criterion_id} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h5 className="text-sm font-semibold">{authored?.description || sentenceLabel(criterion.criterion_id)}</h5>
+                                  <span className="text-xs font-semibold">{criterion.result_state === "not_assessed" ? "Not assessed" : sentenceLabel(criterion.rating_id)}</span>
+                                </div>
+                                {criterion.feedback ? <p className="mt-2 text-sm leading-6">{criterion.feedback}</p> : null}
+                                {criterion.limitation ? <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">Limitation: {criterion.limitation}</p> : null}
+                                {criterion.evidence_refs?.length ? (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">Evidence</p>
+                                    <ul className="mt-1 space-y-1 text-xs text-[var(--muted-foreground)]">
+                                      {criterion.evidence_refs.map((ref) => (
+                                        <li key={ref.evidence_ref}>
+                                          {ref.locator?.kind === "line_range" ? "Lines " + ref.locator.start_line + "-" + ref.locator.end_line : sentenceLabel(ref.locator?.kind || "submitted evidence")}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </article>
+                            );
+                          })}
+                        </div>
+                        {acceptedAssessment.limitations?.length ? (
+                          <div className="mt-3 text-xs text-[var(--muted-foreground)]">
+                            <span className="font-semibold">Assessment limitations: </span>{acceptedAssessment.limitations.join(" ")}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : acceptedAssessment.status === "failed" ? (
+                      <p className="mt-3 text-sm text-[var(--muted-foreground)]">No formal result was recorded. The submitted work and supervisor review remain unchanged.</p>
+                    ) : (
+                      <p className="mt-3 text-sm text-[var(--muted-foreground)]">Assessment is in progress. No result is shown until structured validation completes.</p>
+                    )}
+                  </div>
                 ) : null}
 
                 {artifact?.versions?.length ? (
