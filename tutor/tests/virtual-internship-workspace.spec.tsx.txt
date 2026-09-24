@@ -733,7 +733,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getByText("Assessment asm_1 demonstrates evidence-grounded reconciliation.")).toBeVisible();
     expect(screen.getByText("Assessment asm_2 needs clearer treatment of unresolved items.")).toBeVisible();
     expect(screen.getByText("Document the next reconciliation using exact source references.")).toBeVisible();
-    expect(screen.getByText(/Level 2: 1/)).toBeVisible();
+    expect(screen.getAllByText(/Level 2: 1/)).toHaveLength(2);
     expect(screen.queryByText("Completed internship")).toBeNull();
     expect(screen.queryByRole("button", { name: /certificate|completion letter/i })).toBeNull();
   });
