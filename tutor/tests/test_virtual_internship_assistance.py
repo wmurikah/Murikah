@@ -19,6 +19,18 @@ class Phase6AssistanceTests(unittest.TestCase):
         with self.assertRaises(Exception):
             assistance_event(internship_id="vi_1",source="murikah_mentor",provenance="system_observed",level=6,category="x",event_time=1)
 
+    def test_source_provenance_pairs_are_fail_closed(self):
+        with self.assertRaises(ValueError):
+            assistance_event(internship_id="vi_1",source="external_declared",provenance="system_observed",level=1,category="x",event_time=1)
+        with self.assertRaises(ValueError):
+            assistance_event(internship_id="vi_1",source="murikah_mentor",provenance="learner_declared",level=1,category="x",event_time=1)
+
+    def test_worker_does_not_coerce_missing_or_invalid_level_to_zero(self):
+        source=(ROOT/"cloudflare/src/virtual_internship_phase6.ts").read_text()
+        self.assertIn("strictInt(body.assistance_level)",source)
+        self.assertIn("level===null",source)
+        self.assertIn("assistance_lineage_mismatch",source)
+
     def test_post_submission_help_does_not_retroactively_attach(self):
         rows=[
             {"event_time":99,"assistance_level":2},
