@@ -290,3 +290,12 @@ Persistence is not complete merely because the bindings exist. Production cutove
 - the migrated data passes record-count/checksum reconciliation;
 - no active SQLite database is stored on R2/FUSE;
 - backup and recovery are documented and tested.
+
+
+## Virtual Internship Phase 7 Competency Passport
+
+Migration `0013_virtual_internship_phase7_passport.sql` extends D1 with immutable versioned `competency_definitions`, authored `competency_assessment_mappings`, explicit `competency_definition_compatibility`, immutable `competency_evidence`, immutable evidence adjustments, rebuildable `competency_passports`, immutable Passport level history and recoverable `competency_derivation_status`.
+
+The evidence authority is completed Phase 6 assessment criteria with exact Phase 5 artifact/version/submission lineage and an authored competency mapping. The private Worker route `/internships/passport/reconcile` derives missing evidence idempotently and rebuilds affected learner summaries using `phase7-evidence-strength-v1` and `phase7-passport-aggregation-v1`. No model call is used. Materialized Passport rows can be rebuilt; immutable evidence cannot be updated or cascade-deleted.
+
+Learner reads and export remain owner-scoped through the authenticated Tutor actor and the signed persistence bridge. The browser cannot write competency evidence or levels. The default export references evidence IDs and lineage metadata rather than embedding R2 artifact bytes, and it includes the Virtual Internship simulation disclosure. There is no public Passport URL or employer verification ID in Phase 7.
