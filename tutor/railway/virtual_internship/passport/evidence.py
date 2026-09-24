@@ -50,6 +50,7 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
         "definition_version":int(mapping.get("definition_version") or 0),
         "sub_competency_id":str(mapping.get("sub_competency_id") or ""),
         "criterion_id":str(criterion.get("criterion_id") or ""),
+        "mapping_version":int(mapping.get("mapping_version") or 0),
         "criterion_rating_id":str(criterion.get("rating_id") or ""),
         "criterion_numeric":criterion.get("numeric_value"),
         "demonstrated_level":candidate,
