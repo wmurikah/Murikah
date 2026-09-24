@@ -22,7 +22,7 @@ def criterion(rating="meets",refs=True):
                            "locator":{"kind":"line_range","start_line":1,"end_line":2}}] if refs else []),
     }
 
-MAPPING={"competency_id":"comp_debugging","definition_version":1,"sub_competency_id":"",
+MAPPING={"competency_id":"comp_debugging","definition_version":1,"mapping_version":1,"sub_competency_id":"",
          "context_tags":{"career_family":"software_engineering","role_family":"software_engineering",
                          "scenario_pack_id":"sp_demo_software_engineering","task_category":"investigative",
                          "domain":"software_engineering","work_context":"bug_reproduction"}}
@@ -32,6 +32,7 @@ class Phase7EvidenceTests(unittest.TestCase):
         row=derive_evidence_contribution(assessment=assessment(),criterion=criterion(),mapping=MAPPING,assistance_level=0)
         self.assertIsNotNone(row)
         self.assertEqual(row["competency_id"],"comp_debugging")
+        self.assertEqual(row["mapping_version"],1)
         self.assertEqual(row["demonstrated_level"],"independent")
         self.assertEqual(row["evidence_strength"],"strong")
 
@@ -52,7 +53,8 @@ class Phase7EvidenceTests(unittest.TestCase):
 
     def test_migration_enforces_idempotency_and_immutability(self):
         sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
-        self.assertIn("UNIQUE (learner_id, assessment_id, criterion_id, competency_id, definition_version, evidence_ruleset_version)",sql)
+        self.assertIn("UNIQUE (learner_id, assessment_id, criterion_id, competency_id, definition_version, mapping_version, evidence_ruleset_version)",sql)
+        self.assertIn("mapping_version INTEGER NOT NULL",sql)
         self.assertIn("trg_competency_evidence_no_update",sql)
         self.assertIn("ON DELETE RESTRICT",sql)
         self.assertNotIn("chain_of_thought",sql.lower())
