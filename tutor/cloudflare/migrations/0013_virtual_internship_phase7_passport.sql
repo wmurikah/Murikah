@@ -2,6 +2,12 @@ PRAGMA foreign_keys = ON;
 
 -- Virtual Internship Phase 7: versioned competency definitions, immutable
 -- competency evidence and rebuildable learner-owned Competency Passport summaries.
+CREATE TABLE IF NOT EXISTS competency_level_frameworks (
+  version TEXT PRIMARY KEY,
+  levels_json TEXT NOT NULL CHECK (length(levels_json) BETWEEN 2 AND 16000),
+  created_at INTEGER NOT NULL
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS competency_definitions (
   competency_id TEXT NOT NULL CHECK (length(competency_id) BETWEEN 1 AND 128),
   definition_version INTEGER NOT NULL CHECK (definition_version > 0),
@@ -16,7 +22,8 @@ CREATE TABLE IF NOT EXISTS competency_definitions (
   context_metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (length(context_metadata_json) <= 16000),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','retired')),
   created_at INTEGER NOT NULL,
-  PRIMARY KEY (competency_id, definition_version)
+  PRIMARY KEY (competency_id, definition_version),
+  FOREIGN KEY (level_framework_version) REFERENCES competency_level_frameworks(version) ON DELETE RESTRICT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS competency_assessment_mappings (
@@ -72,7 +79,7 @@ CREATE TABLE IF NOT EXISTS competency_evidence (
   strength_factors_json TEXT NOT NULL DEFAULT '{}' CHECK (length(strength_factors_json) <= 16000),
   transfer_context_json TEXT NOT NULL DEFAULT '{}' CHECK (length(transfer_context_json) <= 16000),
   limitations_json TEXT NOT NULL DEFAULT '[]' CHECK (length(limitations_json) <= 16000),
-  source_type TEXT NOT NULL DEFAULT 'virtual_internship' CHECK (source_type = 'virtual_internship'),
+  source_type TEXT NOT NULL DEFAULT 'virtual_internship' CHECK (source_type IN ('virtual_internship','mastery_path','project','oral_viva','instructor_assessment','external_portfolio')),
   evidence_ruleset_version TEXT NOT NULL CHECK (length(evidence_ruleset_version) BETWEEN 1 AND 80),
   created_at INTEGER NOT NULL,
   UNIQUE (learner_id, assessment_id, criterion_id, competency_id, definition_version, evidence_ruleset_version),
@@ -166,6 +173,10 @@ CREATE INDEX IF NOT EXISTS idx_competency_history_learner_competency
 CREATE INDEX IF NOT EXISTS idx_competency_derivation_learner_status
   ON competency_derivation_status(learner_id, status, updated_at);
 
+CREATE TRIGGER IF NOT EXISTS trg_competency_level_frameworks_no_update
+BEFORE UPDATE ON competency_level_frameworks BEGIN SELECT RAISE(ABORT, 'competency_level_framework_immutable'); END;
+CREATE TRIGGER IF NOT EXISTS trg_competency_level_frameworks_no_delete
+BEFORE DELETE ON competency_level_frameworks BEGIN SELECT RAISE(ABORT, 'competency_level_framework_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS trg_competency_definitions_no_update
 BEFORE UPDATE ON competency_definitions BEGIN SELECT RAISE(ABORT, 'competency_definition_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS trg_competency_definitions_no_delete
@@ -190,6 +201,13 @@ CREATE TRIGGER IF NOT EXISTS trg_competency_history_no_update
 BEFORE UPDATE ON competency_passport_history BEGIN SELECT RAISE(ABORT, 'competency_passport_history_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS trg_competency_history_no_delete
 BEFORE DELETE ON competency_passport_history BEGIN SELECT RAISE(ABORT, 'competency_passport_history_immutable'); END;
+
+-- One persisted display authority for the canonical ordered level framework.
+INSERT OR IGNORE INTO competency_level_frameworks(version,levels_json,created_at) VALUES (
+  'phase7-levels-v1',
+  '[{"id":"emerging","label":"Emerging","meaning":"Early demonstrated evidence exists; task exposure alone is not evidence."},{"id":"developing","label":"Developing","meaning":"Repeated partial or improving demonstration is supported by evidence."},{"id":"applied_with_support","label":"Applied with support","meaning":"Credible application is demonstrated with material assistance in context."},{"id":"independent","label":"Independent","meaning":"Successful performance includes qualifying low-assistance evidence."},{"id":"advanced","label":"Advanced","meaning":"Repeated independent performance is demonstrated across sufficiently distinct contexts."}]',
+  unixepoch()
+);
 
 -- The canonical Phase 7 level framework is shared but each definition persists
 -- its own authored deterministic requirements so future competencies can differ.
