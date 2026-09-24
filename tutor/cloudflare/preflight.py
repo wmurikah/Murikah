@@ -1839,6 +1839,7 @@ def main() -> int:
             "p7RefreshPassport",
             "expires_after_days",
             "mapping_version",
+            "physical_simulation_limitation",
         ),
     )
     require_markers(
