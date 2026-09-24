@@ -182,13 +182,15 @@ async function p7RefreshPassport(
   for(const definition of definitions){
     const cid=String(definition.competency_id||''),version=Number(definition.definition_version||0);
     const key=p7Key(cid,version);
-    if(!targetKeys.has(key))continue;
+    const compatibleFrom=compatibility.filter(row=>
+      String(row.competency_id||'')===cid&&Number(row.to_version||0)===version
+    );
+    const shouldRefresh=targetKeys.has(key)||compatibleFrom.some(row=>
+      targetKeys.has(p7Key(cid,Number(row.from_version||0)))
+    );
+    if(!shouldRefresh)continue;
     const compatibleVersions=new Set<number>([version]);
-    for(const row of compatibility){
-      if(String(row.competency_id||'')===cid&&Number(row.to_version||0)===version){
-        compatibleVersions.add(Number(row.from_version||0));
-      }
-    }
+    for(const row of compatibleFrom)compatibleVersions.add(Number(row.from_version||0));
     const rows=allEvidence.filter(row=>
       String(row.competency_id||'')===cid&&compatibleVersions.has(Number(row.definition_version||0))
     );
@@ -345,6 +347,15 @@ async function p7Reconcile(db:P7Database,actorId:string,now:number):Promise<{ass
       'SELECT DISTINCT competency_id,definition_version FROM competency_evidence WHERE assessment_id=? AND learner_id=?'
     ).bind(row.id,actorId).all<Record<string,unknown>>()).results||[];
     for(const key of keys)affected.add(p7Key(String(key.competency_id||''),Number(key.definition_version||0)));
+  }
+  const recencyDefinitions=(await db.prepare(
+    "SELECT competency_id,definition_version,recency_policy_json FROM competency_definitions WHERE status='active'"
+  ).all<Record<string,unknown>>()).results||[];
+  for(const definition of recencyDefinitions){
+    const policy=p7Parse(definition.recency_policy_json,{}) as Record<string,unknown>;
+    if(Number(policy.expires_after_days||0)>0){
+      affected.add(p7Key(String(definition.competency_id||''),Number(definition.definition_version||0)));
+    }
   }
   const passports=await p7RefreshPassport(db,actorId,affected,now);
   return {assessments:rows.length,evidence,passports};
