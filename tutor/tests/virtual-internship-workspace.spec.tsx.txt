@@ -862,6 +862,81 @@ describe("Virtual Internship workplace through Phase 6", () => {
     );
   });
 
+  it("shows and issues Phase 9 completion documents only for a completed internship", async () => {
+    nav.pathname = "/virtual-internship/documents";
+    let issued = false;
+    const issuedDocument = {
+      document_id: "vdoc_1",
+      internship_id: "vi_1",
+      completion_record_id: "vcr_1",
+      document_type: "performance_report",
+      document_version: 1,
+      template_version: "phase9-performance-report-v1",
+      issued_at: 1_797_900_100,
+      issuance_status: "current",
+      verification_reference_id: "vr_" + "a".repeat(48),
+      sha256: "b".repeat(64),
+      size_bytes: 4096,
+      content_type: "text/html; charset=utf-8",
+      simulation_disclosure: "This document covers a Murikah Virtual Internship simulation.",
+      simulation_disclosure_version: "phase9-simulation-disclosure-v1",
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) {
+        return jsonResponse({
+          ...workspace,
+          state: "completed",
+          internship: { ...workspace.internship, status: "completed", completed_at: 1_797_900_000 },
+        });
+      }
+      if (url.includes("/completion-documents?internship_id=")) {
+        return jsonResponse({ ok: true, documents: issued ? [issuedDocument] : [] });
+      }
+      if (url.endsWith("/completion-documents") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.internship_id).toBe("vi_1");
+        expect(body.document_type).toBe("performance_report");
+        expect(body.request_id).toMatch(/^completion-document-/);
+        expect(body.completion).toBeUndefined();
+        expect(body.completion_record_id).toBeUndefined();
+        expect(body.evidence_ids).toBeUndefined();
+        expect(body.strengths).toBeUndefined();
+        expect(body.institution_name).toBeUndefined();
+        issued = true;
+        return jsonResponse({ ok: true, document: issuedDocument }, 201);
+      }
+      throw new Error("Unexpected request: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Completion documents" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate Internship Performance Report" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate Virtual Internship Completion Letter" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /certificate/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Internship Performance Report" }));
+    expect(await screen.findByText(issuedDocument.verification_reference_id)).toBeVisible();
+    expect(screen.getByText(/Issued · v1/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/completion-documents/vdoc_1/view?"),
+    );
+    expect(screen.getByRole("link", { name: "Download HTML" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=html"),
+    );
+    expect(screen.getByRole("link", { name: "Export source" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=json"),
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/completion-documents$/),
+      expect.objectContaining({ method: "POST" }),
+    ));
+  });
+
   it("keeps a completed internship historical and read-only without Phase 9 credentials", async () => {
     nav.pathname = "/virtual-internship/mentor";
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
