@@ -897,6 +897,8 @@ def main() -> int:
             "validate_and_calculate_assessment",
             "all rubric criteria must be returned exactly once",
             "criterion references evidence not supplied to the assessor",
+            "_authoritative_summary",
+            "_authoritative_limitations",
         ),
     )
     require_markers(
@@ -990,6 +992,7 @@ def main() -> int:
         ("tutor/tests/test_virtual_internship_workplace_dynamics.py", "class Phase6WorkplaceDynamicsTests"),
         ("tutor/tests/test_virtual_internship_ethics.py", "class Phase6EthicsTests"),
         ("tutor/tests/test_virtual_internship_assessment_fairness.py", "class Phase6FairnessTests"),
+        ("tutor/tests/test_virtual_internship_phase6_persistence.py", "class Phase6PersistenceRestartTests"),
     ):
         require_markers(phase6_test, (marker,))
     for demo in ("internal-audit-v2", "data-analyst-v2", "software-engineering-v2"):
