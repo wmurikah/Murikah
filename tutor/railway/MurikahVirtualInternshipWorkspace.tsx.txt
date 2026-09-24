@@ -1409,7 +1409,7 @@ function CompletionRequirements({
       </div>
 
       {competencies.length ? (
-        <details className="mt-4 rounded-lg border border-[var(--border)] p-4">
+        <details open className="mt-4 rounded-lg border border-[var(--border)] p-4">
           <summary className="cursor-pointer text-sm font-semibold">Competency evidence requirements</summary>
           <div className="mt-3 space-y-3">
             {competencies.map((item) => (
@@ -2065,7 +2065,7 @@ function MentorView({
   const [error, setError] = useState("");
   const [assistanceLabel, setAssistanceLabel] = useState("");
   const [failed, setFailed] = useState<{ text: string; requestId: string; taskId: string } | null>(null);
-  const stopped = workspace.state === "stopped";
+  const readOnly = workspace.state !== "active";
 
   useEffect(() => {
     if (!mentorThread) {
@@ -2096,7 +2096,7 @@ function MentorView({
   }, [mentorThread?.thread_id, internshipId]);
 
   async function sendWith(payload: { text: string; requestId: string; taskId: string }, optimistic: boolean) {
-    if (!payload.text.trim()) return;
+    if (!payload.text.trim() || readOnly) return;
     setSending(true);
     setError("");
     setFailed(null);
@@ -2143,7 +2143,7 @@ function MentorView({
         loading={loading}
         error={error}
         draft={draft}
-        disabled={stopped}
+        disabled={readOnly}
         sending={sending}
         onDraft={setDraft}
         onSend={send}
@@ -2183,12 +2183,12 @@ function ReflectionView({
   const [content, setContent] = useState(existing?.content || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const stopped = workspace.state === "stopped";
+  const readOnly = workspace.state !== "active";
 
   useEffect(() => setContent(existing?.content || ""), [existing?.reflection_id, existing?.content]);
 
   async function save() {
-    if (!content.trim() || stopped) return;
+    if (!content.trim() || readOnly) return;
     setSaving(true);
     setMessage("");
     try {
@@ -2219,10 +2219,10 @@ function ReflectionView({
         </p>
       </div>
       <label htmlFor="internship-reflection" className="mt-4 block text-sm font-semibold">Your reflection</label>
-      <textarea id="internship-reflection" rows={8} value={content} onChange={(event) => setContent(event.target.value)} disabled={stopped || saving} className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:opacity-60" />
+      <textarea id="internship-reflection" rows={8} value={content} onChange={(event) => setContent(event.target.value)} disabled={readOnly || saving} className="mt-2 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:opacity-60" />
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--muted-foreground)]" role="status">{message}</p>
-        <button type="button" onClick={save} disabled={stopped || saving || !content.trim()} className="min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving…" : existing ? "Update reflection" : "Save reflection"}</button>
+        <button type="button" onClick={save} disabled={readOnly || saving || !content.trim()} className="min-h-10 rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving…" : existing ? "Update reflection" : "Save reflection"}</button>
       </div>
     </Panel>
   );
@@ -2239,7 +2239,7 @@ function PerformanceReviews({
   const [error, setError] = useState("");
   const reviews = workspace.assessment?.performance_reviews || [];
   const eligibility = workspace.assessment?.review_eligibility;
-  const stopped = workspace.state === "stopped";
+  const readOnly = workspace.state !== "active";
 
   async function createReview(kind: "midpoint" | "final") {
     setBusy(kind); setError("");
