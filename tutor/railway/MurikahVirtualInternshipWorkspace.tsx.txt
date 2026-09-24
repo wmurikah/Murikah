@@ -197,6 +197,7 @@ type CompetencyEvidenceView = {
   submission_id: string;
   assessment_id: string;
   criterion_id: string;
+  mapping_version: number;
   criterion_rating_id: string;
   criterion_numeric?: string | null;
   demonstrated_level: string;
@@ -2240,6 +2241,7 @@ function PassportView() {
                     <div><dt className="font-semibold">Assistance context</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{row.assistance_context?.label || "Recorded assistance context"}</dd></div>
                     <div><dt className="font-semibold">Assessment date</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{formatDate(row.assessment_date || row.created_at, true)}</dd></div>
                     <div><dt className="font-semibold">Criterion</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.criterion_id}</dd></div>
+                    <div><dt className="font-semibold">Mapping version</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">v{row.mapping_version}</dd></div>
                     <div><dt className="font-semibold">Artifact version</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.artifact_version_id}</dd></div>
                     <div><dt className="font-semibold">Submission</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.submission_id}</dd></div>
                   </dl>
