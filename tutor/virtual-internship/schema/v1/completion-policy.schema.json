@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://murikah.com/schemas/virtual-internship/completion-policy-v1.schema.json",
+  "title": "Murikah Virtual Internship Completion Policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "required_task_ids",
+    "required_review_types",
+    "required_competencies",
+    "capstone_task_ids",
+    "require_final_review",
+    "final_review_after_capstone"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "required_task_ids": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" }
+    },
+    "required_review_types": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "enum": ["midpoint"] }
+    },
+    "required_competencies": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competency_id",
+          "definition_version",
+          "minimum_level",
+          "minimum_evidence_strength",
+          "minimum_evidence_records",
+          "minimum_independent_demonstrations",
+          "minimum_distinct_contexts"
+        ],
+        "properties": {
+          "competency_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,127}$" },
+          "definition_version": { "type": "integer", "minimum": 1 },
+          "minimum_level": {
+            "enum": ["emerging", "developing", "applied_with_support", "independent", "advanced"]
+          },
+          "minimum_evidence_strength": { "enum": ["limited", "supporting", "strong"] },
+          "minimum_evidence_records": { "type": "integer", "minimum": 1 },
+          "minimum_independent_demonstrations": { "type": "integer", "minimum": 0 },
+          "minimum_distinct_contexts": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "capstone_task_ids": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" }
+    },
+    "require_final_review": { "type": "boolean" },
+    "final_review_after_capstone": { "type": "boolean" }
+  }
+}
