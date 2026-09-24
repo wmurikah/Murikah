@@ -199,6 +199,7 @@ COPY --from=branded-source /src/DeepTutor/deeptutor/virtual_internship /app/deep
 # image builds from failing when a new test reads an overlay source file.
 COPY tutor/railway /opt/murikah/railway
 COPY tutor/virtual-internship /opt/murikah/virtual-internship
+COPY tutor/virtual-internship /app/virtual-internship
 COPY tutor/scripts/validate_virtual_internship_scenarios.py /opt/murikah/scripts/validate_virtual_internship_scenarios.py
 COPY tutor/cloudflare/src /opt/murikah/cloudflare/src
 COPY tutor/cloudflare/migrations /opt/murikah/cloudflare/migrations
@@ -211,7 +212,7 @@ RUN rm -rf /app/web && mkdir -p /app/web
 COPY --from=frontend-builder /app/web/.next/standalone/ /app/web/
 COPY --from=frontend-builder /app/web/.next/static/ /app/web/.next/static/
 COPY --from=frontend-builder /app/web/public/ /app/web/public/
-RUN chown -R deeptutor:deeptutor /app/web /app/deeptutor
+RUN chown -R deeptutor:deeptutor /app/web /app/deeptutor /app/virtual-internship
 
 COPY tutor/railway/bootstrap_runtime.py /app/murikah-tutor-bootstrap.py
 COPY tutor/railway/bootstrap_fast_lane.py /app/murikah-fast-lane-bootstrap.py
