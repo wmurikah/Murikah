@@ -38,6 +38,14 @@ class Phase6AssistanceTests(unittest.TestCase):
         ]
         self.assertEqual(events_before_submission(rows,submitted_at=100),[rows[0]])
 
+    def test_production_mentor_stream_records_observed_assistance(self):
+        source=(ROOT/"railway/murikah_virtual_internship.py").read_text()
+        self.assertIn("persistence.internship_assistance_record(",source)
+        self.assertIn('source="murikah_mentor"',source)
+        self.assertIn('provenance="system_observed"',source)
+        self.assertIn('category="mentor_guidance"',source)
+        self.assertIn('request_id=body.request_id + ":assistance"',source)
+
     def test_assistance_module_contains_no_score_penalty_formula(self):
         source=(ROOT/"railway/virtual_internship/assessment/assistance.py").read_text()
         self.assertNotIn("score -",source)
