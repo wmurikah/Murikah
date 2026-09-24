@@ -1961,7 +1961,13 @@ def main() -> int:
     )
     forbid_markers(
         "tutor/cloudflare/migrations/0013_virtual_internship_phase7_passport.sql",
-        ("completion_records", "completion_letter", "verification_id", "employability_score"),
+        (
+            "completion_records",
+            "completion_letter",
+            "verification_id",
+            "employability_score",
+            "UNION ALL SELECT",
+        ),
     )
     require_markers(
         "tutor/cloudflare/src/virtual_internship_phase7.ts",
