@@ -38,6 +38,18 @@ class Phase7CompetencyDefinitionTests(unittest.TestCase):
         value=self.fixture(); value["evidence_requirements"]["advanced"]={"min_records":0}
         with self.assertRaises(CompetencyDefinitionError): validate_definition(value)
 
+
+    def test_unknown_parent_and_invalid_transfer_or_recency_policy_are_rejected(self):
+        value=self.fixture(); value["parent_competency_id"]="comp_missing"
+        with self.assertRaises(CompetencyDefinitionError):
+            validate_definition(value,known_competency_ids={"comp_test"})
+        value=self.fixture(); value["transfer_policy"]={"context_fields":["career_family","unknown_field"]}
+        with self.assertRaises(CompetencyDefinitionError):
+            validate_definition(value)
+        value=self.fixture(); value["recency_policy"]={"expires_after_days":-1}
+        with self.assertRaises(CompetencyDefinitionError):
+            validate_definition(value)
+
     def test_migration_has_versioned_immutable_definition_authority(self):
         sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
         self.assertIn("PRIMARY KEY (competency_id, definition_version)",sql)
