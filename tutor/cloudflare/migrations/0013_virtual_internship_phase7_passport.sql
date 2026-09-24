@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS competency_assessment_mappings (
   competency_id TEXT NOT NULL,
   definition_version INTEGER NOT NULL,
   sub_competency_id TEXT NOT NULL DEFAULT '',
+  rating_contribution_json TEXT NOT NULL DEFAULT '{"not_yet":{"candidate":"not_demonstrated","independence_eligible":false},"developing":{"candidate":"developing","independence_eligible":false},"meets":{"candidate":"applied_with_support","independence_eligible":true},"exceeds":{"candidate":"applied_with_support","independence_eligible":true}}' CHECK (length(rating_contribution_json) <= 16000),
+  max_independent_assistance INTEGER NOT NULL DEFAULT 1 CHECK (max_independent_assistance BETWEEN 0 AND 5),
   context_tags_json TEXT NOT NULL DEFAULT '{}' CHECK (length(context_tags_json) <= 16000),
   created_at INTEGER NOT NULL,
   PRIMARY KEY (mapping_version, scenario_version_id, task_id, rubric_id, criterion_id, competency_id),
