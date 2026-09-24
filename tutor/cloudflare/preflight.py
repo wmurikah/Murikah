@@ -381,6 +381,136 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/cloudflare/migrations/0015_virtual_internship_phase9_documents.sql",
+        (
+            "CREATE TABLE IF NOT EXISTS internship_completion_documents",
+            "document_type TEXT NOT NULL CHECK (document_type IN ('performance_report','completion_letter'))",
+            "source_snapshot_hash TEXT NOT NULL",
+            "source_payload_hash TEXT NOT NULL",
+            "document_sha256 TEXT NOT NULL",
+            "verification_reference_id TEXT NOT NULL UNIQUE",
+            "verification_code_hash TEXT NOT NULL",
+            "idx_completion_documents_one_current",
+            "trg_completion_documents_immutable_fields",
+            "trg_completion_documents_supersession_only",
+            "trg_completion_documents_no_delete",
+            "virtual_internship_phase9_document_schema_version",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase9.ts",
+        (
+            "PERFORMANCE_REPORT_SOURCE_SCHEMA_VERSION = 1",
+            "COMPLETION_LETTER_SOURCE_SCHEMA_VERSION = 1",
+            "phase9-performance-report-v1",
+            "phase9-completion-letter-v1",
+            "phase9-simulation-disclosure-v1",
+            "This document covers a Murikah Virtual Internship simulation.",
+            "buildReportSource",
+            "buildLetterSource",
+            "reference_type: 'performance_review'",
+            "source_payload_hash",
+            "sha256Bytes(bytes)",
+            "'vr_' + randomHex(24)",
+            "'vc_' + randomHex(16)",
+            "verification_code_hash",
+            "TUTOR_FILES.put",
+            "INSERT INTO tutor_objects",
+            "/internships/completion-documents/generate",
+            "/internships/completion-documents/list",
+            "/internships/completion-documents/download",
+            "/internships/completion-documents/verify",
+            "invalid_document_generation_request",
+            "VerifiedInstitutionEndorsement",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/src/virtual_internship_phase9.ts",
+        ("Math.random", "r2.dev", "Generate certificate", "OpenAI", "Claude", "Gemini", "Qwen", "NVIDIA"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "handlePhase9DocumentPersistenceRoute",
+            "const phase9Response = await handlePhase9DocumentPersistenceRoute",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def internship_completion_document_generate(",
+            "def internship_completion_documents(",
+            "def internship_completion_document_download(",
+            "def internship_completion_document_verify(",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_virtual_internship.py",
+        (
+            '@router.get("/completion-documents")',
+            '@router.post("/completion-documents")',
+            '@router.get("/completion-documents/{document_id}/view")',
+            '@router.get("/completion-documents/{document_id}/download")',
+            '@router.get("/verify",response_class=HTMLResponse)',
+            "personalization_for_actor(actor_id,username)",
+            "x-robots-tag",
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt",
+        (
+            "Completion documents",
+            "Internship Performance Report",
+            "Virtual Internship Completion Letter",
+            "Generate ",
+            "Download HTML",
+            "Export source",
+            "No certificate is issued.",
+            "Simulation disclosure.",
+        ),
+    )
+    for phase9_test, marker9 in (
+        ("tutor/tests/test_virtual_internship_performance_report.py", "class Phase9PerformanceReportTests"),
+        ("tutor/tests/test_virtual_internship_completion_letter.py", "class Phase9CompletionLetterTests"),
+        ("tutor/tests/test_virtual_internship_document_integrity.py", "class Phase9DocumentIntegrityTests"),
+        ("tutor/tests/test_virtual_internship_document_verification.py", "class Phase9DocumentVerificationTests"),
+        ("tutor/tests/test_virtual_internship_document_ownership.py", "class Phase9DocumentOwnershipTests"),
+        ("tutor/tests/test_virtual_internship_document_endorsement.py", "class Phase9EndorsementExtensionTests"),
+    ):
+        require_markers(phase9_test, (marker9,))
+    require_markers(
+        "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
+        (
+            "shows and issues Phase 9 completion documents only for a completed internship",
+            "Generate Internship Performance Report",
+            "format=html",
+            "format=json",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/PERSISTENCE.md",
+        (
+            "Virtual Internship Phase 9 completion documents and verification",
+            "0015_virtual_internship_phase9_documents.sql",
+            "phase9-simulation-disclosure-v1",
+            "printable HTML plus structured JSON",
+        ),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "## Phase 9 Implementation Record",
+            "## SUBSEQUENT REPORT AND VERIFICATION DEVELOPMENT REQUIREMENT",
+            "phase9-performance-report-v1",
+            "phase9-completion-letter-v1",
+            "phase9-simulation-disclosure-v1",
+            "PDF is not implemented in Phase 9.",
+            "Phase 10 career catalog remains unimplemented",
+            "Phase 11 longitudinal evaluation remains unimplemented",
+        ),
+    )
+
+    require_markers(
         "tutor/Dockerfile.railway",
         (
             'ARG MURIKAH_CLOUDFLARE_IMAGE_REV=dev',
@@ -2089,7 +2219,7 @@ def main() -> int:
             "## Phase 8 Implementation Record",
             "## SUBSEQUENT COMPLETION DEVELOPMENT REQUIREMENT",
             "phase8-completion-evaluator-v1",
-            "Phase 9 remains unimplemented",
+            "At the Phase 8 implementation head, Phase 9 was intentionally absent",
         ),
     )
     require_markers(
