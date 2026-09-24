@@ -1,0 +1,58 @@
+{
+  "organization_id": "org_meridian_energy",
+  "name": "Meridian Energy Services",
+  "fictional": true,
+  "sector": "Energy services",
+  "country_region": "Fictional East African regional context",
+  "description": "A fictional energy-services group used only for Murikah scenario-engine demonstrations.",
+  "products_services": [
+    "industrial energy services",
+    "inventory support services"
+  ],
+  "departments": [
+    {
+      "id": "dept_audit",
+      "name": "Internal Audit"
+    },
+    {
+      "id": "dept_finance",
+      "name": "Finance"
+    },
+    {
+      "id": "dept_operations",
+      "name": "Operations"
+    },
+    {
+      "id": "dept_supply",
+      "name": "Supply Chain"
+    }
+  ],
+  "systems": [
+    "Meridian ERP",
+    "StockTrack"
+  ],
+  "process_references": [
+    "inventory receipt process",
+    "cycle count procedure"
+  ],
+  "vocabulary": [
+    "GRN",
+    "cycle count",
+    "variance",
+    "control owner"
+  ],
+  "communication_norms": [
+    "Use concise written updates and cite records before escalating."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Calendar metadata only; server UTC drives canonical triggers."
+  }
+}
