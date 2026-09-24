@@ -62,6 +62,17 @@ class ScenarioSchemaTests(unittest.TestCase):
         td,path=self._mutate("internal-audit",event_cycle)
         with td,self.assertRaises(ScenarioValidationError):validate_pack(path,verify_hash=False)
 
+    def test_qualifying_final_review_cannot_precede_minimum_duration(self):
+        def make_qualifying(path):
+            def change(manifest):
+                manifest["classification"]="qualifying"
+                manifest["qualifying"]=True
+                manifest["review_policy"]["final_review_day"]=85
+            self._edit(path/"manifest.json",change)
+        td,path=self._mutate("internal-audit-v2",make_qualifying)
+        with td,self.assertRaisesRegex(ScenarioValidationError,"final_review_day"):
+            validate_pack(path,verify_hash=False)
+
     def test_content_hash_is_key_order_independent_and_semantic_change_sensitive(self):
         pack=validate_pack(SCENARIOS_ROOT/"demo"/"internal-audit")
         reordered={key:pack[key] for key in reversed(list(pack.keys()))}
