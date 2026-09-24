@@ -8,10 +8,14 @@ sys.path.insert(0,str(ROOT/"railway"))
 from virtual_internship.validator import SCENARIOS_ROOT, ScenarioValidationError, content_hash, validate_all, validate_pack
 
 class ScenarioSchemaTests(unittest.TestCase):
-    def test_all_three_career_neutral_demo_packs_validate(self):
+    def test_all_committed_career_neutral_demo_versions_validate(self):
         rows=validate_all()
-        self.assertEqual(len(rows),3)
-        self.assertEqual({p.name for p,_ in rows},{"internal-audit","data-analyst","software-engineering"})
+        self.assertEqual(len(rows),6)
+        self.assertEqual({p.name for p,_ in rows},{
+            "internal-audit","internal-audit-v2",
+            "data-analyst","data-analyst-v2",
+            "software-engineering","software-engineering-v2",
+        })
         for path,digest in rows:
             manifest=json.loads((path/"manifest.json").read_text())
             self.assertFalse(manifest["qualifying"])
@@ -73,7 +77,7 @@ class ScenarioSchemaTests(unittest.TestCase):
     def test_validator_command(self):
         run=subprocess.run([sys.executable,str(ROOT/"scripts/validate_virtual_internship_scenarios.py")],cwd=ROOT.parent,capture_output=True,text=True)
         self.assertEqual(run.returncode,0,run.stdout+run.stderr)
-        self.assertIn("Phase 2 scenario validation: PASS (3 packs)",run.stdout)
+        self.assertIn("Virtual Internship Phase 2 scenario validation: PASS (6 packs)",run.stdout)
 
     @staticmethod
     def _edit(path,fn):
