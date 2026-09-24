@@ -2733,6 +2733,8 @@ export default function MurikahVirtualInternshipWorkspace() {
   const people = workspace.people || [];
   const tasks = workspace.tasks || [];
   const stopped = workspace.state === "stopped";
+  const completed = workspace.state === "completed";
+  const readOnly = stopped || completed;
   const selectedTaskCurrent = selectedTask
     ? tasks.find((task) => task.task_id === selectedTask.task_id) || selectedTask
     : null;
