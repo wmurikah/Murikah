@@ -24,8 +24,7 @@ CREATE TABLE IF NOT EXISTS internship_completion_documents (
   superseded_at INTEGER,
   superseded_by_document_id TEXT,
   simulation_disclosure_version TEXT NOT NULL CHECK (length(simulation_disclosure_version) BETWEEN 1 AND 80),
-  endorsement_json TEXT NOT NULL DEFAULT '{}'
-    CHECK (endorsement_json = '{}'),
+  endorsement_json TEXT NOT NULL DEFAULT '{}' CHECK (length(endorsement_json) BETWEEN 2 AND 4000),
   request_id TEXT NOT NULL CHECK (length(request_id) BETWEEN 3 AND 128),
   created_at INTEGER NOT NULL,
   UNIQUE (completion_record_id, document_type, document_version),
@@ -34,7 +33,6 @@ CREATE TABLE IF NOT EXISTS internship_completion_documents (
   FOREIGN KEY (learner_id) REFERENCES tutor_accounts(actor_id) ON DELETE RESTRICT,
   FOREIGN KEY (completion_record_id) REFERENCES completion_records(id) ON DELETE RESTRICT,
   FOREIGN KEY (object_id) REFERENCES tutor_objects(object_id) ON DELETE RESTRICT,
-  FOREIGN KEY (superseded_by_document_id) REFERENCES internship_completion_documents(id) ON DELETE RESTRICT,
   CHECK (
     (issuance_status = 'current' AND superseded_at IS NULL AND superseded_by_document_id IS NULL)
     OR
