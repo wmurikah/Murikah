@@ -34,6 +34,41 @@ def _exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
         raise AssessmentValidationError(f"{label} fields are invalid")
 
 
+def _authoritative_summary(results: list[dict[str, Any]]) -> str:
+    assessed=sum(1 for row in results if row.get("result_state")=="assessed")
+    not_assessed=sum(1 for row in results if row.get("result_state")=="not_assessed")
+    if not_assessed:
+        return (
+            f"Formal rubric assessment recorded {assessed} assessed criterion/criteria and "
+            f"{not_assessed} not-assessed criterion/criteria. "
+            "Criterion-level feedback and evidence references are authoritative."
+        )
+    return (
+        f"Formal rubric assessment recorded {assessed} assessed criterion/criteria. "
+        "Criterion-level feedback and evidence references are authoritative."
+    )
+
+
+def _authoritative_limitations(
+    evidence_packet: dict[str, Any],
+    results: list[dict[str, Any]],
+) -> list[str]:
+    rows: list[str]=[]
+    supplied=evidence_packet.get("limitations")
+    if isinstance(supplied,list):
+        rows.extend(str(item).strip().replace("—","-") for item in supplied if isinstance(item,str) and item.strip())
+    rows.extend(
+        str(row.get("limitation") or "").strip().replace("—","-")
+        for row in results
+        if row.get("result_state")=="not_assessed" and str(row.get("limitation") or "").strip()
+    )
+    unique: list[str]=[]
+    for row in rows:
+        if row and row not in unique:
+            unique.append(row[:1000])
+    return unique[:32]
+
+
 def validate_and_calculate_assessment(
     value: dict[str, Any],
     *,
@@ -117,6 +152,8 @@ def validate_and_calculate_assessment(
         raise AssessmentValidationError("all rubric criteria must be returned exactly once")
 
     aggregate = calculate_aggregate(normalized_rubric, normalized_results)
+    authoritative_summary=_authoritative_summary(normalized_results)
+    authoritative_limitations=_authoritative_limitations(evidence_packet,normalized_results)
     return {
         "schema_version": FORMAL_ASSESSOR_SCHEMA_VERSION,
         "assessment_id": assessment_id,
@@ -125,8 +162,12 @@ def validate_and_calculate_assessment(
         "rubric_hash": rubric_hash(normalized_rubric),
         "calculation_version": RUBRIC_CALCULATION_VERSION,
         "aggregate_numeric": aggregate,
-        "overall_summary": summary.strip().replace("—", "-"),
-        "limitations": [str(x).strip().replace("—", "-") for x in limitations],
+        # The model's summary/overall limitations are schema-validated above but
+        # are not authoritative persisted findings. Deterministic code derives
+        # these fields from validated criterion results and supplied evidence
+        # limitations so uncited model prose cannot become assessment truth.
+        "overall_summary": authoritative_summary,
+        "limitations": authoritative_limitations,
         "criterion_results": normalized_results,
     }
 
