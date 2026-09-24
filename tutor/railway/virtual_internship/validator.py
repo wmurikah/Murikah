@@ -196,6 +196,8 @@ def _validate_review_policy(manifest: dict[str,Any]) -> None:
     minimum=int(manifest["minimum_duration_days"])
     if midpoint > minimum or final > minimum:
         _err("manifest.review_policy","review days must fall within the authored internship duration")
+    if manifest.get("qualifying") is True and final < minimum:
+        _err("manifest.review_policy","qualifying final_review_day cannot precede the minimum internship duration")
     demo_mid=int(policy["demo_accelerated_midpoint_day"]); demo_final=int(policy["demo_accelerated_final_day"])
     if demo_final < demo_mid:
         _err("manifest.review_policy","demo final review must not precede demo midpoint review")
