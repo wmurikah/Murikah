@@ -173,6 +173,77 @@ def build_assessor_context(
     }
 
 
+
+def build_formal_assessor_context(
+    service: Any,
+    *,
+    account_actor_id: str,
+    internship_id: str,
+    task_id: str,
+    assessment_id: str,
+    rubric: dict[str, Any],
+    evidence_packet: dict[str, Any],
+    assistance_events: list[dict[str, Any]] | None = None,
+    workflow_feedback: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build identity-minimized Phase 6 assessment context.
+
+    Account identity is used only to authorize the safe Phase 2 views. It is not
+    copied into the model context, and preferred name/email/profile metadata are
+    deliberately absent.
+    """
+    learner_result = service.learner_view(account_actor_id, internship_id)
+    learner_view = learner_result.get("view") if isinstance(learner_result, dict) else None
+    if not isinstance(learner_view, dict):
+        raise ValueError("learner view unavailable")
+    definition = _definition_payload(service, account_actor_id, internship_id)
+    task = _task_context(definition, learner_view, task_id)
+    if not isinstance(task, dict):
+        raise ValueError("assessment task unavailable")
+    return {
+        "context_type": "formal_assessment",
+        "assessment_id": str(assessment_id or "")[:128],
+        "internship_id": internship_id,
+        "scenario_version_id": learner_view.get("scenario_version_id"),
+        "task": task,
+        "rubric": rubric,
+        "evidence_packet": evidence_packet,
+        "assistance_events": [
+            {
+                "source": str(row.get("source") or "")[:40],
+                "provenance": str(row.get("provenance") or "")[:40],
+                "assistance_level": validate_assistance_level(row.get("assistance_level")),
+                "category": str(row.get("category") or "")[:80],
+                "event_time": int(row.get("event_time") or 0),
+            }
+            for row in (assistance_events or [])
+            if isinstance(row, dict)
+        ][:64],
+        "prior_workflow_feedback": [
+            {
+                "decision": str(row.get("decision") or "")[:40],
+                "feedback": str(row.get("feedback") or "")[:2000],
+                "requested_changes": [
+                    str(item)[:500] for item in (row.get("requested_changes") or [])
+                    if isinstance(item, str)
+                ][:12],
+            }
+            for row in (workflow_feedback or [])
+            if isinstance(row, dict)
+        ][-3:],
+        "permitted_scenario_facts": list(learner_view.get("facts") or []),
+        "context_exclusions": [
+            "preferred_name",
+            "email",
+            "account_profile",
+            "private_mentor_conversation",
+            "unrelated_tasks",
+            "unrelated_inbox_messages",
+            "sensitive_personal_profile_fields",
+        ],
+    }
+
+
 def build_scenario_director_context(
     service: Any,
     *,
@@ -233,6 +304,7 @@ __all__ = [
     "bounded_conversation",
     "build_actor_context",
     "build_assessor_context",
+    "build_formal_assessor_context",
     "build_mentor_context",
     "build_scenario_director_context",
     "normalized_context_hash",
