@@ -531,8 +531,8 @@ export async function handlePhase5ArtifactPersistenceRoute(
     const submissionId=id(url.searchParams.get('submission_id'));
     if (!submissionId) return json({error:'submission_not_found'},404);
     const row=await env.TUTOR_DB.prepare(
-      'SELECT s.id AS submission_id, s.artifact_id, s.artifact_version_id, s.task_id, s.submission_number, s.status AS submission_status, ' +
-      'a.deliverable_type, a.title, v.original_filename, v.content_type, v.size_bytes, v.sha256, v.source_type, v.object_id, ' +
+      'SELECT s.id AS submission_id, s.artifact_id, s.artifact_version_id, s.task_id, s.submission_number, s.submitted_at, s.status AS submission_status, ' +
+      'a.deliverable_type, a.title, v.original_filename, v.content_type, v.size_bytes, v.sha256, v.source_type, v.object_id, v.created_at AS version_created_at, ' +
       'o.object_key, d.assigned_by_actor_id, d.definition_json ' +
       'FROM internship_artifact_submissions s JOIN internship_artifacts a ON a.id = s.artifact_id ' +
       'JOIN internship_artifact_versions v ON v.id = s.artifact_version_id ' +
@@ -562,10 +562,10 @@ export async function handlePhase5ArtifactPersistenceRoute(
       ok:true,
       material:{
         submission_id:row.submission_id,artifact_id:row.artifact_id,artifact_version_id:row.artifact_version_id,
-        task_id:row.task_id,submission_number:row.submission_number,deliverable_type:row.deliverable_type,title:row.title,
-        original_filename:row.original_filename,content_type:row.content_type,size_bytes:row.size_bytes,
+        task_id:row.task_id,submission_number:row.submission_number,submitted_at:row.submitted_at,deliverable_type:row.deliverable_type,title:row.title,
+        original_filename:row.original_filename,content_type:row.content_type,size_bytes:row.size_bytes,version_created_at:row.version_created_at,
         reviewer_actor_id:row.assigned_by_actor_id,
-        task:{title:definition.title||'',brief:definition.brief||'',business_context:definition.business_context||'',learner_objective:definition.learner_objective||''},
+        task:{title:definition.title||'',brief:definition.brief||'',business_context:definition.business_context||'',learner_objective:definition.learner_objective||'',deliverable_types:definition.deliverable_types||[],rubric:definition.rubric||null},
         extractable:Boolean(content),content,prior_reviews:prior.map(p=>({
           decision:p.decision,feedback:p.feedback,
           requested_changes:(()=>{try{return JSON.parse(String(p.requested_changes_json||'[]'));}catch{return [];}})(),

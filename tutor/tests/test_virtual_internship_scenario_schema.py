@@ -8,10 +8,14 @@ sys.path.insert(0,str(ROOT/"railway"))
 from virtual_internship.validator import SCENARIOS_ROOT, ScenarioValidationError, content_hash, validate_all, validate_pack
 
 class ScenarioSchemaTests(unittest.TestCase):
-    def test_all_three_career_neutral_demo_packs_validate(self):
+    def test_all_committed_career_neutral_demo_versions_validate(self):
         rows=validate_all()
-        self.assertEqual(len(rows),3)
-        self.assertEqual({p.name for p,_ in rows},{"internal-audit","data-analyst","software-engineering"})
+        self.assertEqual(len(rows),6)
+        self.assertEqual({p.name for p,_ in rows},{
+            "internal-audit","internal-audit-v2",
+            "data-analyst","data-analyst-v2",
+            "software-engineering","software-engineering-v2",
+        })
         for path,digest in rows:
             manifest=json.loads((path/"manifest.json").read_text())
             self.assertFalse(manifest["qualifying"])
@@ -58,6 +62,29 @@ class ScenarioSchemaTests(unittest.TestCase):
         td,path=self._mutate("internal-audit",event_cycle)
         with td,self.assertRaises(ScenarioValidationError):validate_pack(path,verify_hash=False)
 
+    def test_non_aggregating_scenario_rubric_may_omit_weights(self):
+        def make_unweighted(path):
+            def change(tasks):
+                rubric=tasks[0]["rubric"]
+                rubric["calculation"]["method"]="none"
+                for criterion in rubric["criteria"]:
+                    criterion.pop("weight",None)
+            self._edit(path/"tasks.json",change)
+        td,path=self._mutate("internal-audit-v2",make_unweighted)
+        with td:
+            validate_pack(path,verify_hash=False)
+
+    def test_qualifying_final_review_cannot_precede_minimum_duration(self):
+        def make_qualifying(path):
+            def change(manifest):
+                manifest["classification"]="qualifying"
+                manifest["qualifying"]=True
+                manifest["review_policy"]["final_review_day"]=85
+            self._edit(path/"manifest.json",change)
+        td,path=self._mutate("internal-audit-v2",make_qualifying)
+        with td,self.assertRaisesRegex(ScenarioValidationError,"final_review_day"):
+            validate_pack(path,verify_hash=False)
+
     def test_content_hash_is_key_order_independent_and_semantic_change_sensitive(self):
         pack=validate_pack(SCENARIOS_ROOT/"demo"/"internal-audit")
         reordered={key:pack[key] for key in reversed(list(pack.keys()))}
@@ -73,7 +100,7 @@ class ScenarioSchemaTests(unittest.TestCase):
     def test_validator_command(self):
         run=subprocess.run([sys.executable,str(ROOT/"scripts/validate_virtual_internship_scenarios.py")],cwd=ROOT.parent,capture_output=True,text=True)
         self.assertEqual(run.returncode,0,run.stdout+run.stderr)
-        self.assertIn("Phase 2 scenario validation: PASS (3 packs)",run.stdout)
+        self.assertIn("Virtual Internship Phase 2 scenario validation: PASS (6 packs)",run.stdout)
 
     @staticmethod
     def _edit(path,fn):

@@ -1,0 +1,503 @@
+[
+  {
+    "task_id": "task_understand_issue",
+    "authored_sequence": 1,
+    "title": "Understand the issue",
+    "category": "review",
+    "assigned_by_actor_id": "actor_engineering_manager",
+    "business_context": "A user-facing save failure needs structured triage.",
+    "learner_objective": "Separate reported symptoms from confirmed facts.",
+    "brief": "Review the fictional issue summary and identify missing reproduction information.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 3
+    },
+    "expected_effort": "1 hour",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_product_manager"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "analysis_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_understand_issue_v1",
+      "schema_version": 1,
+      "title": "Understand the issue assessment rubric",
+      "purpose": "Assess the submitted analysis_plan against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_reproduce_bug",
+    "authored_sequence": 2,
+    "title": "Reproduce the bug",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_senior_engineer",
+    "business_context": "The team needs a deterministic reproduction before planning a fix.",
+    "learner_objective": "Use evidence to narrow a failure condition.",
+    "brief": "Work from disclosed clues and record a bounded reproduction plan.",
+    "dependencies": [
+      "task_understand_issue"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 6
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_senior_engineer",
+      "actor_qa_engineer"
+    ],
+    "event_references": [
+      "event_reproduction_clue"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_debugging"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "test_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_reproduce_bug_v1",
+      "schema_version": 1,
+      "title": "Reproduce the bug assessment rubric",
+      "purpose": "Assess the submitted test_plan against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_fix_plan",
+    "authored_sequence": 3,
+    "title": "Propose a fix plan",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_engineering_manager",
+    "business_context": "A confirmed reproduction needs a safe implementation plan.",
+    "learner_objective": "Plan a change without overclaiming implementation.",
+    "brief": "Prepare a fix plan using only disclosed canonical facts.",
+    "dependencies": [
+      "task_reproduce_bug"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 9
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_senior_engineer"
+    ],
+    "event_references": [
+      "event_priority_change"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_change_planning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "analysis_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_fix_plan_v1",
+      "schema_version": 1,
+      "title": "Propose a fix plan assessment rubric",
+      "purpose": "Assess the submitted analysis_plan against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "analysis_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_review_test_requirement",
+    "authored_sequence": 4,
+    "title": "Review regression requirement",
+    "category": "review",
+    "assigned_by_actor_id": "actor_qa_engineer",
+    "business_context": "QA has raised a regression concern.",
+    "learner_objective": "Connect a fix plan to an explicit regression check.",
+    "brief": "Review the disclosed risk and outline the required test.",
+    "dependencies": [
+      "task_fix_plan"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "1 hour",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_qa_engineer"
+    ],
+    "event_references": [
+      "event_regression_risk"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_test_reasoning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "test_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_review_test_requirement_v1",
+      "schema_version": 1,
+      "title": "Review regression requirement assessment rubric",
+      "purpose": "Assess the submitted test_plan against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]

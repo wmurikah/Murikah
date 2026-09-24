@@ -8,6 +8,14 @@ from .roles import ASSESSOR_OUTPUT_SCHEMA_VERSION, DIRECTOR_OUTPUT_SCHEMA_VERSIO
 
 
 ASSESSOR_RESULTS = {"met", "partially_met", "not_met", "not_assessed"}
+ASSISTANCE_LEVEL_LABELS = {
+    0: "Independent",
+    1: "Clarification only",
+    2: "Light coaching",
+    3: "Moderate coaching",
+    4: "Substantial coaching",
+    5: "Solution-level assistance",
+}
 DIRECTOR_PROPOSAL_TYPES = {"select_authored_event", "choose_authored_option"}
 WORKFLOW_REVIEW_DECISIONS = {"accepted", "changes_requested"}
 
@@ -176,6 +184,7 @@ def validate_director_output(
 
 __all__ = [
     "ASSESSOR_RESULTS",
+    "ASSISTANCE_LEVEL_LABELS",
     "DIRECTOR_PROPOSAL_TYPES",
     "WORKFLOW_REVIEW_DECISIONS",
     "StructuredOutputError",

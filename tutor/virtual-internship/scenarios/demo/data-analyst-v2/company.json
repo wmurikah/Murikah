@@ -1,0 +1,53 @@
+{
+  "organization_id": "org_northstar_analytics",
+  "name": "Northstar Analytics Cooperative",
+  "fictional": true,
+  "sector": "Digital analytics",
+  "country_region": "Fictional regional market",
+  "description": "A fictional analytics company used for deterministic scenario-engine tests.",
+  "products_services": [
+    "subscription analytics",
+    "market reporting"
+  ],
+  "departments": [
+    {
+      "id": "dept_analytics",
+      "name": "Analytics"
+    },
+    {
+      "id": "dept_product",
+      "name": "Product"
+    },
+    {
+      "id": "dept_data",
+      "name": "Data Engineering"
+    }
+  ],
+  "systems": [
+    "Lakehouse Demo",
+    "MetricHub"
+  ],
+  "process_references": [
+    "metric definition workflow",
+    "data quality triage"
+  ],
+  "vocabulary": [
+    "metric grain",
+    "freshness",
+    "null rate"
+  ],
+  "communication_norms": [
+    "Document metric assumptions before publishing conclusions."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical timing."
+  }
+}
