@@ -1,4 +1,4 @@
-"""Authenticated learner-facing API for Virtual Internship Phase 4."""
+"""Authenticated learner-facing API for Virtual Internship workplace and Phase 5 work artifacts."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,8 @@ import uuid
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+from urllib.parse import unquote
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
@@ -42,6 +43,37 @@ class MessageRequest(BaseModel):
 
 class ActorMessageRequest(MessageRequest):
     scenario_actor_id: str = Field(min_length=1,max_length=128)
+
+
+class AcknowledgeAssignmentRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class ArtifactCreateRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    task_id: str = Field(min_length=1,max_length=128)
+    deliverable_type: str = Field(min_length=1,max_length=64)
+    title: str = Field(min_length=1,max_length=200)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class ArtifactTextSaveRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    content: str = Field(min_length=1,max_length=120000)
+    request_id: str = Field(min_length=3,max_length=128)
+    prior_review_id: str = Field(default="",max_length=128)
+
+
+class ArtifactSubmitRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    artifact_version_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class ArtifactReviewRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
 
 
 def _identity(payload: TokenPayload) -> tuple[str,str,bool]:
@@ -111,6 +143,408 @@ def _find_task(workspace: dict[str,Any], task_id: str) -> dict[str,Any] | None:
         if isinstance(task,dict) and str(task.get("task_id") or "") == task_id:
             return task
     return None
+
+
+def _artifact_http(exc: Exception, fallback: str = "That work update could not be completed. Try again.") -> HTTPException:
+    text = str(exc)
+    if "upload_too_large" in text or "supported file size" in text:
+        return HTTPException(413,"That file is larger than the 10 MB internship upload limit.")
+    if "unsupported_artifact_type" in text:
+        return HTTPException(415,"That file type is not supported for internship work.")
+    if "HTTP 404" in text or "not_found" in text:
+        return HTTPException(404,"That internship work item is not available.")
+    if "HTTP 401" in text or "authentication_required" in text:
+        return HTTPException(401,"Sign in to continue.")
+    if "HTTP 400" in text or "invalid_" in text or "deliverable_not_allowed" in text:
+        return HTTPException(400,"That work request is not valid for this assignment.")
+    if "HTTP 409" in text or "stopped" in text or "already_" in text:
+        return HTTPException(409,"That action is not available in the current work state.")
+    return HTTPException(503,fallback)
+
+
+def _member(current: TokenPayload, action: str) -> str:
+    actor_id, _username, guest = _identity(current)
+    if guest:
+        raise HTTPException(401,f"Sign in to {action}.")
+    return actor_id
+
+
+def _ensure_phase2_task_completed(
+    actor_id: str,
+    internship_id: str,
+    task_id: str,
+    *,
+    logical_request_id: str,
+    persistence: Any,
+) -> None:
+    state = ScenarioStateService()
+    try:
+        state.transition_task(
+            actor_id,
+            internship_id,
+            task_id,
+            "completed",
+            request_id=logical_request_id + ":task-complete",
+        )
+    except Exception:
+        learner = state.learner_view(actor_id, internship_id)
+        view = learner.get("view") if isinstance(learner,dict) else {}
+        rows = view.get("tasks") if isinstance(view,dict) else []
+        current = next(
+            (
+                row for row in (rows if isinstance(rows,list) else [])
+                if isinstance(row,dict) and str(row.get("task_id") or "") == task_id
+            ),
+            None,
+        )
+        if not isinstance(current,dict) or str(current.get("status") or "") != "completed":
+            raise
+    state.evaluate(
+        actor_id,
+        internship_id,
+        request_id=logical_request_id + ":events",
+    )
+    persistence.internship_artifact_task_completed(
+        actor_id,
+        internship_id,
+        task_id,
+        request_id=logical_request_id + ":activity-complete",
+    )
+
+
+async def _run_workflow_review(
+    *,
+    actor_id: str,
+    internship_id: str,
+    submission_id: str,
+    logical_request_id: str,
+) -> dict[str,Any]:
+    persistence = _persistence()
+    start_request_id = logical_request_id + ":start"
+    review_request_id = logical_request_id + ":decision"
+    try:
+        start_result = persistence.internship_artifact_review_start(
+            actor_id,internship_id,submission_id,request_id=start_request_id
+        )
+        if isinstance(start_result,dict) and start_result.get("already_reviewed"):
+            review = start_result.get("review") if isinstance(start_result.get("review"),dict) else {}
+            task_id = str(review.get("task_id") or "")
+            completed = False
+            if start_result.get("task_ready_for_completion") and task_id:
+                _ensure_phase2_task_completed(
+                    actor_id,
+                    internship_id,
+                    task_id,
+                    logical_request_id=logical_request_id,
+                    persistence=persistence,
+                )
+                completed = True
+            return {
+                "status":"reviewed",
+                "idempotent_replay":True,
+                "review":review,
+                "task_completed":completed,
+            }
+        material_result = persistence.internship_artifact_review_material(
+            actor_id,internship_id,submission_id
+        )
+        material = material_result.get("material") if isinstance(material_result,dict) else None
+        if not isinstance(material,dict):
+            raise RuntimeError("review_material_unavailable")
+        if not material.get("extractable"):
+            return {
+                "status":"under_review",
+                "review_unavailable":True,
+                "message":"Supervisor review is temporarily unavailable for this file format. Your submitted version remains safely stored and unchanged.",
+            }
+        reviewer_actor_id = str(material.get("reviewer_actor_id") or "")
+        task_id = str(material.get("task_id") or "")
+        if not reviewer_actor_id or not task_id:
+            raise RuntimeError("reviewer_unavailable")
+        result, metadata = await VirtualInternshipAIOrchestrator(
+            ScenarioStateService()
+        ).invoke_workflow_review(
+            owner_actor_id=actor_id,
+            internship_id=internship_id,
+            task_id=task_id,
+            reviewer_actor_id=reviewer_actor_id,
+            task=material.get("task") if isinstance(material.get("task"),dict) else {},
+            artifact=material,
+            prior_reviews=material.get("prior_reviews") if isinstance(material.get("prior_reviews"),list) else [],
+        )
+        persisted = persistence.internship_artifact_review_record(
+            actor_id,
+            internship_id,
+            submission_id,
+            decision=str(result.get("decision") or ""),
+            feedback=str(result.get("feedback") or ""),
+            requested_changes=[
+                str(item)
+                for item in result.get("requested_changes",[])
+                if isinstance(item,str)
+            ],
+            model_invocation_id=str(metadata.get("invocation_id") or ""),
+            request_id=review_request_id,
+        )
+        if persisted.get("task_ready_for_completion"):
+            _ensure_phase2_task_completed(
+                actor_id,
+                internship_id,
+                task_id,
+                logical_request_id=logical_request_id,
+                persistence=persistence,
+            )
+            persisted["task_completed"] = True
+        return {"status":"reviewed",**persisted}
+    except AIOrchestrationError:
+        return {
+            "status":"under_review",
+            "review_unavailable":True,
+            "message":"Supervisor review is temporarily unavailable. Please try again later.",
+        }
+
+
+@router.post("/tasks/{task_id}/acknowledge")
+async def acknowledge_assignment(
+    task_id: str,
+    body: AcknowledgeAssignmentRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"acknowledge internship assignments")
+    try:
+        workspace = _workspace_service().workspace(actor_id,body.internship_id)
+        if workspace.get("state") != "active":
+            raise HTTPException(409,"This internship is read-only.")
+        task = _find_task(workspace,task_id)
+        if not task:
+            raise HTTPException(404,"That assignment is not available.")
+        status = str(task.get("status") or "")
+        if status == "available":
+            ScenarioStateService().transition_task(
+                actor_id,body.internship_id,task_id,"in_progress",
+                request_id=body.request_id + ":task",
+            )
+        elif status != "in_progress":
+            raise HTTPException(409,"That assignment cannot be acknowledged in its current state.")
+        return _persistence().internship_assignment_acknowledge(
+            actor_id,body.internship_id,task_id,request_id=body.request_id
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.get("/artifacts")
+async def artifact_summary(
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id = _member(current,"view internship work")
+    try:
+        return _persistence().internship_artifact_summary(actor_id,internship_id)
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.post("/artifacts")
+async def create_artifact(
+    body: ArtifactCreateRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"create internship work")
+    try:
+        return _persistence().internship_artifact_create(
+            actor_id,body.internship_id,body.task_id,
+            deliverable_type=body.deliverable_type,
+            title=body.title,
+            request_id=body.request_id,
+        )
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.get("/artifacts/{artifact_id}")
+async def artifact_history(
+    artifact_id: str,
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id = _member(current,"view internship work")
+    try:
+        return _persistence().internship_artifact_history(actor_id,internship_id,artifact_id)
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.post("/artifacts/{artifact_id}/versions/text")
+async def save_text_version(
+    artifact_id: str,
+    body: ArtifactTextSaveRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"save internship work")
+    try:
+        return _persistence().internship_artifact_save_text(
+            actor_id,body.internship_id,artifact_id,
+            content=body.content,
+            request_id=body.request_id,
+            prior_review_id=body.prior_review_id,
+        )
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.post("/artifacts/{artifact_id}/versions/upload")
+async def upload_artifact_version(
+    artifact_id: str,
+    request: Request,
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"upload internship work")
+    max_bytes = _persistence().PHASE5_MAX_FILE_BYTES
+    try:
+        declared_length = request.headers.get("content-length")
+        if declared_length and int(declared_length) > max_bytes:
+            raise HTTPException(413,"That file is larger than the 10 MB internship upload limit.")
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > max_bytes:
+                raise HTTPException(413,"That file is larger than the 10 MB internship upload limit.")
+            chunks.append(bytes(chunk))
+        data = b"".join(chunks)
+        if not data:
+            raise HTTPException(400,"Choose a file to upload.")
+        filename = unquote(str(request.headers.get("x-murikah-artifact-filename") or "artifact"))
+        request_id = str(request.headers.get("x-murikah-request-id") or "")
+        prior_review_id = str(request.headers.get("x-murikah-prior-review-id") or "")
+        return _persistence().internship_artifact_upload(
+            actor_id,internship_id,artifact_id,
+            data=data,
+            filename=filename,
+            content_type=request.headers.get("content-type") or "application/octet-stream",
+            request_id=request_id,
+            prior_review_id=prior_review_id,
+        )
+    except HTTPException:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400,"That upload request is invalid.") from exc
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.get("/artifacts/{artifact_id}/versions/{version_id}/text")
+async def artifact_version_text(
+    artifact_id: str,
+    version_id: str,
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id = _member(current,"view internship work")
+    try:
+        history = _persistence().internship_artifact_history(actor_id,internship_id,artifact_id)
+        versions = history.get("versions") if isinstance(history,dict) else []
+        if not any(isinstance(row,dict) and str(row.get("id") or "") == version_id for row in (versions or [])):
+            raise HTTPException(404,"That work version is not available.")
+        return _persistence().internship_artifact_text(actor_id,internship_id,version_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.get("/artifacts/{artifact_id}/versions/{version_id}/download")
+async def artifact_version_download(
+    artifact_id: str,
+    version_id: str,
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id = _member(current,"download internship work")
+    try:
+        history = _persistence().internship_artifact_history(actor_id,internship_id,artifact_id)
+        versions = history.get("versions") if isinstance(history,dict) else []
+        if not any(isinstance(row,dict) and str(row.get("id") or "") == version_id for row in (versions or [])):
+            raise HTTPException(404,"That work version is not available.")
+        data, headers = _persistence().internship_artifact_download(
+            actor_id,internship_id,version_id
+        )
+        response_headers = {
+            "cache-control":"private, no-store",
+            "x-content-type-options":"nosniff",
+        }
+        disposition = headers.get("content-disposition")
+        if disposition:
+            response_headers["content-disposition"] = disposition
+        return Response(
+            content=data,
+            media_type=headers.get("content-type","application/octet-stream"),
+            headers=response_headers,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _artifact_http(exc,"That work file could not be downloaded right now.") from exc
+
+
+@router.post("/artifacts/{artifact_id}/submit")
+async def submit_artifact(
+    artifact_id: str,
+    body: ArtifactSubmitRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"submit internship work")
+    try:
+        result = _persistence().internship_artifact_submit(
+            actor_id,body.internship_id,artifact_id,body.artifact_version_id,
+            request_id=body.request_id,
+        )
+        submission = result.get("submission") if isinstance(result,dict) else {}
+        submission_id = str((submission or {}).get("id") or "")
+        if not submission_id:
+            raise RuntimeError("submission_not_found")
+        review = await _run_workflow_review(
+            actor_id=actor_id,
+            internship_id=body.internship_id,
+            submission_id=submission_id,
+            logical_request_id=body.request_id + ":review",
+        )
+        return {**result,"workflow_review":review}
+    except Exception as exc:
+        raise _artifact_http(exc) from exc
+
+
+@router.post("/submissions/{submission_id}/review")
+async def retry_workflow_review(
+    submission_id: str,
+    body: ArtifactReviewRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"request supervisor review")
+    try:
+        return await _run_workflow_review(
+            actor_id=actor_id,
+            internship_id=body.internship_id,
+            submission_id=submission_id,
+            logical_request_id=body.request_id,
+        )
+    except Exception as exc:
+        raise _artifact_http(exc,"Supervisor review is temporarily unavailable. Please try again later.") from exc
 
 
 @router.get("/workspace")

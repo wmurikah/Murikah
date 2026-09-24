@@ -9,6 +9,7 @@ from .roles import ASSESSOR_OUTPUT_SCHEMA_VERSION, DIRECTOR_OUTPUT_SCHEMA_VERSIO
 
 ASSESSOR_RESULTS = {"met", "partially_met", "not_met", "not_assessed"}
 DIRECTOR_PROPOSAL_TYPES = {"select_authored_event", "choose_authored_option"}
+WORKFLOW_REVIEW_DECISIONS = {"accepted", "changes_requested"}
 
 
 class StructuredOutputError(ValueError):
@@ -90,6 +91,41 @@ def validate_assessor_output(
     }
 
 
+
+def validate_workflow_review_output(value: dict[str, Any]) -> dict[str, Any]:
+    _exact_keys(
+        value,
+        {"schema_version", "decision", "feedback", "requested_changes"},
+        {"schema_version", "decision", "feedback", "requested_changes"},
+    )
+    if value["schema_version"] != 1:
+        raise StructuredOutputError("unsupported workflow review schema version")
+    decision = value["decision"]
+    feedback = value["feedback"]
+    requested = value["requested_changes"]
+    if decision not in WORKFLOW_REVIEW_DECISIONS:
+        raise StructuredOutputError("invalid workflow review decision")
+    if not isinstance(feedback, str) or not feedback.strip() or len(feedback) > 6000:
+        raise StructuredOutputError("invalid workflow review feedback")
+    if not isinstance(requested, list) or len(requested) > 12:
+        raise StructuredOutputError("invalid requested_changes")
+    normalized: list[str] = []
+    for item in requested:
+        if not isinstance(item, str) or not item.strip() or len(item) > 1000:
+            raise StructuredOutputError("invalid requested change")
+        normalized.append(item.strip().replace("—", "-"))
+    if decision == "accepted" and normalized:
+        raise StructuredOutputError("accepted workflow review cannot request changes")
+    if decision == "changes_requested" and not normalized:
+        raise StructuredOutputError("changes_requested requires at least one requested change")
+    return {
+        "schema_version": 1,
+        "decision": decision,
+        "feedback": feedback.strip().replace("—", "-"),
+        "requested_changes": normalized,
+    }
+
+
 def validate_director_output(
     value: dict[str, Any],
     *,
@@ -141,9 +177,11 @@ def validate_director_output(
 __all__ = [
     "ASSESSOR_RESULTS",
     "DIRECTOR_PROPOSAL_TYPES",
+    "WORKFLOW_REVIEW_DECISIONS",
     "StructuredOutputError",
     "parse_json_object",
     "validate_assessor_output",
     "validate_assistance_level",
     "validate_director_output",
+    "validate_workflow_review_output",
 ]

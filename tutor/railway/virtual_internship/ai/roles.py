@@ -10,6 +10,7 @@ class VirtualInternshipModelRole(str, Enum):
     MENTOR = "mentor"
     ASSESSOR = "assessor"
     SCENARIO_DIRECTOR = "scenario_director"
+    WORKFLOW_REVIEW = "workflow_review"
 
 
 ORCHESTRATION_SCHEMA_VERSION = 1
@@ -19,6 +20,8 @@ ASSESSOR_PROMPT_VERSION = 1
 DIRECTOR_PROMPT_VERSION = 1
 ASSESSOR_OUTPUT_SCHEMA_VERSION = 1
 DIRECTOR_OUTPUT_SCHEMA_VERSION = 1
+WORKFLOW_REVIEW_PROMPT_VERSION = 1
+WORKFLOW_REVIEW_OUTPUT_SCHEMA_VERSION = 1
 INTERNSHIP_CONTEXT_MAX_CHARS = 14_000
 INTERNSHIP_RECENT_TURNS = 6
 
@@ -84,6 +87,18 @@ ROLE_POLICIES: dict[VirtualInternshipModelRole, RolePolicy] = {
         output_schema_version=DIRECTOR_OUTPUT_SCHEMA_VERSION,
         model_preference="reasoning",
     ),
+    VirtualInternshipModelRole.WORKFLOW_REVIEW: RolePolicy(
+        role=VirtualInternshipModelRole.WORKFLOW_REVIEW,
+        max_tokens=900,
+        first_token_timeout_seconds=0.0,
+        total_timeout_seconds=35.0,
+        max_attempts=2,
+        candidate_limit=2,
+        structured_output=True,
+        prompt_version=WORKFLOW_REVIEW_PROMPT_VERSION,
+        output_schema_version=WORKFLOW_REVIEW_OUTPUT_SCHEMA_VERSION,
+        model_preference="balanced",
+    ),
 }
 
 
@@ -108,5 +123,7 @@ __all__ = [
     "ROLE_POLICIES",
     "RolePolicy",
     "VirtualInternshipModelRole",
+    "WORKFLOW_REVIEW_PROMPT_VERSION",
+    "WORKFLOW_REVIEW_OUTPUT_SCHEMA_VERSION",
     "role_policy",
 ]

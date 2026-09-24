@@ -685,6 +685,265 @@ def internship_ui_reflection_save(
     )
 
 
+
+PHASE5_MAX_FILE_BYTES = 10 * 1024 * 1024
+PHASE5_MAX_FILES_PER_VERSION = 1
+PHASE5_MAX_VERSIONS = 100
+PHASE5_MAX_TEXT_CHARS = 120_000
+
+
+def _internship_artifact_get(route: str, actor_id: str, internship_id: str, **params: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship artifact persistence is unavailable.")
+    query = {
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+    }
+    query.update({key: _learning_text(value, 128) for key, value in params.items()})
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}{route}?{urlencode(query)}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship artifact response is invalid.")
+    return value
+
+
+def internship_artifact_summary(actor_id: str, internship_id: str) -> dict[str, Any]:
+    return _internship_artifact_get("/internships/artifacts/summary", actor_id, internship_id)
+
+
+def internship_artifact_history(actor_id: str, internship_id: str, artifact_id: str) -> dict[str, Any]:
+    return _internship_artifact_get(
+        "/internships/artifacts/history", actor_id, internship_id, artifact_id=artifact_id
+    )
+
+
+def internship_artifact_integrity_check(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Read-only owner-scoped D1/R2 reconciliation for Phase 5 artifact objects."""
+    return _internship_artifact_get(
+        "/internships/artifacts/integrity", actor_id, internship_id
+    )
+
+
+def internship_assignment_acknowledge(
+    actor_id: str, internship_id: str, task_id: str, *, request_id: str
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/acknowledge",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "task_id": _learning_text(task_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_create(
+    actor_id: str,
+    internship_id: str,
+    task_id: str,
+    *,
+    deliverable_type: str,
+    title: str,
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/create",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "task_id": _learning_text(task_id, 128),
+            "deliverable_type": _learning_text(deliverable_type, 64),
+            "title": _learning_text(title, 200),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_save_text(
+    actor_id: str,
+    internship_id: str,
+    artifact_id: str,
+    *,
+    content: str,
+    request_id: str,
+    prior_review_id: str = "",
+) -> dict[str, Any]:
+    if len(content) > PHASE5_MAX_TEXT_CHARS:
+        raise PersistenceError("Artifact text exceeds the supported draft size.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/version-text",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "artifact_id": _learning_text(artifact_id, 128),
+            "content": content,
+            "request_id": _learning_text(request_id, 128),
+            "prior_review_id": _learning_text(prior_review_id, 128),
+        },
+    )
+
+
+def internship_artifact_upload(
+    actor_id: str,
+    internship_id: str,
+    artifact_id: str,
+    *,
+    data: bytes,
+    filename: str,
+    content_type: str,
+    request_id: str,
+    prior_review_id: str = "",
+) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship artifact persistence is unavailable.")
+    if len(data) > PHASE5_MAX_FILE_BYTES:
+        raise PersistenceError("Artifact upload exceeds the supported file size.")
+    safe_name = re.sub(r"[^A-Za-z0-9._ ()-]", "_", Path(filename or "artifact").name)[:180] or "artifact"
+    headers = {
+        "x-murikah-actor-id": _learning_text(actor_id, 128),
+        "x-murikah-internship-id": _learning_text(internship_id, 128),
+        "x-murikah-artifact-id": _learning_text(artifact_id, 128),
+        "x-murikah-request-id": _learning_text(request_id, 128),
+        "x-murikah-prior-review-id": _learning_text(prior_review_id, 128),
+        "x-murikah-artifact-filename": safe_name,
+        "x-murikah-artifact-content-type": _learning_text(content_type, 160),
+    }
+    _, raw, _ = _request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/version-upload",
+        body=data,
+        content_type="application/octet-stream",
+        extra_headers=headers,
+        timeout=30.0,
+    )
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship upload response is invalid.")
+    return value
+
+
+def internship_artifact_submit(
+    actor_id: str,
+    internship_id: str,
+    artifact_id: str,
+    artifact_version_id: str,
+    *,
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/submit",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "artifact_id": _learning_text(artifact_id, 128),
+            "artifact_version_id": _learning_text(artifact_version_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_review_start(
+    actor_id: str, internship_id: str, submission_id: str, *, request_id: str
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/review-start",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "submission_id": _learning_text(submission_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_review_material(
+    actor_id: str, internship_id: str, submission_id: str
+) -> dict[str, Any]:
+    return _internship_artifact_get(
+        "/internships/artifacts/review-material",
+        actor_id,
+        internship_id,
+        submission_id=submission_id,
+    )
+
+
+def internship_artifact_review_record(
+    actor_id: str,
+    internship_id: str,
+    submission_id: str,
+    *,
+    decision: str,
+    feedback: str,
+    requested_changes: list[str],
+    model_invocation_id: str,
+    request_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/review",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "submission_id": _learning_text(submission_id, 128),
+            "decision": _learning_text(decision, 32),
+            "feedback": _learning_text(feedback, 6000),
+            "requested_changes": [_learning_text(item, 1000) for item in requested_changes[:12]],
+            "model_invocation_id": _learning_text(model_invocation_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_task_completed(
+    actor_id: str, internship_id: str, task_id: str, *, request_id: str
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/artifacts/task-completed",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "task_id": _learning_text(task_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_artifact_download(
+    actor_id: str, internship_id: str, version_id: str
+) -> tuple[bytes, dict[str, str]]:
+    query = urlencode(
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "version_id": _learning_text(version_id, 128),
+        }
+    )
+    _, raw, headers = _request(
+        "GET",
+        f"{PERSIST_PREFIX}/internships/artifacts/download?{query}",
+        timeout=30.0,
+    )
+    return raw, headers
+
+
+def internship_artifact_text(
+    actor_id: str, internship_id: str, version_id: str
+) -> dict[str, Any]:
+    return _internship_artifact_get(
+        "/internships/artifacts/version-text",
+        actor_id,
+        internship_id,
+        version_id=version_id,
+    )
+
+
 def email_verification_start(
     email: str,
     *,
