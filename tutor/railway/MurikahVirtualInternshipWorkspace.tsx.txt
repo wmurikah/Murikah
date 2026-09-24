@@ -2177,6 +2177,12 @@ function PassportView() {
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Trend</dt><dd className="mt-1 font-semibold">{sentenceLabel(item.trend)}</dd></div>
               </dl>
               <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">
+                Why this level: {item.explanation?.qualifying_evidence_records ?? item.evidence_count} qualifying evidence record{(item.explanation?.qualifying_evidence_records ?? item.evidence_count) === 1 ? "" : "s"},
+                {" "}{item.explanation?.independent_demonstrations ?? item.independent_count} independent demonstration{(item.explanation?.independent_demonstrations ?? item.independent_count) === 1 ? "" : "s"},
+                across {item.explanation?.distinct_task_contexts ?? item.distinct_task_count} task context{(item.explanation?.distinct_task_contexts ?? item.distinct_task_count) === 1 ? "" : "s"} and
+                {" "}{item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count} transfer context{(item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count) === 1 ? "" : "s"}.
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
                 Last demonstrated {formatDate(item.last_demonstrated_at, true)}. Evidence remains individually traceable to the assessed artifact version and submission.
               </p>
               {item.next_requirements?.length ? (
@@ -2240,6 +2246,9 @@ function PassportView() {
                     <div><dt className="font-semibold">Evidence strength</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{sentenceLabel(row.evidence_strength)}</dd></div>
                     <div><dt className="font-semibold">Assistance context</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{row.assistance_context?.label || "Recorded assistance context"}</dd></div>
                     <div><dt className="font-semibold">Assessment date</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{formatDate(row.assessment_date || row.created_at, true)}</dd></div>
+                    <div><dt className="font-semibold">Internship</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.internship_id}</dd></div>
+                    <div><dt className="font-semibold">Task</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.task_id}</dd></div>
+                    <div><dt className="font-semibold">Work context</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{sentenceLabel(row.transfer_context?.work_context || "not specified")}</dd></div>
                     <div><dt className="font-semibold">Criterion</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.criterion_id}</dd></div>
                     <div><dt className="font-semibold">Mapping version</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">v{row.mapping_version}</dd></div>
                     <div><dt className="font-semibold">Artifact version</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.artifact_version_id}</dd></div>
