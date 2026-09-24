@@ -1,0 +1,42 @@
+{
+  "id": "sp_demo_data_analyst",
+  "slug": "demo-data-analyst",
+  "scenario_version_id": "sv_demo_data_analyst_v2",
+  "schema_version": 1,
+  "scenario_version": 2,
+  "title": "Data Analyst Intern Demo",
+  "career_family": "data_analysis",
+  "role_title": "Data Analyst Intern",
+  "region_context": "Fictional digital services company",
+  "company_ref": "org_northstar_analytics",
+  "minimum_duration_days": 90,
+  "expected_workload_band": "standard",
+  "classification": "demo",
+  "qualifying": false,
+  "initial_task_ids": [
+    "task_inspect_dataset"
+  ],
+  "initial_event_ids": [],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "manager",
+    "project_sponsor",
+    "colleague",
+    "reviewer_qa"
+  ],
+  "content_hash": "0abc7c18daca68b17c231beaaad459f87d147a23b14212db394399d4e1c4bb7c",
+  "review_policy": {
+    "midpoint_day": 45,
+    "final_review_day": 85,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}
