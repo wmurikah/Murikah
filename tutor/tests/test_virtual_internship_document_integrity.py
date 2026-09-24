@@ -46,7 +46,7 @@ class Phase9DocumentIntegrityTests(unittest.TestCase):
     def test_reissue_preserves_old_version_and_releases_current_slot_atomically(self):
         self.assertIn("issuance_status='superseded'",WORKER)
         self.assertIn("superseded_by_document_id",WORKER)
-        self.assertIn("documentVersion",WORKER.replace("document_version","documentVersion"))
+        self.assertIn("document_version",WORKER)
         self.assertIn("await env.TUTOR_DB.batch(statements)",WORKER)
 
 if __name__=="__main__":
