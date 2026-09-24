@@ -346,6 +346,55 @@ def internship_duration_status(actor_id: str, internship_id: str) -> dict[str, A
     }
 
 
+
+def internship_completion_status(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Return owner-bound deterministic Phase 8 completion requirements."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship completion persistence is unavailable.")
+    query = urlencode({
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+    })
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/internships/completion/status?{query}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship completion status response is invalid.")
+    return value
+
+
+def internship_completion_finalize(
+    actor_id: str,
+    internship_id: str,
+    *,
+    request_id: str,
+) -> dict[str, Any]:
+    """Request finalization; the Worker re-evaluates every completion gate."""
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/internships/completion/finalize",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "internship_id": _learning_text(internship_id, 128),
+            "request_id": _learning_text(request_id, 128),
+        },
+    )
+
+
+def internship_completion_integrity(actor_id: str, internship_id: str) -> dict[str, Any]:
+    """Read the deterministic completion consistency check without rewriting history."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship completion persistence is unavailable.")
+    query = urlencode({
+        "actor_id": _learning_text(actor_id, 128),
+        "internship_id": _learning_text(internship_id, 128),
+    })
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/internships/completion/integrity?{query}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship completion integrity response is invalid.")
+    return value
+
+
 def internship_object_key(
     actor_id: str,
     internship_id: str,
