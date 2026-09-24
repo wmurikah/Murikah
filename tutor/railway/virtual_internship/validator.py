@@ -5,12 +5,17 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from virtual_internship.completion.policy import (
+    COMPLETION_POLICY_FILENAME, CompletionPolicyError, validate_completion_policy,
+)
+
 SCENARIO_SCHEMA_VERSION = 1
 MAX_CANONICAL_JSON_BYTES = 1_048_576
 MAX_CASCADE_DEPTH = 16
 COMPONENTS = ("manifest","company","facts","actors","tasks","events","decisions")
 COMPONENT_FILES = {name: f"{name}.json" for name in COMPONENTS}
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "schema" / "v1" / "scenario-pack.schema.json"
+COMPLETION_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "schema" / "v1" / "completion-policy.schema.json"
 SCENARIOS_ROOT = Path(__file__).resolve().parents[2] / "virtual-internship" / "scenarios"
 TASK_STATES = {"locked","available","in_progress","completed","cancelled"}
 MUTATIONS = {"reveal_fact","set_mutable_fact","unlock_task","assign_task","adjust_deadline","record_decision"}
@@ -211,6 +216,15 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     schema=_load_json(SCHEMA_PATH)
     pack={name:_load_json(pack_dir/COMPONENT_FILES[name]) for name in COMPONENTS}
     _validate_schema(pack,schema,schema,"scenario")
+    completion_path=pack_dir/COMPLETION_POLICY_FILENAME
+    if completion_path.exists():
+        completion=_load_json(completion_path)
+        completion_schema=_load_json(COMPLETION_SCHEMA_PATH)
+        _validate_schema(completion,completion_schema,completion_schema,"completion")
+        try:
+            validate_completion_policy(completion,pack)
+        except CompletionPolicyError as exc:
+            _err(COMPLETION_POLICY_FILENAME,str(exc))
     manifest=pack["manifest"]
     if manifest["schema_version"]!=SCENARIO_SCHEMA_VERSION:_err("manifest.schema_version","unsupported schema version")
     required=set(manifest["required_components"])
