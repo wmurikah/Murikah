@@ -27,6 +27,10 @@ function text(value:unknown,max:number):string{const out=String(value??'').trim(
 function id(value:unknown):string{const out=text(value,128);return ID.test(out)?out:'';}
 function requestId(value:unknown):string{const out=text(value,128);return REQUEST_ID.test(out)?out:'';}
 function int(value:unknown):number{const out=Number(value);return Number.isSafeInteger(out)?out:0;}
+function strictInt(value:unknown):number|null{
+  if(typeof value!=='number'||!Number.isSafeInteger(value))return null;
+  return value;
+}
 function generated(prefix:string):string{return prefix+'_'+crypto.randomUUID().replace(/-/g,'');}
 function parseJson(value:unknown,fallback:unknown):unknown{try{return JSON.parse(String(value??''));}catch{return fallback;}}
 function stable(value:unknown):unknown{
@@ -224,9 +228,10 @@ export async function handlePhase6AssessmentPersistenceRoute(
   if(route==='/internships/assistance/record'&&request.method==='POST'){
     if(owned.status!=='active')return json({error:'internship_not_active'},409);
     const req=requestId(body.request_id),taskId=id(body.task_id)||'',artifactId=id(body.artifact_id)||'',versionId=id(body.artifact_version_id)||'';
-    const source=text(body.source,40),provenance=text(body.provenance,40),level=int(body.assistance_level);
+    const source=text(body.source,40),provenance=text(body.provenance,40),level=strictInt(body.assistance_level);
     const category=text(body.category,80),summary=text(body.summary,1000),modelInvocation=id(body.model_invocation_id)||'';
-    if(!req||!ASSISTANCE_SOURCES.has(source)||!ASSISTANCE_PROVENANCE.has(provenance)||level<0||level>5||!category)return json({error:'invalid_assistance_event'},400);
+    const expectedProvenance=source==='external_declared'?'learner_declared':(source==='murikah_mentor'||source==='approved_tool'?'system_observed':'');
+    if(!req||!ASSISTANCE_SOURCES.has(source)||!ASSISTANCE_PROVENANCE.has(provenance)||provenance!==expectedProvenance||level===null||level<0||level>5||!category)return json({error:'invalid_assistance_event'},400);
     const existing=await env.TUTOR_DB.prepare('SELECT * FROM internship_assistance_events WHERE internship_id = ? AND request_id = ? LIMIT 1')
       .bind(internshipId,req).first<Record<string,unknown>>();
     if(existing)return json({ok:true,idempotent_replay:true,assistance_event:existing});
@@ -235,12 +240,17 @@ export async function handlePhase6AssessmentPersistenceRoute(
       if(!task)return json({error:'task_not_found'},404);
     }
     if(artifactId){
-      const artifact=await env.TUTOR_DB.prepare('SELECT id FROM internship_artifacts WHERE internship_id = ? AND id = ? LIMIT 1').bind(internshipId,artifactId).first();
+      const artifact=await env.TUTOR_DB.prepare('SELECT id, task_id FROM internship_artifacts WHERE internship_id = ? AND id = ? LIMIT 1')
+        .bind(internshipId,artifactId).first<Record<string,unknown>>();
       if(!artifact)return json({error:'artifact_not_found'},404);
+      if(taskId&&String(artifact.task_id||'')!==taskId)return json({error:'assistance_lineage_mismatch'},409);
     }
     if(versionId){
-      const version=await env.TUTOR_DB.prepare('SELECT id FROM internship_artifact_versions WHERE internship_id = ? AND id = ? LIMIT 1').bind(internshipId,versionId).first();
+      const version=await env.TUTOR_DB.prepare('SELECT id, artifact_id, task_id FROM internship_artifact_versions WHERE internship_id = ? AND id = ? LIMIT 1')
+        .bind(internshipId,versionId).first<Record<string,unknown>>();
       if(!version)return json({error:'artifact_version_not_found'},404);
+      if(artifactId&&String(version.artifact_id||'')!==artifactId)return json({error:'assistance_lineage_mismatch'},409);
+      if(taskId&&String(version.task_id||'')!==taskId)return json({error:'assistance_lineage_mismatch'},409);
     }
     const eventId=generated('assist');
     await env.TUTOR_DB.prepare(
