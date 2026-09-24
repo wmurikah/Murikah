@@ -202,6 +202,39 @@ class PersistenceClientTests(unittest.TestCase):
         self.assertEqual(writes[0]["preferred_name"], "Will")
         self.assertEqual(writes[1]["preferred_name"], "")
 
+
+    def test_passport_admin_adjustment_uses_signed_private_route(self):
+        original_json = persistence._json_request
+        captured = {}
+
+        def fake_json(method, path, payload=None):
+            captured.update(method=method, path=path, payload=payload or {})
+            return {"ok": True}
+
+        persistence._json_request = fake_json
+        try:
+            result = persistence.internship_passport_adjust_evidence(
+                "admin_1",
+                "ce_1",
+                action="superseded",
+                replacement_evidence_id="ce_2",
+                reason="Verified processing correction.",
+                request_id="req-correction-1",
+            )
+        finally:
+            persistence._json_request = original_json
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["path"], "/__muri/persist/internships/passport/evidence-adjust")
+        self.assertEqual(captured["payload"]["actor_id"], "admin_1")
+        self.assertEqual(captured["payload"]["evidence_id"], "ce_1")
+        self.assertEqual(captured["payload"]["replacement_evidence_id"], "ce_2")
+        with self.assertRaises(ValueError):
+            persistence.internship_passport_adjust_evidence(
+                "admin_1","ce_1",action="superseded",reason="x",request_id="req-2"
+            )
+
     def test_provider_catalog_and_auth_secret_are_not_checkpointed(self):
         self.assertTrue(persistence._skip("system/auth/auth_secret"))
         self.assertTrue(persistence._skip("user/settings/model_catalog.json"))

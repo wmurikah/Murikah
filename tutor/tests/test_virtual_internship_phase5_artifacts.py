@@ -266,7 +266,7 @@ class Phase5ArtifactTests(unittest.TestCase):
             "invoke_workflow_review", "ScenarioStateService().transition_task",
         ):
             self.assertIn(marker, router)
-        for forbidden in ("OpenAI(", "Anthropic(", "Gemini(", "competency_passport", '"status": "accepted"'):
+        for forbidden in ("OpenAI(", "Anthropic(", "Gemini(", '"status": "accepted"'):
             self.assertNotIn(forbidden, router)
         for marker in (
             "Acknowledge assignment", "Save draft", "Submit Version ", "Upload file",

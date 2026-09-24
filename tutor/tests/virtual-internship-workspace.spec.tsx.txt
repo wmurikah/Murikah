@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 const workspace = {
   state: "active",
   simulation: true,
-  sections: ["overview", "inbox", "work", "company", "documents", "meetings", "mentor", "activity"],
+  sections: ["overview", "inbox", "work", "company", "documents", "meetings", "mentor", "passport", "activity"],
   internship: {
     internship_id: "vi_1",
     status: "active",
@@ -793,6 +793,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
       ["Documents", "/virtual-internship/documents"],
       ["Meetings", "/virtual-internship/meetings"],
       ["Mentor", "/virtual-internship/mentor"],
+      ["Passport", "/virtual-internship/passport"],
       ["Activity", "/virtual-internship/activity"],
     ] as const;
     for (const [label, href] of links) {
@@ -868,6 +869,111 @@ describe("Virtual Internship workplace through Phase 6", () => {
     vi.stubGlobal("fetch", workspaceFetch());
     render(<MurikahVirtualInternshipWorkspace />);
     expect(await screen.findByLabelText("Your reflection")).toBeVisible();
+  });
+
+  it("renders the evidence-backed Passport and drills down to exact assessed lineage", async () => {
+    nav.pathname = "/virtual-internship/passport";
+    const passport = {
+      ok: true,
+      aggregation_ruleset_version: "phase7-passport-aggregation-v1",
+      evidence_ruleset_version: "phase7-evidence-strength-v1",
+      level_framework: [
+        { id: "emerging", label: "Emerging", meaning: "Early demonstrated evidence exists." },
+        { id: "developing", label: "Developing", meaning: "Repeated partial or improving demonstration." },
+        { id: "applied_with_support", label: "Applied with support", meaning: "Credible application with material assistance." },
+        { id: "independent", label: "Independent", meaning: "Successful low-assistance performance." },
+        { id: "advanced", label: "Advanced", meaning: "Repeated independent performance across contexts." },
+      ],
+      definitions: [{
+        competency_id: "comp_reconciliation", definition_version: 1, name: "Reconciliation",
+        description: "Reconciles records systematically and identifies supported discrepancies.",
+        domain: "internal_audit", level_framework_version: "phase7-levels-v1",
+        evidence_requirements: {
+          emerging: { min_records: 1, min_candidate: "developing" },
+          independent: { min_records: 2, min_candidate: "independent", min_independent: 1 },
+        }, context_metadata: { physical: false },
+      }],
+      competencies: [{
+        competency_id: "comp_reconciliation", definition_version: 1, name: "Reconciliation",
+        description: "Reconciles records systematically and identifies supported discrepancies.",
+        domain: "internal_audit", level_framework_version: "phase7-levels-v1",
+        current_level: "independent", evidence_strength_summary: "strong", evidence_count: 3,
+        independent_count: 2, assisted_count: 1, distinct_task_count: 2, distinct_context_count: 2,
+        distinct_internship_count: 2, trend: "improving", last_demonstrated_at: 1_790_700_000,
+        explanation: {
+          qualifying_evidence_records: 3, independent_demonstrations: 2,
+          distinct_task_contexts: 2, distinct_transfer_contexts: 2, expired_evidence_records: 1,
+        }, next_requirements: [{ kind: "independent_demonstrations", count: 1 }],
+        aggregation_ruleset_version: "phase7-passport-aggregation-v1",
+      }],
+    };
+    const evidence = {
+      ok: true,
+      evidence: [{
+        id: "ce_1", competency_id: "comp_reconciliation", definition_version: 1,
+        internship_id: "vi_1", scenario_pack_id: "sp_demo_internal_audit",
+        scenario_version_id: "sv_demo_internal_audit_v2", scenario_title: "Internal Audit",
+        task_id: "task_reconcile_sample", artifact_id: "art_1", artifact_title: "Reconciliation memo",
+        artifact_type: "memo", artifact_version_id: "ver_2", submission_id: "sub_2",
+        assessment_id: "asm_2", criterion_id: "evidence_reasoning", mapping_version: 1, criterion_rating_id: "meets",
+        demonstrated_level: "independent", evidence_strength: "strong", assistance_level: 0,
+        assistance_context: { label: "Independent demonstration", recorded_event_count: 0 },
+        revision_context: { artifact_version_number: 2, submission_number: 2, revision_count: 1 },
+        strength_factors: {
+          formal_assessment_completed: true, exact_lineage_valid: true,
+          specific_evidence_references: true, low_assistance_context: true,
+        }, transfer_context: { work_context: "reconciliation" },
+        limitations: ["Only the submitted artifact version was assessed."],
+        source_type: "virtual_internship", evidence_ruleset_version: "phase7-evidence-strength-v1",
+        created_at: 1_790_700_000, assessment_date: 1_790_700_000, adjustments: [],
+      }],
+    };
+    vi.stubGlobal("fetch", workspaceFetch((url) => {
+      if (url.endsWith("/passport")) return jsonResponse(passport);
+      if (url.includes("/passport/evidence?competency_id=comp_reconciliation")) return jsonResponse(evidence);
+      return undefined;
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Competency Passport" })).toBeVisible();
+    expect(screen.getAllByText("Independent").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Strong")).toBeVisible();
+    expect(screen.getByText("3")).toBeVisible();
+    expect(screen.getByText(/Why this level: 3 qualifying evidence records/)).toBeVisible();
+    expect(screen.getByText(/1 historical evidence record excluded from the current level/)).toBeVisible();
+    expect(screen.queryByText(/employability percentage|job ready|percentile/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review evidence" }));
+    expect(await screen.findByText("Reconciliation memo")).toBeVisible();
+    expect(screen.getByText("ver_2")).toBeVisible();
+    expect(screen.getByText("sub_2")).toBeVisible();
+    expect(screen.getByText("v1")).toBeVisible();
+    expect(screen.getByText(/Independent demonstration/)).toBeVisible();
+    expect(screen.getByText("vi_1")).toBeVisible();
+    expect(screen.getByText("task_reconcile_sample")).toBeVisible();
+    expect(screen.getAllByText("Reconciliation").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Why this evidence has this strength/)).toBeVisible();
+    expect(screen.getByText(/Exact lineage valid/)).toBeVisible();
+    expect(screen.getByText(/Only the submitted artifact version was assessed/)).toBeVisible();
+    expect(screen.queryByText(/hidden scenario|system prompt|chain-of-thought/i)).toBeNull();
+  });
+
+  it("shows an honest Passport empty state without awarding Emerging for starting an internship", async () => {
+    nav.pathname = "/virtual-internship/passport";
+    vi.stubGlobal("fetch", workspaceFetch((url) => {
+      if (url.endsWith("/passport")) return jsonResponse({
+        ok: true,
+        aggregation_ruleset_version: "phase7-passport-aggregation-v1",
+        evidence_ruleset_version: "phase7-evidence-strength-v1",
+        level_framework: [],
+        definitions: [],
+        competencies: [],
+      });
+      return undefined;
+    }));
+    render(<MurikahVirtualInternshipWorkspace />);
+    expect(await screen.findByText("No verified competency evidence yet.")).toBeVisible();
+    expect(screen.getByText(/Starting or submitting work alone does not award a competency level/)).toBeVisible();
+    expect(screen.queryByText("Emerging")).toBeNull();
   });
 
   it("uses a layout-shaped loading state and learner-safe recoverable error", async () => {

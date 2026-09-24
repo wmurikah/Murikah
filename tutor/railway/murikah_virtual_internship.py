@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
 from deeptutor.murikah_access import check_origin
+from deeptutor.murikah_personalization import personalization_for_actor
 from deeptutor.services.auth import TokenPayload
 from deeptutor.virtual_internship.ai.orchestrator import AIOrchestrationError, VirtualInternshipAIOrchestrator
 from deeptutor.virtual_internship.ai.roles import ASSESSOR_PROMPT_VERSION
@@ -28,6 +29,7 @@ from deeptutor.virtual_internship.assessment.reviews import (
     deterministic_review_findings,
     review_eligibility,
 )
+from deeptutor.virtual_internship.passport.export import build_passport_export
 from deeptutor.virtual_internship.state import ScenarioStateService
 from deeptutor.virtual_internship.workspace import VirtualInternshipWorkspaceService
 
@@ -108,6 +110,10 @@ class ExternalAssistanceRequest(BaseModel):
     summary: str = Field(default="",max_length=1000)
 
 
+class PassportExportRequest(BaseModel):
+    include_display_name: bool = False
+
+
 
 def _identity(payload: TokenPayload) -> tuple[str,str,bool]:
     actor_id = str(getattr(payload,"user_id","") or "")
@@ -121,7 +127,7 @@ def _guest_workspace() -> dict[str,Any]:
         "simulation":True,
         "title":"Murikah Virtual Internship",
         "description":"A persistent simulated workplace for practising real knowledge-work responsibilities over time.",
-        "sections":["overview","inbox","work","company","documents","meetings","mentor","activity"],
+        "sections":["overview","inbox","work","company","documents","meetings","mentor","passport","activity"],
     }
 
 
@@ -447,6 +453,13 @@ async def _run_formal_assessment(
                 if isinstance(row,dict)
             ],
         )
+        # Phase 6 completion remains authoritative even if Phase 7 derivation is
+        # temporarily unavailable. Reconciliation is idempotent and also runs
+        # on the learner Passport read path, so evidence cannot disappear forever.
+        try:
+            persistence.internship_passport_reconcile(actor_id,internship_id)
+        except Exception:
+            pass
         current = persistence.internship_assessment_summary(actor_id,internship_id)
         return {"status":"completed","assessment":_assessment_by_id(current,assessment_id)}
     except AIOrchestrationError:
@@ -895,6 +908,74 @@ async def declare_external_assistance(
     except Exception as exc:
         raise _safe_http(exc,"That assistance declaration could not be saved. Try again.") from exc
 
+
+
+@router.get("/passport")
+async def competency_passport(
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"view your Competency Passport")
+    persistence=_persistence()
+    try:
+        persistence.internship_passport_reconcile(actor_id)
+        return persistence.internship_passport_summary(actor_id)
+    except Exception as exc:
+        raise _safe_http(exc,"Your Competency Passport could not be loaded. Try again.") from exc
+
+
+@router.get("/passport/evidence")
+async def competency_passport_evidence(
+    competency_id: str = Query(default="",max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"view your Competency Passport evidence")
+    persistence=_persistence()
+    try:
+        persistence.internship_passport_reconcile(actor_id)
+        return persistence.internship_passport_evidence(actor_id,competency_id)
+    except Exception as exc:
+        raise _safe_http(exc,"Your competency evidence could not be loaded. Try again.") from exc
+
+
+@router.post("/passport/export")
+async def export_competency_passport(
+    body: PassportExportRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id=_member(current,"export your Competency Passport")
+    _actor_id, username, _guest = _identity(current)
+    persistence=_persistence()
+    try:
+        persistence.internship_passport_reconcile(actor_id)
+        source=persistence.internship_passport_export_source(actor_id)
+        display_name=""
+        if body.include_display_name:
+            personalization=personalization_for_actor(actor_id,username)
+            display_name=str(
+                personalization.get("preferred_name")
+                or personalization.get("derived_name")
+                or ""
+            )
+        payload=build_passport_export(
+            passport={"competencies":source.get("competencies",[])},
+            evidence=[row for row in source.get("evidence",[]) if isinstance(row,dict)],
+            definitions=[row for row in source.get("definitions",[]) if isinstance(row,dict)],
+            include_display_name=body.include_display_name,
+            display_name=display_name,
+        )
+        return Response(
+            content=json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2).encode("utf-8"),
+            media_type="application/json",
+            headers={
+                "cache-control":"private, no-store",
+                "content-disposition":'attachment; filename="murikah-competency-passport.json"',
+                "x-content-type-options":"nosniff",
+            },
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"Your Competency Passport export could not be created. Try again.") from exc
 
 
 @router.get("/workspace")
