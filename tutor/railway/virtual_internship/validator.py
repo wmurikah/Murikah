@@ -1,6 +1,7 @@
 """Strict, offline Virtual Internship scenario-pack validation."""
 from __future__ import annotations
 import copy, hashlib, json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,7 @@ def _validate_schema(value: Any, schema: dict[str, Any], root: dict[str, Any], p
         (kind=="array" and isinstance(value,list)) or
         (kind=="string" and isinstance(value,str)) or
         (kind=="integer" and isinstance(value,int) and not isinstance(value,bool)) or
+        (kind=="number" and isinstance(value,(int,float)) and not isinstance(value,bool)) or
         (kind=="boolean" and isinstance(value,bool)) or
         (kind=="null" and value is None)
     )
@@ -84,9 +86,14 @@ def _validate_schema(value: Any, schema: dict[str, Any], root: dict[str, Any], p
         if len(value)<schema.get("minLength",0): _err(path,"is too short")
         if len(value)>schema.get("maxLength",10**9): _err(path,"is too long")
         if schema.get("pattern") and not re.fullmatch(schema["pattern"],value): _err(path,"has invalid format")
-    if isinstance(value,int) and not isinstance(value,bool):
-        if value<schema.get("minimum",-10**18): _err(path,"is below minimum")
-        if value>schema.get("maximum",10**18): _err(path,"is above maximum")
+    if isinstance(value,(int,float)) and not isinstance(value,bool):
+        try:
+            numeric=Decimal(str(value))
+        except InvalidOperation:
+            _err(path,"is not a finite number")
+        if not numeric.is_finite(): _err(path,"is not a finite number")
+        if numeric<Decimal(str(schema.get("minimum",-10**18))): _err(path,"is below minimum")
+        if numeric>Decimal(str(schema.get("maximum",10**18))): _err(path,"is above maximum")
 
 def _load_json(path: Path) -> Any:
     try: return json.loads(path.read_text(encoding="utf-8"))
