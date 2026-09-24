@@ -2024,6 +2024,7 @@ function PassportView() {
   const [evidence, setEvidence] = useState<CompetencyEvidenceView[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [includeNameInExport, setIncludeNameInExport] = useState(false);
 
   async function loadPassport() {
     setLoading(true);
@@ -2067,7 +2068,7 @@ function PassportView() {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ include_display_name: false }),
+        body: JSON.stringify({ include_display_name: includeNameInExport }),
       });
       if (!response.ok) throw new Error(await responseError(response, "Your Passport export could not be created."));
       const blob = await response.blob();
@@ -2110,14 +2111,24 @@ function PassportView() {
               Levels are calculated from traceable evidence, not an AI opinion or an overall employability score.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void exportPassport()}
-            disabled={exporting}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold hover:bg-[var(--background)] disabled:opacity-60"
-          >
-            {exporting ? "Preparing export…" : "Export JSON"}
-          </button>
+          <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+            <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <input
+                type="checkbox"
+                checked={includeNameInExport}
+                onChange={(event) => setIncludeNameInExport(event.target.checked)}
+              />
+              Include my display name in this export
+            </label>
+            <button
+              type="button"
+              onClick={() => void exportPassport()}
+              disabled={exporting}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold hover:bg-[var(--background)] disabled:opacity-60"
+            >
+              {exporting ? "Preparing export…" : "Export JSON"}
+            </button>
+          </div>
         </div>
         {message ? <p className="mt-4 text-sm text-red-600" role="alert">{message}</p> : null}
       </Panel>
