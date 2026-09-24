@@ -117,6 +117,28 @@ A Phase 2 task is transitioned to `completed` through `ScenarioStateService.tran
 
 Stopped internships keep artifact/version/submission/review history and owner downloads available in read-only mode. Guests cannot create, upload, submit, review or retrieve member artifacts. Phase 5 does not add artifact deletion; submitted and accepted lineage therefore cannot be erased through a new convenience endpoint.
 
+## Virtual Internship Phase 6 assessment and reviews
+
+`0012_virtual_internship_phase6_assessment.sql` extends the Phase 5 immutable work-product lineage with formal assessment, assistance provenance and midpoint/final performance-review records. It does not create competency evidence, a Competency Passport, internship completion, a performance report, a completion letter, a certificate or verification identifier.
+
+The durable formal-assessment lineage is:
+
+`learner -> internship -> pinned scenario version -> task -> logical artifact -> exact artifact version -> exact submission -> authored rubric -> assessment -> criterion result -> evidence references`
+
+D1 adds `internship_assessments`, `internship_assessment_criteria`, `internship_assistance_events` and `internship_performance_reviews`. Completed assessment history and finalized review evidence are append-oriented and protected from destructive rewriting. A re-assessment uses a new logical request/assessment record rather than repointing historical evidence.
+
+The rubric definition remains part of the immutable scenario-version task definition. Phase 6 records the rubric ID, schema version, SHA-256 hash and deterministic calculation version `phase6-weighted-v1`. Weighted totals use Decimal arithmetic with an authored weight total of 100 and half-up rounding to two decimal places. The model never owns the aggregate calculation.
+
+The Phase 3 assessor role is reused through the existing model-selection, timeout, retry/fallback and invocation-audit path. The model receives an identity-minimized packet containing the exact authored rubric, exact bounded extracted evidence, required task context, learner-visible scenario facts, relevant workflow feedback and assistance metadata. Account email, preferred name, sensitive profile fields, unrelated inbox/tasks and private Mentor conversation text are excluded. Learner artifact text is treated as untrusted evidence data rather than model instruction.
+
+Criterion results must cite evidence reference IDs that were supplied to the assessor. Text evidence references carry the exact artifact, artifact-version and submission IDs plus bounded line-range locators. Cross-artifact, cross-version, cross-submission and out-of-source locators fail closed. Unsupported binary representations remain stored under the Phase 5 private R2 contract and do not receive a fabricated automated assessment.
+
+Assistance is append-only contextual provenance. The canonical Phase 3 levels 0 through 5 are reused. Murikah Mentor and approved-tool events are system-observed; external assistance is learner-declared. Assistance is not converted into an automatic score penalty. Timestamped events can be associated with the work period that preceded a submitted version without retroactively marking earlier versions.
+
+Midpoint and final performance reviews use server-authoritative internship time and the authored scenario review policy. Deterministic code first assembles and hashes a cutoff-bounded evidence snapshot from durable assessments, supervisor workflow reviews, reflections, assistance events and activity history. Reviews do not complete an internship and do not award Passport levels. Demo acceleration remains non-qualifying.
+
+All learner-facing assessment, assistance and review reads remain owner-bound through `internship_instances.learner_id`. Browser-facing Tutor routes call the HMAC-protected persistence bridge; the browser cannot directly persist arbitrary completed rubric results or choose a score.
+
 ## D1 learning journal
 
 `0003_tutor_learning_journal.sql` makes D1 the durable learning-data journal for Tutor. It stores:
