@@ -164,7 +164,7 @@ export async function handlePhase4WorkspacePersistenceRoute(
   }
 
   if (route === '/internships/ui/message' && request.method === 'POST') {
-    if (owned.status !== 'active') return json({error:'internship_stopped'},409);
+    if (owned.status !== 'active') return json({error:'internship_not_active'},409);
     const req = requestId(body.request_id);
     const messageId = id(body.message_id);
     const proposedThreadId = id(body.thread_id);
@@ -225,7 +225,7 @@ export async function handlePhase4WorkspacePersistenceRoute(
   }
 
   if (route === '/internships/ui/reflection' && request.method === 'POST') {
-    if (owned.status !== 'active') return json({error:'internship_stopped'},409);
+    if (owned.status !== 'active') return json({error:'internship_not_active'},409);
     const reflectionId = id(body.reflection_id);
     const period = text(body.period_key,80);
     const content = String(body.content ?? '');
