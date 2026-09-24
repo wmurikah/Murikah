@@ -14,6 +14,19 @@ from deeptutor.api.routers.auth import require_auth
 from deeptutor.murikah_access import check_origin
 from deeptutor.services.auth import TokenPayload
 from deeptutor.virtual_internship.ai.orchestrator import AIOrchestrationError, VirtualInternshipAIOrchestrator
+from deeptutor.virtual_internship.ai.roles import ASSESSOR_PROMPT_VERSION
+from deeptutor.virtual_internship.assessment.engine import FORMAL_ASSESSOR_SCHEMA_VERSION
+from deeptutor.virtual_internship.assessment.evidence import build_text_evidence_packet
+from deeptutor.virtual_internship.assessment.rubrics import (
+    RUBRIC_CALCULATION_VERSION,
+    rubric_hash,
+    validate_rubric,
+)
+from deeptutor.virtual_internship.assessment.reviews import (
+    build_review_snapshot,
+    deterministic_review_findings,
+    review_eligibility,
+)
 from deeptutor.virtual_internship.state import ScenarioStateService
 from deeptutor.virtual_internship.workspace import VirtualInternshipWorkspaceService
 
@@ -74,6 +87,25 @@ class ArtifactSubmitRequest(BaseModel):
 class ArtifactReviewRequest(BaseModel):
     internship_id: str = Field(min_length=1,max_length=128)
     request_id: str = Field(min_length=3,max_length=128)
+
+class FormalAssessmentRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class PerformanceReviewRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
+class ExternalAssistanceRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+    task_id: str = Field(default="",max_length=128)
+    assistance_level: int = Field(ge=0,le=5)
+    category: str = Field(default="external_tool",min_length=1,max_length=80)
+    summary: str = Field(default="",max_length=1000)
+
 
 
 def _identity(payload: TokenPayload) -> tuple[str,str,bool]:
@@ -302,6 +334,229 @@ async def _run_workflow_review(
             "review_unavailable":True,
             "message":"Supervisor review is temporarily unavailable. Please try again later.",
         }
+
+
+def _assessment_by_id(summary: dict[str,Any], assessment_id: str) -> dict[str,Any] | None:
+    rows = summary.get("assessments") if isinstance(summary,dict) else []
+    return next(
+        (
+            row for row in (rows if isinstance(rows,list) else [])
+            if isinstance(row,dict) and str(row.get("id") or "") == assessment_id
+        ),
+        None,
+    )
+
+
+async def _run_formal_assessment(
+    *,
+    actor_id: str,
+    internship_id: str,
+    submission_id: str,
+    logical_request_id: str,
+) -> dict[str,Any]:
+    persistence = _persistence()
+    material_result = persistence.internship_artifact_review_material(
+        actor_id, internship_id, submission_id
+    )
+    material = material_result.get("material") if isinstance(material_result,dict) else None
+    if not isinstance(material,dict):
+        raise HTTPException(404,"That submitted work is not available.")
+    task = material.get("task") if isinstance(material.get("task"),dict) else {}
+    authored_rubric = task.get("rubric") if isinstance(task,dict) else None
+    if not isinstance(authored_rubric,dict):
+        raise HTTPException(409,"Formal assessment is not authored for this assignment.")
+    try:
+        rubric = validate_rubric(authored_rubric)
+        evidence_packet = build_text_evidence_packet(material)
+    except ValueError as exc:
+        raise HTTPException(409,"This submission cannot be formally assessed with the current authored rubric.") from exc
+
+    start = persistence.internship_assessment_start(
+        actor_id,
+        internship_id,
+        submission_id,
+        rubric_id=str(rubric.get("rubric_id") or ""),
+        rubric_schema_version=int(rubric.get("schema_version") or 1),
+        rubric_hash=rubric_hash(rubric),
+        calculation_version=RUBRIC_CALCULATION_VERSION,
+        assessor_prompt_version=ASSESSOR_PROMPT_VERSION,
+        assessor_schema_version=FORMAL_ASSESSOR_SCHEMA_VERSION,
+        request_id=logical_request_id,
+    )
+    assessment = start.get("assessment") if isinstance(start,dict) else None
+    if not isinstance(assessment,dict):
+        raise RuntimeError("assessment_start_failed")
+    assessment_id = str(assessment.get("id") or "")
+    if not assessment_id:
+        raise RuntimeError("assessment_start_failed")
+    if start.get("cached") or str(assessment.get("status") or "") == "completed":
+        current = persistence.internship_assessment_summary(actor_id,internship_id)
+        return {"status":"completed","cached":True,"assessment":_assessment_by_id(current,assessment_id) or assessment}
+
+    references = evidence_packet.get("references") if isinstance(evidence_packet,dict) else []
+    if not references:
+        persistence.internship_assessment_fail(
+            actor_id,internship_id,assessment_id,
+            reason="No safe extracted evidence representation is available for formal automated assessment.",
+        )
+        return {
+            "status":"failed",
+            "assessment_id":assessment_id,
+            "message":"Formal assessment is not available for this submitted file representation. The submission remains safely stored and unchanged.",
+        }
+
+    phase6 = persistence.internship_assessment_summary(actor_id,internship_id)
+    submitted_at = int(material.get("submitted_at") or 0)
+    assistance_events = [
+        row for row in (
+            phase6.get("assistance_events",[]) if isinstance(phase6,dict) else []
+        )
+        if isinstance(row,dict) and int(row.get("event_time") or 0) <= submitted_at
+    ]
+    prior_reviews = material.get("prior_reviews") if isinstance(material.get("prior_reviews"),list) else []
+    try:
+        result, metadata = await VirtualInternshipAIOrchestrator(
+            ScenarioStateService()
+        ).invoke_formal_assessor(
+            owner_actor_id=actor_id,
+            internship_id=internship_id,
+            task_id=str(material.get("task_id") or ""),
+            assessment_id=assessment_id,
+            rubric=rubric,
+            evidence_packet=evidence_packet,
+            assistance_events=assistance_events,
+            workflow_feedback=prior_reviews,
+        )
+        persistence.internship_assessment_complete(
+            actor_id,
+            internship_id,
+            assessment_id,
+            model_invocation_id=str(metadata.get("invocation_id") or ""),
+            aggregate_numeric=(
+                str(result.get("aggregate_numeric"))
+                if result.get("aggregate_numeric") is not None else None
+            ),
+            overall_summary=str(result.get("overall_summary") or ""),
+            limitations=[
+                str(item) for item in result.get("limitations",[])
+                if isinstance(item,str)
+            ],
+            criterion_results=[
+                row for row in result.get("criterion_results",[])
+                if isinstance(row,dict)
+            ],
+        )
+        current = persistence.internship_assessment_summary(actor_id,internship_id)
+        return {"status":"completed","assessment":_assessment_by_id(current,assessment_id)}
+    except AIOrchestrationError:
+        persistence.internship_assessment_fail(
+            actor_id,internship_id,assessment_id,
+            reason="The structured assessor was unavailable or returned an invalid result.",
+        )
+        return {
+            "status":"failed",
+            "assessment_id":assessment_id,
+            "message":"Formal assessment is temporarily unavailable. No score or assessment result was awarded.",
+        }
+    except Exception:
+        try:
+            persistence.internship_assessment_fail(
+                actor_id,internship_id,assessment_id,
+                reason="Formal assessment failed validation or persistence.",
+            )
+        except Exception:
+            pass
+        raise
+
+
+def _build_performance_review(
+    actor_id: str,
+    internship_id: str,
+    review_type: str,
+    request_id: str,
+) -> dict[str,Any]:
+    if review_type not in {"midpoint","final"}:
+        raise HTTPException(404,"That performance review type is not available.")
+    workspace = _workspace_service().workspace(actor_id,internship_id)
+    internship = workspace.get("internship") if isinstance(workspace,dict) else None
+    if not isinstance(internship,dict):
+        raise HTTPException(404,"That internship is not available.")
+    state = str(workspace.get("state") or "")
+    if state not in {"active","stopped"}:
+        raise HTTPException(409,"That performance review is not available in the current internship state.")
+    definition_result = ScenarioStateService().definition(actor_id,internship_id)
+    definition = definition_result.get("definition") if isinstance(definition_result,dict) else None
+    manifest = definition.get("manifest") if isinstance(definition,dict) and isinstance(definition.get("manifest"),dict) else {}
+    now = int(internship.get("current_server_time") or 0)
+    started_at = int(internship.get("started_at") or 0)
+    eligibility = review_eligibility(
+        review_type=review_type,
+        manifest=manifest,
+        started_at=started_at,
+        now=now,
+    )
+    if not eligibility.get("eligible"):
+        raise HTTPException(
+            409,
+            f"This {review_type} performance review becomes available after internship day {eligibility.get('required_day')}.",
+        )
+
+    persistence = _persistence()
+    phase6 = persistence.internship_assessment_summary(actor_id,internship_id)
+    phase5 = persistence.internship_artifact_summary(actor_id,internship_id)
+    reflections_result = persistence.internship_ui_reflections(actor_id,internship_id)
+    snapshot = build_review_snapshot(
+        review_type=review_type,
+        cutoff_at=now,
+        assessments=[
+            row for row in phase6.get("assessments",[])
+            if isinstance(row,dict)
+        ] if isinstance(phase6,dict) else [],
+        workflow_reviews=[
+            row for row in phase5.get("reviews",[])
+            if isinstance(row,dict)
+        ] if isinstance(phase5,dict) else [],
+        reflections=[
+            row for row in reflections_result.get("reflections",[])
+            if isinstance(row,dict)
+        ] if isinstance(reflections_result,dict) else [],
+        assistance_events=[
+            row for row in phase6.get("assistance_events",[])
+            if isinstance(row,dict)
+        ] if isinstance(phase6,dict) else [],
+        activity=[
+            row for row in phase5.get("activity",[])
+            if isinstance(row,dict)
+        ] if isinstance(phase5,dict) else [],
+    )
+    snapshot_hash = str(snapshot.pop("snapshot_hash"))
+    findings = deterministic_review_findings(snapshot)
+    stored = persistence.internship_performance_review_record(
+        actor_id,
+        internship_id,
+        review_type=review_type,
+        cutoff_at=now,
+        evidence_snapshot=snapshot,
+        evidence_snapshot_hash=snapshot_hash,
+        strengths=findings["strengths"],
+        development_areas=findings["development_areas"],
+        priorities=findings["priorities"],
+        assistance_summary=findings["assistance_summary"],
+        narrative=findings["narrative"],
+        request_id=request_id,
+    )
+    review = stored.get("performance_review") if isinstance(stored,dict) else {}
+    return {
+        "ok":True,
+        "review":{
+            "id":str((review or {}).get("id") or ""),
+            "review_type":review_type,
+            "cutoff_at":now,
+            "evidence_snapshot_hash":snapshot_hash,
+            **findings,
+        },
+    }
+
 
 
 @router.post("/tasks/{task_id}/acknowledge")
@@ -545,6 +800,84 @@ async def retry_workflow_review(
         )
     except Exception as exc:
         raise _artifact_http(exc,"Supervisor review is temporarily unavailable. Please try again later.") from exc
+
+
+@router.get("/assessments")
+async def assessment_summary(
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id = _member(current,"view formal internship assessments")
+    try:
+        return _persistence().internship_assessment_summary(actor_id,internship_id)
+    except Exception as exc:
+        raise _safe_http(exc,"Formal assessment history could not be loaded. Try again.") from exc
+
+
+@router.post("/submissions/{submission_id}/assessment")
+async def request_formal_assessment(
+    submission_id: str,
+    body: FormalAssessmentRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"request formal internship assessment")
+    try:
+        return await _run_formal_assessment(
+            actor_id=actor_id,
+            internship_id=body.internship_id,
+            submission_id=submission_id,
+            logical_request_id=body.request_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _safe_http(exc,"Formal assessment could not be completed. Try again later.") from exc
+
+
+@router.post("/performance-reviews/{review_type}")
+async def create_performance_review(
+    review_type: str,
+    body: PerformanceReviewRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"create an internship performance review")
+    try:
+        return _build_performance_review(
+            actor_id,body.internship_id,review_type,body.request_id
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _safe_http(exc,"That performance review could not be created. Try again later.") from exc
+
+
+@router.post("/assistance/external")
+async def declare_external_assistance(
+    body: ExternalAssistanceRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id = _member(current,"declare external assistance")
+    try:
+        return _persistence().internship_assistance_record(
+            actor_id,
+            body.internship_id,
+            task_id=body.task_id,
+            source="external_declared",
+            provenance="learner_declared",
+            assistance_level=body.assistance_level,
+            category=body.category,
+            summary=body.summary,
+            request_id=body.request_id,
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"That assistance declaration could not be saved. Try again.") from exc
+
 
 
 @router.get("/workspace")
@@ -845,6 +1178,18 @@ async def _mentor_stream(
                     related_model_invocation_id=str(metadata.get("invocation_id") or ""),
                 )
                 message = persisted.get("message") if isinstance(persisted,dict) else {}
+                persistence.internship_assistance_record(
+                    actor_id,
+                    body.internship_id,
+                    task_id=body.task_id,
+                    source="murikah_mentor",
+                    provenance="system_observed",
+                    assistance_level=assistance_level,
+                    category="mentor_guidance",
+                    summary=f"Murikah Mentor guidance provided at {assistance_label}.",
+                    model_invocation_id=str(metadata.get("invocation_id") or ""),
+                    request_id=body.request_id + ":assistance",
+                )
                 yield (json.dumps({"type":"final","text":final_text,"message_id":str((message or {}).get("id") or ""),"assistance_label":assistance_label},ensure_ascii=False) + "\n").encode()
                 return
     except AIOrchestrationError as exc:
