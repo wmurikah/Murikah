@@ -64,9 +64,10 @@ export async function handlePhase3AIPersistenceRoute(
     return response({ error: 'authentication_required' }, 401);
   }
   const owned = await env.TUTOR_DB.prepare(
-    'SELECT id, scenario_version_id FROM internship_instances WHERE id = ? AND learner_id = ? LIMIT 1',
-  ).bind(internshipId, actorId).first<{ id: string; scenario_version_id: string }>();
+    'SELECT id, scenario_version_id, status FROM internship_instances WHERE id = ? AND learner_id = ? LIMIT 1',
+  ).bind(internshipId, actorId).first<{ id: string; scenario_version_id: string; status: string }>();
   if (!owned) return response({ error: 'internship_not_found' }, 404);
+  if (owned.status !== 'active') return response({ error: 'internship_not_active' }, 409);
 
   const scenarioVersionId = str(body.scenario_version_id, 128);
   const role = str(body.model_role, 32);
