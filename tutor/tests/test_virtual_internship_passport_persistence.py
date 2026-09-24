@@ -72,6 +72,77 @@ class Phase7PersistenceTests(unittest.TestCase):
         self.assertIn("competency_definition_compatibility",source)
         self.assertIn("expires_after_days",source)
 
+
+    def test_restart_preserves_evidence_and_materialized_passport_without_process_memory(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/"restart.sqlite3"
+            db=sqlite3.connect(path)
+            bootstrap(db)
+            db.executescript(MIGRATION.read_text())
+            db.execute("INSERT INTO tutor_accounts(actor_id) VALUES ('learner_a')")
+            db.execute("INSERT INTO internship_instances(id,learner_id) VALUES ('vi_1','learner_a')")
+            db.execute("INSERT INTO internship_artifacts(id) VALUES ('art_1')")
+            db.execute("INSERT INTO internship_artifact_versions(id) VALUES ('ver_1')")
+            db.execute("INSERT INTO internship_artifact_submissions(id) VALUES ('sub_1')")
+            db.execute("INSERT INTO internship_assessments(id) VALUES ('asm_1')")
+            db.execute("INSERT INTO internship_assessment_criteria(assessment_id,criterion_id) VALUES ('asm_1','evidence_reasoning')")
+            evidence_values=(
+                "ce_1","learner_a","comp_reconciliation",1,"","vi_1","sp_demo_internal_audit",
+                "sv_demo_internal_audit_v2","task_reconcile_sample","art_1","ver_1","sub_1","asm_1",
+                "evidence_reasoning",1,"meets","75","independent",0,"{}","{}","strong","{}",
+                '{"career_family":"internal_audit","work_context":"reconciliation"}',"[]",
+                "virtual_internship","phase7-evidence-strength-v1",100,
+            )
+            db.execute(
+                """INSERT INTO competency_evidence(
+                id,learner_id,competency_id,definition_version,sub_competency_id,internship_id,
+                scenario_pack_id,scenario_version_id,task_id,artifact_id,artifact_version_id,submission_id,
+                assessment_id,criterion_id,mapping_version,criterion_rating_id,criterion_numeric,
+                demonstrated_level,assistance_level,assistance_context_json,revision_context_json,
+                evidence_strength,strength_factors_json,transfer_context_json,limitations_json,
+                source_type,evidence_ruleset_version,created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                evidence_values,
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    """INSERT INTO competency_evidence(
+                    id,learner_id,competency_id,definition_version,sub_competency_id,internship_id,
+                    scenario_pack_id,scenario_version_id,task_id,artifact_id,artifact_version_id,submission_id,
+                    assessment_id,criterion_id,mapping_version,criterion_rating_id,criterion_numeric,
+                    demonstrated_level,assistance_level,assistance_context_json,revision_context_json,
+                    evidence_strength,strength_factors_json,transfer_context_json,limitations_json,
+                    source_type,evidence_ruleset_version,created_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    ("ce_retry",)+evidence_values[1:],
+                )
+            db.execute(
+                """INSERT INTO competency_passports(
+                learner_id,competency_id,definition_version,current_level,evidence_strength_summary,
+                evidence_count,independent_count,assisted_count,distinct_task_count,distinct_context_count,
+                distinct_internship_count,trend,last_demonstrated_at,explanation_json,next_requirements_json,
+                aggregation_ruleset_version,calculated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    "learner_a","comp_reconciliation",1,"emerging","strong",1,1,0,1,1,1,
+                    "insufficient_evidence",100,'{"qualifying_evidence_records":1}',"[]",
+                    "phase7-passport-aggregation-v1",101,
+                ),
+            )
+            db.commit()
+            db.close()
+
+            reopened=sqlite3.connect(path)
+            self.assertEqual(
+                reopened.execute("SELECT id,artifact_version_id,submission_id,mapping_version FROM competency_evidence").fetchone(),
+                ("ce_1","ver_1","sub_1",1),
+            )
+            self.assertEqual(
+                reopened.execute("SELECT current_level,evidence_count,aggregation_ruleset_version FROM competency_passports").fetchone(),
+                ("emerging",1,"phase7-passport-aggregation-v1"),
+            )
+            reopened.close()
+
     def test_learner_api_uses_authenticated_actor_not_browser_owner_fields(self):
         source=ROUTER.read_text()
         self.assertIn('actor_id=_member(current,"view your Competency Passport")',source)
