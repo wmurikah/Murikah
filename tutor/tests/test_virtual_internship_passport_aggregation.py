@@ -95,6 +95,15 @@ class Phase7AggregationTests(unittest.TestCase):
         self.assertEqual(result["explanation"]["historical_evidence_records"],2)
         self.assertEqual(result["explanation"]["expired_evidence_records"],1)
 
+
+    def test_newer_mapping_version_does_not_double_count_same_logical_contribution(self):
+        base=ev(1,"independent","vi_1","task_1","one")
+        older={**base,"id":"ev_old","assessment_id":"asm_1","criterion_id":"c1","competency_id":"comp_x","mapping_version":1}
+        newer={**base,"id":"ev_new","assessment_id":"asm_1","criterion_id":"c1","competency_id":"comp_x","mapping_version":2}
+        result=aggregate_competency(definition=DEFINITION,evidence=[older,newer])
+        self.assertEqual(result["evidence_count"],1)
+        self.assertEqual(result["current_level"],"emerging")
+
     def test_revoked_evidence_is_excluded(self):
         rows=[ev(1),{**ev(2),"revoked":True}]
         result=aggregate_competency(definition=DEFINITION,evidence=rows)
