@@ -1815,6 +1815,8 @@ def main() -> int:
         (
             "CREATE TABLE IF NOT EXISTS competency_definitions",
             "CREATE TABLE IF NOT EXISTS competency_assessment_mappings",
+            "rating_contribution_json TEXT NOT NULL",
+            "max_independent_assistance INTEGER NOT NULL",
             "CREATE TABLE IF NOT EXISTS competency_evidence",
             "mapping_version INTEGER NOT NULL",
             "CREATE TABLE IF NOT EXISTS competency_passports",
@@ -1844,6 +1846,9 @@ def main() -> int:
             "/internships/passport/summary",
             "/internships/passport/evidence",
             "competency_assessment_mappings",
+            "rating_contribution_json",
+            "max_independent_assistance",
+            "p7Candidate(mapping",
             "a.status='completed'",
             "event_time<=?",
             "LEFT JOIN competency_derivation_status",
