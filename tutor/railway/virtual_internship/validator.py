@@ -146,6 +146,53 @@ def _event_dependency_cycle(events:list[dict[str,Any]]) -> None:
         visiting.remove(node); visited.add(node)
     for node in sorted(ids):visit(node)
 
+
+def _validate_phase6_rubrics(pack: dict[str,Any]) -> None:
+    """Validate authored rubric semantics without creating a second authority."""
+    for task in pack.get("tasks", []):
+        rubric=task.get("rubric")
+        if rubric is None:
+            continue
+        levels=rubric.get("rating_levels", [])
+        level_ids=[str(row.get("rating_id","")) for row in levels]
+        if len(level_ids)!=len(set(level_ids)):
+            _err(f"tasks.{task['task_id']}.rubric.rating_levels","duplicate rating_id")
+        criteria=rubric.get("criteria", [])
+        criterion_ids=[str(row.get("criterion_id","")) for row in criteria]
+        if len(criterion_ids)!=len(set(criterion_ids)):
+            _err(f"tasks.{task['task_id']}.rubric.criteria","duplicate criterion_id")
+        allowed_levels=set(level_ids)
+        total=Decimal("0")
+        for criterion in criteria:
+            if not set(criterion.get("allowed_rating_ids", []))<=allowed_levels:
+                _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown rating_id")
+            if not set(criterion.get("deliverable_types", []))<=set(task.get("deliverable_types", [])):
+                _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown deliverable type")
+            try:
+                weight=Decimal(str(criterion.get("weight")))
+            except (InvalidOperation, ValueError):
+                _err(f"tasks.{task['task_id']}.rubric","invalid criterion weight")
+            if weight < 0:
+                _err(f"tasks.{task['task_id']}.rubric","criterion weight must be non-negative")
+            total+=weight
+        calculation=rubric.get("calculation", {})
+        if calculation.get("method")=="weighted_average" and total!=Decimal("100"):
+            _err(f"tasks.{task['task_id']}.rubric","weighted criteria must total 100")
+
+def _validate_review_policy(manifest: dict[str,Any]) -> None:
+    policy=manifest.get("review_policy")
+    if not isinstance(policy,dict):
+        return
+    midpoint=int(policy["midpoint_day"]); final=int(policy["final_review_day"])
+    if final < midpoint:
+        _err("manifest.review_policy","final_review_day must not precede midpoint_day")
+    minimum=int(manifest["minimum_duration_days"])
+    if midpoint > minimum or final > minimum:
+        _err("manifest.review_policy","review days must fall within the authored internship duration")
+    demo_mid=int(policy["demo_accelerated_midpoint_day"]); demo_final=int(policy["demo_accelerated_final_day"])
+    if demo_final < demo_mid:
+        _err("manifest.review_policy","demo final review must not precede demo midpoint review")
+
 def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     schema=_load_json(SCHEMA_PATH)
     pack={name:_load_json(pack_dir/COMPONENT_FILES[name]) for name in COMPONENTS}
@@ -161,6 +208,8 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
         if manifest["minimum_duration_days"]<90:_err("manifest.minimum_duration_days","qualifying scenario cannot be below 90 days")
     elif manifest["classification"]=="qualifying":_err("manifest.classification","demo/test scenario cannot use qualifying classification")
     if pack["company"]["fictional"] is not True:_err("company.fictional","Phase 2 fixtures must be fictional")
+    _validate_review_policy(manifest)
+    _validate_phase6_rubrics(pack)
     actor_ids=_unique(pack["actors"],"actor_id","actors.json")
     fact_ids=_unique(pack["facts"],"id","facts.json")
     task_ids=_unique(pack["tasks"],"task_id","tasks.json")
