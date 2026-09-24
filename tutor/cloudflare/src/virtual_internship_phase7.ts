@@ -15,13 +15,6 @@ const EVIDENCE_RULESET='phase7-evidence-strength-v1';
 const AGGREGATION_RULESET='phase7-passport-aggregation-v1';
 const LEVELS=['emerging','developing','applied_with_support','independent','advanced'] as const;
 const LEVEL_ORDER:Record<string,number>={emerging:0,developing:1,applied_with_support:2,independent:3,advanced:4};
-const LEVEL_FRAMEWORK=[
-  {id:'emerging',label:'Emerging',meaning:'Early demonstrated evidence exists; task exposure alone is not evidence.'},
-  {id:'developing',label:'Developing',meaning:'Repeated partial or improving demonstration is supported by evidence.'},
-  {id:'applied_with_support',label:'Applied with support',meaning:'Credible application is demonstrated with material assistance in context.'},
-  {id:'independent',label:'Independent',meaning:'Successful performance includes qualifying low-assistance evidence.'},
-  {id:'advanced',label:'Advanced',meaning:'Repeated independent performance is demonstrated across sufficiently distinct contexts.'},
-];
 const STRENGTH_ORDER:Record<string,number>={limited:0,supporting:1,strong:2};
 
 function p7Json(payload:unknown,status=200):Response{
@@ -289,10 +282,13 @@ async function p7Summary(db:P7Database,actorId:string){
     "SELECT competency_id,definition_version,name,description,domain,parent_competency_id,level_framework_version,evidence_requirements_json,transfer_policy_json,recency_policy_json,context_metadata_json,status "+
     "FROM competency_definitions WHERE status='active' ORDER BY domain,name"
   ).all<Record<string,unknown>>()).results||[];
+  const framework=await db.prepare(
+    "SELECT levels_json FROM competency_level_frameworks WHERE version='phase7-levels-v1' LIMIT 1"
+  ).first<Record<string,unknown>>();
   return {
     aggregation_ruleset_version:AGGREGATION_RULESET,
     evidence_ruleset_version:EVIDENCE_RULESET,
-    level_framework:LEVEL_FRAMEWORK,
+    level_framework:p7Parse(framework?.levels_json,[]),
     competencies:passports.map(row=>({
       competency_id:row.competency_id,definition_version:row.definition_version,name:row.name,
       description:row.description,domain:row.domain,level_framework_version:row.level_framework_version,
