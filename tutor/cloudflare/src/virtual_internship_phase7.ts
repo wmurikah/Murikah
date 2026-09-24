@@ -44,11 +44,17 @@ async function p7OwnedInternship(db:P7Database,actorId:string,internshipId:strin
     'WHERE i.id=? AND i.learner_id=? LIMIT 1'
   ).bind(internshipId,actorId).first<Record<string,unknown>>();
 }
-function p7Candidate(ratingId:string,assistance:number):string{
-  if(ratingId==='not_yet')return 'not_demonstrated';
-  if(ratingId==='developing')return 'developing';
-  if(ratingId==='meets'||ratingId==='exceeds')return assistance<=1?'independent':'applied_with_support';
-  return '';
+function p7Candidate(mapping:Record<string,unknown>,ratingId:string,assistance:number):string{
+  const contributions=p7Parse(mapping.rating_contribution_json,{}) as Record<string,unknown>;
+  const raw=contributions[ratingId];
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return '';
+  const rule=raw as Record<string,unknown>;
+  const candidate=String(rule.candidate||'');
+  if(!['not_demonstrated','developing','applied_with_support','independent'].includes(candidate))return '';
+  const maxIndependent=Number(mapping.max_independent_assistance);
+  if(!Number.isInteger(maxIndependent)||maxIndependent<0||maxIndependent>5)return '';
+  if(rule.independence_eligible===true&&assistance<=maxIndependent)return 'independent';
+  return candidate;
 }
 function p7ContextIdentity(value:any):string{
   const fields=['career_family','role_family','scenario_pack_id','task_category','domain','work_context'];
@@ -317,10 +323,10 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
     const maxAssistance=assistance.length?Math.max(...assistance.map(row=>Number(row.assistance_level||0))):0;
     const observed=assistance.filter(row=>row.provenance==='system_observed').length;
     const declared=assistance.filter(row=>row.provenance==='learner_declared').length;
-    const candidate=p7Candidate(String(criterion.rating_id||''),maxAssistance);
-    if(!candidate)continue;
     const specific=refs.every((raw:any)=>raw&&typeof raw.locator==='object');
     for(const mapping of mappings){
+      const candidate=p7Candidate(mapping,String(criterion.rating_id||''),maxAssistance);
+      if(!candidate)continue;
       const contextMetadata=p7Parse(mapping.context_metadata_json,{}) as Record<string,unknown>;
       const physical=Boolean(contextMetadata.physical);
       const strength=!specific?'limited':(maxAssistance<=1&&!physical?'strong':'supporting');
