@@ -1,0 +1,503 @@
+[
+  {
+    "task_id": "task_review_process",
+    "authored_sequence": 1,
+    "title": "Review inventory process background",
+    "category": "review",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "Understand the fictional inventory control flow before testing.",
+    "learner_objective": "Identify the process and control points.",
+    "brief": "Review supplied process facts and prepare a concise control map.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 4
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "notes"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only; no artifact submission."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "issue_summary"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_review_process_v1",
+      "schema_version": 1,
+      "title": "Review inventory process background assessment rubric",
+      "purpose": "Assess the submitted issue_summary against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_reconcile_sample",
+    "authored_sequence": 2,
+    "title": "Reconcile an inventory sample",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A sample requires source-to-ledger tracing.",
+    "learner_objective": "Apply a repeatable reconciliation approach.",
+    "brief": "Reconcile the supplied fictional sample and note discrepancies.",
+    "dependencies": [
+      "task_review_process"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 8
+    },
+    "expected_effort": "3 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_finance_manager",
+      "actor_vendor_rep"
+    ],
+    "event_references": [
+      "event_disclose_exception"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_reconciliation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "spreadsheet"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_reconcile_sample_v1",
+      "schema_version": 1,
+      "title": "Reconcile an inventory sample assessment rubric",
+      "purpose": "Assess the submitted spreadsheet against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "spreadsheet"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "spreadsheet"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "spreadsheet"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_investigate_variance",
+    "authored_sequence": 3,
+    "title": "Investigate the discrepancy",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A variance may indicate a control exception.",
+    "learner_objective": "Separate evidence from assumptions.",
+    "brief": "Investigate only facts that have been disclosed.",
+    "dependencies": [
+      "task_reconcile_sample"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "notes",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_operations_manager",
+      "actor_finance_manager"
+    ],
+    "event_references": [
+      "event_management_pressure"
+    ],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_investigation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "issue_summary"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_investigate_variance_v1",
+      "schema_version": 1,
+      "title": "Investigate the discrepancy assessment rubric",
+      "purpose": "Assess the submitted issue_summary against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_draft_issue",
+    "authored_sequence": 4,
+    "title": "Draft issue summary",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "Summarize the issue for review.",
+    "learner_objective": "Communicate evidence and uncertainty clearly.",
+    "brief": "Draft a factual issue summary using disclosed evidence only.",
+    "dependencies": [
+      "task_investigate_variance"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 15
+    },
+    "expected_effort": "2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Trusted Phase 2 test transition only."
+    },
+    "revision_policy": {
+      "max_revisions": 0
+    },
+    "competency_refs": [
+      "comp_written_communication"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_draft_issue_v1",
+      "schema_version": 1,
+      "title": "Draft issue summary assessment rubric",
+      "purpose": "Assess the submitted memo against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite the exact submitted work showing how the task objective and requested deliverable were addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific lines or sections that show evidence use, reasoning, reconciliation, analysis, testing logic, or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form appropriate to the authored deliverable.",
+          "evidence_expectations": "Cite the structure, explanation, labels, or traceability elements of the submitted deliverable. Do not judge accent, identity, or unrelated writing style.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]
