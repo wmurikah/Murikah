@@ -8,6 +8,8 @@ ASSISTANCE_LABELS={0:"Independent demonstration",1:"Clarification only",2:"Light
 
 def demonstrated_candidate(rating_id: str, assistance_level: int) -> str | None:
     rating=str(rating_id or "")
+    if rating=="not_yet":
+        return "not_demonstrated"
     if rating=="developing":
         return "developing"
     if rating not in {"meets","exceeds"}:
