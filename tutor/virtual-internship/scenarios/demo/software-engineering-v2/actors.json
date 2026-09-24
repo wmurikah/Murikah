@@ -1,0 +1,124 @@
+[
+  {
+    "actor_id": "actor_engineering_manager",
+    "name": "Amina Reko",
+    "actor_class": "manager",
+    "job_title": "Engineering Manager",
+    "department_id": "dept_engineering",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign engineering work"
+    ],
+    "goals": [
+      "resolve issues with controlled risk"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_release_policy",
+      "fact_issue_summary",
+      "fact_priority"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "manager",
+    "escalation_capabilities": [
+      "priority escalation"
+    ],
+    "allowed_event_ids": [
+      "event_priority_change"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_senior_engineer",
+    "name": "Jon Tavi",
+    "actor_class": "colleague",
+    "job_title": "Senior Engineer",
+    "department_id": "dept_engineering",
+    "reports_to_actor_id": "actor_engineering_manager",
+    "authority": [
+      "review technical plans"
+    ],
+    "goals": [
+      "maintain reliable implementation"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_release_policy",
+      "fact_issue_summary",
+      "fact_hidden_trigger"
+    ],
+    "communication_style": {
+      "tone": "technical",
+      "formality": "low"
+    },
+    "learner_relationship": "technical colleague",
+    "escalation_capabilities": [
+      "technical review"
+    ],
+    "allowed_event_ids": [
+      "event_reproduction_clue"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_product_manager",
+    "name": "Leila Omari",
+    "actor_class": "project_sponsor",
+    "job_title": "Product Manager",
+    "department_id": "dept_product",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set product priority"
+    ],
+    "goals": [
+      "protect customer workflows"
+    ],
+    "knowledge_fact_ids": [
+      "fact_issue_summary",
+      "fact_priority"
+    ],
+    "communication_style": {
+      "tone": "concise",
+      "formality": "medium"
+    },
+    "learner_relationship": "product stakeholder",
+    "escalation_capabilities": [
+      "priority change"
+    ],
+    "allowed_event_ids": [
+      "event_priority_change"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_qa_engineer",
+    "name": "Soren Mavi",
+    "actor_class": "reviewer_qa",
+    "job_title": "QA Engineer",
+    "department_id": "dept_quality",
+    "reports_to_actor_id": null,
+    "authority": [
+      "define regression checks"
+    ],
+    "goals": [
+      "prevent regression"
+    ],
+    "knowledge_fact_ids": [
+      "fact_public_release_policy",
+      "fact_issue_summary"
+    ],
+    "communication_style": {
+      "tone": "precise",
+      "formality": "medium"
+    },
+    "learner_relationship": "reviewer",
+    "escalation_capabilities": [
+      "regression risk"
+    ],
+    "allowed_event_ids": [
+      "event_regression_risk"
+    ],
+    "active": true
+  }
+]
