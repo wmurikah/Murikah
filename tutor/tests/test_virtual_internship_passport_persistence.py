@@ -57,6 +57,7 @@ class Phase7PersistenceTests(unittest.TestCase):
         self.assertIn("submission_id",source)
         self.assertIn("event_time<=?",source)
         self.assertIn("UNIQUE",MIGRATION.read_text())
+        self.assertIn("mapping_version INTEGER NOT NULL",MIGRATION.read_text())
         self.assertNotIn("invoke_formal_assessor",source)
         self.assertNotIn("llm",source.lower())
 
@@ -64,9 +65,12 @@ class Phase7PersistenceTests(unittest.TestCase):
         source=WORKER.read_text()
         self.assertIn("ON CONFLICT(assessment_id) DO UPDATE",source)
         self.assertIn("SELECT COUNT(*) AS n FROM competency_evidence",source)
-        self.assertIn("DELETE FROM competency_passports WHERE learner_id=?",source)
+        self.assertIn("LEFT JOIN competency_derivation_status",source)
+        self.assertIn("p7RefreshPassport",source)
         self.assertIn("p7Rebuild",source)
         self.assertIn("passport/rebuild",source)
+        self.assertIn("competency_definition_compatibility",source)
+        self.assertIn("expires_after_days",source)
 
     def test_learner_api_uses_authenticated_actor_not_browser_owner_fields(self):
         source=ROUTER.read_text()
