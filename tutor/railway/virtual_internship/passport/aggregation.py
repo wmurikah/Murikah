@@ -12,7 +12,7 @@ def _trend(evidence:list[dict[str,Any]]) -> str:
     if len(evidence)<TREND_MIN_EVIDENCE:
         return "insufficient_evidence"
     ordered=sorted(evidence,key=lambda row:(int(row.get("created_at") or 0),str(row.get("id") or "")))
-    values=[LEVEL_ORDER.get(str(row.get("demonstrated_level") or ""),0) for row in ordered]
+    values=[({"not_demonstrated":-1,**LEVEL_ORDER}).get(str(row.get("demonstrated_level") or ""),-1) for row in ordered]
     deltas=[b-a for a,b in zip(values,values[1:])]
     if all(delta==0 for delta in deltas):
         return "stable"
@@ -42,11 +42,22 @@ def aggregate_competency(*, definition:dict[str,Any], evidence:list[dict[str,Any
     if not active:
         return None
     rules=definition.get("evidence_requirements") or {}
+    positive=[row for row in active if str(row.get("demonstrated_level") or "")!="not_demonstrated"]
+    if not positive:
+        return None
     current="emerging"
     for level in LEVELS:
         level_rules=rules.get(level)
         if isinstance(level_rules,dict) and _requirements_met(level,level_rules,active):
             current=level
+    conflict=definition.get("recency_policy") or {}
+    window=max(1,int(conflict.get("conflict_window",2))) if isinstance(conflict,dict) else 2
+    recent=sorted(active,key=lambda row:(int(row.get("created_at") or 0),str(row.get("id") or "")))[-window:]
+    strong_negative=[row for row in recent if str(row.get("evidence_strength") or "")=="strong" and str(row.get("demonstrated_level") or "")=="not_demonstrated"]
+    if len(strong_negative)>=2 and LEVEL_ORDER[current]>LEVEL_ORDER["emerging"]:
+        current=str(conflict.get("two_strong_not_demonstrated_cap") or "emerging")
+    elif strong_negative and LEVEL_ORDER[current]>LEVEL_ORDER["developing"]:
+        current=str(conflict.get("latest_strong_not_demonstrated_cap") or "developing")
     independent=sum(1 for row in active if str(row.get("demonstrated_level") or "")=="independent")
     assisted=len(active)-independent
     task_contexts={task_context_identity(row) for row in active}
