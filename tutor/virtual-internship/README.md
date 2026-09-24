@@ -1231,15 +1231,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 6 — assessment and workplace dynamics
 
-- [ ] Rubric engine.
-- [ ] Structured assessor.
-- [ ] Assistance-level recording.
-- [ ] Midpoint review.
-- [ ] Final review.
-- [ ] Workplace politics event library.
-- [ ] Ethics/escalation events.
-- [ ] Bias/fairness guardrails.
-- [ ] Evidence-based feedback tests.
+- [x] Rubric engine.
+- [x] Structured assessor.
+- [x] Assistance-level recording.
+- [x] Midpoint review.
+- [x] Final review.
+- [x] Workplace politics event library.
+- [x] Ethics/escalation events.
+- [x] Bias/fairness guardrails.
+- [x] Evidence-based feedback tests.
 
 ### Phase 7 — Competency Passport
 
@@ -2359,7 +2359,7 @@ Later phases must continue to use authenticated actor ownership, the pinned scen
 
 ## Phase 6 Implementation Record
 
-**Status:** implementation present on the Phase 6 branch; the Phase 6 checklist remains intentionally unchecked until focused tests, both preflights, Worker dry-run and the production Tutor image gate are verified on the final head.
+**Status:** verified. The Phase 6 release blocker in `test_virtual_internship_assessment_fairness.py` was corrected and the dedicated **Build Murikah Tutor image** workflow run 35973202713 passed on the repair branch before this checklist was closed. That verification included Tutor deployment preflight, Cloudflare migration preflight, Worker dry-run/check, 8 frontend integration test files, 6 committed scenario packs, 271 packaged Tutor Python tests, and the pinned production Tutor image build. The final documentation head must pass the same dedicated workflow before merge.
 
 ### Persistence, rubric authority and calculation
 
@@ -2425,7 +2425,7 @@ Focused backend coverage is in:
 - `tutor/tests/test_virtual_internship_ethics.py`
 - `tutor/tests/test_virtual_internship_assessment_fairness.py`
 
-The production Dockerfile copies the full `virtual_internship` package, committed scenario packs, Cloudflare source/migrations and test suite into the final build path; it runs the scenario validator and full Tutor Python regression suite before the final runtime image is accepted. Cloudflare preflight protects Phase 6 migration/table markers, deterministic assessment modules, assessor reuse, assistance validation, dynamics/ethics libraries, focused tests, documentation and phase boundaries.
+The production Dockerfile copies the full `virtual_internship` package, committed scenario packs, Cloudflare source/migrations and test suite into the final build path; it runs the scenario validator and full Tutor Python regression suite before the final runtime image is accepted. Cloudflare preflight protects Phase 6 migration/table markers, deterministic assessment modules, assessor reuse, assistance validation, dynamics/ethics libraries, focused tests, documentation and phase boundaries. Release-gate verification on workflow run 35973202713 recorded: Cloudflare migration preflight PASS, Worker dry-run PASS, frontend integration 8/8 files PASS, scenario validation PASS for 6 packs, packaged Python regressions 271/271 PASS, and pinned Tutor production image build PASS.
 
 Intentional boundaries remain explicit: **Phase 7 Competency Passport remains unimplemented. Phase 8 internship completion remains unimplemented. Phase 9 reports and letters remain unimplemented.** Phase 6 creates traceable assessment evidence for later phases but does not aggregate competencies, transition the internship to completed, generate credentials, issue a report or create verification IDs.
 
