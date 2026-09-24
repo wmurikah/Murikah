@@ -249,17 +249,19 @@ async function p7Rebuild(db:P7Database,actorId:string,now:number):Promise<number
 }
 async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record<string,unknown>,now:number):Promise<number>{
   const assessmentId=String(assessment.id||''),internshipId=String(assessment.internship_id||'');
+  const currentMappingVersion=Math.max(0,Number(assessment.current_mapping_version||0));
   const existing=await db.prepare(
-    "SELECT status,derived_count,evidence_ruleset_version FROM competency_derivation_status WHERE assessment_id=? AND learner_id=? LIMIT 1"
+    "SELECT status,derived_count,evidence_ruleset_version,mapping_version FROM competency_derivation_status WHERE assessment_id=? AND learner_id=? LIMIT 1"
   ).bind(assessmentId,actorId).first<Record<string,unknown>>();
   if(
     String(existing?.evidence_ruleset_version||'')===EVIDENCE_RULESET&&
+    Number(existing?.mapping_version||0)===currentMappingVersion&&
     (existing?.status==='completed'||existing?.status==='excluded')
   )return Number(existing.derived_count||0);
   await db.prepare(
-    "INSERT INTO competency_derivation_status(assessment_id,learner_id,status,evidence_ruleset_version,derived_count,last_error,updated_at) VALUES (?,?,'pending',?,0,'',?) "+
-    "ON CONFLICT(assessment_id) DO UPDATE SET status='pending',evidence_ruleset_version=excluded.evidence_ruleset_version,last_error='',updated_at=excluded.updated_at"
-  ).bind(assessmentId,actorId,EVIDENCE_RULESET,now).run();
+    "INSERT INTO competency_derivation_status(assessment_id,learner_id,status,evidence_ruleset_version,mapping_version,derived_count,last_error,updated_at) VALUES (?,?,'pending',?,?,0,'',?) "+
+    "ON CONFLICT(assessment_id) DO UPDATE SET status='pending',evidence_ruleset_version=excluded.evidence_ruleset_version,mapping_version=excluded.mapping_version,last_error='',updated_at=excluded.updated_at"
+  ).bind(assessmentId,actorId,EVIDENCE_RULESET,currentMappingVersion,now).run();
 
   const submission=await db.prepare(
     'SELECT s.submitted_at,s.submission_number,v.version_number FROM internship_artifact_submissions s '+
@@ -287,7 +289,10 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
     const mappings=(await db.prepare(
       'SELECT m.*,d.context_metadata_json FROM competency_assessment_mappings m '+
       'JOIN competency_definitions d ON d.competency_id=m.competency_id AND d.definition_version=m.definition_version '+
-      'WHERE m.scenario_version_id=? AND m.task_id=? AND m.rubric_id=? AND m.criterion_id=? ORDER BY m.mapping_version DESC'
+      'WHERE m.scenario_version_id=? AND m.task_id=? AND m.rubric_id=? AND m.criterion_id=? '+
+      'AND m.mapping_version=(SELECT MAX(mx.mapping_version) FROM competency_assessment_mappings mx '+
+      'WHERE mx.scenario_version_id=m.scenario_version_id AND mx.task_id=m.task_id AND mx.rubric_id=m.rubric_id AND mx.criterion_id=m.criterion_id) '+
+      'ORDER BY m.competency_id'
     ).bind(assessment.scenario_version_id,assessment.task_id,assessment.rubric_id,criterion.criterion_id).all<Record<string,unknown>>()).results||[];
     if(!mappings.length)continue;
 
@@ -344,17 +349,22 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
     .bind(assessmentId,actorId).first<{n:number}>();
   const durableCount=Number(count?.n||0);
   await db.prepare(
-    "UPDATE competency_derivation_status SET status=?,derived_count=?,last_error='',updated_at=? WHERE assessment_id=?"
-  ).bind(durableCount>0?'completed':'excluded',durableCount,now,assessmentId).run();
+    "UPDATE competency_derivation_status SET status=?,mapping_version=?,derived_count=?,last_error='',updated_at=? WHERE assessment_id=?"
+  ).bind(durableCount>0?'completed':'excluded',currentMappingVersion,durableCount,now,assessmentId).run();
   return durableCount;
 }
 async function p7Reconcile(db:P7Database,actorId:string,now:number):Promise<{assessments:number;evidence:number;passports:number}>{
   const rows=(await db.prepare(
-    "SELECT a.*,i.scenario_version_id,v.scenario_pack_id FROM internship_assessments a "+
+    "SELECT a.*,i.scenario_version_id,v.scenario_pack_id,COALESCE(("+
+    "SELECT MAX(m.mapping_version) FROM competency_assessment_mappings m WHERE m.scenario_version_id=i.scenario_version_id "+
+    "AND m.task_id=a.task_id AND m.rubric_id=a.rubric_id),0) AS current_mapping_version "+
+    "FROM internship_assessments a "+
     "JOIN internship_instances i ON i.id=a.internship_id JOIN scenario_versions v ON v.id=i.scenario_version_id "+
     "LEFT JOIN competency_derivation_status ds ON ds.assessment_id=a.id AND ds.learner_id=i.learner_id "+
     "WHERE i.learner_id=? AND a.status='completed' AND ("+
-    "ds.assessment_id IS NULL OR ds.status IN ('pending','failed') OR ds.evidence_ruleset_version<>?) "+
+    "ds.assessment_id IS NULL OR ds.status IN ('pending','failed') OR ds.evidence_ruleset_version<>? OR "+
+    "ds.mapping_version<>COALESCE((SELECT MAX(m2.mapping_version) FROM competency_assessment_mappings m2 "+
+    "WHERE m2.scenario_version_id=i.scenario_version_id AND m2.task_id=a.task_id AND m2.rubric_id=a.rubric_id),0)) "+
     "ORDER BY a.completed_at ASC,a.id ASC"
   ).bind(actorId,EVIDENCE_RULESET).all<Record<string,unknown>>()).results||[];
   let evidence=0;
