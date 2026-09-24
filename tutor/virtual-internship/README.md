@@ -2499,7 +2499,158 @@ After completion, Phase 2 scenario mutations, Phase 3 AI-invocation/assistance w
 
 Focused Phase 8 coverage is in `test_virtual_internship_completion_policy.py`, `test_virtual_internship_completion_state.py` and the existing `virtual-internship-workspace.spec.tsx.txt`. Cloudflare preflight protects the migration, policy schema/validator, evaluator, state constants, demo/test denial, APIs, UI, tests, documentation, Phase 1 minimum-duration authority and production-image packaging. Release-gate verification on Tutor workflow run `36003477191` for code head `2216e52cda43c2ef03904b4d6c1935a22c60acc4` recorded: Tutor preflight PASS, Cloudflare migration preflight PASS, persistence binding validation PASS, Worker `wrangler deploy --dry-run` PASS, scenario validation PASS for 6 packs, packaged Python regressions 336/336 PASS, frontend integration 8/8 files and 53/53 tests PASS, Cloudflare container image build PASS and pinned Tutor production image build PASS. The final documentation head must pass the same dedicated workflow before merge.
 
-**Phase 9 remains unimplemented. Phase 9 performance reports, completion letters, certificates and public verification IDs remain unimplemented. Phase 8 does not generate an Internship Performance Report, completion letter, certificate, completion PDF, public verification/reference ID or institution endorsement.**
+At the Phase 8 implementation head, Phase 9 was intentionally absent: Phase 8 itself does not generate an Internship Performance Report, completion letter, certificate, completion PDF, public verification/reference ID or institution endorsement. Phase 9 is implemented separately below and consumes the immutable Phase 8 authority without changing it.
+
+## Phase 9 Implementation Record
+
+**Status:** implemented on `feat/tutor-virtual-internship-phase9`; the Phase 9 checklist above remains open until the dedicated Tutor release gate passes on the final implementation/documentation head.
+
+### Scope and completion authority
+
+Phase 9 implements only the Internship Performance Report, Virtual Internship Completion Letter, evidence references, mandatory simulation disclosure, privacy-preserving verification/reference mechanism, official export/integrity/versioning and a future verified-institution endorsement extension point. It does **not** re-evaluate Phase 8 completion, reassess Phase 5 artifacts, rerun Phase 6 assessment, recalculate Phase 7 Passport levels, add a certificate, build the Phase 10 career catalog or implement Phase 11 longitudinal analytics.
+
+The sole completion authority remains the immutable Phase 8 `completion_records` row. Phase 9 rejects issuance unless the owned internship is already `completed`, `mode = standard`, `qualifying = 1`, its lifecycle `completed_at` matches the completion record, its stored gate-snapshot SHA-256 recomputes correctly and its installed completion-policy hash still matches the completion record. Active, stopped, demo, test, non-qualifying, missing or inconsistent records fail closed. Phase 9 cannot transition lifecycle state or change `completed_at`.
+
+### Migration, document model and immutable versioning
+
+Migration: `tutor/cloudflare/migrations/0015_virtual_internship_phase9_documents.sql`.
+
+The new `internship_completion_documents` table stores: opaque document ID; internship, learner and `completion_record_id`; `document_type`; immutable `document_version`; explicit `template_version`; source-schema version; Phase 8 `source_snapshot_hash`; canonical source payload and SHA-256; existing `tutor_objects` object ID; exact exported-document SHA-256, size and content type; opaque verification/reference ID; hashed document-specific verification code; issuance status/time; supersession metadata; simulation-disclosure version; future endorsement metadata; idempotency request ID; and creation time.
+
+A unique partial index permits exactly one current document per completion record/document type while all historical versions remain retained. Immutable-field and no-delete triggers prevent Version 1 from being silently rewritten. The only supported row mutation is an audit-preserving `current -> superseded` transition that records when and by which new document ID it was superseded. Reissue creates Version 2+ with its own source hash, output hash, reference and verification code. Version 1 remains retrievable and verifies as superseded.
+
+### Source schemas, templates and deterministic source hierarchy
+
+Performance Report source schema: **v1** (`PERFORMANCE_REPORT_SOURCE_SCHEMA_VERSION = 1`).
+
+Completion Letter source schema: **v1** (`COMPLETION_LETTER_SOURCE_SCHEMA_VERSION = 1`).
+
+Performance Report template: **`phase9-performance-report-v1`**.
+
+Completion Letter template: **`phase9-completion-letter-v1`**.
+
+Simulation disclosure: **`phase9-simulation-disclosure-v1`**.
+
+One canonical structured source payload is built before rendering and SHA-256 hashed. Rendering does not make section-by-section live queries and no LLM/provider is invoked. Given the same completion record, frozen source state and template version, field construction is deterministic; issuance timestamp, document/reference IDs and verification code remain separate issuance metadata and do not alter the evidence-source hash.
+
+The canonical source hierarchy is:
+
+1. Phase 8 immutable completion record and gate snapshot;
+2. Phase 1 server-authoritative `started_at`, Phase 8 `completed_at` and snapshotted duration;
+3. the pinned Phase 2 scenario version for title, fictional/simulated organization, role, workload and exact task titles;
+4. accepted Phase 5 artifact/version/submission lineage existing at completion;
+5. finalized Phase 6 midpoint/final reviews existing at completion;
+6. the Phase 7 evidence IDs and completion-time competency summaries/ruleset versions frozen by Phase 8;
+7. learner-authored Phase 4 reflection data existing at or before completion.
+
+The report never substitutes the learner's later/current Passport state for the Phase 8 snapshot. Completing a later Internship B therefore cannot silently change Internship A Version 1.
+
+### Internship Performance Report contents
+
+The versioned report source contains the learner display-name snapshot; identity limitation; internship title; simulated organization; simulation flag; server internship dates; recorded duration; expected workload band; simulated role and role summary; canonical completed key assignments; accepted work products with exact artifact/version/submission lineage; finalized final performance review; completion-time competency summary; strengths; development areas; deterministic evidence highlights; assistance/independence context; structured midpoint-to-final comparison; the existing finalized supervisor-style Phase 6 narrative; extractive learner-reflection summary; limitations; stable evidence-reference appendix; simulation disclosure; and optional verified endorsement extension field.
+
+No report field is invented by a model. Missing material is represented as not recorded/insufficient comparable evidence where appropriate. Workload hours, praise, task counts, competency levels, learner reflections and employment history are not fabricated.
+
+### Evidence-reference design
+
+Human-readable `E1`, `E2`, ... labels are deterministic within the report while canonical IDs remain in source metadata. Completion-time Phase 7 evidence references resolve to the exact learner-owned task, artifact, accepted artifact version, submission, Phase 6 assessment, criterion, competency, demonstrated level, evidence strength, assistance context and limitation. Finalized midpoint/final Phase 6 review records are also explicit evidence references. Browser requests cannot provide arbitrary evidence IDs.
+
+Every Phase 8 evidence ID must resolve for the same learner; an unknown/cross-account ID fails source validation. Cross-internship evidence is permitted only when Phase 8 legitimately froze that same learner's Phase 7 evidence reference into the completion snapshot. Hidden scenario facts are not presented as learner performance evidence.
+
+### Learner-name snapshot
+
+The learner-facing API derives the issuance name from the existing authenticated personalization contract—preferred name first, then the existing derived account name—and passes it server-to-server through the signed persistence bridge. The browser cannot submit an arbitrary report name. The value is snapshotted into the immutable source payload so a later preferred-name change does not rewrite an issued Version 1. The report explicitly states that this display-name snapshot is not legal-identity verification.
+
+### Completion Letter
+
+The Completion Letter is derived from the same canonical report/completion source and is intentionally shorter. It may state only the learner-name snapshot, named Murikah Virtual Internship, recorded dates, simulated organization/role, categories of simulated work, recorded deliverables, evidence-backed competencies and verification information. It uses Murikah identity and a neutral **Issued by Murikah** system block.
+
+The letter never says the learner was employed, contracted or staffed by the fictional organization; never implies the fictional organization issued it; never fabricates an executive/supervisor signature; never claims statutory industrial attachment recognition; and never implies university/TVET/employer endorsement without a future verified endorsement record. Phase 9 intentionally does **not** add a certificate.
+
+### Official export, R2 ownership and document integrity
+
+The official portfolio representation is deterministic, printable HTML generated server-side from the canonical source payload. It is stored privately under:
+
+`users/<learner-id>/virtual-internships/<internship-id>/<completion-report|completion-letter>/<document-id>/v<version>.html`
+
+using the existing `TUTOR_FILES` binding and existing `tutor_objects` ownership registry. Learner-controlled filenames never become R2 keys. The Worker computes exact exported-byte SHA-256 and size before final issuance and persists the same integrity metadata in `tutor_objects` and the Phase 9 document row. HTML uses bundled/inline presentation only, escapes untrusted learner/model-authored content, loads no remote tracking/font/image resources and carries no fictional-employer letterhead.
+
+Authenticated downloads re-check learner/internship/document/`tutor_objects` ownership, retrieve the private object and recompute SHA-256 and size. Missing or modified bytes fail closed and are never silently replaced under the same document version. An authenticated JSON export returns the exact immutable canonical source payload for machine-readable portability.
+
+**PDF is not implemented in Phase 9.** The pinned Tutor runtime contains no safe existing server-side PDF capability, so the `PDF/export if required` checklist requirement is satisfied through the official stored printable HTML plus immutable structured JSON export. Phase 9 deliberately does not add a large fragile PDF dependency merely to produce a `.pdf` extension and does not claim arbitrary browser-printed bytes reproduce the official HTML-byte hash.
+
+### Verification/reference architecture and privacy
+
+Each official document version receives a cryptographically random 192-bit opaque reference of the form `vr_<48 hex>` and a separate random 128-bit document-specific code `vc_<32 hex>`. Neither is sequential or derived from learner email/name/account/completion ID. Only the verification-code SHA-256 is stored; the plaintext code appears in the exact issued document.
+
+Public verification is served from the Murikah application and marked `noindex,nofollow`. A reference-only lookup returns only: verification state (`current`, `superseded` or integrity failure), document type, issue date, internship title, completion date, exact document SHA-256/fingerprint, document/template version and mandatory simulation disclosure. It exposes no learner email, Passport, evidence, artifact/assessment content or internship history and creates no searchable learner directory. The learner-name snapshot is disclosed only when the complete document-specific reference + code credential verifies.
+
+Verification re-fetches the exact private R2 object and recomputes SHA-256/size. A modified file cannot be reported as the exact valid issued artifact merely because its reference exists. A superseded Version 1 remains historically traceable as superseded; its reference never points to Version 2 bytes.
+
+### Simulation disclosure
+
+The canonical disclosure text is:
+
+> This document covers a Murikah Virtual Internship simulation. It does not represent employment by the simulated organization, a real-employer reference, statutory industrial attachment approval, or institution endorsement unless a separately verified endorsement is explicitly shown.
+
+It appears in the Performance Report, Completion Letter, official HTML and verification output and is protected by preflight/tests.
+
+### Institution endorsement extension point
+
+`VerifiedInstitutionEndorsement` is a typed extension only. It can represent a future verified institution ID/name, authorized signer ID/role, endorsement type, endorsement timestamp, verified status and signature/reference metadata. Normal Phase 9 learner flow always supplies no endorsement. Browser-supplied institution name, signer, endorsement flag or endorsement payload is rejected and the renderer omits any institution signature block when no verified record exists. A future institution-mode feature must populate this only from a trusted verified authorization workflow.
+
+### APIs and learner UI
+
+Private Worker persistence routes:
+- `POST /internships/completion-documents/generate`
+- `GET /internships/completion-documents/list`
+- `GET /internships/completion-documents/download`
+- `POST /internships/completion-documents/verify`
+
+Learner-facing Tutor routes:
+- `GET /api/murikah/virtual-internship/completion-documents`
+- `POST /api/murikah/virtual-internship/completion-documents`
+- `GET /api/murikah/virtual-internship/completion-documents/{document_id}/view`
+- `GET /api/murikah/virtual-internship/completion-documents/{document_id}/download?format=html|json`
+- `GET /api/murikah/virtual-internship/verify?reference_id=...&code=...`
+
+Generation accepts only internship ID, document type and idempotency request ID from the browser. Learner identity, name snapshot, completion record, evidence, strengths/development areas and endorsement state are server-derived. Listing is D1-only and never downloads R2 objects. The existing Virtual Internship **Documents** workspace is extended rather than creating another shell: completed qualifying internships can issue/view/download the Performance Report and Completion Letter; active/stopped internships see only that completion documents become available after qualifying completion. The Phase 7 Passport remains a separate workspace surface. There is no certificate button.
+
+### Idempotency, concurrency and failure recovery
+
+A repeated request ID returns the exact existing immutable document after integrity verification. A new request with the same completion record/document type/source hash/template/disclosure returns the existing current version instead of creating duplicates. A permitted source/template change creates a new immutable version.
+
+R2 bytes are written before issuance. The D1 batch registers `tutor_objects`, the new document metadata and any prior-version supersession atomically; if D1 finalization fails, the new R2 key is deleted and the current row is re-read for race convergence. Two concurrent equivalent requests therefore converge on one current version. A document row pointing at missing or hash-mismatched R2 bytes fails safely and is not silently regenerated under that version.
+
+### Tests, preflight and packaging
+
+Focused Phase 9 Python coverage is in:
+- `tutor/tests/test_virtual_internship_performance_report.py`
+- `tutor/tests/test_virtual_internship_completion_letter.py`
+- `tutor/tests/test_virtual_internship_document_integrity.py`
+- `tutor/tests/test_virtual_internship_document_verification.py`
+- `tutor/tests/test_virtual_internship_document_ownership.py`
+- `tutor/tests/test_virtual_internship_document_endorsement.py`
+
+The existing `virtual-internship-workspace.spec.tsx.txt` covers completed-only issuance UI, safe generation payloads, reference display and view/download/export actions. Cloudflare preflight protects migration `0015`, the source/template/disclosure versions, Worker generation/verification/integrity implementation, persistence client/API/UI, focused tests, this implementation record and the durable subsequent-development requirement.
+
+`tutor/Dockerfile.railway` already copies the full Cloudflare source/migrations, Virtual Internship Python package, overlay component, committed scenarios and full Tutor tests into the production build and runs the scenario validator and packaged regressions. Phase 9 adds no new runtime dependency or model/provider. Final release-gate run details and exact test counts are recorded only after the dedicated workflow passes on the final documentation head.
+
+### Known intentional limitations and later phases
+
+Phase 9 does not implement server-side PDF, QR code, broad document revocation, statutory industrial-attachment recognition or a full institution endorsement workflow. Those omissions are deliberate and are not represented as implemented.
+
+**Phase 10 career catalog remains unimplemented. Phase 11 longitudinal evaluation remains unimplemented.**
+
+## SUBSEQUENT REPORT AND VERIFICATION DEVELOPMENT REQUIREMENT
+
+Future report, letter, credential or verification features must continue to use immutable Phase 8 `completion_records` as qualifying-completion authority and must preserve immutable Phase 9 issued versions, source snapshot hashes, evidence references, source payload hashes, exact output hashes and the versioned simulation disclosure.
+
+Future formats must not recalculate historical document claims from mutable/current Passport state; must not reassess artifacts ad hoc; must not mutate Version 1 bytes; and must create a new immutable document version for a legitimate correction, name reissue or template/source change. A historical reference must continue to resolve the exact historical version and must never silently redirect to newer bytes.
+
+Future public verification must preserve high-entropy non-enumerable references, privacy-minimal reference-only output and exact-byte integrity binding. Any mechanism that reveals learner identity must require the document-specific privacy-preserving credential or a stronger verified design. Future formats must not publish private evidence, artifact content, assessment details, email or internship history by default.
+
+Future institution endorsement must use the typed verified-endorsement extension point and a trusted authorization workflow. Ordinary learners must never self-enter institution/signer data that renders as verified. Every future document format must retain explicit Murikah Virtual Internship simulation disclosure and must never transform a Murikah simulation into a claim of employment, real-employer reference, statutory attachment recognition or unverified institution approval.
 
 ## SUBSEQUENT COMPLETION DEVELOPMENT REQUIREMENT
 
