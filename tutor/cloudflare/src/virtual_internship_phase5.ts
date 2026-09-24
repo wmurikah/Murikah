@@ -649,6 +649,7 @@ export async function handlePhase5ArtifactPersistenceRoute(
   }
 
   if (route === '/internships/artifacts/task-completed' && request.method === 'POST') {
+    if (owned.status !== 'active') return json({error:'internship_not_active'},409);
     const taskId=id(body.task_id), req=requestId(body.request_id);
     if (!taskId || !req) return json({error:'invalid_task_completion'},400);
     const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,taskId);
