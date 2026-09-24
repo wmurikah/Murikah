@@ -156,5 +156,13 @@ class Phase7PersistenceTests(unittest.TestCase):
         self.assertIn("internship_passport_evidence(actor_id,competency_id)",source)
         self.assertNotIn("body.learner_id",source)
         self.assertNotIn("body.owner_id",source)
+        self.assertIn(
+            "persistence.internship_passport_reconcile(actor_id)\n        return persistence.internship_passport_summary(actor_id)",
+            source,
+        )
+        self.assertIn(
+            "persistence.internship_passport_reconcile(actor_id)\n        source=persistence.internship_passport_export_source(actor_id)",
+            source,
+        )
 
 if __name__=="__main__":unittest.main()
