@@ -253,12 +253,13 @@ async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record
       }
     }
   }
-  await db.prepare(
-    "UPDATE competency_derivation_status SET status=?,derived_count=(SELECT COUNT(*) FROM competency_evidence WHERE assessment_id=? AND learner_id=?),last_error='',updated_at=? WHERE assessment_id=?"
-  ).bind(derived>0?'completed':'excluded',assessmentId,actorId,now,assessmentId).run();
   const count=await db.prepare('SELECT COUNT(*) AS n FROM competency_evidence WHERE assessment_id=? AND learner_id=?')
     .bind(assessmentId,actorId).first<{n:number}>();
-  return Number(count?.n||0);
+  const durableCount=Number(count?.n||0);
+  await db.prepare(
+    "UPDATE competency_derivation_status SET status=?,derived_count=?,last_error='',updated_at=? WHERE assessment_id=?"
+  ).bind(durableCount>0?'completed':'excluded',durableCount,now,assessmentId).run();
+  return durableCount;
 }
 async function p7Reconcile(db:P7Database,actorId:string,now:number):Promise<{assessments:number;evidence:number;passports:number}>{
   const rows=(await db.prepare(
