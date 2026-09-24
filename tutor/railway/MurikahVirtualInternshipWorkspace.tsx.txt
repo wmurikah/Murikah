@@ -1829,6 +1829,102 @@ function ReflectionView({
   );
 }
 
+function PerformanceReviews({
+  workspace,
+  refresh,
+}: {
+  workspace: InternshipWorkspaceSummary;
+  refresh: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const reviews = workspace.assessment?.performance_reviews || [];
+  const eligibility = workspace.assessment?.review_eligibility;
+  const stopped = workspace.state === "stopped";
+
+  async function createReview(kind: "midpoint" | "final") {
+    setBusy(kind); setError("");
+    try {
+      const response = await fetch(API + "/performance-reviews/" + kind, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          internship_id: workspace.internship?.internship_id || "",
+          request_id: requestId(kind + "-review"),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "That performance review could not be created."));
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That performance review could not be created.");
+    } finally { setBusy(""); }
+  }
+
+  return (
+    <Panel className="p-5" ariaLabel="Performance reviews">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Performance reviews</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
+            Midpoint and final performance reviews summarize durable internship evidence. They do not complete the internship or create a Competency Passport level.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["midpoint","final"] as const).map((kind) => {
+            const existing = reviews.some((review)=>review.review_type===kind && review.status==="finalized");
+            const allowed = Boolean(eligibility?.[kind]?.eligible) && !existing && !stopped;
+            return (
+              <button key={kind} type="button" disabled={!allowed || Boolean(busy)} onClick={() => void createReview(kind)}
+                className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50">
+                {busy === kind ? "Creating..." : existing ? sentenceLabel(kind) + " review available" :
+                  allowed ? "Create " + sentenceLabel(kind) + " review" :
+                  sentenceLabel(kind) + " review from day " + String(eligibility?.[kind]?.required_day || "")}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+      <div className="mt-4 space-y-4">
+        {reviews.length ? reviews.map((review) => (
+          <article key={review.id} className="rounded-xl border border-[var(--border)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold">{review.review_type === "final" ? "Final Performance Review" : "Midpoint Performance Review"}</h3>
+              <span className="text-xs text-[var(--muted-foreground)]">{formatDate(review.finalized_at || review.cutoff_at,true)}</span>
+            </div>
+            {review.narrative ? <p className="mt-3 text-sm leading-6">{review.narrative}</p> : null}
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {[
+                ["Evidence-grounded strengths", review.strengths || []],
+                ["Development areas", review.development_areas || []],
+                ["Next-period priorities", review.priorities || []],
+              ].map(([title, rows]) => (
+                <div key={title as string}>
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{title as string}</h4>
+                  {(rows as Array<{text:string}>).length ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-sm leading-6">
+                      {(rows as Array<{text:string}>).map((row,index)=><li key={index}>{row.text}</li>)}
+                    </ul>
+                  ) : <p className="mt-2 text-sm text-[var(--muted-foreground)]">No supported item recorded for this section.</p>}
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+              Assistance context: {Object.entries(review.assistance_summary?.event_counts_by_level || {})
+                .filter(([,count])=>Number(count)>0)
+                .map(([level,count])=>"Level " + level + ": " + count)
+                .join(" · ") || "No recorded assistance events before this review cutoff."}
+            </p>
+          </article>
+        )) : (
+          <p className="text-sm text-[var(--muted-foreground)]">No performance review has been finalized yet.</p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function ActivityView({
   workspace,
   refresh,
@@ -1840,6 +1936,7 @@ function ActivityView({
     <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <Timeline title="Activity" items={workspace.activity || []} />
       <div className="space-y-5">
+        <PerformanceReviews workspace={workspace} refresh={refresh} />
         <ReflectionView workspace={workspace} onWorkspaceRefresh={refresh} />
         <Panel className="p-5">
           <h2 className="text-base font-semibold">Past reflections</h2>
