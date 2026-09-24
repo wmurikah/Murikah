@@ -2382,7 +2382,7 @@ function ReflectionView({
       });
       if (!response.ok) throw new Error(await responseError(response, "That reflection could not be saved. Try again."));
       setMessage("Reflection saved.");
-      await onWorkspaceRefresh();
+      void onWorkspaceRefresh();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "That reflection could not be saved. Try again.");
     } finally {
