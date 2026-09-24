@@ -700,7 +700,7 @@ class VirtualInternshipAIOrchestrator:
         requested_selection: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Run the production Phase 6 assessor through the Phase 3 role pipeline."""
-        from ..assessment.engine import validate_and_calculate_assessment
+        from ..assessment.engine import AssessmentValidationError, validate_and_calculate_assessment
 
         context = build_formal_assessor_context(
             self.state_service,
@@ -713,6 +713,17 @@ class VirtualInternshipAIOrchestrator:
             assistance_events=assistance_events,
             workflow_feedback=workflow_feedback,
         )
+        def validate_formal(value: dict[str, Any]) -> dict[str, Any]:
+            try:
+                return validate_and_calculate_assessment(
+                    value,
+                    assessment_id=assessment_id,
+                    rubric=rubric,
+                    evidence_packet=evidence_packet,
+                )
+            except AssessmentValidationError as exc:
+                raise StructuredOutputError(str(exc)) from exc
+
         return await self._structured_call(
             role=VirtualInternshipModelRole.ASSESSOR,
             owner_actor_id=owner_actor_id,
@@ -721,12 +732,7 @@ class VirtualInternshipAIOrchestrator:
             requested_selection=requested_selection,
             task_id=task_id,
             system_prompt=ASSESSOR_SYSTEM_PROMPT,
-            validator=lambda value: validate_and_calculate_assessment(
-                value,
-                assessment_id=assessment_id,
-                rubric=rubric,
-                evidence_packet=evidence_packet,
-            ),
+            validator=validate_formal,
         )
 
 
