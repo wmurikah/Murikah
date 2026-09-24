@@ -654,9 +654,20 @@ export async function handlePhase5ArtifactPersistenceRoute(
     if (!taskId || !req) return json({error:'invalid_task_completion'},400);
     const contract=await taskContract(env.TUTOR_DB,internshipId,owned.scenario_version_id,taskId);
     if (!contract || contract.status !== 'completed') return json({error:'task_not_completed'},409);
-    await env.TUTOR_DB.batch([
-      activityStatement(env.TUTOR_DB,internshipId,taskId,'task_completed',now,req),
-    ]);
+    const activityId=generated('iaa');
+    const result=await env.TUTOR_DB.prepare(
+      'INSERT OR IGNORE INTO internship_artifact_activity(' +
+      'id, internship_id, task_id, artifact_id, version_id, submission_id, review_id, event_type, event_time, request_id, detail_json' +
+      ") SELECT ?, ?, ?, '', '', '', '', 'task_completed', ?, ?, '{}' " +
+      "WHERE EXISTS (SELECT 1 FROM internship_instances i WHERE i.id = ? AND i.learner_id = ? AND i.status = 'active')"
+    ).bind(activityId,internshipId,taskId,now,req,internshipId,actorId).run();
+    if(Number(result.meta?.changes||0)===0){
+      const replay=await env.TUTOR_DB.prepare(
+        "SELECT id FROM internship_artifact_activity WHERE internship_id = ? AND event_type = 'task_completed' AND request_id = ? LIMIT 1"
+      ).bind(internshipId,req).first<{id:string}>();
+      if(replay)return json({ok:true,idempotent_replay:true});
+      return json({error:'internship_not_active'},409);
+    }
     return json({ok:true},201);
   }
 
