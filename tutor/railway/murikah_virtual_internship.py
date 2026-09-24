@@ -114,6 +114,11 @@ class PassportExportRequest(BaseModel):
     include_display_name: bool = False
 
 
+class CompletionRequest(BaseModel):
+    internship_id: str = Field(min_length=1,max_length=128)
+    request_id: str = Field(min_length=3,max_length=128)
+
+
 
 def _identity(payload: TokenPayload) -> tuple[str,str,bool]:
     actor_id = str(getattr(payload,"user_id","") or "")
@@ -135,8 +140,10 @@ def _safe_http(exc: Exception, fallback: str = SAFE_LOAD_ERROR) -> HTTPException
     text = str(exc)
     if "HTTP 404" in text or "not_found" in text:
         return HTTPException(404,"That internship item is not available.")
+    if "internship_completion_blocked" in text or "internship_completion_conflict" in text:
+        return HTTPException(409,"The internship completion requirements are not yet satisfied.")
     if "HTTP 409" in text or "stopped" in text:
-        return HTTPException(409,"This internship is stopped and is available in read-only mode.")
+        return HTTPException(409,"This internship is not active and is available in read-only mode.")
     if "HTTP 401" in text or "authentication_required" in text:
         return HTTPException(401,"Sign in to continue.")
     return HTTPException(503,fallback)
@@ -976,6 +983,36 @@ async def export_competency_passport(
         )
     except Exception as exc:
         raise _safe_http(exc,"Your Competency Passport export could not be created. Try again.") from exc
+
+
+
+@router.get("/completion")
+async def completion_status(
+    internship_id: str = Query(min_length=1,max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    actor_id=_member(current,"view internship completion requirements")
+    try:
+        return _persistence().internship_completion_status(actor_id,internship_id)
+    except Exception as exc:
+        raise _safe_http(exc,"Completion requirements could not be loaded. Try again.") from exc
+
+
+@router.post("/completion")
+async def complete_internship(
+    body: CompletionRequest,
+    request: Request,
+    current: TokenPayload = Depends(require_auth),
+):
+    check_origin(request)
+    actor_id=_member(current,"complete an internship")
+    try:
+        return _persistence().internship_completion_finalize(
+            actor_id,body.internship_id,request_id=body.request_id
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"The internship could not be completed. Try again.") from exc
+
 
 
 @router.get("/workspace")
