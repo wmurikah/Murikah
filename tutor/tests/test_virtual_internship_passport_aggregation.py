@@ -66,6 +66,33 @@ class Phase7AggregationTests(unittest.TestCase):
         rows.append(ev(6,"not_demonstrated","vi_6","task_6","six",strength="strong"))
         self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=rows)["current_level"],"emerging")
 
+
+    def test_next_level_requirements_count_only_qualifying_evidence(self):
+        rows=[
+            ev(1,"developing","vi_1","task_1","one"),
+            ev(2,"not_demonstrated","vi_2","task_2","two",strength="strong"),
+        ]
+        result=aggregate_competency(definition=DEFINITION,evidence=rows)
+        self.assertEqual(result["current_level"],"emerging")
+        missing={row["kind"]:row["count"] for row in result["next_requirements"]}
+        self.assertEqual(missing["evidence_records"],1)
+
+    def test_configured_recency_excludes_expired_contribution_without_deleting_history(self):
+        definition={**DEFINITION,"recency_policy":{
+            **DEFINITION["recency_policy"],"expires_after_days":30,
+        }}
+        old=ev(1,"independent","vi_1","task_1","one",created=100)
+        recent=ev(2,"developing","vi_2","task_2","two",created=3_000_000)
+        result=aggregate_competency(
+            definition=definition,
+            evidence=[old,recent],
+            as_of=3_000_000,
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result["evidence_count"],1)
+        self.assertEqual(result["explanation"]["historical_evidence_records"],2)
+        self.assertEqual(result["explanation"]["expired_evidence_records"],1)
+
     def test_revoked_evidence_is_excluded(self):
         rows=[ev(1),{**ev(2),"revoked":True}]
         result=aggregate_competency(definition=DEFINITION,evidence=rows)
