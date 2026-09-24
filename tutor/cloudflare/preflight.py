@@ -1936,6 +1936,173 @@ def main() -> int:
         ),
     )
 
+    require_markers(
+        "tutor/cloudflare/migrations/0014_virtual_internship_phase8_completion.sql",
+        (
+            "phase1_completed_at_guard",
+            "CHECK (status IN ('active','stopped','completed'))",
+            "CREATE TABLE IF NOT EXISTS scenario_completion_policies",
+            "CREATE TABLE IF NOT EXISTS completion_records",
+            "internship_id TEXT NOT NULL UNIQUE",
+            "gate_snapshot_json TEXT NOT NULL",
+            "gate_snapshot_hash TEXT NOT NULL",
+            "evaluator_version TEXT NOT NULL",
+            "passport_aggregation_ruleset_versions_json",
+            "evidence_ruleset_versions_json",
+            "evidence_refs_json",
+            "completion_record_immutable",
+            "virtual_internship_phase8_completion_schema_version",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/migrations/0014_virtual_internship_phase8_completion.sql",
+        ("certificate_number", "public_verification", "completion_letter"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/virtual_internship_phase8.ts",
+        (
+            "COMPLETION_EVALUATOR_VERSION",
+            "evaluateCompletionEligibility",
+            "elapsedSeconds >= requiredDurationDays * INTERNSHIP_DAY_SECONDS",
+            "required_tasks_incomplete",
+            "required_review_missing",
+            "competency_evidence_insufficient",
+            "capstone_incomplete",
+            "final_review_missing",
+            "final_review_precedes_capstone",
+            "non_qualifying_internship",
+            "completion_policy_unavailable",
+            "manifest?.qualifying === true",
+            "String(row.mode) === 'standard'",
+            "INSERT OR IGNORE INTO completion_records",
+            "UPDATE internship_memberships SET status='completed'",
+            "'internship_completed'",
+            "/internships/completion/status",
+            "/internships/completion/finalize",
+            "/internships/completion/integrity",
+            "/scenario-completion-policy/install",
+        ),
+    )
+    forbid_markers(
+        "tutor/cloudflare/src/virtual_internship_phase8.ts",
+        ("skip90days", "forceComplete", "demoComplete", "OpenAI", "Claude", "Gemini", "Qwen", "NVIDIA", "TUTOR_FILES"),
+    )
+    require_markers(
+        "tutor/cloudflare/src/index.ts",
+        (
+            "STANDARD_MINIMUM_INTERNSHIP_DAYS = 90",
+            "handlePhase8CompletionPersistenceRoute",
+            "const phase8Response = await handlePhase8CompletionPersistenceRoute",
+            "row.completed_at ?? row.stopped_at",
+        ),
+    )
+    require_markers(
+        "tutor/virtual-internship/schema/v1/completion-policy.schema.json",
+        (
+            '"schema_version"',
+            '"required_task_ids"',
+            '"required_review_types"',
+            '"required_competencies"',
+            '"capstone_task_ids"',
+            '"require_final_review"',
+            '"final_review_after_capstone"',
+        ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/completion/policy.py",
+        (
+            "COMPLETION_POLICY_SCHEMA_VERSION = 1",
+            "def completion_policy_hash(",
+            "def validate_completion_policy(",
+            "minimum_evidence_strength",
+            "duplicate competency requirement",
+        ),
+    )
+    require_markers(
+        "tutor/railway/bootstrap_runtime.py",
+        (
+            "COMPLETION_POLICY_FILENAME",
+            "scenario_completion_policy_install(",
+            "completion_policy_hash(policy)",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def scenario_completion_policy_install(",
+            "def internship_completion_status(",
+            "def internship_completion_finalize(",
+            "def internship_completion_integrity(",
+        ),
+    )
+    require_markers(
+        "tutor/railway/murikah_virtual_internship.py",
+        (
+            '@router.get("/completion")',
+            '@router.post("/completion")',
+            'actor_id=_member(current,"view internship completion requirements")',
+            'actor_id=_member(current,"complete an internship")',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt",
+        (
+            "function CompletionRequirements(",
+            "Completion requirements",
+            "Day ",
+            "Required work",
+            "Competency evidence",
+            "Complete internship",
+            "server will re-check every requirement",
+            "Murikah Virtual Internship simulation",
+        ),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_completion_policy.py",
+        ("class CompletionPolicyTests", "test_unknown_required_task_rejected", "test_unknown_competency_rejected"),
+    )
+    require_markers(
+        "tutor/tests/test_virtual_internship_completion_state.py",
+        (
+            "class CompletionPersistenceTests",
+            "test_completed_no_longer_consumes_one_active_qualifying_slot",
+            "test_duration_boundaries_follow_exact_utc_seconds",
+            "test_demo_test_and_nonqualifying_records_fail_closed",
+            "test_finalization_rechecks_and_is_idempotent_owner_scoped",
+        ),
+    )
+    require_markers(
+        "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
+        (
+            "renders explicit Phase 8 completion gates without a percent-complete score",
+            "finalizes only after the latest server status is eligible",
+            "keeps a completed internship historical and read-only without Phase 9 credentials",
+        ),
+    )
+    require_markers(
+        "tutor/cloudflare/PERSISTENCE.md",
+        ("Virtual Internship Phase 8 deterministic completion", "0014_virtual_internship_phase8_completion.sql"),
+    )
+    require_markers(
+        "tutor/virtual-internship/README.md",
+        (
+            "## Phase 8 Implementation Record",
+            "## SUBSEQUENT COMPLETION DEVELOPMENT REQUIREMENT",
+            "phase8-completion-evaluator-v1",
+            "Phase 9 remains unimplemented",
+        ),
+    )
+    require_markers(
+        "tutor/Dockerfile.railway",
+        (
+            "COPY tutor/railway/virtual_internship /src/DeepTutor/deeptutor/virtual_internship",
+            "COPY tutor/virtual-internship /app/virtual-internship",
+            "COPY tutor/cloudflare/src /opt/murikah/cloudflare/src",
+            "COPY tutor/cloudflare/migrations /opt/murikah/cloudflare/migrations",
+            "RUN python -m unittest discover -s /opt/murikah/tests -v",
+        ),
+    )
+
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
     validate_bootstrap_fixture()
