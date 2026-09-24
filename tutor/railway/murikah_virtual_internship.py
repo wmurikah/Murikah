@@ -126,7 +126,7 @@ def _guest_workspace() -> dict[str,Any]:
         "simulation":True,
         "title":"Murikah Virtual Internship",
         "description":"A persistent simulated workplace for practising real knowledge-work responsibilities over time.",
-        "sections":["overview","inbox","work","company","documents","meetings","mentor","activity"],
+        "sections":["overview","inbox","work","company","documents","meetings","mentor","passport","activity"],
     }
 
 
