@@ -1,0 +1,117 @@
+[
+  {
+    "actor_id": "actor_analytics_manager",
+    "name": "Imani Teso",
+    "actor_class": "manager",
+    "job_title": "Analytics Manager",
+    "department_id": "dept_analytics",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign analytical work"
+    ],
+    "goals": [
+      "deliver reliable analysis"
+    ],
+    "knowledge_fact_ids": [
+      "fact_metric_policy",
+      "fact_dataset_grain",
+      "fact_product_priority"
+    ],
+    "communication_style": {
+      "tone": "analytical",
+      "formality": "medium"
+    },
+    "learner_relationship": "manager",
+    "escalation_capabilities": [
+      "scope escalation"
+    ],
+    "allowed_event_ids": [
+      "event_requirement_change"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_product_stakeholder",
+    "name": "Rafi Dalen",
+    "actor_class": "project_sponsor",
+    "job_title": "Product Lead",
+    "department_id": "dept_product",
+    "reports_to_actor_id": null,
+    "authority": [
+      "change product requirements"
+    ],
+    "goals": [
+      "improve retention insight"
+    ],
+    "knowledge_fact_ids": [
+      "fact_metric_policy",
+      "fact_product_priority"
+    ],
+    "communication_style": {
+      "tone": "concise",
+      "formality": "medium"
+    },
+    "learner_relationship": "business stakeholder",
+    "escalation_capabilities": [
+      "requirement change"
+    ],
+    "allowed_event_ids": [
+      "event_requirement_change"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_engineer",
+    "name": "Kora Nima",
+    "actor_class": "colleague",
+    "job_title": "Data Engineer",
+    "department_id": "dept_data",
+    "reports_to_actor_id": null,
+    "authority": [
+      "clarify data pipeline"
+    ],
+    "goals": [
+      "maintain data quality"
+    ],
+    "knowledge_fact_ids": [
+      "fact_dataset_grain",
+      "fact_hidden_null_issue"
+    ],
+    "communication_style": {
+      "tone": "technical",
+      "formality": "low"
+    },
+    "learner_relationship": "technical colleague",
+    "escalation_capabilities": [
+      "quality incident"
+    ],
+    "allowed_event_ids": [
+      "event_quality_disclosure"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_analyst_colleague",
+    "name": "Sami Olo",
+    "actor_class": "colleague",
+    "job_title": "Analyst",
+    "department_id": "dept_analytics",
+    "reports_to_actor_id": "actor_analytics_manager",
+    "authority": [],
+    "goals": [
+      "share analysis conventions"
+    ],
+    "knowledge_fact_ids": [
+      "fact_metric_policy",
+      "fact_dataset_grain"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]
