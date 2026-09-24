@@ -5,8 +5,9 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PHASE1 = ROOT / "cloudflare/migrations/0006_virtual_internship_phase1.sql"
-PHASE8 = ROOT / "cloudflare/migrations/0014_virtual_internship_phase8_completion.sql"
+MIGRATIONS = ROOT / "cloudflare/migrations"
+PHASE1 = MIGRATIONS / "0006_virtual_internship_phase1.sql"
+PHASE8 = MIGRATIONS / "0014_virtual_internship_phase8_completion.sql"
 WORKER = ROOT / "cloudflare/src/virtual_internship_phase8.ts"
 ROUTER = ROOT / "railway/murikah_virtual_internship.py"
 
@@ -30,6 +31,33 @@ def install_phase1_and_phase8(db: sqlite3.Connection) -> None:
 
 
 class CompletionPersistenceTests(unittest.TestCase):
+    def test_phase8_migration_applies_after_complete_current_schema(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = sqlite3.connect(Path(td) / "full-schema.sqlite3")
+            db.execute("PRAGMA foreign_keys=ON")
+            migrations = sorted(
+                path for path in MIGRATIONS.glob("*.sql")
+                if path.name <= PHASE8.name
+            )
+            self.assertGreaterEqual(len(migrations), 14)
+            for migration in migrations:
+                db.executescript(migration.read_text())
+            self.assertEqual(
+                db.execute(
+                    "SELECT value FROM persistence_meta WHERE key='virtual_internship_phase8_completion_schema_version'"
+                ).fetchone()[0],
+                "1",
+            )
+            instance_sql = db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='internship_instances'"
+            ).fetchone()[0]
+            membership_sql = db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='internship_memberships'"
+            ).fetchone()[0]
+            self.assertIn("'completed'", instance_sql)
+            self.assertIn("'completed'", membership_sql)
+            self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+
     def test_forward_migration_extends_lifecycle_and_preserves_phase1_guard(self):
         with tempfile.TemporaryDirectory() as td:
             db = sqlite3.connect(Path(td) / "phase8.sqlite3")
