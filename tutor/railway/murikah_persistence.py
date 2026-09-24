@@ -422,6 +422,24 @@ def internship_object_key(
 
 
 
+def scenario_completion_policy_install(
+    scenario_version_id: str,
+    policy: dict[str, Any],
+    *,
+    policy_hash: str,
+) -> dict[str, Any]:
+    """Install one validated immutable completion policy for an exact scenario version."""
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/scenario-completion-policy/install",
+        {
+            "scenario_version_id": _learning_text(scenario_version_id, 128),
+            "policy": policy,
+            "policy_hash": _learning_text(policy_hash, 64),
+        },
+    )
+
+
 def scenario_definition_install(
     scenario_version_id: str,
     canonical_definition: dict[str, Any],
