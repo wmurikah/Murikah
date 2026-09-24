@@ -23,11 +23,14 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate Tutor deployment invariants
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check origin/main...HEAD
           python tutor/scripts/preflight.py
           python tutor/cloudflare/preflight.py
 

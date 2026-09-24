@@ -71,9 +71,10 @@ class Phase6AssessorTests(unittest.TestCase):
 class Phase6FormalAssessorOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_formal_assessor_reuses_phase3_role_and_returns_validated_result(self):
         sink=AuditSink()
+        service=FakeStateService()
         payload=output()
         orch=VirtualInternshipAIOrchestrator(
-            FakeStateService(),
+            service,
             candidate_resolver=lambda *_a,**_k:[candidate()],
             stream_factory=lambda *_a,**_k:FakeStream([json.dumps(payload)]),
             audit_recorder=sink,
@@ -84,7 +85,7 @@ class Phase6FormalAssessorOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["aggregate_numeric"],"75.00")
         self.assertEqual(metadata["model_role"],"assessor")
-        self.assertEqual(FakeStateService().mutations,[])
+        self.assertEqual(service.mutations,[])
         self.assertEqual(sink.rows[-1][2]["status"],"completed")
 
     async def test_formal_assessor_invalid_outputs_fail_closed_after_bounded_fallback(self):

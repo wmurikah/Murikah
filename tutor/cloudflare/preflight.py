@@ -725,9 +725,11 @@ def main() -> int:
     require_markers(
         "tutor/tests/virtual-internship-workspace.spec.tsx.txt",
         (
-            "Virtual Internship workplace through Phase 5",
+            "Virtual Internship workplace through Phase 6",
             "without fake completion scoring",
             "requires deliberate acknowledgement before Phase 5 work actions",
+            "renders Phase 6 formal assessment evidence for the exact submitted version",
+            "renders midpoint and final performance reviews without completion claims",
             "streams a workplace actor reply",
             "keeps Murikah Mentor separate",
             "persists the learner reflection",
