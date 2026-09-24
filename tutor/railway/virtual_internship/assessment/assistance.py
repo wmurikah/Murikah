@@ -25,6 +25,13 @@ def assistance_event(
         raise ValueError("unknown assistance source")
     if provenance not in {"system_observed", "learner_declared"}:
         raise ValueError("unknown assistance provenance")
+    expected_provenance = {
+        "murikah_mentor": "system_observed",
+        "approved_tool": "system_observed",
+        "external_declared": "learner_declared",
+    }[source]
+    if provenance != expected_provenance:
+        raise ValueError("assistance source and provenance do not match")
     return {
         "internship_id": internship_id,
         "task_id": task_id,
