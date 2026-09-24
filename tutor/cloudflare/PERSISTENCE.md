@@ -292,6 +292,20 @@ Persistence is not complete merely because the bindings exist. Production cutove
 - backup and recovery are documented and tested.
 
 
+
+## Virtual Internship Phase 8 deterministic completion
+
+Migration `0014_virtual_internship_phase8_completion.sql` adds clean `completed` lifecycle semantics without editing Phase 1 migration `0006`. The migration preserves the referenced Phase 1 parent rows and extends their constrained lifecycle columns additively, retains the original always-null completion guard as `phase1_completed_at_guard`, creates a new server-authoritative `completed_at`, recreates the one-active-qualifying index, and extends learner membership/activity semantics for completion.
+
+`scenario_completion_policies` is an immutable one-row-per-scenario-version authority. Runtime bootstrap installs a validated `completion.json` only for its exact published scenario version and stores the canonical SHA-256 policy hash. Historical versions without a policy are not rewritten and fail closed for qualifying completion.
+
+`completion_records` has one immutable record per internship and stores learner ownership, exact scenario pack/version, policy schema/hash, server completion time, required duration, evaluator version, canonical structured gate snapshot and snapshot hash, Passport aggregation ruleset versions, evidence-strength ruleset versions and stable evidence references. It intentionally contains no certificate number, public verification ID or Phase 9 report/letter payload.
+
+The signed private persistence routes are `/internships/completion/status`, `/internships/completion/finalize`, `/internships/completion/integrity` and bootstrap-only `/scenario-completion-policy/install`. Status evaluation is read-only. Finalization rechecks all gates and uses a D1 batch with unique constraints and guarded lifecycle updates so retries and competing completion attempts converge on one completion record. Stop and completion are distinct terminal transitions. A completed internship no longer occupies the learner's one-active-qualifying slot, so a future qualifying internship can start normally.
+
+Completion reads and writes are owner-scoped through the authenticated Tutor actor. Browser payloads cannot assert learner identity, completion timestamps, gate booleans, mode or qualifying state. Demo/test and non-qualifying rows are denied, and the evaluator also checks the pinned scenario manifest classification. Basic completion reads use indexed D1 metadata only: no live model call and no R2 artifact download is required.
+
+
 ## Virtual Internship Phase 7 Competency Passport
 
 Migration `0013_virtual_internship_phase7_passport.sql` extends D1 with immutable versioned `competency_definitions`, authored/versioned `competency_assessment_mappings`, explicit `competency_definition_compatibility`, immutable `competency_evidence`, immutable administrative evidence adjustments, rebuildable `competency_passports`, immutable Passport level history and recoverable `competency_derivation_status`. Competency evidence persists the exact mapping version as well as the Phase 5 artifact/version/submission and Phase 6 assessment/criterion lineage.
