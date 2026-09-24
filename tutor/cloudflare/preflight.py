@@ -702,6 +702,13 @@ def main() -> int:
         ),
     )
     require_markers(
+        "tutor/railway/murikah_persistence.py",
+        (
+            "def internship_passport_adjust_evidence(",
+            "/internships/passport/evidence-adjust",
+        ),
+    )
+    require_markers(
         "tutor/railway/murikah_virtual_internship.py",
         (
             '@router.get("/workspace")',
