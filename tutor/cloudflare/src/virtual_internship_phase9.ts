@@ -704,7 +704,17 @@ async function issue(
     },
   });
   try {
-    const statements: P9Statement[] = [
+    const statements: P9Statement[] = [];
+    if (current) {
+      // D1 batch is the atomic boundary: release the one-current uniqueness slot
+      // before inserting the new immutable version. The forward document ID is
+      // intentionally not a foreign key so the whole batch can commit atomically.
+      statements.push(env.TUTOR_DB.prepare(
+        "UPDATE internship_completion_documents SET issuance_status='superseded',superseded_at=?,superseded_by_document_id=? " +
+        "WHERE id=? AND issuance_status='current'",
+      ).bind(now,documentId,String(current.id || '')));
+    }
+    statements.push(
       env.TUTOR_DB.prepare(
         'INSERT INTO tutor_objects(object_id,owner_kind,owner_id,object_type,runtime_path,object_key,sha256,size_bytes,content_type,created_at,updated_at,deleted_at) ' +
         "VALUES (?,'user',?,?,?,?,?,?,?, ?,?,NULL)",
@@ -721,13 +731,7 @@ async function issue(
         source.completion_snapshot_hash,sourcePayloadJson,sourcePayloadHash,objectId,outputHash,bytes.byteLength,'text/html; charset=utf-8',
         reference,codeHash,now,SIMULATION_DISCLOSURE_VERSION,req,now,
       ),
-    ];
-    if (current) {
-      statements.push(env.TUTOR_DB.prepare(
-        "UPDATE internship_completion_documents SET issuance_status='superseded',superseded_at=?,superseded_by_document_id=? " +
-        "WHERE id=? AND issuance_status='current'",
-      ).bind(now,documentId,String(current.id || '')));
-    }
+    );
     await env.TUTOR_DB.batch(statements);
   } catch {
     await env.TUTOR_FILES.delete(key);
