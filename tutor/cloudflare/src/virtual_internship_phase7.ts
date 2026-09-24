@@ -15,6 +15,13 @@ const EVIDENCE_RULESET='phase7-evidence-strength-v1';
 const AGGREGATION_RULESET='phase7-passport-aggregation-v1';
 const LEVELS=['emerging','developing','applied_with_support','independent','advanced'] as const;
 const LEVEL_ORDER:Record<string,number>={emerging:0,developing:1,applied_with_support:2,independent:3,advanced:4};
+const LEVEL_FRAMEWORK=[
+  {id:'emerging',label:'Emerging',meaning:'Early demonstrated evidence exists; task exposure alone is not evidence.'},
+  {id:'developing',label:'Developing',meaning:'Repeated partial or improving demonstration is supported by evidence.'},
+  {id:'applied_with_support',label:'Applied with support',meaning:'Credible application is demonstrated with material assistance in context.'},
+  {id:'independent',label:'Independent',meaning:'Successful performance includes qualifying low-assistance evidence.'},
+  {id:'advanced',label:'Advanced',meaning:'Repeated independent performance is demonstrated across sufficiently distinct contexts.'},
+];
 const STRENGTH_ORDER:Record<string,number>={limited:0,supporting:1,strong:2};
 
 function p7Json(payload:unknown,status=200):Response{
@@ -285,13 +292,23 @@ async function p7Summary(db:P7Database,actorId:string){
   return {
     aggregation_ruleset_version:AGGREGATION_RULESET,
     evidence_ruleset_version:EVIDENCE_RULESET,
+    level_framework:LEVEL_FRAMEWORK,
     competencies:passports.map(row=>({
-      ...row,explanation:p7Parse(row.explanation_json,{}),next_requirements:p7Parse(row.next_requirements_json,[]),
-      evidence_requirements:p7Parse(row.evidence_requirements_json,{}),transfer_policy:p7Parse(row.transfer_policy_json,{}),
+      competency_id:row.competency_id,definition_version:row.definition_version,name:row.name,
+      description:row.description,domain:row.domain,level_framework_version:row.level_framework_version,
+      current_level:row.current_level,evidence_strength_summary:row.evidence_strength_summary,
+      evidence_count:row.evidence_count,independent_count:row.independent_count,assisted_count:row.assisted_count,
+      distinct_task_count:row.distinct_task_count,distinct_context_count:row.distinct_context_count,
+      distinct_internship_count:row.distinct_internship_count,trend:row.trend,last_demonstrated_at:row.last_demonstrated_at,
+      explanation:p7Parse(row.explanation_json,{}),next_requirements:p7Parse(row.next_requirements_json,[]),
+      aggregation_ruleset_version:row.aggregation_ruleset_version,
     })),
     definitions:definitions.map(row=>({
-      ...row,evidence_requirements:p7Parse(row.evidence_requirements_json,{}),transfer_policy:p7Parse(row.transfer_policy_json,{}),
-      recency_policy:p7Parse(row.recency_policy_json,{}),context_metadata:p7Parse(row.context_metadata_json,{}),
+      competency_id:row.competency_id,definition_version:row.definition_version,name:row.name,
+      description:row.description,domain:row.domain,parent_competency_id:row.parent_competency_id,
+      level_framework_version:row.level_framework_version,
+      evidence_requirements:p7Parse(row.evidence_requirements_json,{}),
+      context_metadata:p7Parse(row.context_metadata_json,{}),
     })),
   };
 }
@@ -308,9 +325,20 @@ async function p7Evidence(db:P7Database,actorId:string,competencyId:string){
     'SELECT a.* FROM competency_evidence_adjustments a JOIN competency_evidence e ON e.id=a.evidence_id WHERE e.learner_id=? ORDER BY a.created_at'
   ).bind(actorId).all<Record<string,unknown>>()).results||[];
   return rows.map(row=>({
-    ...row,assistance_context:p7Parse(row.assistance_context_json,{}),revision_context:p7Parse(row.revision_context_json,{}),
-    strength_factors:p7Parse(row.strength_factors_json,{}),transfer_context:p7Parse(row.transfer_context_json,{}),
-    limitations:p7Parse(row.limitations_json,[]),adjustments:adjustments.filter(a=>a.evidence_id===row.id),
+    id:row.id,competency_id:row.competency_id,definition_version:row.definition_version,
+    sub_competency_id:row.sub_competency_id,internship_id:row.internship_id,
+    scenario_pack_id:row.scenario_pack_id,scenario_version_id:row.scenario_version_id,
+    scenario_title:row.scenario_title,task_id:row.task_id,artifact_id:row.artifact_id,
+    artifact_title:row.artifact_title,artifact_type:row.deliverable_type,artifact_version_id:row.artifact_version_id,
+    submission_id:row.submission_id,assessment_id:row.assessment_id,criterion_id:row.criterion_id,
+    criterion_rating_id:row.criterion_rating_id,criterion_numeric:row.criterion_numeric,
+    demonstrated_level:row.demonstrated_level,evidence_strength:row.evidence_strength,
+    assistance_level:row.assistance_level,assistance_context:p7Parse(row.assistance_context_json,{}),
+    revision_context:p7Parse(row.revision_context_json,{}),strength_factors:p7Parse(row.strength_factors_json,{}),
+    transfer_context:p7Parse(row.transfer_context_json,{}),limitations:p7Parse(row.limitations_json,[]),
+    source_type:row.source_type,evidence_ruleset_version:row.evidence_ruleset_version,
+    created_at:row.created_at,assessment_date:row.completed_at,
+    adjustments:adjustments.filter(a=>a.evidence_id===row.id).map(a=>({action:a.action,reason:a.reason,created_at:a.created_at})),
   }));
 }
 
