@@ -276,7 +276,10 @@ export async function handlePhase6AssessmentPersistenceRoute(
     const minimum=Math.max(1,int(manifest.minimum_duration_days)||90);
     const demo=['demo','test'].includes(String(manifest.classification||''));
     const midpoint=demo?(int(policy.demo_accelerated_midpoint_day)||Math.max(1,Math.floor(minimum/2))):(int(policy.midpoint_day)||Math.max(1,Math.floor(minimum/2)));
-    const finalDay=demo?(int(policy.demo_accelerated_final_day)||Math.max(midpoint,minimum-5)):(int(policy.final_review_day)||Math.max(midpoint,minimum-5));
+    let finalDay=demo?(int(policy.demo_accelerated_final_day)||Math.max(midpoint,minimum)):(int(policy.final_review_day)||minimum);
+    const qualifying=Boolean(int(owned.qualifying))||manifest.qualifying===true||String(manifest.classification||'')==='qualifying';
+    if(!demo&&qualifying)finalDay=Math.max(finalDay,minimum);
+    finalDay=Math.max(finalDay,midpoint);
     const requiredDay=reviewType==='midpoint'?midpoint:finalDay;
     const elapsed=Math.max(0,Math.floor((now-int(owned.started_at))/86400));
     if(elapsed<requiredDay||cutoff>now||cutoff<int(owned.started_at))return json({error:'review_not_eligible',required_day:requiredDay,elapsed_days:elapsed},409);
