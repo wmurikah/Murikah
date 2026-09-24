@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from decimal import Decimal
 from typing import Any
+
+from .rubrics import RubricError, validate_rubric
 
 REVIEW_SNAPSHOT_VERSION = 1
 
@@ -86,6 +89,38 @@ def build_review_snapshot(
     return snapshot
 
 
+def attach_review_signals(
+    assessment: dict[str, Any],
+    rubric: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach deterministic review signals without depending on authored rating labels."""
+    try:
+        normalized=validate_rubric(rubric)
+    except RubricError as exc:
+        raise ValueError("assessment rubric is invalid for performance review") from exc
+    values={row["rating_id"]:Decimal(row["value"]) for row in normalized["rating_levels"]}
+    criteria_by_id={row["criterion_id"]:row for row in normalized["criteria"]}
+    enriched={**assessment}
+    rows=[]
+    for raw in assessment.get("criteria",[]) if isinstance(assessment.get("criteria"),list) else []:
+        if not isinstance(raw,dict):
+            continue
+        row={**raw,"review_signal":"neutral"}
+        if row.get("result_state")=="assessed":
+            authored=criteria_by_id.get(str(row.get("criterion_id") or ""))
+            rating_id=str(row.get("rating_id") or "")
+            if authored and rating_id in values and rating_id in authored["allowed_rating_ids"]:
+                allowed_values=[values[rid] for rid in authored["allowed_rating_ids"] if rid in values]
+                if allowed_values:
+                    low=min(allowed_values); high=max(allowed_values)
+                    if high>low:
+                        midpoint=low+(high-low)/Decimal("2")
+                        row["review_signal"]="strength" if values[rating_id]>=midpoint else "development"
+        rows.append(row)
+    enriched["criteria"]=rows
+    return enriched
+
+
 def deterministic_review_findings(snapshot: dict[str, Any]) -> dict[str, Any]:
     strengths: list[dict[str, str]] = []
     development: list[dict[str, str]] = []
@@ -101,9 +136,10 @@ def deterministic_review_findings(snapshot: dict[str, Any]) -> dict[str, Any]:
             if not feedback:
                 continue
             ref = {"assessment_id": assessment_id, "criterion_id": str(criterion.get("criterion_id") or "")}
-            if criterion.get("result_state") == "assessed" and str(criterion.get("rating_id") or "") in {"meets", "exceeds"}:
+            signal=str(criterion.get("review_signal") or "neutral")
+            if criterion.get("result_state") == "assessed" and signal == "strength":
                 strengths.append({"text": feedback[:1000], **ref})
-            elif criterion.get("result_state") == "assessed":
+            elif criterion.get("result_state") == "assessed" and signal == "development":
                 development.append({"text": feedback[:1000], **ref})
                 priorities.append({"text": f"Address the documented gap for {ref['criterion_id']}.", **ref})
     level_counts = {str(i): 0 for i in range(6)}
@@ -129,6 +165,7 @@ def deterministic_review_findings(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "REVIEW_SNAPSHOT_VERSION",
+    "attach_review_signals",
     "build_review_snapshot",
     "deterministic_review_findings",
     "resolved_review_days",
