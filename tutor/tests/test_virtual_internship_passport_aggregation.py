@@ -9,7 +9,7 @@ sys.path.insert(0,str(ROOT/"railway"))
 
 from virtual_internship.passport.aggregation import aggregate_competency,PASSPORT_AGGREGATION_RULESET_VERSION
 
-DEFINITION={"evidence_requirements":{
+DEFINITION={"recency_policy":{"conflict_window":2,"latest_strong_not_demonstrated_cap":"developing","two_strong_not_demonstrated_cap":"emerging"},"evidence_requirements":{
     "emerging":{"min_records":1,"min_candidate":"developing"},
     "developing":{"min_records":2,"min_candidate":"developing"},
     "applied_with_support":{"min_records":2,"min_candidate":"applied_with_support"},
@@ -53,6 +53,18 @@ class Phase7AggregationTests(unittest.TestCase):
         self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=improving)["trend"],"improving")
         mixed=[ev(1,"independent"),ev(2,"developing"),ev(3,"independent")]
         self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=mixed)["trend"],"mixed")
+
+    def test_recent_strong_contradictory_evidence_can_downgrade_deterministically(self):
+        rows=[
+            ev(1,"independent","vi_1","task_1","one",strength="strong"),
+            ev(2,"independent","vi_2","task_2","two",strength="strong"),
+            ev(3,"independent","vi_3","task_3","three",strength="strong"),
+            ev(4,"independent","vi_4","task_4","four",strength="strong"),
+            ev(5,"not_demonstrated","vi_5","task_5","five",strength="strong"),
+        ]
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=rows)["current_level"],"developing")
+        rows.append(ev(6,"not_demonstrated","vi_6","task_6","six",strength="strong"))
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=rows)["current_level"],"emerging")
 
     def test_revoked_evidence_is_excluded(self):
         rows=[ev(1),{**ev(2),"revoked":True}]
