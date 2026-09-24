@@ -51,6 +51,20 @@ class Phase7EvidenceTests(unittest.TestCase):
 
 
 
+
+    def test_custom_phase6_rating_works_only_when_authored_in_mapping(self):
+        mapping={
+            **MAPPING,
+            "rating_contributions":{
+                "excellent":{"candidate":"applied_with_support","independence_eligible":True},
+            },
+        }
+        row=derive_evidence_contribution(
+            assessment=assessment(),criterion=criterion("excellent"),mapping=mapping,assistance_level=0
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(row["demonstrated_level"],"independent")
+
     def test_unknown_authored_rating_mapping_creates_no_evidence(self):
         self.assertIsNone(
             derive_evidence_contribution(
@@ -93,6 +107,8 @@ class Phase7EvidenceTests(unittest.TestCase):
         sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
         self.assertIn("UNIQUE (learner_id, assessment_id, criterion_id, competency_id, definition_version, mapping_version, evidence_ruleset_version)",sql)
         self.assertIn("mapping_version INTEGER NOT NULL",sql)
+        self.assertIn("rating_contribution_json TEXT NOT NULL",sql)
+        self.assertIn("max_independent_assistance INTEGER NOT NULL",sql)
         self.assertIn("trg_competency_evidence_no_update",sql)
         self.assertIn("ON DELETE RESTRICT",sql)
         self.assertNotIn("chain_of_thought",sql.lower())
