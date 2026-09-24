@@ -24,6 +24,7 @@ def build_text_evidence_packet(material: dict[str, Any]) -> dict[str, Any]:
             "artifact_id": artifact_id,
             "artifact_version_id": version_id,
             "submission_id": submission_id,
+            "line_count": 0,
             "references": [],
             "limitations": ["The submitted file has no safe extracted text representation for formal automated assessment."],
         }
@@ -50,6 +51,7 @@ def build_text_evidence_packet(material: dict[str, Any]) -> dict[str, Any]:
         "artifact_id": artifact_id,
         "artifact_version_id": version_id,
         "submission_id": submission_id,
+        "line_count": len(lines),
         "references": refs,
         "limitations": limitations,
     }
@@ -66,8 +68,12 @@ def evidence_reference_map(packet: dict[str, Any]) -> dict[str, dict[str, Any]]:
         ref_id = str(ref.get("evidence_ref") or "")
         if not ref_id or ref_id in out:
             raise EvidenceError("evidence reference identity is invalid")
+        if str(ref.get("artifact_id") or "") != str(packet.get("artifact_id") or ""):
+            raise EvidenceError("evidence references another artifact")
         if str(ref.get("artifact_version_id") or "") != str(packet.get("artifact_version_id") or ""):
             raise EvidenceError("evidence references another artifact version")
+        if str(ref.get("submission_id") or "") != str(packet.get("submission_id") or ""):
+            raise EvidenceError("evidence references another submission")
         locator = ref.get("locator")
         if not isinstance(locator, dict) or locator.get("kind") != "line_range":
             raise EvidenceError("unsupported evidence locator")
@@ -75,6 +81,11 @@ def evidence_reference_map(packet: dict[str, Any]) -> dict[str, dict[str, Any]]:
         end = locator.get("end_line")
         if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, int) or not isinstance(end, int) or start < 1 or end < start:
             raise EvidenceError("invalid line-range locator")
+        line_count = packet.get("line_count")
+        if isinstance(line_count, bool) or (line_count is not None and not isinstance(line_count, int)):
+            raise EvidenceError("invalid evidence packet line count")
+        if isinstance(line_count, int) and line_count >= 0 and end > line_count:
+            raise EvidenceError("evidence locator exceeds supplied source")
         out[ref_id] = ref
     return out
 
