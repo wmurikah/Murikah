@@ -912,8 +912,8 @@ describe("Virtual Internship workplace through Phase 6", () => {
     render(<MurikahVirtualInternshipWorkspace />);
 
     expect(await screen.findByRole("heading", { name: "Completion documents" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Generate Internship Performance Report" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Generate Virtual Internship Completion Letter" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Generate Internship Performance Report" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Generate Virtual Internship Completion Letter" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /certificate/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Internship Performance Report" }));
