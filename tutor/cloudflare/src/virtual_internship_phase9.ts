@@ -444,6 +444,31 @@ async function buildReportSource(
     assistance.add(ref.assistance_context);
     if (ref.limitation) evidenceLimitations.add(ref.limitation);
   }
+  const reviewReferences: EvidenceReference[] = [];
+  for (const [kind, review] of [['midpoint',reviews.midpoint],['final',reviews.final]] as const) {
+    if (!review) continue;
+    reviewReferences.push({
+      label: 'E' + (evidence.references.length + reviewReferences.length + 1),
+      reference_type: 'performance_review',
+      canonical_id: String(review.id || ''),
+      task_id: '',
+      task_title: kind === 'midpoint' ? 'Midpoint performance review' : 'Final performance review',
+      artifact_id: '',
+      artifact_title: 'Finalized Phase 6 performance review',
+      artifact_type: 'performance_review',
+      artifact_version: Number(review.review_version || 1),
+      submission_id: '',
+      assessment_id: '',
+      criterion_id: '',
+      competency_id: '',
+      competency_name: '',
+      demonstrated_level: '',
+      evidence_strength: '',
+      assistance_context: text(canonicalJson(parse(review.assistance_summary_json,{})),500),
+      limitation: 'Review conclusions are limited to the durable evidence snapshot recorded by Phase 6 at finalization.',
+    });
+  }
+  const allEvidenceReferences = [...evidence.references,...reviewReferences];
 
   const competencyRows = array(snapshot?.evidence?.competencies).map((row) => row && typeof row === 'object' ? row as Record<string,unknown> : {});
   const competencies = competencyRows.map((row) => ({
@@ -521,7 +546,7 @@ async function buildReportSource(
     competency_summary: competencies,
     strengths: finalStrengths,
     development_areas: finalDevelopment,
-    evidence_highlights: evidence.references.slice(0,8),
+    evidence_highlights: allEvidenceReferences.slice(0,8),
     assistance_independence_context: [...assistance],
     midpoint_to_final_improvement: improvement(reviews.midpoint,reviews.final),
     supervisor_style_narrative: text(finalReview?.narrative || 'A finalized supervisor-style narrative was not recorded.',8000),
@@ -531,7 +556,7 @@ async function buildReportSource(
       summary: extractReflection(reflection.content),
     } : null,
     limitations: [...new Set(limitations.map((item) => text(item,1800)).filter(Boolean))],
-    evidence_references: evidence.references,
+    evidence_references: allEvidenceReferences,
     simulation_disclosure: SIMULATION_DISCLOSURE,
     simulation_disclosure_version: SIMULATION_DISCLOSURE_VERSION,
     endorsement: null,
