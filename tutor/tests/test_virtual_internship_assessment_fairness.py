@@ -28,16 +28,10 @@ class Phase6FairnessTests(unittest.TestCase):
     def test_identity_and_sensitive_profile_fields_are_absent(self):
         dumped=str(self.context("learner_a")).lower()
         for forbidden in ("preferred_name","email","race","ethnicity","religion","sexual_orientation","health","disability"):
-            if forbidden in {"preferred_name","email"}:
-                self.assertIn(forbidden,dumped)
-            else:
-                self.assertNotIn(forbidden,dumped)
-        exclusions=self.context("learner_a")["context_exclusions"]
-        self.assertIn("preferred_name",exclusions)
-        self.assertIn("email",exclusions)
-        self.assertIn("sensitive_personal_profile_fields",exclusions)
+            self.assertNotIn(forbidden,dumped)
 
-    def test_private_mentor_conversation_is_explicitly_excluded(self):
-        self.assertIn("private_mentor_conversation",self.context("learner_a")["context_exclusions"])
+    def test_private_mentor_conversation_is_not_supplied(self):
+        dumped=str(self.context("learner_a")).lower()
+        self.assertNotIn("mentor_conversation",dumped)
 
 if __name__=="__main__":unittest.main()
