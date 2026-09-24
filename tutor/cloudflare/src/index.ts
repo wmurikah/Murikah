@@ -6,6 +6,7 @@ import { handlePhase5ArtifactPersistenceRoute } from './virtual_internship_phase
 import { handlePhase6AssessmentPersistenceRoute } from './virtual_internship_phase6';
 import { handlePhase7PassportPersistenceRoute } from './virtual_internship_phase7';
 import { handlePhase8CompletionPersistenceRoute } from './virtual_internship_phase8';
+import { handlePhase9DocumentPersistenceRoute } from './virtual_internship_phase9';
 
 type PersistenceRunResult = { meta?: { changes?: number } };
 type PersistenceStatement = {
@@ -647,6 +648,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
   const phase8Response = await handlePhase8CompletionPersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
   if (phase8Response) return phase8Response;
+
+  const phase9Response = await handlePhase9DocumentPersistenceRoute(
+    request,
+    { TUTOR_DB: env.TUTOR_DB, TUTOR_FILES: env.TUTOR_FILES, MURIKAH_PUBLIC_BASE_URL: env.MURIKAH_PUBLIC_BASE_URL },
+    route,
+    now,
+  );
+  if (phase9Response) return phase9Response;
 
   if (route === '/scenario-version/resolve' && request.method === 'POST') {
     const body = await requestJson(request);
