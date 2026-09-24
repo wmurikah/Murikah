@@ -245,15 +245,6 @@ def build_formal_assessor_context(
             if isinstance(row, dict)
         ][-3:],
         "permitted_scenario_facts": list(learner_view.get("facts") or []),
-        "context_exclusions": [
-            "preferred_name",
-            "email",
-            "account_profile",
-            "private_mentor_conversation",
-            "unrelated_tasks",
-            "unrelated_inbox_messages",
-            "sensitive_personal_profile_fields",
-        ],
     }
 
 
