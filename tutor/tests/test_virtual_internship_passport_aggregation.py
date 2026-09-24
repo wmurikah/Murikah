@@ -1,0 +1,62 @@
+import json
+import sqlite3
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"railway"))
+
+from virtual_internship.passport.aggregation import aggregate_competency,PASSPORT_AGGREGATION_RULESET_VERSION
+
+DEFINITION={"evidence_requirements":{
+    "emerging":{"min_records":1,"min_candidate":"developing"},
+    "developing":{"min_records":2,"min_candidate":"developing"},
+    "applied_with_support":{"min_records":2,"min_candidate":"applied_with_support"},
+    "independent":{"min_records":2,"min_candidate":"independent","min_independent":1},
+    "advanced":{"min_records":4,"min_candidate":"independent","min_independent":3,"min_task_contexts":2,"min_transfer_contexts":2},
+}}
+
+def ev(i,level="developing",internship="vi_1",task="task_1",context="one",created=None,strength="supporting"):
+    return {"id":f"ev_{i}","demonstrated_level":level,"internship_id":internship,"task_id":task,
+            "transfer_context":{"career_family":"audit","role_family":"audit","scenario_pack_id":"sp",
+                                "task_category":"review","domain":"audit","work_context":context},
+            "created_at":created if created is not None else i,"evidence_strength":strength}
+
+class Phase7AggregationTests(unittest.TestCase):
+    def test_one_record_is_emerging_not_advanced(self):
+        result=aggregate_competency(definition=DEFINITION,evidence=[ev(1,"independent")])
+        self.assertEqual(result["current_level"],"emerging")
+        self.assertEqual(result["aggregation_ruleset_version"],PASSPORT_AGGREGATION_RULESET_VERSION)
+
+    def test_repeated_criteria_same_task_do_not_fake_task_transfer(self):
+        rows=[ev(1,"independent"),ev(2,"independent"),ev(3,"independent"),ev(4,"independent")]
+        result=aggregate_competency(definition=DEFINITION,evidence=rows)
+        self.assertEqual(result["distinct_task_count"],1)
+        self.assertNotEqual(result["current_level"],"advanced")
+
+    def test_advanced_requires_repeated_independent_distinct_contexts(self):
+        rows=[
+            ev(1,"independent","vi_1","task_1","one"),
+            ev(2,"independent","vi_1","task_1","one"),
+            ev(3,"independent","vi_2","task_2","two"),
+            ev(4,"independent","vi_2","task_2","two"),
+        ]
+        result=aggregate_competency(definition=DEFINITION,evidence=rows)
+        self.assertEqual(result["current_level"],"advanced")
+        self.assertEqual(result["distinct_task_count"],2)
+        self.assertEqual(result["distinct_context_count"],2)
+
+    def test_trend_is_deterministic_and_requires_three_points(self):
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=[ev(1),ev(2)])["trend"],"insufficient_evidence")
+        improving=[ev(1,"developing"),ev(2,"applied_with_support"),ev(3,"independent")]
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=improving)["trend"],"improving")
+        mixed=[ev(1,"independent"),ev(2,"developing"),ev(3,"independent")]
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=mixed)["trend"],"mixed")
+
+    def test_revoked_evidence_is_excluded(self):
+        rows=[ev(1),{**ev(2),"revoked":True}]
+        result=aggregate_competency(definition=DEFINITION,evidence=rows)
+        self.assertEqual(result["evidence_count"],1)
+
+if __name__=="__main__": unittest.main()
