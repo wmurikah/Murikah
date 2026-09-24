@@ -16,8 +16,12 @@ class Phase6AssistanceTests(unittest.TestCase):
             self.assertEqual(event["assistance_level"],level)
 
     def test_out_of_range_level_rejected(self):
-        with self.assertRaises(Exception):
-            assistance_event(internship_id="vi_1",source="murikah_mentor",provenance="system_observed",level=6,category="x",event_time=1)
+        for level in (-1,6):
+            with self.assertRaises(Exception):
+                assistance_event(
+                    internship_id="vi_1",source="murikah_mentor",provenance="system_observed",
+                    level=level,category="x",event_time=1,
+                )
 
     def test_source_provenance_pairs_are_fail_closed(self):
         with self.assertRaises(ValueError):
