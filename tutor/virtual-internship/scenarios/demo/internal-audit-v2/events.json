@@ -1,0 +1,115 @@
+[
+  {
+    "event_id": "event_day7_variance",
+    "authored_sequence": 1,
+    "event_type": "time_disclosure",
+    "priority": 30,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 7
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_inventory_variance",
+        "value": "variance_detected"
+      },
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_inventory_variance"
+      }
+    ],
+    "message_template_id": "msg_variance_notice",
+    "actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Day 7 variance disclosure",
+    "learning_objective": "Respond to new evidence without assuming a cause."
+  },
+  {
+    "event_id": "event_disclose_exception",
+    "authored_sequence": 2,
+    "event_type": "task_evidence",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_reconcile_sample",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_control_exception"
+      }
+    ],
+    "message_template_id": "msg_exception_disclosed",
+    "actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Control exception disclosed",
+    "learning_objective": "Update an audit hypothesis when corroborating evidence appears."
+  },
+  {
+    "event_id": "event_management_pressure",
+    "authored_sequence": 3,
+    "event_type": "workplace_politics",
+    "priority": 50,
+    "triggers": [
+      {
+        "trigger_type": "prior_event",
+        "event_id": "event_disclose_exception"
+      },
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_investigate_variance",
+        "status": "available"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_future_request"
+      }
+    ],
+    "message_template_id": "msg_management_pressure",
+    "actor_ids": [
+      "actor_operations_manager",
+      "actor_audit_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Management prioritization pressure",
+    "learning_objective": "Practice professional escalation when speed and control quality conflict."
+  },
+  {
+    "event_id": "event_escalation_choice",
+    "authored_sequence": 4,
+    "event_type": "decision_consequence",
+    "priority": 60,
+    "triggers": [
+      {
+        "trigger_type": "decision",
+        "decision_id": "decision_pressure_response",
+        "option_id": "escalate"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "assign_task",
+        "task_id": "task_draft_issue"
+      }
+    ],
+    "message_template_id": "msg_escalation_ack",
+    "actor_ids": [
+      "actor_audit_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Escalation option accepted",
+    "learning_objective": "Use an authored professional escalation path."
+  }
+]
