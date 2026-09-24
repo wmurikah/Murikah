@@ -136,6 +136,85 @@ type InternshipPerformanceReview = {
   finalized_at: number;
 };
 
+type PassportLevelMeta = { id: string; label: string; meaning: string };
+
+type CompetencyPassportItem = {
+  competency_id: string;
+  definition_version: number;
+  name: string;
+  description: string;
+  domain: string;
+  level_framework_version: string;
+  current_level: string;
+  evidence_strength_summary: string;
+  evidence_count: number;
+  independent_count: number;
+  assisted_count: number;
+  distinct_task_count: number;
+  distinct_context_count: number;
+  distinct_internship_count: number;
+  trend: string;
+  last_demonstrated_at: number;
+  explanation: Record<string, number | string>;
+  next_requirements: Array<{ kind: string; count: number }>;
+  aggregation_ruleset_version: string;
+};
+
+type CompetencyDefinitionView = {
+  competency_id: string;
+  definition_version: number;
+  name: string;
+  description: string;
+  domain: string;
+  parent_competency_id?: string | null;
+  level_framework_version: string;
+  evidence_requirements: Record<string, Record<string, number | string>>;
+  context_metadata: { physical?: boolean };
+};
+
+type CompetencyPassportResponse = {
+  ok: boolean;
+  aggregation_ruleset_version: string;
+  evidence_ruleset_version: string;
+  level_framework: PassportLevelMeta[];
+  competencies: CompetencyPassportItem[];
+  definitions: CompetencyDefinitionView[];
+};
+
+type CompetencyEvidenceView = {
+  id: string;
+  competency_id: string;
+  definition_version: number;
+  internship_id: string;
+  scenario_pack_id: string;
+  scenario_version_id: string;
+  scenario_title: string;
+  task_id: string;
+  artifact_id: string;
+  artifact_title: string;
+  artifact_type: string;
+  artifact_version_id: string;
+  submission_id: string;
+  assessment_id: string;
+  criterion_id: string;
+  mapping_version: number;
+  criterion_rating_id: string;
+  criterion_numeric?: string | null;
+  demonstrated_level: string;
+  evidence_strength: string;
+  assistance_level: number;
+  assistance_context: { label?: string; recorded_event_count?: number; system_observed_count?: number; learner_declared_count?: number };
+  revision_context: { artifact_version_number?: number; submission_number?: number; revision_count?: number };
+  strength_factors: Record<string, boolean | string>;
+  transfer_context: Record<string, string>;
+  limitations: string[];
+  source_type: string;
+  evidence_ruleset_version: string;
+  created_at: number;
+  assessment_date: number;
+  adjustments: Array<{ action: string; reason: string; created_at: number }>;
+};
+
 type InternshipWorkArtifact = {
   id: string;
   task_id: string;
@@ -325,6 +404,7 @@ const SECTIONS = [
   { id: "documents", label: "Documents", icon: FileText, href: "/virtual-internship/documents" },
   { id: "meetings", label: "Meetings", icon: CalendarDays, href: "/virtual-internship/meetings" },
   { id: "mentor", label: "Mentor", icon: Bot, href: "/virtual-internship/mentor" },
+  { id: "passport", label: "Passport", icon: ClipboardList, href: "/virtual-internship/passport" },
   { id: "activity", label: "Activity", icon: Activity, href: "/virtual-internship/activity" },
 ] as const;
 
@@ -468,11 +548,12 @@ function GuestPreview() {
           Practise professional knowledge work in a persistent simulated company, with assignments, workplace conversations,
           meetings, source documents, reflection and a separate Murikah Mentor.
         </p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ["A real work rhythm", "Your internship keeps its state across visits and follows the existing minimum duration policy."],
             ["Workplace actors", "Communicate with learner-visible supervisors and stakeholders inside the simulation."],
             ["Murikah Mentor", "Get coaching and explanations without turning workplace actors into tutors."],
+            ["Competency Passport", "Build a private evidence-backed record from formally assessed internship work, with traceable evidence and assistance context."],
           ].map(([title, copy]) => (
             <Panel key={title} className="p-5">
               <h2 className="font-semibold">{title}</h2>
@@ -1925,6 +2006,315 @@ function PerformanceReviews({
   );
 }
 
+function passportRequirementLabel(item: { kind: string; count: number }) {
+  const labels: Record<string, string> = {
+    evidence_records: "additional qualifying evidence record",
+    independent_demonstrations: "additional independent demonstration",
+    distinct_task_contexts: "additional distinct task context",
+    distinct_transfer_contexts: "additional distinct transfer context",
+  };
+  const label = labels[item.kind] || sentenceLabel(item.kind);
+  return String(item.count) + " " + label + (item.count === 1 ? "" : "s");
+}
+
+function competencyRequirementSummary(level: string, rules: Record<string, number | string>) {
+  const parts: string[] = [];
+  const minRecords = Number(rules.min_records || 0);
+  const minIndependent = Number(rules.min_independent || 0);
+  const minTasks = Number(rules.min_task_contexts || 0);
+  const minContexts = Number(rules.min_transfer_contexts || 0);
+  if (minRecords) parts.push(String(minRecords) + " qualifying evidence record" + (minRecords === 1 ? "" : "s"));
+  if (minIndependent) parts.push(String(minIndependent) + " independent demonstration" + (minIndependent === 1 ? "" : "s"));
+  if (minTasks) parts.push(String(minTasks) + " distinct task context" + (minTasks === 1 ? "" : "s"));
+  if (minContexts) parts.push(String(minContexts) + " distinct transfer context" + (minContexts === 1 ? "" : "s"));
+  return sentenceLabel(level) + " requires " + (parts.length ? parts.join(", ") : "authored qualifying evidence") + ".";
+}
+
+function PassportView() {
+  const [passport, setPassport] = useState<CompetencyPassportResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [selected, setSelected] = useState<CompetencyPassportItem | null>(null);
+  const [evidence, setEvidence] = useState<CompetencyEvidenceView[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [includeNameInExport, setIncludeNameInExport] = useState(false);
+
+  async function loadPassport() {
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(API + "/passport", { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error(await responseError(response, "Your Competency Passport could not be loaded."));
+      setPassport((await response.json()) as CompetencyPassportResponse);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Your Competency Passport could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openEvidence(item: CompetencyPassportItem) {
+    setSelected(item);
+    setEvidence([]);
+    setEvidenceLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(API + "/passport/evidence?competency_id=" + encodeURIComponent(item.competency_id), {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await responseError(response, "Competency evidence could not be loaded."));
+      const payload = (await response.json()) as { evidence?: CompetencyEvidenceView[] };
+      setEvidence(Array.isArray(payload.evidence) ? payload.evidence : []);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Competency evidence could not be loaded.");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }
+
+  async function exportPassport() {
+    setExporting(true);
+    setMessage("");
+    try {
+      const response = await fetch(API + "/passport/export", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ include_display_name: includeNameInExport }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "Your Passport export could not be created."));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "murikah-competency-passport.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Your Passport export could not be created.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  useEffect(() => { void loadPassport(); }, []);
+
+  if (loading) {
+    return <Panel className="p-6"><p className="text-sm text-[var(--muted-foreground)]" role="status">Loading your evidence-backed Competency Passport…</p></Panel>;
+  }
+  if (!passport) {
+    return <Panel className="p-6"><p className="text-sm text-red-600" role="alert">{message || "Your Competency Passport is unavailable."}</p></Panel>;
+  }
+
+  const competencies = passport.competencies || [];
+  const levelLabel = (id: string) => passport.level_framework?.find((level) => level.id === id)?.label || sentenceLabel(id);
+
+  return (
+    <div className="space-y-5">
+      <Panel className="p-5 sm:p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A9822E]">Verified simulation evidence</p>
+            <h2 className="mt-2 text-xl font-semibold">Competency Passport</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+              This private record summarizes competencies demonstrated through formally assessed Murikah Virtual Internship work.
+              Levels are calculated from traceable evidence, not an AI opinion or an overall employability score.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+            <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <input
+                type="checkbox"
+                checked={includeNameInExport}
+                onChange={(event) => setIncludeNameInExport(event.target.checked)}
+              />
+              Include my display name in this export
+            </label>
+            <button
+              type="button"
+              onClick={() => void exportPassport()}
+              disabled={exporting}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold hover:bg-[var(--background)] disabled:opacity-60"
+            >
+              {exporting ? "Preparing export…" : "Export JSON"}
+            </button>
+          </div>
+        </div>
+        {message ? <p className="mt-4 text-sm text-red-600" role="alert">{message}</p> : null}
+      </Panel>
+
+      {competencies.length === 0 ? (
+        <Panel className="p-5">
+          <EmptyState
+            title="No verified competency evidence yet."
+            detail="Your Passport will grow as assessed internship work creates verified evidence. Starting or submitting work alone does not award a competency level."
+          />
+          <details className="mt-5 rounded-lg border border-[var(--border)] p-4">
+            <summary className="cursor-pointer text-sm font-semibold">What the Passport measures</summary>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {(passport.definitions || []).map((definition) => (
+                <div key={definition.competency_id} className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-sm font-semibold">{definition.name}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{definition.description}</p>
+                  {definition.context_metadata?.physical ? (
+                    <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">Virtual Internship evidence cannot fully verify the physical/manual component of this competency.</p>
+                  ) : null}
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {Object.entries(definition.evidence_requirements || {}).map(([level, rules]) => (
+                      <li key={level}>• {competencyRequirementSummary(level, rules)}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </details>
+        </Panel>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {competencies.map((item) => (
+            <Panel key={item.competency_id + ":" + item.definition_version} className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{sentenceLabel(item.domain)}</p>
+                  <h3 className="mt-1 text-lg font-semibold">{item.name}</h3>
+                </div>
+                <span className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-semibold">
+                  {levelLabel(item.current_level)}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">{item.description}</p>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Evidence</dt><dd className="mt-1 font-semibold">{item.evidence_count}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Strength</dt><dd className="mt-1 font-semibold">{sentenceLabel(item.evidence_strength_summary)}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Independent</dt><dd className="mt-1 font-semibold">{item.independent_count}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Assisted</dt><dd className="mt-1 font-semibold">{item.assisted_count}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Task contexts</dt><dd className="mt-1 font-semibold">{item.distinct_task_count}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Transfer contexts</dt><dd className="mt-1 font-semibold">{item.distinct_context_count}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Internships</dt><dd className="mt-1 font-semibold">{item.distinct_internship_count}</dd></div>
+                {item.trend !== "insufficient_evidence" ? (
+                  <div><dt className="text-xs text-[var(--muted-foreground)]">Trend</dt><dd className="mt-1 font-semibold">{sentenceLabel(item.trend)}</dd></div>
+                ) : null}
+              </dl>
+              <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">
+                Why this level: {item.explanation?.qualifying_evidence_records ?? item.evidence_count} qualifying evidence record{(item.explanation?.qualifying_evidence_records ?? item.evidence_count) === 1 ? "" : "s"},
+                {" "}{item.explanation?.independent_demonstrations ?? item.independent_count} independent demonstration{(item.explanation?.independent_demonstrations ?? item.independent_count) === 1 ? "" : "s"},
+                across {item.explanation?.distinct_task_contexts ?? item.distinct_task_count} task context{(item.explanation?.distinct_task_contexts ?? item.distinct_task_count) === 1 ? "" : "s"} and
+                {" "}{item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count} transfer context{(item.explanation?.distinct_transfer_contexts ?? item.distinct_context_count) === 1 ? "" : "s"}.
+              </p>
+              {(Number(item.explanation?.expired_evidence_records || 0) > 0) ? (
+                <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                  {String(item.explanation.expired_evidence_records)} historical evidence record{Number(item.explanation.expired_evidence_records) === 1 ? "" : "s"} excluded from the current level by this competency&apos;s configured recency policy. The historical evidence remains available in drill-down.
+                </p>
+              ) : null}
+              <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                Last demonstrated {formatDate(item.last_demonstrated_at, true)}. Evidence remains individually traceable to the assessed artifact version and submission.
+              </p>
+              {item.next_requirements?.length ? (
+                <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+                  <p className="text-xs font-semibold">Evidence still missing for the next demonstrated level</p>
+                  <ul className="mt-2 space-y-1 text-xs text-[var(--muted-foreground)]">
+                    {item.next_requirements.map((requirement, index) => <li key={requirement.kind + index}>• {passportRequirementLabel(requirement)}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void openEvidence(item)}
+                className="mt-4 min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold hover:bg-[var(--background)]"
+              >
+                Review evidence
+              </button>
+            </Panel>
+          ))}
+        </div>
+      )}
+
+      <Panel className="p-5">
+        <details>
+          <summary className="cursor-pointer text-sm font-semibold">Competency level framework</summary>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {(passport.level_framework || []).map((level) => (
+              <div key={level.id} className="rounded-lg border border-[var(--border)] p-3">
+                <p className="text-sm font-semibold">{level.label}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{level.meaning}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+      </Panel>
+
+      {selected ? (
+        <Panel className="p-5 sm:p-6" ariaLabel={"Evidence for " + selected.name}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Evidence drill-down</p>
+              <h2 className="mt-1 text-lg font-semibold">{selected.name}</h2>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">Definition v{selected.definition_version} · {selected.level_framework_version}</p>
+            </div>
+            <button type="button" onClick={() => { setSelected(null); setEvidence([]); }} className="min-h-9 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold">Close</button>
+          </div>
+          {evidenceLoading ? <p className="mt-5 text-sm text-[var(--muted-foreground)]" role="status">Loading evidence…</p> : (
+            <div className="mt-5 space-y-4">
+              {evidence.length ? evidence.map((row) => (
+                <article key={row.id} className="rounded-xl border border-[var(--border)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{row.artifact_title || row.task_id}</p>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">{row.scenario_title || row.scenario_pack_id} · {sentenceLabel(row.artifact_type || "work artifact")}</p>
+                    </div>
+                    <span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-semibold">
+                      {row.demonstrated_level === "not_demonstrated" ? "Not demonstrated in this evidence" : levelLabel(row.demonstrated_level)}
+                    </span>
+                  </div>
+                  <dl className="mt-4 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                    <div><dt className="font-semibold">Evidence strength</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{sentenceLabel(row.evidence_strength)}</dd></div>
+                    <div><dt className="font-semibold">Assistance context</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{row.assistance_context?.label || "Recorded assistance context"}</dd></div>
+                    <div><dt className="font-semibold">Assessment date</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{formatDate(row.assessment_date || row.created_at, true)}</dd></div>
+                    <div><dt className="font-semibold">Internship</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.internship_id}</dd></div>
+                    <div><dt className="font-semibold">Task</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.task_id}</dd></div>
+                    <div><dt className="font-semibold">Work context</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">{sentenceLabel(row.transfer_context?.work_context || "not specified")}</dd></div>
+                    <div><dt className="font-semibold">Criterion</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.criterion_id}</dd></div>
+                    <div><dt className="font-semibold">Mapping version</dt><dd className="mt-0.5 text-[var(--muted-foreground)]">v{row.mapping_version}</dd></div>
+                    <div><dt className="font-semibold">Artifact version</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.artifact_version_id}</dd></div>
+                    <div><dt className="font-semibold">Submission</dt><dd className="mt-0.5 break-all text-[var(--muted-foreground)]">{row.submission_id}</dd></div>
+                  </dl>
+                  <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                    Evidence ID <span className="break-all font-mono">{row.id}</span> · Assessment <span className="break-all font-mono">{row.assessment_id}</span>
+                  </p>
+                  {Object.entries(row.strength_factors || {}).some(([, value]) => value === true) ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold">Why this evidence has this strength</p>
+                      <ul className="mt-1 space-y-1 text-xs text-[var(--muted-foreground)]">
+                        {Object.entries(row.strength_factors || {})
+                          .filter(([, value]) => value === true)
+                          .map(([factor]) => <li key={factor}>• {sentenceLabel(factor)}</li>)}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {row.limitations?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold">Limitations</p>
+                      <ul className="mt-1 space-y-1 text-xs text-[var(--muted-foreground)]">{row.limitations.map((limitation, index) => <li key={index}>• {limitation}</li>)}</ul>
+                    </div>
+                  ) : null}
+                  {row.adjustments?.length ? <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">This evidence has an administrative audit adjustment and is excluded from the current aggregate where applicable.</p> : null}
+                  <a href={"/virtual-internship/work?task=" + encodeURIComponent(row.task_id)} className="mt-4 inline-flex min-h-9 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold">
+                    Open related work
+                  </a>
+                </article>
+              )) : <EmptyState title="No evidence is available for this competency." detail="Only valid completed Phase 6 assessments with an authored competency mapping appear here." />}
+            </div>
+          )}
+        </Panel>
+      ) : null}
+    </div>
+  );
+}
+
 function ActivityView({
   workspace,
   refresh,
@@ -2036,6 +2426,7 @@ export default function MurikahVirtualInternshipWorkspace() {
   else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} />;
   else if (section === "meetings") body = <MeetingsView meetings={workspace.meetings || []} activity={workspace.activity || []} />;
   else if (section === "mentor") body = <MentorView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
+  else if (section === "passport") body = <PassportView />;
   else if (section === "activity") body = <ActivityView workspace={workspace} refresh={refreshWorkspace} />;
   else body = <OverviewView workspace={workspace} people={people} onTask={setSelectedTask} />;
 

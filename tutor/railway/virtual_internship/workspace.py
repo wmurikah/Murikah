@@ -473,7 +473,7 @@ class VirtualInternshipWorkspaceService:
                 "state":"none",
                 "simulation":True,
                 "start_options":self.start_options(actor_id),
-                "sections":["overview","inbox","work","company","documents","meetings","mentor","activity"],
+                "sections":["overview","inbox","work","company","documents","meetings","mentor","passport","activity"],
             }
         context = self._context(actor_id,internship_id)
         tasks = self._visible_tasks(context)
@@ -569,7 +569,7 @@ class VirtualInternshipWorkspaceService:
                 for row in context.reflections
             ],
             "activity":activity,
-            "sections":["overview","inbox","work","company","documents","meetings","mentor","activity"],
+            "sections":["overview","inbox","work","company","documents","meetings","mentor","passport","activity"],
         }
 
     def document(self, actor_id: str, internship_id: str, document_id: str) -> dict[str,Any]:
