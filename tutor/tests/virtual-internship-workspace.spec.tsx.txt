@@ -896,7 +896,8 @@ describe("Virtual Internship workplace through Phase 6", () => {
     render(<MurikahVirtualInternshipWorkspace />);
 
     expect(await screen.findByText("Completed")).toBeVisible();
-    expect(screen.getByLabelText("Message Lina A.")).toBeDisabled();
+    expect(screen.getByLabelText("Workplace message")).toBeDisabled();
+    expect(screen.getByPlaceholderText("This internship is read-only.")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
