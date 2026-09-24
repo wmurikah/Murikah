@@ -37,8 +37,14 @@ class Phase6RubricTests(unittest.TestCase):
         self.assertEqual(len(rubric_hash(value)),64)
         self.assertEqual(RUBRIC_CALCULATION_VERSION,"phase6-weighted-v1")
 
-    def test_invalid_weight_total_rejected(self):
+    def test_negative_weight_and_invalid_weight_total_are_rejected(self):
+        value=rubric();value["criteria"][0]["weight"]=-1;value["criteria"][1]["weight"]=101
+        with self.assertRaises(RubricError):validate_rubric(value)
         value=rubric();value["criteria"][0]["weight"]=60
+        with self.assertRaises(RubricError):validate_rubric(value)
+
+    def test_duplicate_criterion_id_is_rejected(self):
+        value=rubric();value["criteria"][1]["criterion_id"]="analysis"
         with self.assertRaises(RubricError):validate_rubric(value)
 
     def test_unknown_rating_reference_rejected(self):
