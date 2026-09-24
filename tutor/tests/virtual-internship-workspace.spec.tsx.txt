@@ -909,7 +909,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
         scenario_version_id: "sv_demo_internal_audit_v2", scenario_title: "Internal Audit",
         task_id: "task_reconcile_sample", artifact_id: "art_1", artifact_title: "Reconciliation memo",
         artifact_type: "memo", artifact_version_id: "ver_2", submission_id: "sub_2",
-        assessment_id: "asm_2", criterion_id: "evidence_reasoning", criterion_rating_id: "meets",
+        assessment_id: "asm_2", criterion_id: "evidence_reasoning", mapping_version: 1, criterion_rating_id: "meets",
         demonstrated_level: "independent", evidence_strength: "strong", assistance_level: 0,
         assistance_context: { label: "Independent demonstration", recorded_event_count: 0 },
         revision_context: { artifact_version_number: 2, submission_number: 2, revision_count: 1 },
@@ -935,6 +935,7 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(await screen.findByText("Reconciliation memo")).toBeVisible();
     expect(screen.getByText("ver_2")).toBeVisible();
     expect(screen.getByText("sub_2")).toBeVisible();
+    expect(screen.getByText("v1")).toBeVisible();
     expect(screen.getByText(/Independent demonstration/)).toBeVisible();
     expect(screen.getByText(/Only the submitted artifact version was assessed/)).toBeVisible();
     expect(screen.queryByText(/hidden scenario|system prompt|chain-of-thought/i)).toBeNull();
