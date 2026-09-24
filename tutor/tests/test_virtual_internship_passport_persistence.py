@@ -43,6 +43,10 @@ class Phase7PersistenceTests(unittest.TestCase):
             self.assertIn("idx_competency_passports_learner",names)
             with self.assertRaises(sqlite3.IntegrityError):
                 db.execute("UPDATE competency_definitions SET name='rewritten' WHERE competency_id='comp_reconciliation'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    "INSERT INTO competency_definitions SELECT * FROM competency_definitions WHERE competency_id='comp_reconciliation' AND definition_version=1"
+                )
             db.close()
             reopened=sqlite3.connect(path)
             self.assertEqual(reopened.execute("SELECT COUNT(*) FROM competency_definitions").fetchone()[0],11)
@@ -66,6 +70,8 @@ class Phase7PersistenceTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(assessment_id) DO UPDATE",source)
         self.assertIn("SELECT COUNT(*) AS n FROM competency_evidence",source)
         self.assertIn("LEFT JOIN competency_derivation_status",source)
+        self.assertIn("current_mapping_version",source)
+        self.assertIn("ds.mapping_version<>",source)
         self.assertIn("p7RefreshPassport",source)
         self.assertIn("p7Rebuild",source)
         self.assertIn("passport/rebuild",source)
