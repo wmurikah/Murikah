@@ -64,19 +64,33 @@ function p7Trend(rows:Record<string,unknown>[]):string{
   if(deltas.every(x=>x>=0)&&deltas.some(x=>x>0))return 'improving';
   return 'mixed';
 }
-function p7RequirementMet(level:string,rules:Record<string,unknown>,rows:Record<string,unknown>[]):boolean{
+function p7QualifyingRows(rules:Record<string,unknown>,rows:Record<string,unknown>[]):Record<string,unknown>[]{
   const required=String(rules.min_candidate||'developing');
-  const qualifying=rows.filter(row=>p7LevelAtLeast(String(row.demonstrated_level||''),required));
+  return rows.filter(row=>p7LevelAtLeast(String(row.demonstrated_level||''),required));
+}
+function p7RecencyEligible(definition:Record<string,unknown>,historical:Record<string,unknown>[],now:number){
+  const policy=p7Parse(definition.recency_policy_json,{}) as Record<string,unknown>;
+  const expiry=Number(policy.expires_after_days||0);
+  if(!Number.isFinite(expiry)||expiry<=0)return {rows:historical,expired:0};
+  const cutoff=now-(expiry*86400);
+  const rows=historical.filter(row=>Number(row.created_at||0)>=cutoff);
+  return {rows,expired:historical.length-rows.length};
+}
+function p7RequirementMet(level:string,rules:Record<string,unknown>,rows:Record<string,unknown>[]):boolean{
+  const qualifying=p7QualifyingRows(rules,rows);
   if(qualifying.length<Number(rules.min_records||1))return false;
   const independent=qualifying.filter(row=>row.demonstrated_level==='independent').length;
   if(independent<Number(rules.min_independent||0))return false;
   const taskContexts=new Set(qualifying.map(row=>String(row.internship_id||'')+':'+String(row.task_id||'')));
   if(taskContexts.size<Number(rules.min_task_contexts||0))return false;
-  const contexts=new Set(qualifying.map(row=>p7ContextIdentity(p7Parse(row.transfer_context_json,{}))).filter(Boolean));
+  const contexts=new Set(qualifying.map(row=>p7ContextIdentity(p7Parse(row.transfer_context_json,{}))).filter(value=>value.replace(/\|/g,'').length>0));
   if(contexts.size<Number(rules.min_transfer_contexts||0))return false;
   return true;
 }
-function p7Aggregate(definition:Record<string,unknown>,rows:Record<string,unknown>[]):Record<string,unknown>|null{
+function p7Aggregate(definition:Record<string,unknown>,historicalRows:Record<string,unknown>[],now:number):Record<string,unknown>|null{
+  if(!historicalRows.length)return null;
+  const recency=p7RecencyEligible(definition,historicalRows,now);
+  const rows=recency.rows;
   if(!rows.length)return null;
   const positive=rows.filter(row=>String(row.demonstrated_level||'')!=='not_demonstrated');
   if(!positive.length)return null;
@@ -100,17 +114,27 @@ function p7Aggregate(definition:Record<string,unknown>,rows:Record<string,unknow
   const contexts=new Set(rows.map(row=>p7ContextIdentity(p7Parse(row.transfer_context_json,{}))).filter(value=>value.replace(/\|/g,'').length>0));
   const internships=new Set(rows.map(row=>String(row.internship_id||'')).filter(Boolean));
   let strength='limited';
-  for(const row of rows)if((STRENGTH_ORDER[String(row.evidence_strength||'')]??0)>STRENGTH_ORDER[strength])strength=String(row.evidence_strength);
-  const last=Math.max(...rows.map(row=>Number(row.created_at||0)));
+  for(const row of positive)if((STRENGTH_ORDER[String(row.evidence_strength||'')]??0)>STRENGTH_ORDER[strength])strength=String(row.evidence_strength);
+  const last=Math.max(...positive.map(row=>Number(row.created_at||0)));
+  const strengthDistribution:Record<string,number>={limited:0,supporting:0,strong:0};
+  for(const row of rows){
+    const value=String(row.evidence_strength||'');
+    if(value in strengthDistribution)strengthDistribution[value]+=1;
+  }
+
   const nextIndex=LEVEL_ORDER[current]+1;
   const nextLevel=LEVELS[nextIndex]||null;
   const missing:Array<Record<string,unknown>>=[];
   if(nextLevel&&requirements[nextLevel]){
     const r=requirements[nextLevel];
-    const minRecords=Math.max(0,Number(r.min_records||0)-rows.length);
-    const minIndependent=Math.max(0,Number(r.min_independent||0)-independent);
-    const minTasks=Math.max(0,Number(r.min_task_contexts||0)-tasks.size);
-    const minContexts=Math.max(0,Number(r.min_transfer_contexts||0)-contexts.size);
+    const qualifying=p7QualifyingRows(r,rows);
+    const qualifyingIndependent=qualifying.filter(row=>row.demonstrated_level==='independent').length;
+    const qualifyingTasks=new Set(qualifying.map(row=>String(row.internship_id||'')+':'+String(row.task_id||'')));
+    const qualifyingContexts=new Set(qualifying.map(row=>p7ContextIdentity(p7Parse(row.transfer_context_json,{}))).filter(value=>value.replace(/\|/g,'').length>0));
+    const minRecords=Math.max(0,Number(r.min_records||0)-qualifying.length);
+    const minIndependent=Math.max(0,Number(r.min_independent||0)-qualifyingIndependent);
+    const minTasks=Math.max(0,Number(r.min_task_contexts||0)-qualifyingTasks.size);
+    const minContexts=Math.max(0,Number(r.min_transfer_contexts||0)-qualifyingContexts.size);
     if(minRecords)missing.push({kind:'evidence_records',count:minRecords});
     if(minIndependent)missing.push({kind:'independent_demonstrations',count:minIndependent});
     if(minTasks)missing.push({kind:'distinct_task_contexts',count:minTasks});
@@ -122,15 +146,17 @@ function p7Aggregate(definition:Record<string,unknown>,rows:Record<string,unknow
     distinct_context_count:contexts.size,distinct_internship_count:internships.size,
     trend:p7Trend(rows),last_demonstrated_at:last,
     explanation:{
-      qualifying_evidence_records:rows.length,independent_demonstrations:independent,
+      qualifying_evidence_records:rows.length,historical_evidence_records:historicalRows.length,
+      expired_evidence_records:recency.expired,independent_demonstrations:independent,
       assisted_demonstrations:assisted,distinct_task_contexts:tasks.size,
       distinct_transfer_contexts:contexts.size,strongest_evidence_strength:strength,
+      evidence_strength_distribution:strengthDistribution,
       contradictory_records:rows.filter(row=>row.demonstrated_level==='not_demonstrated').length,
     },
     next_requirements:missing,aggregation_ruleset_version:AGGREGATION_RULESET,
   };
 }
-async function p7EvidenceRows(db:P7Database,actorId:string):Promise<Record<string,unknown>[]>{
+async function p7EvidenceRowsasync function p7EvidenceRows(db:P7Database,actorId:string):Promise<Record<string,unknown>[]>{
   const result=await db.prepare(
     "SELECT e.* FROM competency_evidence e WHERE e.learner_id=? AND NOT EXISTS ("+
     "SELECT 1 FROM competency_evidence_adjustments a WHERE a.evidence_id=e.id AND a.action IN ('revoked','superseded')) "+
@@ -138,31 +164,56 @@ async function p7EvidenceRows(db:P7Database,actorId:string):Promise<Record<strin
   ).bind(actorId).all<Record<string,unknown>>();
   return result.results||[];
 }
-async function p7Rebuild(db:P7Database,actorId:string,now:number):Promise<number>{
+function p7Key(competencyId:string,definitionVersion:number):string{
+  return competencyId+':'+String(definitionVersion);
+}
+async function p7RefreshPassport(
+  db:P7Database,actorId:string,targetKeys:Set<string>,now:number,
+):Promise<number>{
+  if(!targetKeys.size)return 0;
   const definitions=(await db.prepare(
     "SELECT * FROM competency_definitions WHERE status='active' ORDER BY competency_id,definition_version"
   ).all<Record<string,unknown>>()).results||[];
+  const compatibility=(await db.prepare(
+    "SELECT competency_id,from_version,to_version,compatibility FROM competency_definition_compatibility WHERE compatibility='compatible'"
+  ).all<Record<string,unknown>>()).results||[];
   const allEvidence=await p7EvidenceRows(db,actorId);
-  const previous=(await db.prepare(
-    'SELECT competency_id,definition_version,current_level FROM competency_passports WHERE learner_id=?'
-  ).bind(actorId).all<Record<string,unknown>>()).results||[];
-  const previousMap=new Map(previous.map(row=>[String(row.competency_id)+':'+String(row.definition_version),String(row.current_level||'')]));
-  await db.prepare('DELETE FROM competency_passports WHERE learner_id=?').bind(actorId).run();
   let written=0;
   for(const definition of definitions){
     const cid=String(definition.competency_id||''),version=Number(definition.definition_version||0);
-    const rows=allEvidence.filter(row=>String(row.competency_id||'')===cid&&Number(row.definition_version||0)===version);
-    const aggregate=p7Aggregate(definition,rows);
-    if(!aggregate)continue;
+    const key=p7Key(cid,version);
+    if(!targetKeys.has(key))continue;
+    const compatibleVersions=new Set<number>([version]);
+    for(const row of compatibility){
+      if(String(row.competency_id||'')===cid&&Number(row.to_version||0)===version){
+        compatibleVersions.add(Number(row.from_version||0));
+      }
+    }
+    const rows=allEvidence.filter(row=>
+      String(row.competency_id||'')===cid&&compatibleVersions.has(Number(row.definition_version||0))
+    );
+    const aggregate=p7Aggregate(definition,rows,now);
+    const previous=await db.prepare(
+      'SELECT current_level FROM competency_passports WHERE learner_id=? AND competency_id=? AND definition_version=? LIMIT 1'
+    ).bind(actorId,cid,version).first<Record<string,unknown>>();
+    if(!aggregate){
+      if(previous){
+        await db.prepare(
+          'DELETE FROM competency_passports WHERE learner_id=? AND competency_id=? AND definition_version=?'
+        ).bind(actorId,cid,version).run();
+      }
+      continue;
+    }
     await db.prepare(
-      'INSERT INTO competency_passports(learner_id,competency_id,definition_version,current_level,evidence_strength_summary,evidence_count,independent_count,assisted_count,distinct_task_count,distinct_context_count,distinct_internship_count,trend,last_demonstrated_at,explanation_json,next_requirements_json,aggregation_ruleset_version,calculated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO competency_passports(learner_id,competency_id,definition_version,current_level,evidence_strength_summary,evidence_count,independent_count,assisted_count,distinct_task_count,distinct_context_count,distinct_internship_count,trend,last_demonstrated_at,explanation_json,next_requirements_json,aggregation_ruleset_version,calculated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '+
+      'ON CONFLICT(learner_id,competency_id,definition_version) DO UPDATE SET current_level=excluded.current_level,evidence_strength_summary=excluded.evidence_strength_summary,evidence_count=excluded.evidence_count,independent_count=excluded.independent_count,assisted_count=excluded.assisted_count,distinct_task_count=excluded.distinct_task_count,distinct_context_count=excluded.distinct_context_count,distinct_internship_count=excluded.distinct_internship_count,trend=excluded.trend,last_demonstrated_at=excluded.last_demonstrated_at,explanation_json=excluded.explanation_json,next_requirements_json=excluded.next_requirements_json,aggregation_ruleset_version=excluded.aggregation_ruleset_version,calculated_at=excluded.calculated_at'
     ).bind(
       actorId,cid,version,aggregate.current_level,aggregate.evidence_strength_summary,aggregate.evidence_count,
       aggregate.independent_count,aggregate.assisted_count,aggregate.distinct_task_count,aggregate.distinct_context_count,
       aggregate.distinct_internship_count,aggregate.trend,aggregate.last_demonstrated_at,
       JSON.stringify(aggregate.explanation),JSON.stringify(aggregate.next_requirements),AGGREGATION_RULESET,now
     ).run();
-    const key=cid+':'+version,prior=previousMap.get(key)||'';
+    const prior=String(previous?.current_level||'');
     if(prior!==String(aggregate.current_level)){
       await db.prepare(
         'INSERT INTO competency_passport_history(id,learner_id,competency_id,definition_version,previous_level,new_level,aggregation_ruleset_version,explanation_json,changed_at) VALUES (?,?,?,?,?,?,?,?,?)'
@@ -172,15 +223,31 @@ async function p7Rebuild(db:P7Database,actorId:string,now:number):Promise<number
   }
   return written;
 }
-async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record<string,unknown>,now:number):Promise<number>{
+async function p7Rebuild(db:P7Database,actorId:string,now:number):Promise<number>{
+  const definitions=(await db.prepare(
+    "SELECT competency_id,definition_version FROM competency_definitions WHERE status='active' ORDER BY competency_id,definition_version"
+  ).all<Record<string,unknown>>()).results||[];
+  const keys=new Set(definitions.map(row=>p7Key(String(row.competency_id||''),Number(row.definition_version||0))));
+  const written=await p7RefreshPassport(db,actorId,keys,now);
+  await db.prepare(
+    "DELETE FROM competency_passports WHERE learner_id=? AND NOT EXISTS ("+
+    "SELECT 1 FROM competency_definitions d WHERE d.competency_id=competency_passports.competency_id "+
+    "AND d.definition_version=competency_passports.definition_version AND d.status='active')"
+  ).bind(actorId).run();
+  return written;
+}
+async function p7DeriveAssessmentasync function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record<string,unknown>,now:number):Promise<number>{
   const assessmentId=String(assessment.id||''),internshipId=String(assessment.internship_id||'');
   const existing=await db.prepare(
-    "SELECT status,derived_count FROM competency_derivation_status WHERE assessment_id=? AND learner_id=? LIMIT 1"
+    "SELECT status,derived_count,evidence_ruleset_version FROM competency_derivation_status WHERE assessment_id=? AND learner_id=? LIMIT 1"
   ).bind(assessmentId,actorId).first<Record<string,unknown>>();
-  if(existing?.status==='completed'||existing?.status==='excluded')return Number(existing.derived_count||0);
+  if(
+    String(existing?.evidence_ruleset_version||'')===EVIDENCE_RULESET&&
+    (existing?.status==='completed'||existing?.status==='excluded')
+  )return Number(existing.derived_count||0);
   await db.prepare(
     "INSERT INTO competency_derivation_status(assessment_id,learner_id,status,evidence_ruleset_version,derived_count,last_error,updated_at) VALUES (?,?,'pending',?,0,'',?) "+
-    "ON CONFLICT(assessment_id) DO UPDATE SET status='pending',last_error='',updated_at=excluded.updated_at"
+    "ON CONFLICT(assessment_id) DO UPDATE SET status='pending',evidence_ruleset_version=excluded.evidence_ruleset_version,last_error='',updated_at=excluded.updated_at"
   ).bind(assessmentId,actorId,EVIDENCE_RULESET,now).run();
 
   const submission=await db.prepare(
@@ -265,14 +332,24 @@ async function p7Reconcile(db:P7Database,actorId:string,now:number):Promise<{ass
   const rows=(await db.prepare(
     "SELECT a.*,i.scenario_version_id,v.scenario_pack_id FROM internship_assessments a "+
     "JOIN internship_instances i ON i.id=a.internship_id JOIN scenario_versions v ON v.id=i.scenario_version_id "+
-    "WHERE i.learner_id=? AND a.status='completed' ORDER BY a.completed_at ASC,a.id ASC"
-  ).bind(actorId).all<Record<string,unknown>>()).results||[];
+    "LEFT JOIN competency_derivation_status ds ON ds.assessment_id=a.id AND ds.learner_id=i.learner_id "+
+    "WHERE i.learner_id=? AND a.status='completed' AND ("+
+    "ds.assessment_id IS NULL OR ds.status IN ('pending','failed') OR ds.evidence_ruleset_version<>?) "+
+    "ORDER BY a.completed_at ASC,a.id ASC"
+  ).bind(actorId,EVIDENCE_RULESET).all<Record<string,unknown>>()).results||[];
   let evidence=0;
-  for(const row of rows)evidence+=await p7DeriveAssessment(db,actorId,row,now);
-  const passports=await p7Rebuild(db,actorId,now);
+  const affected=new Set<string>();
+  for(const row of rows){
+    evidence+=await p7DeriveAssessment(db,actorId,row,now);
+    const keys=(await db.prepare(
+      'SELECT DISTINCT competency_id,definition_version FROM competency_evidence WHERE assessment_id=? AND learner_id=?'
+    ).bind(row.id,actorId).all<Record<string,unknown>>()).results||[];
+    for(const key of keys)affected.add(p7Key(String(key.competency_id||''),Number(key.definition_version||0)));
+  }
+  const passports=await p7RefreshPassport(db,actorId,affected,now);
   return {assessments:rows.length,evidence,passports};
 }
-async function p7Summary(db:P7Database,actorId:string){
+async function p7Summaryasync function p7Summary(db:P7Database,actorId:string){
   const passports=(await db.prepare(
     'SELECT p.*,d.name,d.description,d.domain,d.level_framework_version,d.evidence_requirements_json,d.transfer_policy_json,d.recency_policy_json '+
     'FROM competency_passports p JOIN competency_definitions d ON d.competency_id=p.competency_id AND d.definition_version=p.definition_version '+
@@ -359,7 +436,8 @@ export async function handlePhase7PassportPersistenceRoute(
   if(route==='/internships/passport/rebuild'&&request.method==='POST'){
     try{
       const reconciled=await p7Reconcile(env.TUTOR_DB,actorId,now);
-      return p7Json({ok:true,rebuild:true,...reconciled});
+      const rebuilt=await p7Rebuild(env.TUTOR_DB,actorId,now);
+      return p7Json({ok:true,rebuild:true,...reconciled,passports:rebuilt});
     }catch(error){
       console.error('Phase 7 passport rebuild failed',error);
       return p7Json({error:'passport_rebuild_failed'},503);
