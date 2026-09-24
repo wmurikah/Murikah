@@ -36,4 +36,13 @@ class Phase7ExportTests(unittest.TestCase):
         self.assertNotIn("learner_display_name",base)
         self.assertEqual(named["learner_display_name"],"Learner")
 
+
+    def test_export_name_is_explicitly_learner_controlled_and_server_resolved(self):
+        router=(ROOT/"railway/murikah_virtual_internship.py").read_text()
+        ui=(ROOT/"railway/MurikahVirtualInternshipWorkspace.tsx.txt").read_text()
+        self.assertIn("include_display_name=body.include_display_name",router)
+        self.assertIn("personalization_for_actor(actor_id,username)",router)
+        self.assertIn("Include my display name in this export",ui)
+        self.assertIn("include_display_name: includeNameInExport",ui)
+
 if __name__=="__main__": unittest.main()
