@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 
-type WorkspaceState = "guest" | "none" | "active" | "stopped";
+type WorkspaceState = "guest" | "none" | "active" | "stopped" | "completed";
 
 type InternshipTaskSummary = {
   task_id: string;
@@ -356,6 +356,7 @@ type InternshipWorkspaceSummary = {
     current_week: number;
     expected_workload_band: string;
     stopped_at: number;
+    completed_at: number;
   };
   overview?: {
     active_task_count: number;
@@ -393,6 +394,63 @@ type StreamEvent = {
   message_id?: string;
   assistance_label?: string;
   retryable?: boolean;
+};
+
+type CompletionCompetencyRequirement = {
+  competency_id: string;
+  name: string;
+  definition_version: number;
+  minimum_level: string;
+  current_level: string;
+  minimum_evidence_strength: string;
+  current_evidence_strength: string;
+  minimum_evidence_records: number;
+  evidence_records: number;
+  minimum_independent_demonstrations: number;
+  independent_demonstrations: number;
+  minimum_distinct_contexts: number;
+  distinct_contexts: number;
+  passed: boolean;
+};
+
+type CompletionStatus = {
+  evaluated_at: number;
+  lifecycle_status: string;
+  qualifying: boolean;
+  overall_eligible: boolean;
+  blockers: string[];
+  duration: {
+    passed: boolean;
+    elapsed_days: number;
+    required_days: number;
+    target_end_at: number;
+  };
+  required_work: {
+    passed: boolean;
+    required: number;
+    completed: number;
+  };
+  reviews: {
+    passed: boolean;
+    required: number;
+    completed: number;
+    required_types?: string[];
+  };
+  evidence: {
+    passed: boolean;
+    required: number;
+    satisfied: number;
+    competencies?: CompletionCompetencyRequirement[];
+  };
+  capstone_final_review: {
+    passed: boolean;
+    capstones_required: number;
+    capstones_completed: number;
+    final_review_required: boolean;
+    final_review_finalized: boolean;
+    final_review_after_capstone?: boolean;
+  };
+  completed_at: number | null;
 };
 
 const API = "/api/murikah/virtual-internship";
@@ -1152,14 +1210,271 @@ function TaskDetail({
   );
 }
 
+
+function completionBlockerText(code: string) {
+  const copy: Record<string, string> = {
+    duration_not_met: "The minimum duration has not yet been reached.",
+    required_tasks_incomplete: "Required work is still incomplete.",
+    required_review_missing: "A required performance review is not finalized.",
+    competency_evidence_insufficient: "One or more competency evidence requirements are not yet satisfied.",
+    capstone_incomplete: "Required capstone work is still incomplete.",
+    final_review_missing: "The final performance review is not finalized.",
+    final_review_precedes_capstone: "The final performance review must be finalized after the required capstone work.",
+    non_qualifying_internship: "This simulation is non-qualifying and cannot receive qualifying completion.",
+    completion_policy_unavailable: "Completion requirements are not available for this pinned scenario version.",
+    internship_stopped: "A stopped internship cannot be finalized as qualifying-complete.",
+    internship_not_active: "This internship is no longer active.",
+  };
+  return copy[code] || sentenceLabel(code);
+}
+
+function CompletionRequirementRow({
+  label,
+  detail,
+  passed,
+  href,
+}: {
+  label: string;
+  detail: string;
+  passed: boolean;
+  href?: string;
+}) {
+  const content = (
+    <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{detail}</p>
+      </div>
+      <span
+        className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold " +
+          (passed
+            ? "border-emerald-300 text-emerald-700 dark:text-emerald-300"
+            : "border-amber-300 text-amber-800 dark:text-amber-300")}
+      >
+        {passed ? "Met" : "Pending"}
+      </span>
+    </div>
+  );
+  return href ? (
+    <a href={href} className="block rounded-lg border border-[var(--border)] p-3 hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]">
+      {content}
+    </a>
+  ) : (
+    <div className="rounded-lg border border-[var(--border)] p-3">{content}</div>
+  );
+}
+
+function CompletionRequirements({
+  internshipId,
+  onCompleted,
+}: {
+  internshipId: string;
+  onCompleted: () => Promise<void>;
+}) {
+  const [status, setStatus] = useState<CompletionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [finalizing, setFinalizing] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function loadCompletion() {
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        API + "/completion?internship_id=" + encodeURIComponent(internshipId),
+        { credentials: "include", cache: "no-store" },
+      );
+      if (!response.ok) throw new Error(await responseError(response, "Completion requirements could not be loaded."));
+      const payload = (await response.json()) as { completion?: CompletionStatus };
+      setStatus(payload.completion || null);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Completion requirements could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function finalizeCompletion() {
+    if (!status?.overall_eligible || status.lifecycle_status !== "active") return;
+    setFinalizing(true);
+    setMessage("");
+    try {
+      const response = await fetch(API + "/completion", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          internship_id: internshipId,
+          request_id: requestId("complete"),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "The internship could not be completed."));
+      const payload = (await response.json()) as { completion?: CompletionStatus };
+      if (payload.completion) setStatus(payload.completion);
+      await onCompleted();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "The internship could not be completed.");
+      await loadCompletion();
+    } finally {
+      setFinalizing(false);
+    }
+  }
+
+  useEffect(() => { void loadCompletion(); }, [internshipId]);
+
+  if (loading) {
+    return (
+      <Panel className="p-5" ariaLabel="Completion requirements">
+        <p className="text-sm text-[var(--muted-foreground)]" role="status">Loading completion requirements…</p>
+      </Panel>
+    );
+  }
+
+  if (!status) {
+    return (
+      <Panel className="p-5" ariaLabel="Completion requirements">
+        <h2 className="text-lg font-semibold">Completion requirements</h2>
+        <p className="mt-2 text-sm text-red-600" role="alert">{message || "Completion requirements are unavailable."}</p>
+      </Panel>
+    );
+  }
+
+  const competencies = status.evidence.competencies || [];
+  const completed = status.lifecycle_status === "completed";
+  const durationDay = Math.min(status.duration.elapsed_days + 1, Math.max(1, status.duration.required_days));
+
+  return (
+    <Panel className="p-5 sm:p-6" ariaLabel="Completion requirements">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A9822E]">Internship status</p>
+          <h2 className="mt-2 text-xl font-semibold">Completion requirements</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+            Qualifying completion is determined from server-authoritative duration, required work, finalized reviews,
+            Competency Passport evidence and capstone requirements. Time alone does not complete the internship.
+          </p>
+        </div>
+        {completed ? (
+          <div className="shrink-0 rounded-lg border border-emerald-300 px-4 py-3 text-sm">
+            <p className="font-semibold">Completed</p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              {status.completed_at ? formatDate(status.completed_at, true) : "Completion recorded"}
+            </p>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <CompletionRequirementRow
+          label="Duration requirement"
+          detail={"Day " + durationDay + " of " + status.duration.required_days + ". Target date: " + formatDate(status.duration.target_end_at) + "."}
+          passed={status.duration.passed}
+        />
+        <CompletionRequirementRow
+          label="Required work"
+          detail={status.required_work.completed + " of " + status.required_work.required + " required assignments completed."}
+          passed={status.required_work.passed}
+          href="/virtual-internship/work"
+        />
+        <CompletionRequirementRow
+          label="Required performance reviews"
+          detail={status.reviews.completed + " of " + status.reviews.required + " authored required reviews finalized."}
+          passed={status.reviews.passed}
+          href="/virtual-internship/activity"
+        />
+        <CompletionRequirementRow
+          label="Competency evidence"
+          detail={status.evidence.satisfied + " of " + status.evidence.required + " competency requirements satisfied."}
+          passed={status.evidence.passed}
+          href="/virtual-internship/passport"
+        />
+        <CompletionRequirementRow
+          label="Capstone work"
+          detail={status.capstone_final_review.capstones_completed + " of " + status.capstone_final_review.capstones_required + " required capstone assignments completed."}
+          passed={status.capstone_final_review.capstones_completed === status.capstone_final_review.capstones_required}
+          href="/virtual-internship/work"
+        />
+        <CompletionRequirementRow
+          label="Final performance review"
+          detail={
+            status.capstone_final_review.final_review_required
+              ? (status.capstone_final_review.final_review_finalized
+                  ? "The required final performance review is finalized."
+                  : "The required final performance review is pending.")
+              : "No final performance review is required by this pinned completion policy."
+          }
+          passed={!status.capstone_final_review.final_review_required || status.capstone_final_review.final_review_finalized}
+          href="/virtual-internship/activity"
+        />
+      </div>
+
+      {competencies.length ? (
+        <details className="mt-4 rounded-lg border border-[var(--border)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Competency evidence requirements</summary>
+          <div className="mt-3 space-y-3">
+            {competencies.map((item) => (
+              <div key={item.competency_id + ":" + item.definition_version} className="rounded-lg border border-[var(--border)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{item.name}</p>
+                  <span className="text-xs font-semibold">{item.passed ? "Met" : "Pending"}</span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                  Level {sentenceLabel(item.current_level || "not demonstrated")} of required {sentenceLabel(item.minimum_level)}.
+                  {" "}Evidence strength {sentenceLabel(item.current_evidence_strength || "none")} of required {sentenceLabel(item.minimum_evidence_strength)}.
+                  {" "}{item.evidence_records} of {item.minimum_evidence_records} evidence records,
+                  {" "}{item.independent_demonstrations} of {item.minimum_independent_demonstrations} independent demonstrations,
+                  {" "}{item.distinct_contexts} of {item.minimum_distinct_contexts} distinct contexts.
+                </p>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {status.blockers.length ? (
+        <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50/40 p-4 dark:bg-amber-950/10" role="status">
+          <p className="text-sm font-semibold">What remains</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
+            {status.blockers.map((code) => <li key={code}>{completionBlockerText(code)}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      {message ? <p className="mt-4 text-sm text-red-600" role="alert">{message}</p> : null}
+
+      {completed ? (
+        <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">
+          This is a Murikah Virtual Internship simulation. Historical work, reviews and Competency Passport evidence remain available in read-only form.
+        </p>
+      ) : status.overall_eligible && status.lifecycle_status === "active" ? (
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => void finalizeCompletion()}
+            disabled={finalizing}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--foreground)] px-4 text-sm font-semibold text-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E] disabled:opacity-60"
+          >
+            {finalizing ? "Completing…" : "Complete internship"}
+          </button>
+          <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+            The server will re-check every requirement before recording completion.
+          </p>
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
 function OverviewView({
   workspace,
   people,
   onTask,
+  onWorkspaceRefresh,
 }: {
   workspace: InternshipWorkspaceSummary;
   people: InternshipPerson[];
   onTask: (task: InternshipTaskSummary) => void;
+  onWorkspaceRefresh: () => Promise<void>;
 }) {
   const internship = workspace.internship!;
   const overview = workspace.overview!;
@@ -1167,6 +1482,7 @@ function OverviewView({
   const workplaceThreads = (overview.recent_threads || []).filter((thread) => thread.thread_kind === "workplace");
   return (
     <div className="space-y-5">
+      <CompletionRequirements internshipId={internship.internship_id} onCompleted={onWorkspaceRefresh} />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Time elapsed" value={"Day " + internship.current_day} detail={"Week " + internship.current_week + " · minimum " + internship.minimum_duration_days + " days"} />
         <Metric label="Current work" value={String(overview.active_task_count)} detail="Active assignments" />
@@ -1566,6 +1882,8 @@ function InboxView({
   const [failed, setFailed] = useState<{ text: string; requestId: string; actorId: string; taskId: string } | null>(null);
   const internshipId = workspace.internship!.internship_id;
   const stopped = workspace.state === "stopped";
+  const completed = workspace.state === "completed";
+  const readOnly = stopped || completed;
 
   useEffect(() => {
     const thread = workplaceThreads.find((item) => item.thread_id === requestedThread) || null;
@@ -2421,14 +2739,14 @@ export default function MurikahVirtualInternshipWorkspace() {
 
   let body: React.ReactNode;
   if (section === "inbox") body = <InboxView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
-  else if (section === "work") body = <WorkView tasks={tasks} people={people} internshipId={internship.internship_id} readOnly={stopped} selected={selectedTaskCurrent} onSelect={setSelectedTask} onChanged={refreshWorkspace} />;
+  else if (section === "work") body = <WorkView tasks={tasks} people={people} internshipId={internship.internship_id} readOnly={readOnly} selected={selectedTaskCurrent} onSelect={setSelectedTask} onChanged={refreshWorkspace} />;
   else if (section === "company") body = <CompanyView company={company} people={people} onMessage={(person) => router.push("/virtual-internship/inbox?actor=" + encodeURIComponent(person.actor_id))} />;
   else if (section === "documents") body = <DocumentsView documents={workspace.documents || []} internshipId={internship.internship_id} />;
   else if (section === "meetings") body = <MeetingsView meetings={workspace.meetings || []} activity={workspace.activity || []} />;
   else if (section === "mentor") body = <MentorView workspace={workspace} onWorkspaceRefresh={refreshWorkspace} />;
   else if (section === "passport") body = <PassportView />;
   else if (section === "activity") body = <ActivityView workspace={workspace} refresh={refreshWorkspace} />;
-  else body = <OverviewView workspace={workspace} people={people} onTask={setSelectedTask} />;
+  else body = <OverviewView workspace={workspace} people={people} onTask={setSelectedTask} onWorkspaceRefresh={refreshWorkspace} />;
 
   return (
     <main className="min-h-full overflow-x-hidden bg-[var(--background)] px-3 py-5 text-[var(--foreground)] sm:px-5 lg:px-8">
@@ -2446,7 +2764,7 @@ export default function MurikahVirtualInternshipWorkspace() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className={"rounded-full border px-3 py-1.5 text-xs font-semibold " + (stopped ? "border-red-300 text-red-700 dark:text-red-300" : "border-emerald-300 text-emerald-700 dark:text-emerald-300")}>
-                {stopped ? "Stopped" : "Active"}
+                {completed ? "Completed" : stopped ? "Stopped" : "Active"}
               </span>
               <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted-foreground)]">
                 Scenario v{internship.scenario_version}
@@ -2456,6 +2774,10 @@ export default function MurikahVirtualInternshipWorkspace() {
           {stopped ? (
             <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3 text-sm leading-6 dark:bg-amber-950/10" role="status">
               This internship is stopped. Your history remains available, including artifact versions, submissions and reviews, but new workplace messages, Mentor requests, reflections and work changes are read-only.
+            </div>
+          ) : completed ? (
+            <div className="mt-4 rounded-lg border border-emerald-300/60 bg-emerald-50/50 px-4 py-3 text-sm leading-6 dark:bg-emerald-950/10" role="status">
+              This Murikah Virtual Internship simulation is completed. Historical work, messages, reviews, reflections and Competency Passport evidence remain available in read-only form.
             </div>
           ) : null}
           {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
@@ -2471,7 +2793,7 @@ export default function MurikahVirtualInternshipWorkspace() {
           </nav>
         </header>
         <div className="mt-5">
-          {section === "overview" && selectedTaskCurrent ? <div className="mb-5"><TaskDetail task={selectedTaskCurrent} people={people} internshipId={internship.internship_id} readOnly={stopped} onChanged={refreshWorkspace} onClose={() => setSelectedTask(null)} /></div> : null}
+          {section === "overview" && selectedTaskCurrent ? <div className="mb-5"><TaskDetail task={selectedTaskCurrent} people={people} internshipId={internship.internship_id} readOnly={readOnly} onChanged={refreshWorkspace} onClose={() => setSelectedTask(null)} /></div> : null}
           {body}
         </div>
       </div>
