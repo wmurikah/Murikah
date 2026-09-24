@@ -2062,7 +2062,7 @@ def main() -> int:
             "phase7-evidence-strength-v1",
             "phase7-passport-aggregation-v1",
             "Phase 8 internship completion remains unimplemented",
-            "Phase 9 performance reports, completion letters",
+            "Phase 9 reports and letters must read the existing Passport/evidence results",
         ),
     )
 
