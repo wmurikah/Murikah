@@ -155,7 +155,7 @@ test('desktop hero and photo geometry match the reference specification', async 
   );
 });
 
-test('homepage navigation alone overlays hero and turns solid after 24px', async () => {
+test('homepage uses the same solid shared header as every public route', async () => {
   const header = await readFile(
     new URL('../../src/components/Header.astro', import.meta.url),
     'utf8',
@@ -163,18 +163,12 @@ test('homepage navigation alone overlays hero and turns solid after 24px', async
   const css = await readFile(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
   const page = await readFile(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
 
-  assert.ok(header.includes("const isHome = path === '/'"));
-  assert.match(header, /site-header--home fixed inset-x-0/);
-  assert.match(header, /murikah-logo-transparent\.png/);
-  assert.match(header, /NAV\.map/);
-  assert.match(css, /> header\.site-header--home \{[\s\S]*?background: transparent/);
-  assert.match(
-    css,
-    /> header\.site-header--home\.is-scrolled \{[\s\S]*?background: var\(--color-navy\)/,
-  );
-  assert.match(page, /top: 24px/);
-  assert.match(page, /new IntersectionObserver/);
-  assert.match(page, /classList\.toggle\('is-scrolled'/);
+  assert.match(header, /class="site-header"/);
+  assert.match(header, /background: var\(--header-bg\)/);
+  assert.match(header, /\/brand\/murikah-header-lockup\.svg/);
+  assert.doesNotMatch(header, /site-header--home|murikah-logo-dark|murikah-logo-transparent/);
+  assert.doesNotMatch(css, /site-header--home|background:\s*transparent[^;]*;[\s\S]*site-header/);
+  assert.doesNotMatch(page, /data-home-header|data-home-nav-sentinel|new IntersectionObserver|is-scrolled/);
 });
 
 test('buttons, trust row and hero text clear WCAG AA contrast on navy', async () => {
@@ -214,7 +208,7 @@ test('hero motion, focus and mobile behavior meet the requested controls', async
   assert.match(page, /@media \(max-width: 1023px\)/);
   assert.match(page, /--hero-image-opacity: 0\.35/);
   assert.match(page, /@media \(max-width: 639px\)[\s\S]*?font-size: 40px/);
-  assert.match(page, /padding-top: 120px/);
+  assert.match(page, /padding-top: 56px/);
   assert.match(page, /\.home-hero__primary \{[\s\S]*?width: 100%/);
   assert.match(css, /\.home-hero-page \.a11y \{[\s\S]*?bottom: calc\(6rem/);
 });

@@ -1125,7 +1125,6 @@ button.sb-kpi:hover { border-color: var(--sb-line-strong); }
 
 html.sandbox-fullscreen,
 html.sandbox-fullscreen body { overflow:hidden !important; }
-html.sandbox-fullscreen .site-header,
 html.sandbox-fullscreen body > footer,
 html.sandbox-fullscreen .sandbox-page-intro,
 html.sandbox-fullscreen .sandbox-page-outro,
@@ -1134,7 +1133,7 @@ html.sandbox-fullscreen #main { margin:0 !important; padding:0 !important; }
 html.sandbox-fullscreen .sandbox-app-stage { padding:0 !important; }
 html.sandbox-fullscreen .sandbox-app-stage__inner { max-width:none !important; margin:0 !important; }
 html.sandbox-fullscreen .sb-demo-banner { border:0; border-radius:0; }
-html.sandbox-fullscreen .sb-app { height:calc(100svh - 32px); border:0; border-radius:0; }
+html.sandbox-fullscreen .sb-app { height:calc(100svh - 80px); border:0; border-radius:0; }
 html.sandbox-fullscreen .a11y { bottom:72px !important; right:10px !important; }
 
 @media print {

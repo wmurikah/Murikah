@@ -107,7 +107,7 @@ test('functional form borders do not use the decorative hairline token', async (
   assert.doesNotMatch(subscribe, /placeholder:text-slate\/60/);
 });
 
-test('non-home public chrome stays light while the homepage may opt into its dark hero header', async () => {
+test('public chrome uses one solid navy shared header while footer remains unchanged', async () => {
   const cta = await readFile(
     new URL('../../src/components/primitives/CtaSection.astro', import.meta.url),
     'utf8',
@@ -120,18 +120,18 @@ test('non-home public chrome stays light while the homepage may opt into its dar
     new URL('../../src/components/Header.astro', import.meta.url),
     'utf8',
   );
-
-  assert.match(header, /bg-paper\/95/);
-  assert.match(header, /site-header--home/);
-  assert.doesNotMatch(header, /bg-header-bg/);
-  assert.match(header, /murikah-logo-dark\.png/);
-  assert.match(cta, /<Section tone="paper"/);
-  assert.doesNotMatch(cta, /tone="navy-rich"/);
   const css = await readFile(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
 
+  assert.match(header, /background: var\(--header-bg\)/);
+  assert.match(header, /\/brand\/murikah-header-lockup\.svg/);
+  assert.match(header, /background: var\(--color-brass-on-dark\)/);
+  assert.doesNotMatch(header, /bg-paper\/95|site-header--home|murikah-logo-dark\.png|murikah-logo-transparent\.png/);
+  assert.doesNotMatch(css, /site-header--home/);
+
+  assert.match(cta, /<Section tone="paper"/);
+  assert.doesNotMatch(cta, /tone="navy-rich"/);
   assert.match(footer, /bg-paper-shade/);
   assert.doesNotMatch(footer, /bg-header-bg/);
   assert.doesNotMatch(footer, /\bon-dark\b/);
   assert.doesNotMatch(css, /\.marketing-shell\.ceramic-ink \.newsletter-panel/);
-  assert.match(css, /> header \.btn-primary[\s\S]*?background: #071d35;/);
 });
