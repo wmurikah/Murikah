@@ -669,6 +669,47 @@ export async function handlePhase8CompletionPersistenceRoute(
   route: string,
   now: number,
 ): Promise<Response | null> {
+  if (route === '/scenario-completion-policy/install' && request.method === 'POST') {
+    const body = await bodyJson(request);
+    const scenarioVersionId = cleanId(body.scenario_version_id);
+    const suppliedHash = String(body.policy_hash ?? '').trim();
+    const policyObject = body.policy;
+    if (!scenarioVersionId || !HEX64.test(suppliedHash) || !policyObject || typeof policyObject !== 'object' || Array.isArray(policyObject)) {
+      return json({ error: 'completion_policy_invalid' }, 400);
+    }
+    const policy = parsePolicy(canonicalJson(policyObject));
+    if (!policy) return json({ error: 'completion_policy_invalid' }, 400);
+    const actualHash = await sha256Hex(canonicalJson(policy));
+    if (actualHash !== suppliedHash) return json({ error: 'completion_policy_hash_mismatch' }, 409);
+    const scenario = await env.TUTOR_DB.prepare(
+      "SELECT id FROM scenario_versions WHERE id=? AND status='published' LIMIT 1",
+    ).bind(scenarioVersionId).first<{ id: string }>();
+    if (!scenario || !await policyReferencesValid(env.TUTOR_DB, scenarioVersionId, policy)) {
+      return json({ error: 'completion_policy_invalid' }, 400);
+    }
+    const existing = await env.TUTOR_DB.prepare(
+      'SELECT policy_hash FROM scenario_completion_policies WHERE scenario_version_id=? LIMIT 1',
+    ).bind(scenarioVersionId).first<{ policy_hash: string }>();
+    if (existing) {
+      return existing.policy_hash === suppliedHash
+        ? json({ ok: true, idempotent_replay: true, scenario_version_id: scenarioVersionId, policy_hash: suppliedHash })
+        : json({ error: 'completion_policy_immutable_conflict' }, 409);
+    }
+    try {
+      await env.TUTOR_DB.prepare(
+        'INSERT INTO scenario_completion_policies(scenario_version_id,schema_version,policy_json,policy_hash,created_at) VALUES (?,?,?,?,?)',
+      ).bind(scenarioVersionId, COMPLETION_POLICY_SCHEMA_VERSION, canonicalJson(policy), suppliedHash, now).run();
+      return json({ ok: true, scenario_version_id: scenarioVersionId, policy_hash: suppliedHash }, 201);
+    } catch {
+      const raced = await env.TUTOR_DB.prepare(
+        'SELECT policy_hash FROM scenario_completion_policies WHERE scenario_version_id=? LIMIT 1',
+      ).bind(scenarioVersionId).first<{ policy_hash: string }>();
+      return raced?.policy_hash === suppliedHash
+        ? json({ ok: true, idempotent_replay: true, scenario_version_id: scenarioVersionId, policy_hash: suppliedHash })
+        : json({ error: 'completion_policy_install_failed' }, 503);
+    }
+  }
+
   if (!route.startsWith('/internships/completion')) return null;
   const url = new URL(request.url);
   const isGet = request.method === 'GET';
