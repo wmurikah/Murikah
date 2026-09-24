@@ -49,6 +49,8 @@ class Phase7AggregationTests(unittest.TestCase):
 
     def test_trend_is_deterministic_and_requires_three_points(self):
         self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=[ev(1),ev(2)])["trend"],"insufficient_evidence")
+        stable=[ev(1,"developing"),ev(2,"developing"),ev(3,"developing")]
+        self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=stable)["trend"],"stable")
         improving=[ev(1,"developing"),ev(2,"applied_with_support"),ev(3,"independent")]
         self.assertEqual(aggregate_competency(definition=DEFINITION,evidence=improving)["trend"],"improving")
         mixed=[ev(1,"independent"),ev(2,"developing"),ev(3,"independent")]
