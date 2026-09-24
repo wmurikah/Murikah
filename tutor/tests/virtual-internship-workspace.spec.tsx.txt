@@ -36,6 +36,7 @@ const workspace = {
     current_week: 2,
     expected_workload_band: "standard",
     stopped_at: 0,
+    completed_at: 0,
   },
   overview: {
     active_task_count: 1,
@@ -137,6 +138,50 @@ const workspace = {
   }],
 };
 
+const blockedCompletion = {
+  ok: true,
+  completion: {
+    evaluated_at: 1_790_691_200,
+    lifecycle_status: "active",
+    qualifying: true,
+    overall_eligible: false,
+    blockers: ["duration_not_met", "required_tasks_incomplete", "competency_evidence_insufficient"],
+    duration: { passed: false, elapsed_days: 8, required_days: 90, target_end_at: 1_797_776_000 },
+    required_work: { passed: false, required: 2, completed: 1 },
+    reviews: { passed: true, required: 1, completed: 1, required_types: ["midpoint"] },
+    evidence: {
+      passed: false,
+      required: 1,
+      satisfied: 0,
+      competencies: [{
+        competency_id: "comp_reconciliation",
+        name: "Reconciliation",
+        definition_version: 1,
+        minimum_level: "independent",
+        current_level: "developing",
+        minimum_evidence_strength: "supporting",
+        current_evidence_strength: "limited",
+        minimum_evidence_records: 2,
+        evidence_records: 1,
+        minimum_independent_demonstrations: 1,
+        independent_demonstrations: 0,
+        minimum_distinct_contexts: 2,
+        distinct_contexts: 1,
+        passed: false,
+      }],
+    },
+    capstone_final_review: {
+      passed: false,
+      capstones_required: 1,
+      capstones_completed: 0,
+      final_review_required: true,
+      final_review_finalized: false,
+      final_review_after_capstone: true,
+    },
+    completed_at: null,
+  },
+};
+
 function jsonResponse(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), {
     status,
@@ -150,6 +195,7 @@ function workspaceFetch(extra?: (url: string, init?: RequestInit) => Response | 
     const custom = extra?.(url, init);
     if (custom) return await custom;
     if (url.endsWith("/workspace")) return jsonResponse(workspace);
+    if (url.includes("/completion?internship_id=")) return jsonResponse(blockedCompletion);
     throw new Error("Unexpected request: " + url);
   });
 }
@@ -736,6 +782,100 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getAllByText(/Level 2: 1/)).toHaveLength(2);
     expect(screen.queryByText("Completed internship")).toBeNull();
     expect(screen.queryByRole("button", { name: /certificate|completion letter/i })).toBeNull();
+  });
+
+  it("renders explicit Phase 8 completion gates without a percent-complete score", async () => {
+    vi.stubGlobal("fetch", workspaceFetch());
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Completion requirements" })).toBeVisible();
+    expect(screen.getByText(/Day 9 of 90/)).toBeVisible();
+    expect(screen.getByText(/1 of 2 required assignments completed/)).toBeVisible();
+    expect(screen.getByText(/0 of 1 competency requirements satisfied/)).toBeVisible();
+    expect(screen.getByText(/minimum duration has not yet been reached/i)).toBeVisible();
+    expect(screen.getByText(/Reconciliation/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Complete internship" })).toBeNull();
+    expect(screen.queryByText(/% complete|completion percentage/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /certificate|completion letter|performance report/i })).toBeNull();
+  });
+
+  it("finalizes only after the latest server status is eligible and waits for the committed response", async () => {
+    const eligible = structuredClone(blockedCompletion) as any;
+    eligible.completion.overall_eligible = true;
+    eligible.completion.blockers = [];
+    eligible.completion.duration.passed = true;
+    eligible.completion.duration.elapsed_days = 90;
+    eligible.completion.required_work = { passed: true, required: 2, completed: 2 };
+    eligible.completion.evidence.passed = true;
+    eligible.completion.evidence.satisfied = 1;
+    eligible.completion.evidence.competencies[0] = {
+      ...eligible.completion.evidence.competencies[0],
+      current_level: "independent",
+      current_evidence_strength: "strong",
+      evidence_records: 2,
+      independent_demonstrations: 1,
+      distinct_contexts: 2,
+      passed: true,
+    };
+    eligible.completion.capstone_final_review = {
+      passed: true,
+      capstones_required: 1,
+      capstones_completed: 1,
+      final_review_required: true,
+      final_review_finalized: true,
+      final_review_after_capstone: true,
+    };
+    const completedResponse = structuredClone(eligible) as any;
+    completedResponse.completion.lifecycle_status = "completed";
+    completedResponse.completion.completed_at = 1_797_900_000;
+
+    let workspaceReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) {
+        workspaceReads += 1;
+        return jsonResponse(workspace);
+      }
+      if (url.includes("/completion?internship_id=")) return jsonResponse(eligible);
+      if (url.endsWith("/completion") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.internship_id).toBe("vi_1");
+        expect(body.request_id).toMatch(/^complete-/);
+        expect(body.duration_met).toBeUndefined();
+        expect(body.tasks_complete).toBeUndefined();
+        expect(body.completed_at).toBeUndefined();
+        return jsonResponse(completedResponse);
+      }
+      throw new Error("Unexpected request: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    const complete = await screen.findByRole("button", { name: "Complete internship" });
+    expect(screen.queryByText(/^Completed$/)).toBeNull();
+    fireEvent.click(complete);
+    expect(await screen.findByText(/^Completed$/)).toBeVisible();
+    expect(workspaceReads).toBeGreaterThanOrEqual(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/completion$/),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("keeps a completed internship historical and read-only without Phase 9 credentials", async () => {
+    nav.pathname = "/virtual-internship/mentor";
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...workspace,
+      state: "completed",
+      internship: { ...workspace.internship, status: "completed", completed_at: 1_797_900_000 },
+    })));
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByText("Completed")).toBeVisible();
+    expect(screen.getByText(/simulation is completed/i)).toBeVisible();
+    expect(screen.getByLabelText("Message Murikah Mentor")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ask Mentor" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /certificate|completion letter|performance report/i })).toBeNull();
   });
 
   it("keeps a stopped internship historical and read-only", async () => {
