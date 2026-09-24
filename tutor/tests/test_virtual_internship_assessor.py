@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -6,6 +7,10 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"railway"))
 from virtual_internship.assessment.engine import AssessmentValidationError,validate_and_calculate_assessment
 from virtual_internship.assessment.rubrics import RUBRIC_CALCULATION_VERSION
+from virtual_internship.ai.orchestrator import AIOrchestrationError, VirtualInternshipAIOrchestrator
+from virtual_internship.ai.roles import ROLE_POLICIES, RolePolicy, VirtualInternshipModelRole
+sys.path.insert(0,str(ROOT/"tests"))
+from virtual_internship_ai_fakes import AuditSink, FakeStateService, FakeStream, candidate
 
 def rubric():
     return {
@@ -60,5 +65,68 @@ class Phase6AssessorTests(unittest.TestCase):
         migration=(ROOT/"cloudflare/migrations/0012_virtual_internship_phase6_assessment.sql").read_text()
         self.assertIn("status IN ('pending','assessing','completed','failed')",migration)
         self.assertNotIn("competency_evidence",migration)
+
+
+
+class Phase6FormalAssessorOrchestrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_formal_assessor_reuses_phase3_role_and_returns_validated_result(self):
+        sink=AuditSink()
+        payload=output()
+        orch=VirtualInternshipAIOrchestrator(
+            FakeStateService(),
+            candidate_resolver=lambda *_a,**_k:[candidate()],
+            stream_factory=lambda *_a,**_k:FakeStream([json.dumps(payload)]),
+            audit_recorder=sink,
+        )
+        result,metadata=await orch.invoke_formal_assessor(
+            owner_actor_id="learner_a",internship_id="vi_1",task_id="task_one",
+            assessment_id="asm_1",rubric=rubric(),evidence_packet=packet(),
+        )
+        self.assertEqual(result["aggregate_numeric"],"75.00")
+        self.assertEqual(metadata["model_role"],"assessor")
+        self.assertEqual(FakeStateService().mutations,[])
+        self.assertEqual(sink.rows[-1][2]["status"],"completed")
+
+    async def test_formal_assessor_invalid_outputs_fail_closed_after_bounded_fallback(self):
+        sink=AuditSink()
+        candidates=[candidate(model_id="m1"),candidate(model_id="m2",model="vendor/m2")]
+        bad=output()
+        bad["criterion_results"][0]["criterion_id"]="invented"
+        orch=VirtualInternshipAIOrchestrator(
+            FakeStateService(),
+            candidate_resolver=lambda *_a,**_k:candidates,
+            stream_factory=lambda *_a,**_k:FakeStream([json.dumps(bad)]),
+            audit_recorder=sink,
+        )
+        with self.assertRaises(AIOrchestrationError):
+            await orch.invoke_formal_assessor(
+                owner_actor_id="learner_a",internship_id="vi_1",task_id="task_one",
+                assessment_id="asm_1",rubric=rubric(),evidence_packet=packet(),
+            )
+        self.assertEqual(sink.rows[-1][2]["status"],"failed")
+        self.assertEqual(sink.rows[-1][2]["error_code"],"schema_validation_failed")
+
+    async def test_formal_assessor_provider_timeout_fails_closed(self):
+        sink=AuditSink()
+        original=ROLE_POLICIES[VirtualInternshipModelRole.ASSESSOR]
+        try:
+            ROLE_POLICIES[VirtualInternshipModelRole.ASSESSOR]=RolePolicy(
+                VirtualInternshipModelRole.ASSESSOR,800,0.0,0.005,1,1,True,1,1
+            )
+            orch=VirtualInternshipAIOrchestrator(
+                FakeStateService(),
+                candidate_resolver=lambda *_a,**_k:[candidate()],
+                stream_factory=lambda *_a,**_k:FakeStream([json.dumps(output())],delay=0.02),
+                audit_recorder=sink,
+            )
+            with self.assertRaises(AIOrchestrationError) as cm:
+                await orch.invoke_formal_assessor(
+                    owner_actor_id="learner_a",internship_id="vi_1",task_id="task_one",
+                    assessment_id="asm_1",rubric=rubric(),evidence_packet=packet(),
+                )
+            self.assertEqual(cm.exception.code,"provider_timeout")
+            self.assertEqual(sink.rows[-1][2]["status"],"failed")
+        finally:
+            ROLE_POLICIES[VirtualInternshipModelRole.ASSESSOR]=original
 
 if __name__=="__main__":unittest.main()
