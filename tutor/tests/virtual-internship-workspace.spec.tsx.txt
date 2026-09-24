@@ -888,7 +888,10 @@ describe("Virtual Internship workplace through Phase 6", () => {
         competency_id: "comp_reconciliation", definition_version: 1, name: "Reconciliation",
         description: "Reconciles records systematically and identifies supported discrepancies.",
         domain: "internal_audit", level_framework_version: "phase7-levels-v1",
-        evidence_requirements: {}, context_metadata: { physical: false },
+        evidence_requirements: {
+          emerging: { min_records: 1, min_candidate: "developing" },
+          independent: { min_records: 2, min_candidate: "independent", min_independent: 1 },
+        }, context_metadata: { physical: false },
       }],
       competencies: [{
         competency_id: "comp_reconciliation", definition_version: 1, name: "Reconciliation",
@@ -897,7 +900,10 @@ describe("Virtual Internship workplace through Phase 6", () => {
         current_level: "independent", evidence_strength_summary: "strong", evidence_count: 3,
         independent_count: 2, assisted_count: 1, distinct_task_count: 2, distinct_context_count: 2,
         distinct_internship_count: 2, trend: "improving", last_demonstrated_at: 1_790_700_000,
-        explanation: {}, next_requirements: [{ kind: "independent_demonstrations", count: 1 }],
+        explanation: {
+          qualifying_evidence_records: 3, independent_demonstrations: 2,
+          distinct_task_contexts: 2, distinct_transfer_contexts: 2, expired_evidence_records: 1,
+        }, next_requirements: [{ kind: "independent_demonstrations", count: 1 }],
         aggregation_ruleset_version: "phase7-passport-aggregation-v1",
       }],
     };
@@ -913,7 +919,10 @@ describe("Virtual Internship workplace through Phase 6", () => {
         demonstrated_level: "independent", evidence_strength: "strong", assistance_level: 0,
         assistance_context: { label: "Independent demonstration", recorded_event_count: 0 },
         revision_context: { artifact_version_number: 2, submission_number: 2, revision_count: 1 },
-        strength_factors: {}, transfer_context: { work_context: "reconciliation" },
+        strength_factors: {
+          formal_assessment_completed: true, exact_lineage_valid: true,
+          specific_evidence_references: true, low_assistance_context: true,
+        }, transfer_context: { work_context: "reconciliation" },
         limitations: ["Only the submitted artifact version was assessed."],
         source_type: "virtual_internship", evidence_ruleset_version: "phase7-evidence-strength-v1",
         created_at: 1_790_700_000, assessment_date: 1_790_700_000, adjustments: [],
@@ -930,6 +939,8 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getAllByText("Independent").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Strong")).toBeVisible();
     expect(screen.getByText("3")).toBeVisible();
+    expect(screen.getByText(/Why this level: 3 qualifying evidence records/)).toBeVisible();
+    expect(screen.getByText(/1 historical evidence record excluded from the current level/)).toBeVisible();
     expect(screen.queryByText(/employability percentage|job ready|percentile/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review evidence" }));
     expect(await screen.findByText("Reconciliation memo")).toBeVisible();
@@ -940,6 +951,8 @@ describe("Virtual Internship workplace through Phase 6", () => {
     expect(screen.getByText("vi_1")).toBeVisible();
     expect(screen.getByText("task_reconcile_sample")).toBeVisible();
     expect(screen.getAllByText("Reconciliation").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Why this evidence has this strength/)).toBeVisible();
+    expect(screen.getByText("Exact lineage valid")).toBeVisible();
     expect(screen.getByText(/Only the submitted artifact version was assessed/)).toBeVisible();
     expect(screen.queryByText(/hidden scenario|system prompt|chain-of-thought/i)).toBeNull();
   });
