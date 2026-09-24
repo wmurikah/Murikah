@@ -163,6 +163,7 @@ export async function handlePhase6AssessmentPersistenceRoute(
   }
 
   if(route==='/internships/assessments/complete'&&request.method==='POST'){
+    if(owned.status!=='active')return json({error:'internship_not_active'},409);
     const assessmentId=id(body.assessment_id),modelInvocationId=id(body.model_invocation_id);
     const summary=text(body.overall_summary,4000),aggregate=body.aggregate_numeric==null?'':text(body.aggregate_numeric,80);
     const limitations=safeArray(body.limitations).map(x=>text(x,1000)).filter(Boolean).slice(0,32);
@@ -213,6 +214,7 @@ export async function handlePhase6AssessmentPersistenceRoute(
   }
 
   if(route==='/internships/assessments/fail'&&request.method==='POST'){
+    if(owned.status!=='active')return json({error:'internship_not_active'},409);
     const assessmentId=id(body.assessment_id),reason=text(body.reason,1000);
     const assessment=await env.TUTOR_DB.prepare(
       'SELECT a.id, a.status FROM internship_assessments a JOIN internship_instances i ON i.id = a.internship_id WHERE a.id = ? AND a.internship_id = ? AND i.learner_id = ? LIMIT 1'
