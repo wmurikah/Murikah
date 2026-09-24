@@ -156,7 +156,7 @@ function p7Aggregate(definition:Record<string,unknown>,historicalRows:Record<str
     next_requirements:missing,aggregation_ruleset_version:AGGREGATION_RULESET,
   };
 }
-async function p7EvidenceRowsasync function p7EvidenceRows(db:P7Database,actorId:string):Promise<Record<string,unknown>[]>{
+async function p7EvidenceRows(db:P7Database,actorId:string):Promise<Record<string,unknown>[]>{
   const result=await db.prepare(
     "SELECT e.* FROM competency_evidence e WHERE e.learner_id=? AND NOT EXISTS ("+
     "SELECT 1 FROM competency_evidence_adjustments a WHERE a.evidence_id=e.id AND a.action IN ('revoked','superseded')) "+
@@ -238,7 +238,7 @@ async function p7Rebuild(db:P7Database,actorId:string,now:number):Promise<number
   ).bind(actorId).run();
   return written;
 }
-async function p7DeriveAssessmentasync function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record<string,unknown>,now:number):Promise<number>{
+async function p7DeriveAssessment(db:P7Database,actorId:string,assessment:Record<string,unknown>,now:number):Promise<number>{
   const assessmentId=String(assessment.id||''),internshipId=String(assessment.internship_id||'');
   const existing=await db.prepare(
     "SELECT status,derived_count,evidence_ruleset_version FROM competency_derivation_status WHERE assessment_id=? AND learner_id=? LIMIT 1"
@@ -360,7 +360,7 @@ async function p7Reconcile(db:P7Database,actorId:string,now:number):Promise<{ass
   const passports=await p7RefreshPassport(db,actorId,affected,now);
   return {assessments:rows.length,evidence,passports};
 }
-async function p7Summaryasync function p7Summary(db:P7Database,actorId:string){
+async function p7Summary(db:P7Database,actorId:string){
   const passports=(await db.prepare(
     'SELECT p.*,d.name,d.description,d.domain,d.level_framework_version,d.evidence_requirements_json,d.transfer_policy_json,d.recency_policy_json '+
     'FROM competency_passports p JOIN competency_definitions d ON d.competency_id=p.competency_id AND d.definition_version=p.definition_version '+
