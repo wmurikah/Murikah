@@ -15,7 +15,7 @@ class Phase7ExportTests(unittest.TestCase):
             passport={"competencies":[{"competency_id":"comp_x","current_level":"developing"}]},
             evidence=[{"id":"ev_1","competency_id":"comp_x","definition_version":1,"internship_id":"vi_1",
                        "scenario_pack_id":"sp","scenario_version_id":"sv","task_id":"task","artifact_id":"art",
-                       "artifact_version_id":"ver","submission_id":"sub","assessment_id":"asm","criterion_id":"c",
+                       "artifact_version_id":"ver","submission_id":"sub","assessment_id":"asm","criterion_id":"c","mapping_version":1,
                        "demonstrated_level":"developing","evidence_strength":"supporting","assistance_level":2,
                        "transfer_context":{},"limitations":[],"evidence_ruleset_version":"phase7-evidence-strength-v1","created_at":10,
                        "provider_secret":"never","chain_of_thought":"never","artifact_content":"never"}],
@@ -25,6 +25,7 @@ class Phase7ExportTests(unittest.TestCase):
         dumped=json.dumps(result).lower()
         self.assertEqual(result["simulation_disclosure"],SIMULATION_DISCLOSURE)
         self.assertIn('"evidence_id": "ev_1"',dumped)
+        self.assertIn('"mapping_version": 1',dumped)
         self.assertNotIn("provider_secret",dumped)
         self.assertNotIn("chain_of_thought",dumped)
         self.assertNotIn("artifact_content",dumped)
