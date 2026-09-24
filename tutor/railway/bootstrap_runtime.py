@@ -417,6 +417,10 @@ def bootstrap_virtual_internship_phase6_scenarios() -> None:
         if not murikah_persistence.enabled():
             return
         from deeptutor.virtual_internship.validator import discover_packs, validate_pack
+        from deeptutor.virtual_internship.completion.policy import (
+            COMPLETION_POLICY_FILENAME,
+            completion_policy_hash,
+        )
     except Exception:
         return
 
@@ -438,6 +442,14 @@ def bootstrap_virtual_internship_phase6_scenarios() -> None:
             pack,
             content_hash=digest,
         )
+        completion_path = pack_dir / COMPLETION_POLICY_FILENAME
+        if completion_path.exists():
+            policy = json.loads(completion_path.read_text(encoding="utf-8"))
+            murikah_persistence.scenario_completion_policy_install(
+                scenario_version_id,
+                policy,
+                policy_hash=completion_policy_hash(policy),
+            )
         installed += 1
     if installed:
         print(f"[Murikah Tutor] Installed {installed} rubric-enabled Virtual Internship scenario version(s).")
