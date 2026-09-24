@@ -172,6 +172,14 @@ class CompletionPersistenceTests(unittest.TestCase):
         self.assertIn("db.batch([", source)
         self.assertIn("gate_snapshot_hash", PHASE8.read_text())
 
+    def test_idempotent_replay_recovers_active_partial_lifecycle_safely(self):
+        source = WORKER.read_text()
+        self.assertIn("async function recoverCompletionLifecycle(", source)
+        self.assertIn("if (String(row.status) === 'active')", source)
+        self.assertIn("recoverCompletionLifecycle(db, actorId, internshipId, replay, now)", source)
+        self.assertIn("internship_completion_integrity_conflict", source)
+        self.assertIn("Never rewrite the immutable completion record", source)
+
     def test_learner_route_accepts_only_request_identity_not_gate_assertions(self):
         source = ROUTER.read_text()
         self.assertIn('actor_id=_member(current,"view internship completion requirements")', source)
