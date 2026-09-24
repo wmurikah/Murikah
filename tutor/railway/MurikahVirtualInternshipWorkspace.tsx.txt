@@ -2017,6 +2017,19 @@ function passportRequirementLabel(item: { kind: string; count: number }) {
   return String(item.count) + " " + label + (item.count === 1 ? "" : "s");
 }
 
+function competencyRequirementSummary(level: string, rules: Record<string, number | string>) {
+  const parts: string[] = [];
+  const minRecords = Number(rules.min_records || 0);
+  const minIndependent = Number(rules.min_independent || 0);
+  const minTasks = Number(rules.min_task_contexts || 0);
+  const minContexts = Number(rules.min_transfer_contexts || 0);
+  if (minRecords) parts.push(String(minRecords) + " qualifying evidence record" + (minRecords === 1 ? "" : "s"));
+  if (minIndependent) parts.push(String(minIndependent) + " independent demonstration" + (minIndependent === 1 ? "" : "s"));
+  if (minTasks) parts.push(String(minTasks) + " distinct task context" + (minTasks === 1 ? "" : "s"));
+  if (minContexts) parts.push(String(minContexts) + " distinct transfer context" + (minContexts === 1 ? "" : "s"));
+  return sentenceLabel(level) + " requires " + (parts.length ? parts.join(", ") : "authored qualifying evidence") + ".";
+}
+
 function PassportView() {
   const [passport, setPassport] = useState<CompetencyPassportResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2147,6 +2160,14 @@ function PassportView() {
                 <div key={definition.competency_id} className="rounded-lg border border-[var(--border)] p-3">
                   <p className="text-sm font-semibold">{definition.name}</p>
                   <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{definition.description}</p>
+                  {definition.context_metadata?.physical ? (
+                    <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">Virtual Internship evidence cannot fully verify the physical/manual component of this competency.</p>
+                  ) : null}
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {Object.entries(definition.evidence_requirements || {}).map(([level, rules]) => (
+                      <li key={level}>• {competencyRequirementSummary(level, rules)}</li>
+                    ))}
+                  </ul>
                 </div>
               ))}
             </div>
@@ -2174,7 +2195,9 @@ function PassportView() {
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Task contexts</dt><dd className="mt-1 font-semibold">{item.distinct_task_count}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Transfer contexts</dt><dd className="mt-1 font-semibold">{item.distinct_context_count}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Internships</dt><dd className="mt-1 font-semibold">{item.distinct_internship_count}</dd></div>
-                <div><dt className="text-xs text-[var(--muted-foreground)]">Trend</dt><dd className="mt-1 font-semibold">{sentenceLabel(item.trend)}</dd></div>
+                {item.trend !== "insufficient_evidence" ? (
+                  <div><dt className="text-xs text-[var(--muted-foreground)]">Trend</dt><dd className="mt-1 font-semibold">{sentenceLabel(item.trend)}</dd></div>
+                ) : null}
               </dl>
               <p className="mt-4 text-xs leading-5 text-[var(--muted-foreground)]">
                 Why this level: {item.explanation?.qualifying_evidence_records ?? item.evidence_count} qualifying evidence record{(item.explanation?.qualifying_evidence_records ?? item.evidence_count) === 1 ? "" : "s"},
@@ -2262,6 +2285,16 @@ function PassportView() {
                   <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                     Evidence ID <span className="break-all font-mono">{row.id}</span> · Assessment <span className="break-all font-mono">{row.assessment_id}</span>
                   </p>
+                  {Object.entries(row.strength_factors || {}).some(([, value]) => value === true) ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold">Why this evidence has this strength</p>
+                      <ul className="mt-1 space-y-1 text-xs text-[var(--muted-foreground)]">
+                        {Object.entries(row.strength_factors || {})
+                          .filter(([, value]) => value === true)
+                          .map(([factor]) => <li key={factor}>• {sentenceLabel(factor)}</li>)}
+                      </ul>
+                    </div>
+                  ) : null}
                   {row.limitations?.length ? (
                     <div className="mt-3">
                       <p className="text-xs font-semibold">Limitations</p>
