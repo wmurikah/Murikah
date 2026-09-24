@@ -28,6 +28,12 @@ class Phase6EthicsTests(unittest.TestCase):
         for row in ETHICS_EVENTS:
             validate_ethics_template(row)
 
+    def test_escalation_routes_are_authored_per_template_not_universal(self):
+        routes={tuple(row["allowed_options"]) for row in ETHICS_EVENTS}
+        self.assertGreater(len(routes),1)
+        self.assertTrue(any("raise_to_authored_supervisor" not in row["allowed_options"] for row in ETHICS_EVENTS))
+        self.assertTrue(any("use_authored_ethics_route" not in row["allowed_options"] for row in ETHICS_EVENTS))
+
     def test_only_authored_escalation_option_is_accepted(self):
         template=ETHICS_EVENTS[0]
         self.assertEqual(validate_authored_option(template,"document_issue"),"document_issue")
