@@ -926,7 +926,12 @@ def main() -> int:
             "build_review_snapshot",
             "deterministic_review_findings",
             "snapshot_hash",
+            "final_day = max(minimum, final_day)",
         ),
+    )
+    require_markers(
+        "tutor/railway/virtual_internship/validator.py",
+        ("qualifying final_review_day cannot precede the minimum internship duration",),
     )
     require_markers(
         "tutor/railway/virtual_internship/ai/context.py",
@@ -942,11 +947,36 @@ def main() -> int:
     )
     require_markers(
         "tutor/railway/virtual_internship/dynamics/library.py",
-        ("WORKPLACE_DYNAMICS", "compile_phase2_event", "termination_by_ai"),
+        (
+            "WORKPLACE_DYNAMICS",
+            "compile_phase2_decision",
+            "compile_phase2_event",
+            '"once": True',
+            "termination_by_ai",
+        ),
     )
     require_markers(
         "tutor/railway/virtual_internship/dynamics/ethics.py",
-        ("ETHICS_EVENTS", "phase2_authored_only", "validate_authored_option"),
+        (
+            "ETHICS_EVENTS",
+            "phase2_authored_only",
+            "compile_phase2_ethics_decision",
+            "compile_phase2_ethics_event",
+            '"once": True',
+            "validate_authored_option",
+        ),
+    )
+    require_markers(
+        ".github/workflows/tutor-image.yml",
+        (
+            "fetch-depth: 0",
+            "git diff --check origin/main...HEAD",
+            "python tutor/scripts/preflight.py",
+            "python tutor/cloudflare/preflight.py",
+            "npm --prefix tutor/cloudflare run check",
+            "Build pinned Tutor image",
+            "Publish immutable source image",
+        ),
     )
     for phase6_test, marker in (
         ("tutor/tests/test_virtual_internship_rubrics.py", "class Phase6RubricTests"),
