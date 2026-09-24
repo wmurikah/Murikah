@@ -42,6 +42,19 @@ class Phase7EvidenceTests(unittest.TestCase):
         negative=derive_evidence_contribution(assessment=assessment(),criterion=criterion("not_yet"),mapping=MAPPING,assistance_level=0)
         self.assertEqual(negative["demonstrated_level"],"not_demonstrated")
 
+
+    def test_unknown_mapping_and_invalid_assistance_fail_closed(self):
+        self.assertIsNone(
+            derive_evidence_contribution(
+                assessment=assessment(),criterion=criterion(),mapping={},assistance_level=0
+            )
+        )
+        self.assertIsNone(
+            derive_evidence_contribution(
+                assessment=assessment(),criterion=criterion(),mapping=MAPPING,assistance_level=6
+            )
+        )
+
     def test_broken_lineage_creates_no_evidence(self):
         bad=criterion(); bad["evidence_refs"][0]["artifact_version_id"]="other"
         self.assertIsNone(derive_evidence_contribution(assessment=assessment(),criterion=bad,mapping=MAPPING,assistance_level=0))
