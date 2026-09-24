@@ -1,20 +1,37 @@
 """Derive immutable competency evidence contributions from Phase 6 records."""
 from __future__ import annotations
+import json
 from typing import Any
 from .strength import calculate_evidence_strength, EVIDENCE_STRENGTH_RULESET_VERSION
 from .transfer import normalized_transfer_context
 
 ASSISTANCE_LABELS={0:"Independent demonstration",1:"Clarification only",2:"Light coaching used",3:"Moderate coaching used",4:"Substantial coaching used",5:"Solution-level assistance used"}
 
-def demonstrated_candidate(rating_id: str, assistance_level: int) -> str | None:
-    rating=str(rating_id or "")
-    if rating=="not_yet":
-        return "not_demonstrated"
-    if rating=="developing":
-        return "developing"
-    if rating not in {"meets","exceeds"}:
+def demonstrated_candidate(mapping: dict[str,Any], rating_id: str, assistance_level: int) -> str | None:
+    raw=mapping.get("rating_contributions") or mapping.get("rating_contribution_json") or {}
+    if isinstance(raw,str):
+        try:
+            raw=json.loads(raw)
+        except (TypeError,ValueError,json.JSONDecodeError):
+            return None
+    if not isinstance(raw,dict):
         return None
-    return "independent" if int(assistance_level) <= 1 else "applied_with_support"
+    rule=raw.get(str(rating_id or ""))
+    if not isinstance(rule,dict):
+        return None
+    candidate=str(rule.get("candidate") or "")
+    if candidate not in {"not_demonstrated","developing","applied_with_support","independent"}:
+        return None
+    independence_eligible=rule.get("independence_eligible") is True
+    try:
+        maximum=int(mapping.get("max_independent_assistance",1))
+    except (TypeError,ValueError):
+        return None
+    if not 0 <= maximum <= 5:
+        return None
+    if independence_eligible and int(assistance_level) <= maximum:
+        return "independent"
+    return candidate
 
 def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[str,Any],
                                  mapping: dict[str,Any], assistance_level: int,
@@ -33,7 +50,7 @@ def derive_evidence_contribution(*, assessment: dict[str,Any], criterion: dict[s
     refs=criterion.get("evidence_refs")
     if not isinstance(refs,list) or not refs:
         return None
-    candidate=demonstrated_candidate(str(criterion.get("rating_id") or ""),assistance_level)
+    candidate=demonstrated_candidate(mapping,str(criterion.get("rating_id") or ""),assistance_level)
     if candidate is None:
         return None
     artifact_id=str(assessment.get("artifact_id") or "")
