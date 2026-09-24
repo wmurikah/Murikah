@@ -24,4 +24,15 @@ class Phase7OwnershipContractTests(unittest.TestCase):
         self.assertNotIn("completion_letter",migration)
         self.assertNotIn("certificate",migration)
 
+
+    def test_evidence_corrections_are_admin_only_private_and_idempotent(self):
+        worker=(ROOT/"cloudflare/src/virtual_internship_phase7.ts").read_text()
+        router=(ROOT/"railway/murikah_virtual_internship.py").read_text()
+        sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
+        self.assertIn("/internships/passport/evidence-adjust",worker)
+        self.assertIn("account.role!=='admin'",worker)
+        self.assertIn("admin_actor_id TEXT NOT NULL",sql)
+        self.assertIn("UNIQUE (admin_actor_id, request_id)",sql)
+        self.assertNotIn('@router.post("/passport/evidence-adjust")',router)
+
 if __name__=="__main__": unittest.main()
