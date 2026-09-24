@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 import sys
 import tempfile
@@ -49,6 +50,17 @@ class Phase7CompetencyDefinitionTests(unittest.TestCase):
         value=self.fixture(); value["recency_policy"]={"expires_after_days":-1}
         with self.assertRaises(CompetencyDefinitionError):
             validate_definition(value)
+
+
+    def test_seeded_ids_exactly_reuse_authored_v2_scenario_competencies(self):
+        authored=set()
+        scenario_root=ROOT/"virtual-internship/scenarios/demo"
+        for path in sorted(scenario_root.glob("*-v2/tasks.json")):
+            for task in json.loads(path.read_text()):
+                authored.update(str(value) for value in task.get("competency_refs",[]) if value)
+        sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
+        seeded=set(re.findall(r"\('(comp_[a-z0-9_]+)',1,",sql))
+        self.assertEqual(seeded,authored)
 
     def test_migration_has_versioned_immutable_definition_authority(self):
         sql=(ROOT/"cloudflare/migrations/0013_virtual_internship_phase7_passport.sql").read_text()
