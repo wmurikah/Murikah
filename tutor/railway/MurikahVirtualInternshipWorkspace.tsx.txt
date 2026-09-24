@@ -1941,7 +1941,7 @@ function InboxView({
   }
 
   async function sendWith(payload: { text: string; requestId: string; actorId: string; taskId: string }, optimistic: boolean) {
-    if (!payload.actorId || !payload.text.trim()) return;
+    if (!payload.actorId || !payload.text.trim() || readOnly) return;
     setSending(true);
     setError("");
     setFailed(null);
@@ -2030,7 +2030,7 @@ function InboxView({
               loading={loading}
               error={error}
               draft={draft}
-              disabled={stopped}
+              disabled={readOnly}
               sending={sending}
               onDraft={setDraft}
               onSend={send}
