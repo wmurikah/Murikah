@@ -21,6 +21,19 @@ class Phase6EvidenceTests(unittest.TestCase):
         packet["references"][0]["artifact_version_id"]="ver_other"
         with self.assertRaises(EvidenceError):evidence_reference_map(packet)
 
+    def test_cross_artifact_and_submission_references_are_rejected(self):
+        packet=build_text_evidence_packet(self.material())
+        packet["references"][0]["artifact_id"]="art_other"
+        with self.assertRaises(EvidenceError):evidence_reference_map(packet)
+        packet=build_text_evidence_packet(self.material())
+        packet["references"][0]["submission_id"]="sub_other"
+        with self.assertRaises(EvidenceError):evidence_reference_map(packet)
+
+    def test_locator_cannot_claim_lines_outside_supplied_source(self):
+        packet=build_text_evidence_packet(self.material())
+        packet["references"][0]["locator"]["end_line"]=99
+        with self.assertRaises(EvidenceError):evidence_reference_map(packet)
+
     def test_binary_without_safe_extraction_is_explicitly_limited(self):
         packet=build_text_evidence_packet({**self.material(""),"extractable":False})
         self.assertEqual(packet["references"],[])
