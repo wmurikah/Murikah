@@ -23,6 +23,13 @@ def criterion(rating="meets",refs=True):
     }
 
 MAPPING={"competency_id":"comp_debugging","definition_version":1,"mapping_version":1,"sub_competency_id":"",
+         "rating_contributions":{
+             "not_yet":{"candidate":"not_demonstrated","independence_eligible":False},
+             "developing":{"candidate":"developing","independence_eligible":False},
+             "meets":{"candidate":"applied_with_support","independence_eligible":True},
+             "exceeds":{"candidate":"applied_with_support","independence_eligible":True},
+         },
+         "max_independent_assistance":1,
          "context_tags":{"career_family":"software_engineering","role_family":"software_engineering",
                          "scenario_pack_id":"sp_demo_software_engineering","task_category":"investigative",
                          "domain":"software_engineering","work_context":"bug_reproduction"}}
@@ -42,6 +49,14 @@ class Phase7EvidenceTests(unittest.TestCase):
         negative=derive_evidence_contribution(assessment=assessment(),criterion=criterion("not_yet"),mapping=MAPPING,assistance_level=0)
         self.assertEqual(negative["demonstrated_level"],"not_demonstrated")
 
+
+
+    def test_unknown_authored_rating_mapping_creates_no_evidence(self):
+        self.assertIsNone(
+            derive_evidence_contribution(
+                assessment=assessment(),criterion=criterion("custom_rating"),mapping=MAPPING,assistance_level=0
+            )
+        )
 
     def test_unknown_mapping_and_invalid_assistance_fail_closed(self):
         self.assertIsNone(
