@@ -43,6 +43,19 @@ class Phase6RubricTests(unittest.TestCase):
         value=rubric();value["criteria"][0]["weight"]=60
         with self.assertRaises(RubricError):validate_rubric(value)
 
+    def test_non_aggregating_rubric_may_omit_optional_weights(self):
+        value=rubric()
+        value["calculation"]["method"]="none"
+        for criterion in value["criteria"]:
+            criterion.pop("weight")
+        normalized=validate_rubric(value)
+        self.assertTrue(all("weight" not in criterion for criterion in normalized["criteria"]))
+        self.assertIsNone(calculate_aggregate(normalized,[]))
+
+    def test_weighted_rubric_rejects_missing_weight(self):
+        value=rubric();value["criteria"][0].pop("weight")
+        with self.assertRaises(RubricError):validate_rubric(value)
+
     def test_duplicate_criterion_id_is_rejected(self):
         value=rubric();value["criteria"][1]["criterion_id"]="analysis"
         with self.assertRaises(RubricError):validate_rubric(value)
