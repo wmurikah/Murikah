@@ -1,0 +1,54 @@
+{
+  "organization_id": "org_pineforge_software",
+  "name": "Pineforge Software Studio",
+  "fictional": true,
+  "sector": "Software products",
+  "country_region": "Fictional regional technology market",
+  "description": "A fictional software company used only for deterministic Murikah scenario-engine tests.",
+  "products_services": [
+    "workflow software",
+    "business web applications"
+  ],
+  "departments": [
+    {
+      "id": "dept_engineering",
+      "name": "Engineering"
+    },
+    {
+      "id": "dept_product",
+      "name": "Product"
+    },
+    {
+      "id": "dept_quality",
+      "name": "Quality Assurance"
+    }
+  ],
+  "systems": [
+    "IssueTrack Demo",
+    "BuildLab"
+  ],
+  "process_references": [
+    "bug triage",
+    "release readiness review"
+  ],
+  "vocabulary": [
+    "reproduction",
+    "regression",
+    "acceptance criteria",
+    "release candidate"
+  ],
+  "communication_norms": [
+    "Reproduction evidence should be recorded before proposing a fix."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical timing."
+  }
+}
