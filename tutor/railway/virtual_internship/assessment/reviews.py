@@ -63,7 +63,7 @@ def build_review_snapshot(
             if not isinstance(row, dict):
                 continue
             stamp = next((_int(row.get(key)) for key in keys if _int(row.get(key)) > 0), 0)
-            if not stamp or stamp <= cutoff_at:
+            if stamp and stamp <= cutoff_at:
                 out.append(row)
         return out
     snapshot = {
