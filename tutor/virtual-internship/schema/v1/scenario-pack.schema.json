@@ -1209,7 +1209,6 @@
               "criterion_id",
               "description",
               "evidence_expectations",
-              "weight",
               "allowed_rating_ids",
               "deliverable_types",
               "allow_not_assessed"
