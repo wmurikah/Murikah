@@ -1,5 +1,23 @@
 PRAGMA foreign_keys = ON;
 
+-- Publish rubric-enabled v2 demo scenario metadata without rewriting any pinned v1 definition.
+INSERT INTO scenario_packs(id, slug, title, career_family, role_title, status, created_at, updated_at)
+VALUES
+  ('sp_demo_internal_audit','demo-internal-audit','Internal Audit Intern Demo','internal_audit','Internal Audit Intern','published',unixepoch(),unixepoch()),
+  ('sp_demo_data_analyst','demo-data-analyst','Data Analyst Intern Demo','data_analysis','Data Analyst Intern','published',unixepoch(),unixepoch()),
+  ('sp_demo_software_engineering','demo-software-engineering','Software Engineering Intern Demo','software_engineering','Software Engineering Intern','published',unixepoch(),unixepoch())
+ON CONFLICT(id) DO UPDATE SET
+  status='published',
+  updated_at=excluded.updated_at;
+
+INSERT OR IGNORE INTO scenario_versions(
+  id, scenario_pack_id, version, schema_version, status, manifest_ref,
+  minimum_duration_days, expected_workload_band, content_hash, created_at, published_at
+) VALUES
+  ('sv_demo_internal_audit_v2','sp_demo_internal_audit',2,1,'published','d1:scenario-version-content/sv_demo_internal_audit_v2',90,'standard','877d0dd6575bde0cbcf87dc1d90cee4e7a595fd9325dc13160edddabac10ae54',unixepoch(),unixepoch()),
+  ('sv_demo_data_analyst_v2','sp_demo_data_analyst',2,1,'published','d1:scenario-version-content/sv_demo_data_analyst_v2',90,'standard','0abc7c18daca68b17c231beaaad459f87d147a23b14212db394399d4e1c4bb7c',unixepoch(),unixepoch()),
+  ('sv_demo_software_engineering_v2','sp_demo_software_engineering',2,1,'published','d1:scenario-version-content/sv_demo_software_engineering_v2',90,'standard','bbb09ba16aefed5d304fd29949d2aab64de76f19a4993537b5d98b9670d1e940',unixepoch(),unixepoch());
+
 -- Virtual Internship Phase 6: immutable formal assessment lineage, assistance
 -- provenance and auditable midpoint/final performance reviews.
 CREATE TABLE IF NOT EXISTS internship_assessments (
