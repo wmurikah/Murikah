@@ -1243,15 +1243,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 7 — Competency Passport
 
-- [ ] Competency definitions.
-- [ ] Competency Evidence Record.
-- [ ] Evidence-strength rules.
-- [ ] Independent vs assisted weighting/context.
-- [ ] Cross-task evidence aggregation.
-- [ ] Cross-internship transfer.
-- [ ] Passport UI.
-- [ ] Evidence drill-down.
-- [ ] Export.
+- [x] Competency definitions.
+- [x] Competency Evidence Record.
+- [x] Evidence-strength rules.
+- [x] Independent vs assisted weighting/context.
+- [x] Cross-task evidence aggregation.
+- [x] Cross-internship transfer.
+- [x] Passport UI.
+- [x] Evidence drill-down.
+- [x] Export.
 
 ### Phase 8 — 90-day completion system
 
@@ -2432,7 +2432,7 @@ Intentional boundaries remain explicit: **Phase 7 Competency Passport remains un
 
 ## Phase 7 Implementation Record
 
-**Status:** implementation present on the Phase 7 branch; the Phase 7 checklist remains intentionally unchecked until focused tests, both preflights, Worker dry-run and the production Tutor image gate pass on the final head.
+**Status:** verified on the Phase 7 implementation head. Dedicated **Build Murikah Tutor image** workflow run `35982597466` passed Tutor deployment preflight, Cloudflare migration preflight, persistence binding validation, Worker dry-run, all 8 frontend integration files / 49 tests, all 6 committed Virtual Internship scenario packs, all 312 packaged Tutor Python tests, the pinned DeepTutor production build and the production Tutor image build. The checklist below is closed only after that release gate passed; this documentation head must pass the same dedicated workflow before merge.
 
 ### Persistence, competency authority and level framework
 
@@ -2479,7 +2479,7 @@ Evidence drill-down shows the source internship/scenario, task, structured work 
 
 All learner-facing Passport endpoints derive the owner from the authenticated Tutor session. Guests cannot create evidence, accumulate a Passport, read member evidence or export a Passport. The browser has no route to set competency level, evidence strength, assistance level, evidence lineage, revoke evidence or alter aggregation rules. Administrative correction is private, admin-only and audit-preserving. Passport reads use D1 summaries/metadata and never fetch R2 artifact bytes or invoke a model. A definition marked as physical/manual receives an explicit simulation limitation and cannot silently become Strong evidence solely from virtual work.
 
-Focused Phase 7 tests cover definitions/versioning, evidence derivation/immutability/idempotency, evidence strength, assistance, aggregation, contradictory evidence, transfer, ownership, export, D1 migration/restart and Passport UI/drill-down. Cloudflare preflight protects the Phase 7 migration, Worker service, ruleset versions, UI, tests and this record.
+Focused Phase 7 tests cover definitions/versioning, evidence derivation/immutability/idempotency, evidence strength, assistance, aggregation, contradictory evidence, transfer, ownership, export, D1 migration/restart and Passport UI/drill-down. Cloudflare preflight protects the Phase 7 migration, Worker service, ruleset versions, UI, tests and this record. Release-gate verification on run `35982597466` recorded: Tutor preflight PASS, Cloudflare migration preflight PASS, persistence binding validation PASS, Worker `wrangler deploy --dry-run` PASS, frontend integration 8/8 files and 49/49 tests PASS, scenario validation PASS for 6 packs, packaged Python regressions 312/312 PASS, pinned DeepTutor production build PASS and Tutor production image build PASS.
 
 **Phase 8 internship completion remains unimplemented. Phase 9 performance reports, completion letters, certificates and public verification IDs remain unimplemented.**
 
