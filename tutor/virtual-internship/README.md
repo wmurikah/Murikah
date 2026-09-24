@@ -2429,6 +2429,66 @@ The production Dockerfile copies the full `virtual_internship` package, committe
 
 Intentional boundaries remain explicit: **Phase 7 Competency Passport remains unimplemented. Phase 8 internship completion remains unimplemented. Phase 9 reports and letters remain unimplemented.** Phase 6 creates traceable assessment evidence for later phases but does not aggregate competencies, transition the internship to completed, generate credentials, issue a report or create verification IDs.
 
+
+## Phase 7 Implementation Record
+
+**Status:** implementation present on the Phase 7 branch; the Phase 7 checklist remains intentionally unchecked until focused tests, both preflights, Worker dry-run and the production Tutor image gate pass on the final head.
+
+### Persistence, competency authority and level framework
+
+Phase 7 uses `tutor/cloudflare/migrations/0013_virtual_internship_phase7_passport.sql`. D1 is the canonical competency-definition authority. Definitions are immutable versioned rows keyed by `competency_id + definition_version`; the migration seeds the 11 competency IDs already authored by the published Phase 2 v2 task packs rather than inventing a second namespace. `competency_assessment_mappings` explicitly maps each published v2 rubric criterion to its task-authored competency. Mapping is authored and versioned; assessor prose is never parsed to guess competency meaning.
+
+The canonical level framework is `phase7-levels-v1`: **Emerging**, **Developing**, **Applied with support**, **Independent**, **Advanced**. Emerging requires demonstrated evidence rather than task exposure. Developing requires repeated qualifying contribution. Applied with support represents credible application where material assistance remains part of context. Independent requires qualifying low-assistance evidence. Advanced requires repeated Independent evidence plus distinct task and transfer contexts; one high-scoring artifact can never award Advanced.
+
+### Competency Evidence Record and exact lineage
+
+`competency_evidence` is immutable. Each evidence row preserves:
+`learner -> internship -> scenario version -> task -> artifact -> exact artifact version -> exact submission -> Phase 6 assessment -> exact assessment criterion -> authored competency mapping -> Competency Evidence Record`.
+
+Evidence IDs are opaque. The uniqueness key `learner + assessment + criterion + competency + definition version + evidence ruleset` makes retries idempotent. Corrections use immutable `competency_evidence_adjustments` revocation/supersession records rather than rewriting history. Evidence never stores chain-of-thought, model confidence as competence, hidden scenario truth or artifact bytes.
+
+Completed Phase 6 assessments are the only initial evidence source. A `not_yet` criterion is preserved as `not_demonstrated` contradictory evidence, but does not award Emerging. `developing` contributes Developing. `meets/exceeds` contributes Independent when the maximum relevant pre-submission assistance is 0–1, otherwise Applied with support. This candidate is one evidence contribution, not the final Passport level.
+
+### Evidence strength, assistance and revision context
+
+Evidence-strength ruleset `phase7-evidence-strength-v1` is deterministic and separate from competency level. Exact completed assessment lineage plus specific evidence references produces Supporting evidence; the same evidence with low-assistance context is Strong. Broken lineage or missing required references fails closed. Strength never uses model confidence.
+
+Phase 7 reuses Phase 6 assistance events and the canonical 0–5 scale. System-observed and learner-declared assistance counts remain distinguishable. Assistance is context, not a score penalty. Only events at or before the exact submission timestamp are considered; later Mentor help cannot retroactively affect an earlier submitted version. Artifact version number, submission number and revision count are preserved without treating revision itself as weakness.
+
+### Aggregation, contradictory evidence, transfer and trend
+
+Runtime Passport aggregation is the D1 Worker service in `tutor/cloudflare/src/virtual_internship_phase7.ts`, ruleset `phase7-passport-aggregation-v1`. It does not call an LLM and does not average rubric percentages. It evaluates each competency's versioned evidence requirements over immutable evidence, tracking evidence count, Independent/assisted contribution count, distinct internship+task contexts, structured transfer contexts, evidence-strength distribution, internship count and chronology.
+
+Repeated criteria from one task remain one task context and cannot fake transfer. Transfer context uses structured authored tags (`career_family`, `role_family`, `scenario_pack_id`, `task_category`, `domain`, `work_context`), never raw scenario title or assessor prose. Evidence from multiple internships aggregates only inside the same compatible competency definition version. Historical evidence always retains its original internship and definition version.
+
+Contradictory evidence is preserved. The versioned definition recency policy uses the two most recent strong contributions: one recent strong `not_demonstrated` contribution caps a previously higher aggregate at Developing; two in the configured window cap it at Emerging. This is an explicit deterministic conflict rule, not naive highest-ever, latest-only or averaging. No evidence expires because the initial definitions configure no expiry. Trend requires at least three chronological evidence records and returns `improving`, `stable`, `mixed` or `insufficient_evidence`.
+
+### Materialized Passport, rebuild and reconciliation
+
+`competency_passports` is a rebuildable learner read model; `competency_evidence` remains the authority. `competency_passport_history` records actual aggregate level changes with previous/new level, explanation and ruleset. `competency_derivation_status` makes the Phase 6 -> Phase 7 boundary recoverable. Formal assessment completion attempts reconciliation, but a temporary Phase 7 failure never rewrites or invalidates the completed Phase 6 assessment. Passport reads reconcile missing completed assessments idempotently. The full rebuild path recalculates materialized summaries from durable evidence with zero model calls.
+
+### Passport UI, drill-down and export
+
+The shared Virtual Internship workspace now has a real `/virtual-internship/passport` section. It shows competency name, current demonstrated level, evidence strength, evidence count, Independent/assisted context, distinct task/context/internship counts, deterministic trend, last demonstrated date and evidence still missing for the next level. It intentionally has no overall employability percentage, learner ranking, badges, XP, streaks or job-readiness claim.
+
+Evidence drill-down shows the source internship/scenario, task, artifact title/type, exact artifact version, exact submission, Phase 6 assessment and criterion, evidence contribution, evidence strength, assistance context, assessment date, limitations and a learner-owned link back to Work. Raw internal JSON rules, hidden scenario facts, provider secrets and chain-of-thought are not exposed.
+
+`POST /api/murikah/virtual-internship/passport/export` is an explicit learner-controlled JSON export. It contains definition/ruleset versions, current competency summaries and stable evidence references with a Virtual Internship simulation disclosure. It does not embed private artifact contents, publish a public profile, create an employer verification ID, imply employment, or issue a completion credential.
+
+### Ownership, performance and phase boundary
+
+All learner-facing Passport endpoints derive the owner from the authenticated Tutor session. Guests cannot create evidence, accumulate a Passport, read member evidence or export a Passport. The browser has no route to set competency level, evidence strength, assistance level, evidence lineage or aggregation rules. Passport reads use D1 summaries/metadata and never fetch R2 artifact bytes or invoke a model.
+
+Focused Phase 7 tests cover definitions/versioning, evidence derivation/immutability/idempotency, evidence strength, assistance, aggregation, contradictory evidence, transfer, ownership, export, D1 migration/restart and Passport UI/drill-down. Cloudflare preflight protects the Phase 7 migration, Worker service, ruleset versions, UI, tests and this record.
+
+**Phase 8 internship completion remains unimplemented. Phase 9 performance reports, completion letters, certificates and public verification IDs remain unimplemented.**
+
+## SUBSEQUENT COMPETENCY PASSPORT DEVELOPMENT REQUIREMENT
+
+Future phases must preserve immutable Competency Evidence Records; exact Phase 5 artifact/version/submission and Phase 6 assessment/criterion lineage; competency-definition versions; evidence-strength ruleset versions; Passport aggregation ruleset versions; structured assistance/transfer context; and learner ownership isolation. Future code must not create competency evidence from model prose, model confidence, browser-supplied levels or unsupported external certificates.
+
+Phase 8 completion may consume Passport evidence gates but must not rewrite Passport evidence or make the Passport itself a completion credential. Phase 9 reports and letters must read the existing Passport/evidence results rather than independently re-assessing artifacts. Any future competency semantic change requires an explicit new definition version and compatibility/migration declaration; historical evidence keeps the original definition version.
+
 ## SUBSEQUENT ASSESSMENT DEVELOPMENT REQUIREMENT
 
 Future assessment/reporting/completion phases must reuse Phase 6 assessment records rather than re-assessing artifacts ad hoc. Phase 7 competency evidence must reference the exact Phase 6 assessment, task, artifact version and submission lineage. Preserve the authored rubric version/hash, deterministic calculation version, structured criterion results, assistance provenance and evidence references.
