@@ -21,7 +21,7 @@ class Phase9PerformanceReportTests(unittest.TestCase):
             "internship_performance_reviews",
             "competency_evidence e",
             "internship_assessment_criteria",
-            "internship_reflections",
+            "internship_reflections","reference_type: 'performance_review'",
         ):
             self.assertIn(marker,WORKER)
         self.assertIn("current_level",WORKER)
