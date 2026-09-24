@@ -194,9 +194,21 @@ async function p7RefreshPassport(
     if(!shouldRefresh)continue;
     const compatibleVersions=new Set<number>([version]);
     for(const row of compatibleFrom)compatibleVersions.add(Number(row.from_version||0));
-    const rows=allEvidence.filter(row=>
+    const candidateRows=allEvidence.filter(row=>
       String(row.competency_id||'')===cid&&compatibleVersions.has(Number(row.definition_version||0))
     );
+    const latestByLogicalContribution=new Map<string,Record<string,unknown>>();
+    const passthrough:Record<string,unknown>[]=[];
+    for(const row of candidateRows){
+      const assessmentId=String(row.assessment_id||''),criterionId=String(row.criterion_id||'');
+      if(!assessmentId||!criterionId){passthrough.push(row);continue;}
+      const logical=assessmentId+'|'+criterionId+'|'+cid;
+      const existing=latestByLogicalContribution.get(logical);
+      if(!existing||Number(row.mapping_version||0)>Number(existing.mapping_version||0)){
+        latestByLogicalContribution.set(logical,row);
+      }
+    }
+    const rows=[...passthrough,...latestByLogicalContribution.values()];
     const aggregate=p7Aggregate(definition,rows,now);
     const previous=await db.prepare(
       'SELECT current_level FROM competency_passports WHERE learner_id=? AND competency_id=? AND definition_version=? LIMIT 1'
