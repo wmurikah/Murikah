@@ -497,8 +497,13 @@ export async function handlePhase7PassportPersistenceRoute(
       }
     }
     const existing=await env.TUTOR_DB.prepare(
-      'SELECT id FROM competency_evidence_adjustments WHERE admin_actor_id=? AND request_id=? LIMIT 1'
+      'SELECT id,evidence_id,action,replacement_evidence_id FROM competency_evidence_adjustments WHERE admin_actor_id=? AND request_id=? LIMIT 1'
     ).bind(actorId,requestId).first<Record<string,unknown>>();
+    if(existing&&(
+      String(existing.evidence_id||'')!==evidenceId||
+      String(existing.action||'')!==action||
+      String(existing.replacement_evidence_id||'')!==replacementId
+    ))return p7Json({error:'request_id_conflict'},409);
     if(!existing){
       await env.TUTOR_DB.prepare(
         'INSERT INTO competency_evidence_adjustments(id,evidence_id,action,replacement_evidence_id,reason,admin_actor_id,request_id,created_at) VALUES (?,?,?,?,?,?,?,?)'
