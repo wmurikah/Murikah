@@ -19,11 +19,16 @@ def resolved_review_days(manifest: dict[str, Any]) -> tuple[int, int]:
     minimum = max(1, _int(manifest.get("minimum_duration_days"), 90))
     policy = manifest.get("review_policy") if isinstance(manifest.get("review_policy"), dict) else {}
     midpoint = _int(policy.get("midpoint_day"), max(1, minimum // 2))
-    final_day = _int(policy.get("final_review_day"), max(midpoint, minimum - 5))
-    if str(manifest.get("classification") or "") in {"demo", "test"}:
+    final_day = _int(policy.get("final_review_day"), minimum)
+    classification = str(manifest.get("classification") or "")
+    if classification in {"demo", "test"}:
         midpoint = _int(policy.get("demo_accelerated_midpoint_day"), midpoint)
         final_day = _int(policy.get("demo_accelerated_final_day"), final_day)
-    return max(1, midpoint), max(1, final_day)
+    elif manifest.get("qualifying") is True or classification == "qualifying":
+        # A qualifying final performance review may not become eligible before
+        # the Phase 1 minimum duration. The review is still not completion.
+        final_day = max(minimum, final_day)
+    return max(1, midpoint), max(midpoint, final_day)
 
 
 def review_eligibility(
