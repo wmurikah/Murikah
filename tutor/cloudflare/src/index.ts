@@ -5,6 +5,7 @@ import { handlePhase4WorkspacePersistenceRoute } from './virtual_internship_phas
 import { handlePhase5ArtifactPersistenceRoute } from './virtual_internship_phase5';
 import { handlePhase6AssessmentPersistenceRoute } from './virtual_internship_phase6';
 import { handlePhase7PassportPersistenceRoute } from './virtual_internship_phase7';
+import { handlePhase8CompletionPersistenceRoute } from './virtual_internship_phase8';
 
 type PersistenceRunResult = { meta?: { changes?: number } };
 type PersistenceStatement = {
@@ -512,7 +513,7 @@ function newInternshipId(prefix: 'vi' | 'ia'): string {
 }
 
 function internshipDurationStatus(
-  row: Pick<InternshipStatusRow, 'started_at' | 'stopped_at' | 'minimum_duration_days'>,
+  row: Pick<InternshipStatusRow, 'started_at' | 'stopped_at' | 'completed_at' | 'minimum_duration_days'>,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): {
   elapsed_seconds: number;
@@ -521,7 +522,8 @@ function internshipDurationStatus(
   final_completion_available: false;
   pending_future_completion_gates: true;
 } {
-  const effectiveEnd = row.stopped_at === null ? nowSeconds : Math.min(nowSeconds, row.stopped_at);
+  const terminalAt = row.completed_at ?? row.stopped_at;
+  const effectiveEnd = terminalAt === null ? nowSeconds : Math.min(nowSeconds, terminalAt);
   const elapsedSeconds = Math.max(0, effectiveEnd - row.started_at);
   return {
     elapsed_seconds: elapsedSeconds,
@@ -642,6 +644,9 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
 
   const phase7Response = await handlePhase7PassportPersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
   if (phase7Response) return phase7Response;
+
+  const phase8Response = await handlePhase8CompletionPersistenceRoute(request, { TUTOR_DB: env.TUTOR_DB }, route, now);
+  if (phase8Response) return phase8Response;
 
   if (route === '/scenario-version/resolve' && request.method === 'POST') {
     const body = await requestJson(request);
@@ -836,11 +841,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           "UPDATE internship_instances SET status = 'stopped', lifecycle_stage = 'stopped', stopped_at = ?, updated_at = ? WHERE id = ? AND learner_id = ? AND status = 'active'",
         ).bind(now, now, internshipId, actorId),
         env.TUTOR_DB.prepare(
-          "UPDATE internship_memberships SET status = 'stopped', updated_at = ? WHERE internship_id = ? AND actor_id = ? AND role = 'learner'",
-        ).bind(now, internshipId, actorId),
+          "UPDATE internship_memberships SET status = 'stopped', updated_at = ? WHERE internship_id = ? AND actor_id = ? AND role = 'learner' " +
+          "AND EXISTS (SELECT 1 FROM internship_instances i WHERE i.id = ? AND i.status = 'stopped')",
+        ).bind(now, internshipId, actorId, internshipId),
         env.TUTOR_DB.prepare(
-          "INSERT OR IGNORE INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) VALUES (?, ?, ?, 'internship_stopped', ?, ?, '')",
-        ).bind(activityId, internshipId, actorId, now, requestId),
+          "INSERT OR IGNORE INTO internship_activity(id, internship_id, actor_id, event_type, event_time, request_id, detail) " +
+          "SELECT ?, ?, ?, 'internship_stopped', ?, ?, '' WHERE EXISTS " +
+          "(SELECT 1 FROM internship_instances i WHERE i.id = ? AND i.status = 'stopped')",
+        ).bind(activityId, internshipId, actorId, now, requestId, internshipId),
       ]);
       const status = await internshipStatusForActor(env, internshipId, actorId, now);
       return persistenceJson({ ok: true, internship: status });
