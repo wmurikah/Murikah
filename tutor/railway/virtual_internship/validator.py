@@ -169,12 +169,18 @@ def _validate_phase6_rubrics(pack: dict[str,Any]) -> None:
         if len(criterion_ids)!=len(set(criterion_ids)):
             _err(f"tasks.{task['task_id']}.rubric.criteria","duplicate criterion_id")
         allowed_levels=set(level_ids)
+        calculation=rubric.get("calculation", {})
+        weighted=calculation.get("method")=="weighted_average"
         total=Decimal("0")
         for criterion in criteria:
             if not set(criterion.get("allowed_rating_ids", []))<=allowed_levels:
                 _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown rating_id")
             if not set(criterion.get("deliverable_types", []))<=set(task.get("deliverable_types", [])):
                 _err(f"tasks.{task['task_id']}.rubric.{criterion.get('criterion_id','criterion')}","unknown deliverable type")
+            if "weight" not in criterion:
+                if weighted:
+                    _err(f"tasks.{task['task_id']}.rubric","weighted criteria require weights")
+                continue
             try:
                 weight=Decimal(str(criterion.get("weight")))
             except (InvalidOperation, ValueError):
@@ -182,8 +188,7 @@ def _validate_phase6_rubrics(pack: dict[str,Any]) -> None:
             if weight < 0:
                 _err(f"tasks.{task['task_id']}.rubric","criterion weight must be non-negative")
             total+=weight
-        calculation=rubric.get("calculation", {})
-        if calculation.get("method")=="weighted_average" and total!=Decimal("100"):
+        if weighted and total!=Decimal("100"):
             _err(f"tasks.{task['task_id']}.rubric","weighted criteria must total 100")
 
 def _validate_review_policy(manifest: dict[str,Any]) -> None:
