@@ -101,9 +101,13 @@ CREATE TABLE IF NOT EXISTS competency_evidence_adjustments (
   action TEXT NOT NULL CHECK (action IN ('revoked','superseded')),
   replacement_evidence_id TEXT,
   reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 1000),
+  admin_actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL CHECK (length(request_id) BETWEEN 3 AND 128),
   created_at INTEGER NOT NULL,
+  UNIQUE (admin_actor_id, request_id),
   FOREIGN KEY (evidence_id) REFERENCES competency_evidence(id) ON DELETE RESTRICT,
-  FOREIGN KEY (replacement_evidence_id) REFERENCES competency_evidence(id) ON DELETE RESTRICT
+  FOREIGN KEY (replacement_evidence_id) REFERENCES competency_evidence(id) ON DELETE RESTRICT,
+  FOREIGN KEY (admin_actor_id) REFERENCES tutor_accounts(actor_id) ON DELETE RESTRICT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS competency_passports (
@@ -135,7 +139,7 @@ CREATE TABLE IF NOT EXISTS competency_passport_history (
   competency_id TEXT NOT NULL,
   definition_version INTEGER NOT NULL,
   previous_level TEXT,
-  new_level TEXT NOT NULL CHECK (new_level IN ('emerging','developing','applied_with_support','independent','advanced')),
+  new_level TEXT CHECK (new_level IS NULL OR new_level IN ('emerging','developing','applied_with_support','independent','advanced')),
   aggregation_ruleset_version TEXT NOT NULL,
   explanation_json TEXT NOT NULL DEFAULT '{}',
   changed_at INTEGER NOT NULL,
