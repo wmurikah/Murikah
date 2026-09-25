@@ -616,96 +616,566 @@ function ErrorWorkspace({ message, retry }: { message: string; retry: () => void
   );
 }
 
-function GuestPreview() {
+
+type CatalogCardData = {
+  slug: string;
+  scenario_pack_id: string;
+  scenario_version_id: string;
+  scenario_version: number;
+  internship_type: "qualifying" | "practice";
+  qualifying: boolean;
+  mode: string;
+  title: string;
+  role_title: string;
+  simulated_company: string;
+  sector: string;
+  region: string;
+  career_family: { id: string; slug: string; title: string };
+  short_description: string;
+  minimum_duration_days: number;
+  weekly_workload: { min_hours: number; max_hours: number; label: string };
+  workload_band: string;
+  experience_level: string;
+  competency_preview: string[];
+  responsibility_preview: string[];
+  deliverable_preview: string[];
+  qualification_label: string;
+  physical_competency_classification: string;
+  physical_competency_limitation_text: string;
+};
+
+type CatalogDetailData = CatalogCardData & {
+  long_description: string;
+  competencies: string[];
+  responsibilities: string[];
+  deliverables: string[];
+  work_rhythm: string;
+  prerequisites: string;
+  simulation_disclosure: string;
+  completion_overview: string;
+  support_summary: string;
+  exact_scenario_version: { id: string; version: number; content_hash: string };
+  practice_disclosure: string;
+};
+
+type CatalogFacets = {
+  career_families: Array<{ id: string; slug: string; title: string; short_title: string }>;
+  sectors: string[];
+  internship_types: string[];
+  workload_bands: string[];
+  experience_levels: string[];
+};
+
+function CatalogSkeleton() {
   return (
-    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">Virtual Internship</h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--muted-foreground)] sm:text-lg">
-          Practise professional knowledge work in a persistent simulated company, with assignments, workplace conversations,
-          meetings, source documents, reflection and a separate Murikah Mentor.
-        </p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            ["A real work rhythm", "Your internship keeps its state across visits and follows the existing minimum duration policy."],
-            ["Workplace actors", "Communicate with learner-visible supervisors and stakeholders inside the simulation."],
-            ["Murikah Mentor", "Get coaching and explanations without turning workplace actors into tutors."],
-            ["Competency Passport", "Build a private evidence-backed record from formally assessed internship work, with traceable evidence and assistance context."],
-          ].map(([title, copy]) => (
-            <Panel key={title} className="p-5">
-              <h2 className="font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{copy}</p>
-            </Panel>
-          ))}
+    <main className="min-h-full bg-[var(--background)] px-4 py-7 text-[var(--foreground)] sm:px-6 lg:px-8" aria-busy="true">
+      <div className="mx-auto max-w-7xl animate-pulse">
+        <div className="h-3 w-44 rounded bg-[var(--border)]" />
+        <div className="mt-5 h-10 w-full max-w-xl rounded bg-[var(--border)]" />
+        <div className="mt-3 h-5 w-full max-w-3xl rounded bg-[var(--border)]" />
+        <div className="mt-8 h-12 rounded-xl bg-[var(--card)]" />
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {[1,2,3,4,5,6].map((item) => <div key={item} className="h-80 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />)}
         </div>
-        <Panel className="mt-6 p-5 sm:p-6">
-          <h2 className="text-lg font-semibold">Sign in to enter your workplace</h2>
-          <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-            Internship records, messages, tasks, company information, Mentor context and reflections are available only to the signed-in learner who owns them.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <a href="/login?next=%2Fvirtual-internship" className="inline-flex min-h-11 items-center rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white">
-              Sign in
-            </a>
-            <a href="/register?next=%2Fvirtual-internship" className="inline-flex min-h-11 items-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold">
-              Create account
-            </a>
-          </div>
-        </Panel>
       </div>
     </main>
   );
 }
 
-function NoInternship({
-  options,
-  onStart,
-  starting,
-  error,
-}: {
-  options: StartOption[];
-  onStart: (slug: string) => void;
-  starting: string;
-  error?: string;
-}) {
+function CatalogTypeBadge({ item }: { item: CatalogCardData }) {
+  const practice = item.internship_type === "practice";
   return (
-    <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Virtual Internship</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-          You do not have an active internship. Only internship scenarios that the current server says are available are shown here.
+    <span className={"inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold " +
+      (practice ? "border-slate-300 text-[var(--foreground)]" : "border-[#A9822E]/60 text-[#8B6A20] dark:text-[#D5B66D]")}>
+      {practice ? "Demo · Practice internship" : "Qualifying Virtual Internship"}
+    </span>
+  );
+}
+
+function CatalogCard({ item }: { item: CatalogCardData }) {
+  const practice = item.internship_type === "practice";
+  return (
+    <article className="flex h-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CatalogTypeBadge item={item} />
+        <span className="text-xs text-[var(--muted-foreground)]">{item.career_family.title}</span>
+      </div>
+      <h3 className="mt-4 text-xl font-semibold tracking-[-0.02em]">{item.role_title}</h3>
+      <p className="mt-1 text-sm font-medium">{item.simulated_company}</p>
+      <p className="mt-1 text-xs text-[var(--muted-foreground)]">{item.sector}</p>
+
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium">
+        {!practice ? <span>Minimum {item.minimum_duration_days} calendar days</span> : <span>Short practice experience</span>}
+        <span>{item.weekly_workload.label}</span>
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-[var(--muted-foreground)]">{item.short_description}</p>
+
+      <div className="mt-5 space-y-4 text-sm">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Competencies</p>
+          <p className="mt-1.5 leading-6">{item.competency_preview.join(" · ")}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Sample responsibilities</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[var(--muted-foreground)]">
+            {item.responsibility_preview.map((value) => <li key={value}>{value}</li>)}
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">What you will produce</p>
+          <p className="mt-1.5 leading-6 text-[var(--muted-foreground)]">{item.deliverable_preview.join(" · ")}</p>
+        </div>
+      </div>
+
+      {practice ? (
+        <p className="mt-5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold leading-5">
+          Does not qualify for completion credentials
         </p>
-        {error ? <p className="mt-5 rounded-lg border border-red-300/60 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">{error}</p> : null}
-        <div className="mt-7 space-y-4">
-          {options.length === 0 ? (
-            <EmptyState title="No internship is available right now." detail="When a qualifying scenario is available to your account, it will appear here." />
+      ) : null}
+      {item.physical_competency_classification !== "knowledge_work" && item.physical_competency_limitation_text ? (
+        <p className="mt-4 rounded-lg border border-[var(--border)] px-3 py-2 text-xs leading-5">
+          <strong>Simulation limitation:</strong> {item.physical_competency_limitation_text}
+        </p>
+      ) : null}
+
+      <a
+        href={"/virtual-internship/catalog/" + encodeURIComponent(item.slug) + "?version=" + encodeURIComponent(item.scenario_version_id)}
+        className="mt-6 inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border)] px-4 text-sm font-semibold hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+      >
+        {practice ? "View practice internship" : "View internship"}
+      </a>
+    </article>
+  );
+}
+
+function CatalogDetailView({
+  item,
+  isGuest,
+  commitment,
+  starting,
+  startError,
+  onStart,
+}: {
+  item: CatalogDetailData;
+  isGuest: boolean;
+  commitment: boolean;
+  starting: string;
+  startError?: string;
+  onStart: (catalogSlug: string, scenarioVersionId: string) => void;
+}) {
+  const practice = item.internship_type === "practice";
+  const [checks, setChecks] = useState({ simulation: false, duration: false, gates: false, active: false });
+  const allChecked = checks.simulation && checks.duration && checks.gates && checks.active;
+  const exact = item.exact_scenario_version?.id || item.scenario_version_id;
+  const detailHref = "/virtual-internship/catalog/" + encodeURIComponent(item.slug) + "?version=" + encodeURIComponent(exact);
+  const commitmentHref = "/virtual-internship/catalog/" + encodeURIComponent(item.slug) + "/commitment?version=" + encodeURIComponent(exact);
+
+  if (commitment && !practice) {
+    const earliest = new Date(Date.now() + item.minimum_duration_days * 24 * 60 * 60 * 1000);
+    const loginNext = encodeURIComponent(commitmentHref);
+    return (
+      <main className="min-h-full bg-[var(--background)] px-4 py-7 text-[var(--foreground)] sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl">
+          <a href={detailHref} className="text-sm font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← Back to internship details</a>
+          <span className="mt-7 block text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
+          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Review your commitment</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+            Review the role and qualifying requirements before creating your persistent internship workplace.
+          </p>
+
+          <Panel className="mt-7 p-5 sm:p-6">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Selected role</p><p className="mt-1 font-semibold">{item.role_title}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Simulated company</p><p className="mt-1 font-semibold">{item.simulated_company}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Exact scenario version</p><p className="mt-1">Version {item.exact_scenario_version.version} · {exact}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Expected workload</p><p className="mt-1">{item.weekly_workload.label}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Minimum duration</p><p className="mt-1">{item.minimum_duration_days} calendar days</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Earliest duration date</p><p className="mt-1">{earliest.toLocaleDateString()}</p></div>
+            </div>
+            <p className="mt-5 rounded-lg border border-[var(--border)] px-4 py-3 text-sm leading-6">
+              Your internship begins when you start it. The earliest duration date is not a guaranteed completion date.
+            </p>
+          </Panel>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <Panel className="p-5">
+              <h2 className="font-semibold">Key responsibilities</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+                {item.responsibilities.map((value) => <li key={value}>{value}</li>)}
+              </ul>
+            </Panel>
+            <Panel className="p-5">
+              <h2 className="font-semibold">Expected work products</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+                {item.deliverables.map((value) => <li key={value}>{value}</li>)}
+              </ul>
+            </Panel>
+          </div>
+
+          <Panel className="mt-6 p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">Before you start</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{item.completion_overview}</p>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{item.support_summary}</p>
+            <div className="mt-5 space-y-3">
+              {[
+                ["simulation", "I understand that this is a simulated internship in a fictional workplace."],
+                ["duration", "I understand the minimum duration is " + item.minimum_duration_days + " calendar days."],
+                ["gates", "I understand that elapsed time alone does not complete the internship. Required assignments, reviews, evidence and capstone gates also apply."],
+                ["active", "I understand that only one qualifying internship may be active at a time."],
+              ].map(([key,label]) => (
+                <label key={key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] p-3 text-sm leading-6">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-[#A9822E]"
+                    checked={checks[key as keyof typeof checks]}
+                    onChange={(event) => setChecks((current) => ({ ...current, [key]: event.target.checked }))}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            {startError ? (
+              <div className="mt-4 rounded-lg border border-red-300/60 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">
+                {startError}
+                {startError.toLowerCase().includes("active internship") ? <a href="/virtual-internship" className="ml-2 font-semibold underline">Continue current internship</a> : null}
+              </div>
+            ) : null}
+            <div className="mt-5">
+              {isGuest ? (
+                <a href={"/login?next=" + loginNext} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white">
+                  Sign in to start internship
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!allChecked || Boolean(starting)}
+                  onClick={() => onStart(item.slug, exact)}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+                >
+                  {starting === item.slug ? "Starting…" : "Start internship"}
+                </button>
+              )}
+            </div>
+          </Panel>
+        </div>
+      </main>
+    );
+  }
+
+  const loginNext = encodeURIComponent(detailHref);
+  return (
+    <main className="min-h-full bg-[var(--background)] px-4 py-7 text-[var(--foreground)] sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <a href="/virtual-internship" className="text-sm font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← Back to internships</a>
+        <div className="mt-7 flex flex-wrap items-center gap-3">
+          <CatalogTypeBadge item={item} />
+          <span className="text-xs text-[var(--muted-foreground)]">Scenario v{item.exact_scenario_version.version}</span>
+        </div>
+        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">{item.role_title}</h1>
+        <p className="mt-2 text-base font-medium">{item.simulated_company}</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{item.sector} · {item.career_family.title} · {item.region}</p>
+        <p className="mt-5 max-w-3xl text-base leading-7 text-[var(--muted-foreground)]">{item.long_description}</p>
+
+        {practice ? (
+          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm leading-6">
+            <p className="font-semibold">Demo · Practice internship</p>
+            <p className="mt-1">{item.practice_disclosure || "This is a demo internship. It does not qualify for completion credentials."}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-7 grid gap-4 sm:grid-cols-3">
+          {!practice ? <Metric label="Minimum duration" value={item.minimum_duration_days + " days"} detail="Duration is only one completion requirement." /> : <Metric label="Type" value="Practice" detail="Does not qualify for completion credentials." />}
+          <Metric label="Expected workload" value={item.weekly_workload.label} detail="Planning guidance, not completed-hour evidence." />
+          <Metric label="Experience level" value={sentenceLabel(item.experience_level)} detail="Professional simulated work." />
+        </div>
+
+        <div className="mt-7 grid gap-5 md:grid-cols-2">
+          <Panel className="p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">What you will do</h2>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+              {item.responsibilities.map((value) => <li key={value}>{value}</li>)}
+            </ul>
+          </Panel>
+          <Panel className="p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">Competencies developed</h2>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+              {item.competencies.map((value) => <li key={value}>{value}</li>)}
+            </ul>
+          </Panel>
+          <Panel className="p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">What you will produce</h2>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+              {item.deliverables.map((value) => <li key={value}>{value}</li>)}
+            </ul>
+          </Panel>
+          <Panel className="p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">How the work progresses</h2>
+            <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">{item.work_rhythm}</p>
+          </Panel>
+        </div>
+
+        <Panel className="mt-6 p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">How the internship works</h2>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+            <li>You join a persistent simulated workplace.</li>
+            <li>Assignments unlock over time as authored dependencies and milestones are met.</li>
+            <li>You work with simulated colleagues, supervisors and stakeholders.</li>
+            <li>You produce work artifacts that receive evidence-based feedback and assessment.</li>
+            {!practice ? <li>Competency evidence may contribute to your Competency Passport when the evidence rules are satisfied.</li> : null}
+            <li>{item.completion_overview}</li>
+          </ul>
+          <p className="mt-4 text-sm leading-6 text-[var(--muted-foreground)]"><strong>Support:</strong> {item.support_summary}</p>
+          {item.prerequisites ? <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]"><strong>Prerequisites:</strong> {item.prerequisites}</p> : null}
+          <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]"><strong>Simulation disclosure:</strong> {item.simulation_disclosure}</p>
+        </Panel>
+
+        {item.physical_competency_classification !== "knowledge_work" && item.physical_competency_limitation_text ? (
+          <Panel className="mt-6 p-5">
+            <h2 className="font-semibold">Simulation limitation</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{item.physical_competency_limitation_text}</p>
+          </Panel>
+        ) : null}
+
+        {startError ? <p className="mt-5 rounded-lg border border-red-300/60 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">{startError}</p> : null}
+        <div className="mt-7 flex flex-wrap gap-3">
+          {practice ? (
+            isGuest ? (
+              <a href={"/login?next=" + loginNext} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white">
+                Sign in to try practice internship
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled={Boolean(starting)}
+                onClick={() => onStart(item.slug, exact)}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {starting === item.slug ? "Starting…" : "Start practice internship"}
+              </button>
+            )
+          ) : isGuest ? (
+            <a href={"/login?next=" + encodeURIComponent(commitmentHref)} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white">
+              Sign in to review commitment
+            </a>
           ) : (
-            options.map((option) => (
-              <Panel key={option.scenario_slug} className="p-5 sm:p-6">
-                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                  <div>
-                    <h2 className="text-lg font-semibold">{option.title}</h2>
-                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">{option.role_title}</p>
-                    <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                      Minimum {option.minimum_duration_days} days
-                      {option.expected_workload_band ? " · " + sentenceLabel(option.expected_workload_band) + " workload" : ""}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={Boolean(starting)}
-                    onClick={() => onStart(option.scenario_slug)}
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {starting === option.scenario_slug ? "Starting…" : "Start internship"}
-                  </button>
-                </div>
-              </Panel>
-            ))
+            <a href={commitmentHref} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1E2A30] px-5 text-sm font-semibold text-white">
+              Review commitment
+            </a>
           )}
         </div>
+      </div>
+    </main>
+  );
+}
+
+function CatalogExperience({
+  isGuest,
+  starting,
+  startError,
+  onStart,
+}: {
+  isGuest: boolean;
+  starting: string;
+  startError?: string;
+  onStart: (catalogSlug: string, scenarioVersionId: string) => void;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryString = searchParams.toString();
+  const match = pathname.match(/^\/virtual-internship\/catalog\/([^/]+)(?:\/(commitment))?\/?$/);
+  const catalogSlug = match ? decodeURIComponent(match[1]) : "";
+  const commitment = Boolean(match?.[2]);
+  const pinnedVersion = searchParams.get("version") || "";
+  const [items, setItems] = useState<CatalogCardData[]>([]);
+  const [detail, setDetail] = useState<CatalogDetailData | null>(null);
+  const [facets, setFacets] = useState<CatalogFacets | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+  const [searchDraft, setSearchDraft] = useState(searchParams.get("q") || "");
+
+  useEffect(() => { setSearchDraft(searchParams.get("q") || ""); }, [queryString]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadingCatalog(true);
+      setCatalogError("");
+      try {
+        if (catalogSlug) {
+          const params = new URLSearchParams();
+          if (pinnedVersion) params.set("scenario_version_id", pinnedVersion);
+          const response = await fetch(
+            API + "/catalog/" + encodeURIComponent(catalogSlug) + (params.toString() ? "?" + params.toString() : ""),
+            { credentials: "include", cache: "no-store" },
+          );
+          if (!response.ok) throw new Error(await responseError(response, "We could not load that internship right now. Try again."));
+          const payload = await response.json() as { internship?: CatalogDetailData };
+          if (!payload.internship) throw new Error("That internship is not available.");
+          if (!cancelled) setDetail(payload.internship);
+        } else {
+          const listParams = new URLSearchParams();
+          for (const key of ["q","career","sector","type","workload","experience"]) {
+            const value = searchParams.get(key);
+            if (value) listParams.set(key, value);
+          }
+          const [listResponse, facetsResponse] = await Promise.all([
+            fetch(API + "/catalog?" + listParams.toString(), { credentials: "include", cache: "no-store" }),
+            fetch(API + "/catalog/facets", { credentials: "include", cache: "no-store" }),
+          ]);
+          if (!listResponse.ok) throw new Error(await responseError(listResponse, "We could not load the internship catalog right now. Try again."));
+          const listPayload = await listResponse.json() as { results?: CatalogCardData[] };
+          if (!cancelled) setItems(Array.isArray(listPayload.results) ? listPayload.results : []);
+          if (facetsResponse.ok) {
+            const facetPayload = await facetsResponse.json() as CatalogFacets;
+            if (!cancelled) setFacets(facetPayload);
+          }
+        }
+      } catch (cause) {
+        if (!cancelled) setCatalogError(cause instanceof Error ? cause.message : "We could not load the internship catalog right now. Try again.");
+      } finally {
+        if (!cancelled) setLoadingCatalog(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [catalogSlug, pinnedVersion, queryString]);
+
+  function setFilter(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value); else params.delete(key);
+    router.replace("/virtual-internship" + (params.toString() ? "?" + params.toString() : ""));
+  }
+
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    setFilter("q", searchDraft.trim());
+  }
+
+  if (loadingCatalog) return <CatalogSkeleton />;
+  if (catalogError) {
+    return (
+      <main className="min-h-full bg-[var(--background)] px-4 py-8 text-[var(--foreground)] sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <ErrorWorkspace message={catalogError} retry={() => router.refresh()} />
+        </div>
+      </main>
+    );
+  }
+  if (catalogSlug) {
+    if (!detail) return <ErrorWorkspace message="That internship is not available." retry={() => router.push("/virtual-internship")} />;
+    return <CatalogDetailView item={detail} isGuest={isGuest} commitment={commitment} starting={starting} startError={startError} onStart={onStart} />;
+  }
+
+  const qualifying = items.filter((item) => item.internship_type === "qualifying");
+  const practice = items.filter((item) => item.internship_type === "practice");
+  const hasFilters = ["q","career","sector","type","workload","experience"].some((key) => Boolean(searchParams.get(key)));
+
+  return (
+    <main className="min-h-full overflow-x-hidden bg-[var(--background)] px-4 py-7 text-[var(--foreground)] sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A9822E]">Murikah simulated workplace</span>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">Choose your Virtual Internship</h1>
+        <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)] sm:text-base sm:leading-7">
+          Choose a role, enter a persistent simulated workplace, complete professional assignments, receive workplace feedback
+          and build evidence for your Competency Passport. Qualifying internships have a minimum duration of 90 calendar days.
+        </p>
+
+        <form onSubmit={submitSearch} role="search" className="mt-7">
+          <label htmlFor="internship-search" className="sr-only">Search internships</label>
+          <div className="flex gap-2">
+            <input
+              id="internship-search"
+              type="search"
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="Search internships..."
+              className="min-h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]"
+            />
+            <button type="submit" className="min-h-12 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9822E]">
+              Search
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Internship filters">
+          <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+            Career family
+            <select value={searchParams.get("career") || ""} onChange={(event) => setFilter("career", event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+              <option value="">All careers</option>
+              {(facets?.career_families || []).map((family) => <option key={family.id} value={family.slug}>{family.title}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+            Sector
+            <select value={searchParams.get("sector") || ""} onChange={(event) => setFilter("sector", event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+              <option value="">All sectors</option>
+              {(facets?.sectors || []).map((sector) => <option key={sector} value={sector}>{sector}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+            Type
+            <select value={searchParams.get("type") || ""} onChange={(event) => setFilter("type", event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+              <option value="">All types</option>
+              <option value="qualifying">Qualifying</option>
+              <option value="practice">Practice</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+            Weekly workload
+            <select value={searchParams.get("workload") || ""} onChange={(event) => setFilter("workload", event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+              <option value="">Any workload</option>
+              {(facets?.workload_bands || []).map((value) => <option key={value} value={value}>{sentenceLabel(value)}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+            Experience
+            <select value={searchParams.get("experience") || ""} onChange={(event) => setFilter("experience", event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+              <option value="">Any level</option>
+              {(facets?.experience_levels || []).map((value) => <option key={value} value={value}>{sentenceLabel(value)}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted-foreground)]">
+          <span>{items.length} {items.length === 1 ? "internship" : "internships"}</span>
+          {hasFilters ? <button type="button" onClick={() => router.replace("/virtual-internship")} className="min-h-10 font-semibold text-[var(--foreground)] underline underline-offset-4">Clear filters</button> : null}
+        </div>
+
+        {items.length === 0 ? (
+          <Panel className="mt-8 p-7 text-center">
+            <h2 className="text-lg font-semibold">{hasFilters ? "No internships match those filters." : "The internship catalog is not available right now."}</h2>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              {hasFilters ? "Clear the filters or try a broader search." : "Try again after the catalog has been published."}
+            </p>
+            {hasFilters ? <button type="button" onClick={() => router.replace("/virtual-internship")} className="mt-4 min-h-11 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold">Clear filters</button> : null}
+          </Panel>
+        ) : null}
+
+        {qualifying.length ? (
+          <section className="mt-9" aria-labelledby="qualifying-internships">
+            <div className="border-b border-[var(--border)] pb-3">
+              <h2 id="qualifying-internships" className="text-2xl font-semibold tracking-[-0.02em]">Qualifying Virtual Internships</h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">Persistent 90+ day simulated workplace experiences with qualifying completion gates.</p>
+            </div>
+            <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {qualifying.map((item) => <CatalogCard key={item.scenario_version_id} item={item} />)}
+            </div>
+          </section>
+        ) : null}
+
+        {practice.length ? (
+          <section className="mt-12 border-t border-[var(--border)] pt-8" aria-labelledby="practice-internships">
+            <h2 id="practice-internships" className="text-2xl font-semibold tracking-[-0.02em]">Practice internships</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
+              Explore the workplace experience in a shorter demo before committing to a qualifying internship.
+            </p>
+            <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {practice.map((item) => <CatalogCard key={item.scenario_version_id} item={item} />)}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );
@@ -2884,15 +3354,19 @@ export default function MurikahVirtualInternshipWorkspace() {
 
   useEffect(() => { void loadWorkspace(); }, []);
 
-  async function startInternship(scenarioSlug: string) {
-    setStarting(scenarioSlug);
+  async function startInternship(catalogSlug: string, scenarioVersionId: string) {
+    setStarting(catalogSlug);
     setError("");
     try {
       const response = await fetch(API + "/start", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scenario_slug: scenarioSlug, request_id: requestId("start") }),
+        body: JSON.stringify({
+          scenario_slug: catalogSlug,
+          scenario_version_id: scenarioVersionId,
+          request_id: requestId("start"),
+        }),
       });
       if (!response.ok) throw new Error(await responseError(response, "We could not start that internship right now. Try again."));
       setWorkspace((await response.json()) as InternshipWorkspaceSummary);
@@ -2907,8 +3381,16 @@ export default function MurikahVirtualInternshipWorkspace() {
   if (loading) return <LoadingWorkspace />;
   if (error && !workspace) return <ErrorWorkspace message={error} retry={() => void loadWorkspace()} />;
   if (!workspace) return <ErrorWorkspace message="We could not load your internship right now. Try again." retry={() => void loadWorkspace()} />;
-  if (workspace.state === "guest") return <GuestPreview />;
-  if (workspace.state === "none") return <NoInternship options={workspace.start_options || []} onStart={(slug) => void startInternship(slug)} starting={starting} error={error} />;
+  if (workspace.state === "guest" || workspace.state === "none") {
+    return (
+      <CatalogExperience
+        isGuest={workspace.state === "guest"}
+        starting={starting}
+        startError={error}
+        onStart={(catalogSlug, scenarioVersionId) => void startInternship(catalogSlug, scenarioVersionId)}
+      />
+    );
+  }
 
   const internship = workspace.internship!;
   const company = workspace.company!;
