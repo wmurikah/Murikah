@@ -42,6 +42,7 @@ SAFE_SAVE_ERROR = "That update could not be saved. Try again."
 
 class StartInternshipRequest(BaseModel):
     scenario_slug: str = Field(min_length=3,max_length=128)
+    scenario_version_id: str = Field(min_length=3,max_length=128)
     request_id: str = Field(min_length=3,max_length=128)
 
 
@@ -149,6 +150,10 @@ def _safe_http(exc: Exception, fallback: str = SAFE_LOAD_ERROR) -> HTTPException
         return HTTPException(404,"That internship item is not available.")
     if "internship_completion_blocked" in text or "internship_completion_conflict" in text:
         return HTTPException(409,"The internship completion requirements are not yet satisfied.")
+    if "active_internship_exists" in text:
+        return HTTPException(409,"You already have an active internship. Continue your current internship before starting another.")
+    if "scenario_version_retired" in text or "scenario_version_required" in text:
+        return HTTPException(409,"This internship version is no longer available. Review the current internship details before starting.")
     if "HTTP 409" in text or "stopped" in text:
         return HTTPException(409,"This internship is not active and is available in read-only mode.")
     if "HTTP 401" in text or "authentication_required" in text:
@@ -1188,6 +1193,52 @@ async def verify_completion_document(
     return HTMLResponse(page,headers={"cache-control":"no-store","x-robots-tag":"noindex, nofollow"})
 
 
+@router.get("/catalog")
+async def internship_catalog(
+    q: str = Query(default="",max_length=120),
+    career: str = Query(default="",max_length=80),
+    sector: str = Query(default="",max_length=120),
+    internship_type: str = Query(default="",alias="type",max_length=32),
+    workload: str = Query(default="",max_length=32),
+    experience: str = Query(default="",max_length=32),
+    current: TokenPayload = Depends(require_auth),
+):
+    _identity(current)
+    try:
+        return _persistence().internship_catalog_list(
+            query=q,
+            career=career,
+            sector=sector,
+            internship_type=internship_type,
+            workload=workload,
+            experience=experience,
+        )
+    except Exception as exc:
+        raise _safe_http(exc,"We could not load the internship catalog right now. Try again.") from exc
+
+
+@router.get("/catalog/facets")
+async def internship_catalog_facets(current: TokenPayload = Depends(require_auth)):
+    _identity(current)
+    try:
+        return _persistence().internship_catalog_facets()
+    except Exception as exc:
+        raise _safe_http(exc,"We could not load internship filters right now. Try again.") from exc
+
+
+@router.get("/catalog/{catalog_slug}")
+async def internship_catalog_detail(
+    catalog_slug: str,
+    scenario_version_id: str = Query(default="",max_length=128),
+    current: TokenPayload = Depends(require_auth),
+):
+    _identity(current)
+    try:
+        return _persistence().internship_catalog_detail(catalog_slug,scenario_version_id)
+    except Exception as exc:
+        raise _safe_http(exc,"We could not load that internship right now. Try again.") from exc
+
+
 @router.get("/workspace")
 async def workspace(
     internship_id: str = Query(default="",max_length=128),
@@ -1214,12 +1265,20 @@ async def start_internship(
         raise HTTPException(401,"Create an account or sign in to start an internship.")
     service = _workspace_service()
     try:
-        allowed = {row["scenario_slug"] for row in service.start_options(actor_id)}
-        if body.scenario_slug not in allowed:
-            raise HTTPException(404,"That qualifying internship is not available.")
+        reviewed = _persistence().internship_catalog_detail(
+            body.scenario_slug,
+            body.scenario_version_id,
+        )
+        internship_detail = reviewed.get("internship") if isinstance(reviewed,dict) else None
+        if not isinstance(internship_detail,dict):
+            raise HTTPException(404,"That internship is not available.")
+        if str(internship_detail.get("scenario_version_id") or "") != body.scenario_version_id:
+            raise HTTPException(409,"This internship version has changed. Review the current internship details before starting.")
         result = _persistence().internship_start(
             actor_id,
+            scenario_pack_id=str(internship_detail.get("scenario_pack_id") or ""),
             scenario_slug=body.scenario_slug,
+            scenario_version_id=body.scenario_version_id,
             request_id=body.request_id,
         )
         internship = result.get("internship") if isinstance(result,dict) else {}
