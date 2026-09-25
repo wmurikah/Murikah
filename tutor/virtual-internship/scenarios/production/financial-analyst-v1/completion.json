@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "required_task_ids": [
+    "task_finance_01",
+    "task_finance_02",
+    "task_finance_03",
+    "task_finance_04",
+    "task_finance_05",
+    "task_finance_06",
+    "task_finance_07",
+    "task_finance_08",
+    "task_finance_09",
+    "task_finance_10",
+    "task_finance_11",
+    "task_finance_12",
+    "task_finance_13"
+  ],
+  "required_review_types": [
+    "midpoint"
+  ],
+  "required_competencies": [
+    {
+      "competency_id": "comp_financial_reconciliation",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_variance_analysis",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_financial_modeling",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_management_reporting",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    }
+  ],
+  "capstone_task_ids": [
+    "task_finance_12"
+  ],
+  "require_final_review": true,
+  "final_review_after_capstone": true
+}

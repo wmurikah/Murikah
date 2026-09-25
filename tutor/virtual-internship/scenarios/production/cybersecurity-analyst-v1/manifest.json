@@ -1,0 +1,146 @@
+{
+  "id": "sp_cybersecurity_analyst_qualifying",
+  "slug": "cybersecurity-analyst-internship",
+  "scenario_version_id": "sv_cybersecurity_analyst_qualifying_v1",
+  "schema_version": 1,
+  "scenario_version": 1,
+  "title": "Cybersecurity Analyst Virtual Internship",
+  "career_family": "cybersecurity",
+  "role_title": "Cybersecurity Analyst Intern",
+  "region_context": "Fictional East African regional market",
+  "company_ref": "org_cyber",
+  "minimum_duration_days": 90,
+  "expected_workload_band": "standard",
+  "classification": "qualifying",
+  "qualifying": true,
+  "mode": "standard",
+  "physical_competency_classification": "knowledge_work",
+  "physical_competency_limitation_text": "",
+  "template_refs": [
+    {
+      "template_id": "tpl_standard_90_day_knowledge_work",
+      "template_version": 1,
+      "content_hash": "1a5fc3894bbb61fb9a4b00bc23ea41ecac7146334ff7c53be872853e4dfb29fc"
+    },
+    {
+      "template_id": "tpl_common_workplace_communication",
+      "template_version": 1,
+      "content_hash": "88e73f6c143ad019f3afef6a658ef29060394defc5e5d614f0fb0a8fda25e821"
+    },
+    {
+      "template_id": "tpl_standard_midpoint_review",
+      "template_version": 1,
+      "content_hash": "9b47bcfa3d04cfeed7b770d192774a4c9bc83beacb5e2c2a5fa45466e39a2587"
+    },
+    {
+      "template_id": "tpl_standard_final_review",
+      "template_version": 1,
+      "content_hash": "85ded058d84ac0ceae69b761fc2d968722e6a190949530a064e67fa49286cb41"
+    },
+    {
+      "template_id": "tpl_standard_completion_disclosure",
+      "template_version": 1,
+      "content_hash": "667ef818309ed5843b79374d2bed35c6c878caa768f99e14522fac842ea7b665"
+    },
+    {
+      "template_id": "tpl_shared_ethics_event_patterns",
+      "template_version": 1,
+      "content_hash": "c61cba3860923f0d52ccfce5b83dd7a5606aec8a544c6b8fcc0c1de11777f535"
+    }
+  ],
+  "catalog": {
+    "schema_version": 1,
+    "catalog_slug": "cybersecurity-analyst-intern",
+    "career_family_id": "cf_cybersecurity_v1",
+    "short_description": "Assess defensive security evidence, triage risk, review controls and build practical remediation plans.",
+    "long_description": "Join the fictional Cybersecurity team at Orion Ridge Digital. Work through asset context, access controls, vulnerability and risk triage, evidence review, incident-response planning, security communication, remediation, capstone work and final review without harmful exploitation.",
+    "internship_type": "qualifying",
+    "minimum_duration_days": 90,
+    "weekly_hours_min": 8,
+    "weekly_hours_max": 12,
+    "workload_band": "standard",
+    "experience_level": "entry",
+    "competencies_developed": [
+      "Asset and security review",
+      "Access-control analysis",
+      "Security risk triage",
+      "Remediation planning"
+    ],
+    "sample_responsibilities": [
+      "Review fictional asset, identity and control evidence",
+      "Triage vulnerabilities and risks using defensive reasoning",
+      "Prepare incident-readiness and remediation plans",
+      "Communicate security issues to simulated stakeholders"
+    ],
+    "deliverables": [
+      "Security review plan",
+      "Control assessment",
+      "Risk register",
+      "Remediation plan",
+      "Final security capstone"
+    ],
+    "work_rhythm": "A 13-week progression moves from structured onboarding and scoped assignments to cross-functional work, midpoint review, increasingly independent work, a capstone and final review.",
+    "prerequisites": "Basic cybersecurity concepts are helpful. No live system access or offensive tooling is required.",
+    "physical_competency_classification": "knowledge_work",
+    "physical_competency_limitation_text": "",
+    "simulation_disclosure": "This is a simulated internship in a fictional workplace. It is not employment with a real organization.",
+    "completion_overview": "Duration is one requirement. Required assignments, reviews, evidence, capstone work and final review gates must also be met.",
+    "support_summary": "Murikah Mentor support is available within authored assignment limits. Assistance is recorded as part of the evidence context.",
+    "published": true,
+    "catalog_visible": true,
+    "sort_order": 40,
+    "search_keywords": [
+      "cybersecurity",
+      "security",
+      "access control",
+      "risk",
+      "vulnerability",
+      "incident response",
+      "remediation"
+    ]
+  },
+  "initial_task_ids": [
+    "task_cyber_01"
+  ],
+  "initial_event_ids": [
+    "event_cyber_unlock_02",
+    "event_cyber_unlock_03",
+    "event_cyber_unlock_04",
+    "event_cyber_unlock_05",
+    "event_cyber_unlock_06",
+    "event_cyber_unlock_07",
+    "event_cyber_unlock_08",
+    "event_cyber_unlock_09",
+    "event_cyber_unlock_10",
+    "event_cyber_unlock_11",
+    "event_cyber_unlock_12",
+    "event_cyber_unlock_13",
+    "event_cyber_ethics",
+    "event_cyber_politics",
+    "event_cyber_midpoint",
+    "event_cyber_final"
+  ],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "manager",
+    "stakeholder",
+    "colleague",
+    "peer_intern"
+  ],
+  "content_hash": "8d6c68c15eebab43270c28a61f5305469c8ef98cea47c1d49f0b49f710ed7506",
+  "review_policy": {
+    "midpoint_day": 45,
+    "final_review_day": 90,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

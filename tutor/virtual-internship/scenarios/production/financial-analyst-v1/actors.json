@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_finance_supervisor",
+    "name": "Amara Kone",
+    "actor_class": "supervisor",
+    "job_title": "FP&A Supervisor",
+    "department_id": "dept_finance",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_finance_policy",
+      "fact_finance_method",
+      "fact_finance_priority",
+      "fact_finance_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_finance_unlock_02",
+      "event_finance_unlock_03",
+      "event_finance_unlock_04",
+      "event_finance_unlock_05",
+      "event_finance_unlock_06",
+      "event_finance_unlock_07",
+      "event_finance_unlock_08",
+      "event_finance_unlock_09",
+      "event_finance_unlock_10",
+      "event_finance_unlock_11",
+      "event_finance_unlock_12",
+      "event_finance_unlock_13",
+      "event_finance_ethics",
+      "event_finance_politics",
+      "event_finance_midpoint",
+      "event_finance_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_finance_manager",
+    "name": "James Musonda",
+    "actor_class": "manager",
+    "job_title": "Finance Director",
+    "department_id": "dept_finance",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_finance_policy",
+      "fact_finance_method",
+      "fact_finance_priority",
+      "fact_finance_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_finance_stakeholder",
+    "name": "Nadia Noor",
+    "actor_class": "stakeholder",
+    "job_title": "Commercial Director",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_finance_policy",
+      "fact_finance_priority",
+      "fact_finance_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_finance_colleague",
+    "name": "Kelvin Oloo",
+    "actor_class": "colleague",
+    "job_title": "Financial Analyst",
+    "department_id": "dept_finance",
+    "reports_to_actor_id": "actor_finance_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_finance_policy",
+      "fact_finance_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_finance_peer",
+    "name": "Faith Wanjiku",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_finance",
+    "reports_to_actor_id": "actor_finance_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_finance_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

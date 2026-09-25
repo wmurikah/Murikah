@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_finance_policy",
+    "key": "finance_work_policy",
+    "value": "Financial analysis must reconcile to approved synthetic source data and clearly separate actuals, assumptions and forecasts.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_method",
+    "key": "finance_team_method",
+    "value": "Use documented formulas, reconciliations and scenario assumptions. Do not provide recommendations about real securities.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_finance"
+    ],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_priority",
+    "key": "finance_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_stakeholder",
+    "key": "finance_stakeholder_constraint",
+    "value": "Commercial leadership wants a favorable forecast before a key synthetic assumption is validated.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_hidden",
+    "key": "finance_hidden_exception",
+    "value": "A synthetic timing difference explains part of the apparent expense overrun.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_ethics",
+    "key": "finance_ethics_pressure",
+    "value": "A stakeholder will ask to remove a downside scenario from a management pack without evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_finance_review",
+    "key": "finance_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_finance_capstone",
+    "key": "finance_capstone_context",
+    "value": "The capstone integrates reconciliation, variance analysis, forecasting, modeling, scenario analysis and management reporting.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]

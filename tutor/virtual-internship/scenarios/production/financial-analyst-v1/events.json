@@ -1,0 +1,421 @@
+[
+  {
+    "event_id": "event_finance_unlock_02",
+    "authored_sequence": 1,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_01",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_02"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_02",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Reconcile the synthetic management dataset",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_03",
+    "authored_sequence": 2,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_02",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_03"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_03",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Clarify planning assumptions and stakeholder needs",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_04",
+    "authored_sequence": 3,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_03",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_04"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_04",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Define core financial metrics and drivers",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_05",
+    "authored_sequence": 4,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_04",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_05"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_05",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Prepare the budget and forecast approach",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_06",
+    "authored_sequence": 5,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_05",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_06"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_06",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Perform variance and scenario analysis",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_07",
+    "authored_sequence": 6,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_06",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_07"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_07",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Prepare for the midpoint performance review",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_08",
+    "authored_sequence": 7,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_07",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_08"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_08",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Investigate a material financial variance",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_09",
+    "authored_sequence": 8,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_08",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_09"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_09",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Draft the management reporting memo",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_10",
+    "authored_sequence": 9,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_09",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_10"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_10",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Build the fictional scenario-model specification",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_11",
+    "authored_sequence": 10,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_10",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_11"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_11",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Revise the analysis independently",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_12",
+    "authored_sequence": 11,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_11",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_12"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_12",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Complete the financial analysis capstone",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_unlock_13",
+    "authored_sequence": 12,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_finance_12",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_finance_13"
+      }
+    ],
+    "message_template_id": "msg_finance_assignment_13",
+    "actor_ids": [
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Present final management insights",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_finance_ethics",
+    "authored_sequence": 13,
+    "event_type": "ethics_escalation",
+    "priority": 60,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 35
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_finance_ethics"
+      }
+    ],
+    "message_template_id": "msg_finance_ethics",
+    "actor_ids": [
+      "actor_finance_stakeholder",
+      "actor_finance_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Ethics and escalation pressure",
+    "learning_objective": "Respond professionally when delivery pressure conflicts with evidence quality or policy."
+  },
+  {
+    "event_id": "event_finance_politics",
+    "authored_sequence": 14,
+    "event_type": "workplace_dynamics",
+    "priority": 55,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 55
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_finance_priority",
+        "value": "priority_challenged"
+      }
+    ],
+    "message_template_id": "msg_finance_politics",
+    "actor_ids": [
+      "actor_finance_stakeholder",
+      "actor_finance_manager"
+    ],
+    "once": true,
+    "audit_label": "Cross-functional priority challenge",
+    "learning_objective": "Manage stakeholder pressure without abandoning professional standards."
+  },
+  {
+    "event_id": "event_finance_midpoint",
+    "authored_sequence": 15,
+    "event_type": "meeting",
+    "priority": 70,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 45
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_finance_review",
+        "value": "midpoint_due"
+      }
+    ],
+    "message_template_id": "msg_finance_midpoint",
+    "actor_ids": [
+      "actor_finance_supervisor",
+      "actor_finance_manager"
+    ],
+    "once": true,
+    "audit_label": "Midpoint performance meeting",
+    "learning_objective": "Use evidence and feedback to plan stronger second-half performance."
+  },
+  {
+    "event_id": "event_finance_final",
+    "authored_sequence": 16,
+    "event_type": "meeting",
+    "priority": 80,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 90
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_finance_review",
+        "value": "final_due"
+      }
+    ],
+    "message_template_id": "msg_finance_final",
+    "actor_ids": [
+      "actor_finance_supervisor",
+      "actor_finance_manager"
+    ],
+    "once": true,
+    "audit_label": "Final performance meeting",
+    "learning_objective": "Review the complete body of work and final capstone evidence."
+  }
+]

@@ -1,0 +1,1625 @@
+[
+  {
+    "task_id": "task_cyber_01",
+    "authored_sequence": 1,
+    "title": "Complete security onboarding and asset context review",
+    "category": "routine",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Understand the fictional environment and defensive boundaries.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 5
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_asset_review"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "meeting_notes"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_01_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_02",
+    "authored_sequence": 2,
+    "title": "Assess identity and access-control evidence",
+    "category": "review",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Assess access design and evidence without live system access.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_01"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_access_control_analysis"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_02_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_03",
+    "authored_sequence": 3,
+    "title": "Define the security review scope and risk criteria",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Define scope, criteria and evidence needs.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_02"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 20
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_risk_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_03_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_04",
+    "authored_sequence": 4,
+    "title": "Triage synthetic vulnerabilities and exposures",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Prioritize synthetic vulnerabilities using context and impact.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_03"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 28
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_remediation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "risk_register"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_04_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "risk_register"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "risk_register"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "risk_register"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_05",
+    "authored_sequence": 5,
+    "title": "Prepare the control assessment plan",
+    "category": "research",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Plan a defensible control review.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_04"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 36
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_asset_review"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_05_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_06",
+    "authored_sequence": 6,
+    "title": "Evaluate evidence and remediation priorities",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Evaluate evidence and remediation options.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_05"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 44
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_access_control_analysis"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_06_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_07",
+    "authored_sequence": 7,
+    "title": "Prepare for the midpoint performance review",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Review evidence quality and development priorities.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_06"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 50
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_risk_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_07_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_08",
+    "authored_sequence": 8,
+    "title": "Investigate an access-control exception",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_cyber_manager",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Investigate a synthetic access exception safely.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_07"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 58
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_remediation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "incident_report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_08_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_09",
+    "authored_sequence": 9,
+    "title": "Draft the security risk communication",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_cyber_manager",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Communicate risk without overstating certainty.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_08"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 66
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_asset_review"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_09_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_10",
+    "authored_sequence": 10,
+    "title": "Develop the remediation plan",
+    "category": "review",
+    "assigned_by_actor_id": "actor_cyber_manager",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Create practical, prioritized remediation actions.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_09"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 72
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_access_control_analysis"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "project_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_10_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_11",
+    "authored_sequence": 11,
+    "title": "Revise the control assessment independently",
+    "category": "decision",
+    "assigned_by_actor_id": "actor_cyber_manager",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Incorporate challenge with reduced assistance.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_10"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 80
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_risk_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_11_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_12",
+    "authored_sequence": 12,
+    "title": "Complete the security capstone",
+    "category": "capstone",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Integrate controls, risk, incident readiness and remediation.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_11"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 88
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_remediation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_12_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_cyber_13",
+    "authored_sequence": 13,
+    "title": "Present final risk and control conclusions",
+    "category": "presentation",
+    "assigned_by_actor_id": "actor_cyber_supervisor",
+    "business_context": "A fictional security team needs evidence-based defensive assurance and risk decisions without harmful exploitation workflows.",
+    "learner_objective": "Present conclusions, limitations and next actions.",
+    "brief": "Use only learner-visible fictional evidence. Do not attempt exploitation, credential attacks, persistence or live offensive access.",
+    "dependencies": [
+      "task_cyber_12"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 90
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_cyber_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_security_asset_review"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "presentation"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_cyber_13_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]
