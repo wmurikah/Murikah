@@ -1170,6 +1170,7 @@ def main() -> int:
         (
             "pull_request:",
             "fetch-depth: 0",
+            "timeout-minutes: 60",
             "MURIKAH_TUTOR_BASE_REF: origin/main",
             "git diff --check origin/main...HEAD",
             "if: github.event_name != 'pull_request'",
