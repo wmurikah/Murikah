@@ -645,6 +645,7 @@ type CatalogCardData = {
 };
 
 type CatalogDetailData = CatalogCardData & {
+  server_current_time: number;
   long_description: string;
   competencies: string[];
   responsibilities: string[];
@@ -772,7 +773,8 @@ function CatalogDetailView({
   const commitmentHref = "/virtual-internship/catalog/" + encodeURIComponent(item.slug) + "/commitment?version=" + encodeURIComponent(exact);
 
   if (commitment && !practice) {
-    const earliest = new Date(Date.now() + item.minimum_duration_days * 24 * 60 * 60 * 1000);
+    const serverNow = Number(item.server_current_time || 0) > 0 ? Number(item.server_current_time) * 1000 : Date.now();
+    const earliest = new Date(serverNow + item.minimum_duration_days * 24 * 60 * 60 * 1000);
     const loginNext = encodeURIComponent(commitmentHref);
     return (
       <main className="min-h-full bg-[var(--background)] px-4 py-7 text-[var(--foreground)] sm:px-6 lg:px-8">
