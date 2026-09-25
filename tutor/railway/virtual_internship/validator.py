@@ -8,6 +8,7 @@ from typing import Any
 from virtual_internship.completion.policy import (
     COMPLETION_POLICY_FILENAME, CompletionPolicyError, validate_completion_policy,
 )
+from virtual_internship.phase10_validation import validate_phase10_pack
 
 SCENARIO_SCHEMA_VERSION = 1
 MAX_CANONICAL_JSON_BYTES = 1_048_576
@@ -16,6 +17,8 @@ COMPONENTS = ("manifest","company","facts","actors","tasks","events","decisions"
 COMPONENT_FILES = {name: f"{name}.json" for name in COMPONENTS}
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "schema" / "v1" / "scenario-pack.schema.json"
 COMPLETION_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "schema" / "v1" / "completion-policy.schema.json"
+CATALOG_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "schema" / "v1" / "catalog-metadata.schema.json"
+CAREER_FAMILIES_PATH = Path(__file__).resolve().parents[2] / "virtual-internship" / "career-families.v1.json"
 SCENARIOS_ROOT = Path(__file__).resolve().parents[2] / "virtual-internship" / "scenarios"
 TASK_STATES = {"locked","available","in_progress","completed","cancelled"}
 MUTATIONS = {"reveal_fact","set_mutable_fact","unlock_task","assign_task","adjust_deadline","record_decision"}
@@ -217,6 +220,7 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     pack={name:_load_json(pack_dir/COMPONENT_FILES[name]) for name in COMPONENTS}
     _validate_schema(pack,schema,schema,"scenario")
     completion_path=pack_dir/COMPLETION_POLICY_FILENAME
+    completion=None
     if completion_path.exists():
         completion=_load_json(completion_path)
         completion_schema=_load_json(COMPLETION_SCHEMA_PATH)
@@ -238,6 +242,10 @@ def validate_pack(pack_dir: Path, verify_hash: bool=True) -> dict[str,Any]:
     if pack["company"]["fictional"] is not True:_err("company.fictional","Phase 2 fixtures must be fictional")
     _validate_review_policy(manifest)
     _validate_phase6_rubrics(pack)
+    validate_phase10_pack(
+        pack, pack_dir, completion, _load_json, _validate_schema, _err,
+        CATALOG_SCHEMA_PATH, CAREER_FAMILIES_PATH,
+    )
     actor_ids=_unique(pack["actors"],"actor_id","actors.json")
     fact_ids=_unique(pack["facts"],"id","facts.json")
     task_ids=_unique(pack["tasks"],"task_id","tasks.json")
