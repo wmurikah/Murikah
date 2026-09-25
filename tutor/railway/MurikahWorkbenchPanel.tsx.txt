@@ -461,6 +461,7 @@ export default function MurikahWorkbenchPanel({
             </label>
             <textarea
               autoFocus
+              aria-label={editorLabel}
               value={content}
               onChange={(event) => setContent(event.target.value)}
               spellCheck={item.renderer === "markdown"}
