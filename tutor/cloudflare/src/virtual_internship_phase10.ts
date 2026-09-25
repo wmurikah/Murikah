@@ -103,9 +103,10 @@ function catalogCard(row: Record<string, unknown>) {
     physical_competency_limitation_text: String(row.physical_competency_limitation_text || ""),
   };
 }
-function catalogDetail(row: Record<string, unknown>) {
+function catalogDetail(row: Record<string, unknown>, now: number) {
   return {
     ...catalogCard(row),
+    server_current_time: now,
     long_description: String(row.long_description || ""),
     competencies: stringList(parse(row.competencies_json, []), 24),
     responsibilities: stringList(parse(row.responsibilities_json, []), 24),
@@ -172,7 +173,7 @@ async function catalogFacets(env: Phase10Env): Promise<Response> {
     experience_levels: ["entry", "early_career", "intermediate"],
   });
 }
-async function catalogDetailRoute(request: Request, env: Phase10Env): Promise<Response> {
+async function catalogDetailRoute(request: Request, env: Phase10Env, now: number): Promise<Response> {
   const url = new URL(request.url);
   const catalogSlug = slug(url.searchParams.get("slug"));
   const versionId = id(url.searchParams.get("scenario_version_id"));
@@ -182,7 +183,7 @@ async function catalogDetailRoute(request: Request, env: Phase10Env): Promise<Re
   if (versionId) { query += "AND ce.scenario_version_id = ? "; values.push(versionId); }
   query += "ORDER BY ce.published_at DESC LIMIT 1";
   const row = await env.TUTOR_DB.prepare(query).bind(...values).first<Record<string, unknown>>();
-  return row ? json({ ok: true, internship: catalogDetail(row) }) : json({ error: "catalog_entry_not_found" }, 404);
+  return row ? json({ ok: true, internship: catalogDetail(row, now) }) : json({ error: "catalog_entry_not_found" }, 404);
 }
 function validateCatalog(manifest: Record<string, unknown>, catalog: Record<string, unknown>): string {
   if (integer(catalog.schema_version) !== 1) return "catalog_schema_version_invalid";
@@ -422,7 +423,7 @@ export async function handlePhase10CatalogPersistenceRoute(
 ): Promise<Response | null> {
   if (route === "/catalog/list" && request.method === "GET") return catalogList(request, env);
   if (route === "/catalog/facets" && request.method === "GET") return catalogFacets(env);
-  if (route === "/catalog/detail" && request.method === "GET") return catalogDetailRoute(request, env);
+  if (route === "/catalog/detail" && request.method === "GET") return catalogDetailRoute(request, env, now);
   if (route === "/catalog/project" && request.method === "POST") return projectCatalog(request, env, now);
   if (route.startsWith("/institution-scenarios/")) return institutionRoute(request, env, route, now);
   return null;
