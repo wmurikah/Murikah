@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MurikahCopyableTable from "@/components/workbench/MurikahCopyableTable";
 import MurikahWorkbenchPanel from "@/components/workbench/MurikahWorkbenchPanel";
@@ -86,6 +86,7 @@ describe("Murikah Workbench", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Clear local" }));
     expect(localStorage.getItem("murikah:workbench:v1:message:42")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByRole("textbox", { name: "Document" })).toHaveValue("# Original");
   });
 
@@ -98,7 +99,7 @@ describe("Murikah Workbench", () => {
       content: "Sensitive response that was never edited.",
     };
     render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
-    await new Promise((resolve) => setTimeout(resolve, 420));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 420)); });
     expect(localStorage.getItem("murikah:workbench:v1:message:untouched")).toBeNull();
   });
 
