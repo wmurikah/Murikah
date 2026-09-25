@@ -197,6 +197,47 @@ def patch_mermaid(root: Path) -> None:
     replace_once(path, old, new, "Mermaid editable renderer")
 
 
+def patch_code_blocks(root: Path) -> None:
+    path = root / "web/components/common/RichCodeBlock.tsx"
+    replace_once(
+        path,
+        'import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";\n',
+        'import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";\nimport { Pencil } from "lucide-react";\nimport { openMurikahWorkbench } from "@/lib/murikah-workbench";\n',
+        "code Workbench imports",
+    )
+    replace_once(
+        path,
+        '''    <div
+      className={`md-code-block overflow-hidden rounded-xl border border-[var(--border)] ${''',
+        '''    <div
+      className={`group/murikah-code relative md-code-block overflow-hidden rounded-xl border border-[var(--border)] ${''',
+        "code Workbench wrapper",
+    )
+    marker = '''      {!isPlain ? (
+        <div'''
+    insertion = '''      <button
+        type="button"
+        onClick={() =>
+          openMurikahWorkbench({
+            kind: "code",
+            renderer: "code",
+            title: normalizedLang ? `${normalizedLang} code` : "Code",
+            content: raw,
+            language: normalizedLang || "text",
+          })
+        }
+        className="absolute right-2 top-1.5 z-10 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/35 px-2 py-1 text-[10.5px] font-medium text-white/80 opacity-100 backdrop-blur hover:text-white sm:opacity-0 sm:group-hover/murikah-code:opacity-100 sm:group-focus-within/murikah-code:opacity-100"
+        aria-label="Edit code in Workbench"
+        title="Edit code in Workbench"
+      >
+        <Pencil size={11} strokeWidth={1.7} />
+        Edit
+      </button>
+      {!isPlain ? (
+        <div'''
+    replace_once(path, marker, insertion, "code Workbench action")
+
+
 def patch_chat_actions(root: Path) -> None:
     path = root / "web/features/chat/messages/ChatMessageList.tsx"
     replace_once(
@@ -400,6 +441,7 @@ def main() -> None:
     patch_app_shell(root)
     patch_markdown_tables(root)
     patch_mermaid(root)
+    patch_code_blocks(root)
     patch_chat_actions(root)
     patch_chat_workspace(root)
     patch_visualizations(root)
