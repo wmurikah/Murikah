@@ -1,0 +1,142 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import MurikahCopyableTable from "@/components/workbench/MurikahCopyableTable";
+import MurikahWorkbenchPanel from "@/components/workbench/MurikahWorkbenchPanel";
+import {
+  MURIKAH_WORKBENCH_OPEN_EVENT,
+  type MurikahWorkbenchItem,
+} from "@/lib/murikah-workbench";
+
+vi.mock("@/components/common/MarkdownRenderer", () => ({
+  default: ({ content }: { content: string }) => <div data-testid="markdown-preview">{content}</div>,
+}));
+
+beforeEach(() => {
+  localStorage.clear();
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn(async () => undefined) },
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
+
+describe("Murikah Workbench", () => {
+  it("copies rendered tables as tab-separated text and opens the table editor", async () => {
+    let opened: any = null;
+    const listener = (event: Event) => {
+      opened = (event as CustomEvent).detail;
+    };
+    window.addEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, listener);
+    render(
+      <MurikahCopyableTable>
+        <table>
+          <thead><tr><th>Country</th><th>Risk</th></tr></thead>
+          <tbody><tr><td>Kenya</td><td>High</td></tr></tbody>
+        </table>
+      </MurikahCopyableTable>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy table" }));
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        "Country\tRisk\nKenya\tHigh",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit table in Workbench" }));
+    expect(opened).toMatchObject({
+      kind: "table",
+      renderer: "table",
+      content: "Country\tRisk\nKenya\tHigh",
+    });
+    expect(opened.id).toMatch(/^table:table:/);
+    expect(opened.id).not.toContain("Kenya");
+    window.removeEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, listener);
+  });
+
+  it("edits a document locally, previews it, and never calls the network", async () => {
+    const fetchSpy = vi.stubGlobal("fetch", vi.fn());
+    const item: MurikahWorkbenchItem = {
+      id: "message:42",
+      kind: "document",
+      renderer: "markdown",
+      title: "Tutor response",
+      content: "# Original",
+    };
+    render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
+
+    const editor = screen.getByRole("textbox", { name: "Document" });
+    fireEvent.change(editor, { target: { value: "# Revised\n\nLearner edit." } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByTestId("markdown-preview")).toHaveTextContent("Revised");
+    expect(screen.getByTestId("markdown-preview")).toHaveTextContent("Learner edit.");
+
+    await waitFor(() => {
+      const raw = localStorage.getItem("murikah:workbench:v1:message:42") || "";
+      expect(raw).toContain("Learner edit.");
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("edits table cells as structured rows instead of flattening the table", () => {
+    const item: MurikahWorkbenchItem = {
+      id: "table:test",
+      kind: "table",
+      renderer: "table",
+      title: "Table",
+      content: "Control\tOwner\nAccess review\tICT",
+    };
+    render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Row 2, column 2" }), {
+      target: { value: "Internal Audit" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByText("Access review")).toBeVisible();
+    expect(screen.getByText("Internal Audit")).toBeVisible();
+  });
+
+  it("previews edited SVG in a script-disabled isolated frame", () => {
+    const item: MurikahWorkbenchItem = {
+      id: "diagram:test",
+      kind: "diagram",
+      renderer: "svg",
+      title: "Process diagram",
+      content: '<svg viewBox="0 0 100 30"><text>Original</text></svg>',
+    };
+    render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "SVG source" }), {
+      target: { value: '<svg viewBox="0 0 100 30"><text>Edited</text></svg>' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    const frame = screen.getByTitle("Workbench SVG preview");
+    expect(frame).toHaveAttribute("sandbox", "");
+    expect(frame.getAttribute("srcdoc")).toContain("Edited");
+    expect(frame.getAttribute("srcdoc")).toContain("default-src 'none'");
+  });
+
+  it("keeps explicit local versions and can restore one", () => {
+    const item: MurikahWorkbenchItem = {
+      id: "code:test",
+      kind: "code",
+      renderer: "code",
+      title: "Code",
+      content: "const value = 1;",
+      language: "javascript",
+    };
+    render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
+    const editor = screen.getByRole("textbox", { name: "javascript" });
+    fireEvent.change(editor, { target: { value: "const value = 2;" } });
+    fireEvent.click(screen.getByRole("button", { name: "Version" }));
+    fireEvent.change(editor, { target: { value: "const value = 3;" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Restore local version" }), {
+      target: { value: "0" },
+    });
+    expect(screen.getByRole("textbox", { name: "javascript" })).toHaveValue(
+      "const value = 2;",
+    );
+  });
+});
