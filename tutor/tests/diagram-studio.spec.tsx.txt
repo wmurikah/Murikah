@@ -48,6 +48,30 @@ describe("Diagram Design", () => {
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(screen.getByRole("button", { name: "Download SVG" })).toBeEnabled();
   });
+  it("opens the completed SVG in Workbench for source editing", async () => {
+    const stream = streamResponse();
+    let detail: any = null;
+    const listener = (event: Event) => {
+      detail = (event as CustomEvent).detail;
+    };
+    window.addEventListener("murikah:open-workbench", listener);
+    render(<MurikahDiagramStudio />);
+    expect(screen.getByRole("button", { name: "Edit in Workbench" })).toBeDisabled();
+    await start();
+    await act(async () => stream.emit({ type: "done", answer: svg }));
+    await screen.findByTitle("Murikah Tutor generated diagram");
+    const edit = screen.getByRole("button", { name: "Edit in Workbench" });
+    expect(edit).toBeEnabled();
+    fireEvent.click(edit);
+    expect(detail).toMatchObject({
+      kind: "diagram",
+      renderer: "svg",
+      content: svg,
+      title: "Computer Science Courses",
+    });
+    window.removeEventListener("murikah:open-workbench", listener);
+  });
+
   it("renders the diagram before any explanatory narrative", async () => {
     const stream = streamResponse();
     render(<MurikahDiagramStudio />);
