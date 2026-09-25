@@ -680,6 +680,8 @@ def main() -> int:
             'patch_app_shell(root)',
             'patch_markdown_tables(root)',
             'patch_mermaid(root)',
+            'patch_code_blocks(root)',
+            'Edit code in Workbench',
             'patch_chat_actions(root)',
             'patch_chat_workspace(root)',
             'murikah:open-workbench',
