@@ -83,6 +83,23 @@ describe("Murikah Workbench", () => {
       expect(raw).toContain("Learner edit.");
     });
     expect(fetchSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear local" }));
+    expect(localStorage.getItem("murikah:workbench:v1:message:42")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Document" })).toHaveValue("# Original");
+  });
+
+  it("does not persist an untouched Tutor response just because Workbench opens", async () => {
+    const item: MurikahWorkbenchItem = {
+      id: "message:untouched",
+      kind: "document",
+      renderer: "markdown",
+      title: "Tutor response",
+      content: "Sensitive response that was never edited.",
+    };
+    render(<MurikahWorkbenchPanel item={item} onClose={() => undefined} />);
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    expect(localStorage.getItem("murikah:workbench:v1:message:untouched")).toBeNull();
   });
 
   it("edits table cells as structured rows instead of flattening the table", () => {
