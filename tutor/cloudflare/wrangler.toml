@@ -53,7 +53,7 @@ class_name = "TutorContainer"
 # GitHub Actions builds and tests the Tutor image once, then mirrors it into
 # Cloudflare's managed registry. deploy_staging.py pins this mutable fallback
 # to the exact source-<revision> tag before every production deployment.
-image = "murikah-tutor:main"
+image = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor:main"
 # Staging keeps spare capacity for one active app, diagnostics and short-lived
 # rollout overlap. max_instances is a ceiling; unused slots do not run.
 max_instances = 4
