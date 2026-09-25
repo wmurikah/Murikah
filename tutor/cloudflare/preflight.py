@@ -1186,7 +1186,7 @@ def main() -> int:
             "npm --prefix tutor/cloudflare run deploy:release",
             "npm --prefix tutor/cloudflare run smoke:staging",
             "Advance last-known-good aliases",
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}",
             "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
             "CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
             'wrangler containers push "${cf_source}"',
