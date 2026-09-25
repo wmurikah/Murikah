@@ -1,0 +1,86 @@
+[
+  {
+    "actor_id": "actor_data_practice_supervisor",
+    "name": "Maya Njeri",
+    "actor_class": "supervisor",
+    "job_title": "Practice Analytics Lead",
+    "department_id": "dept_data_practice",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign practice work",
+      "review practice work"
+    ],
+    "goals": [
+      "show how the simulated workplace operates"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_practice_context",
+      "fact_data_practice_issue",
+      "fact_data_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice supervisor",
+    "escalation_capabilities": [
+      "practice escalation"
+    ],
+    "allowed_event_ids": [
+      "event_data_practice_unlock_2",
+      "event_data_practice_unlock_3",
+      "event_data_practice_unlock_4",
+      "event_data_practice_pressure"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_practice_stakeholder",
+    "name": "Tessa Mwangi",
+    "actor_class": "stakeholder",
+    "job_title": "Commercial Stakeholder",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide fictional context"
+    ],
+    "goals": [
+      "represent a workplace stakeholder"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_practice_context",
+      "fact_data_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice stakeholder",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_practice_peer",
+    "name": "Leah Nduta",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_data_practice",
+    "reports_to_actor_id": "actor_data_practice_supervisor",
+    "authority": [],
+    "goals": [
+      "model peer interaction"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_practice_context"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

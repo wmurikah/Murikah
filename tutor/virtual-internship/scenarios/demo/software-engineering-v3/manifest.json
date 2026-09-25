@@ -1,0 +1,93 @@
+{
+  "id": "sp_demo_software_engineering",
+  "slug": "demo-software-engineering",
+  "scenario_version_id": "sv_demo_software_engineering_v3",
+  "schema_version": 1,
+  "scenario_version": 3,
+  "title": "Software Engineering Practice Internship",
+  "career_family": "software_engineering",
+  "role_title": "Software Engineering Practice Intern",
+  "region_context": "Fictional practice environment",
+  "company_ref": "org_software_practice",
+  "minimum_duration_days": 14,
+  "expected_workload_band": "light",
+  "classification": "demo",
+  "qualifying": false,
+  "mode": "demo",
+  "physical_competency_classification": "knowledge_work",
+  "physical_competency_limitation_text": "",
+  "catalog": {
+    "schema_version": 1,
+    "catalog_slug": "software-engineering-practice",
+    "career_family_id": "cf_software_engineering_v1",
+    "short_description": "Explore a short Software Engineering demo before committing to a qualifying internship.",
+    "long_description": "A compact demo of the simulated engineering workplace using supplied evidence and safe code-reading tasks. It remains non-qualifying.",
+    "internship_type": "practice",
+    "minimum_duration_days": 14,
+    "weekly_hours_min": 2,
+    "weekly_hours_max": 4,
+    "workload_band": "light",
+    "experience_level": "entry",
+    "competencies_developed": [
+      "Issue triage",
+      "Debugging reasoning",
+      "Test reasoning"
+    ],
+    "sample_responsibilities": [
+      "Review supplied issue evidence",
+      "Prepare a safe diagnosis note",
+      "Draft a small test plan"
+    ],
+    "deliverables": [
+      "Practice issue analysis",
+      "Practice test plan",
+      "Practice presentation"
+    ],
+    "work_rhythm": "A short demo sequence for exploring the simulated workplace before committing to a qualifying internship.",
+    "prerequisites": "None.",
+    "physical_competency_classification": "knowledge_work",
+    "physical_competency_limitation_text": "",
+    "simulation_disclosure": "This is a demo internship in a fictional workplace.",
+    "completion_overview": "This demo does not satisfy the 90-day qualifying internship requirement and does not issue the qualifying Performance Report or Completion Letter.",
+    "support_summary": "Murikah Mentor support is available for practice work. Practice evidence does not become qualifying completion evidence.",
+    "published": true,
+    "catalog_visible": true,
+    "sort_order": 130,
+    "search_keywords": [
+      "software",
+      "engineering",
+      "practice",
+      "demo"
+    ]
+  },
+  "initial_task_ids": [
+    "task_software_practice_1"
+  ],
+  "initial_event_ids": [
+    "event_software_practice_unlock_2",
+    "event_software_practice_unlock_3",
+    "event_software_practice_unlock_4",
+    "event_software_practice_pressure"
+  ],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "stakeholder",
+    "peer_intern"
+  ],
+  "content_hash": "33577dec9c9f23509e7cde2e54363d4f23f38ad296715a3a0d112d4e23327a0a",
+  "review_policy": {
+    "midpoint_day": 7,
+    "final_review_day": 14,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

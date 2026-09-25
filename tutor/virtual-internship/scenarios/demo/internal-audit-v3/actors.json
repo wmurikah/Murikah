@@ -1,0 +1,86 @@
+[
+  {
+    "actor_id": "actor_audit_practice_supervisor",
+    "name": "Nia Otieno",
+    "actor_class": "supervisor",
+    "job_title": "Practice Audit Supervisor",
+    "department_id": "dept_audit_practice",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign practice work",
+      "review practice work"
+    ],
+    "goals": [
+      "show how the simulated workplace operates"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_practice_context",
+      "fact_audit_practice_issue",
+      "fact_audit_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice supervisor",
+    "escalation_capabilities": [
+      "practice escalation"
+    ],
+    "allowed_event_ids": [
+      "event_audit_practice_unlock_2",
+      "event_audit_practice_unlock_3",
+      "event_audit_practice_unlock_4",
+      "event_audit_practice_pressure"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_practice_stakeholder",
+    "name": "Amina Farah",
+    "actor_class": "stakeholder",
+    "job_title": "Operations Stakeholder",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide fictional context"
+    ],
+    "goals": [
+      "represent a workplace stakeholder"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_practice_context",
+      "fact_audit_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice stakeholder",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_practice_peer",
+    "name": "Ruth Achieng",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_audit_practice",
+    "reports_to_actor_id": "actor_audit_practice_supervisor",
+    "authority": [],
+    "goals": [
+      "model peer interaction"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_practice_context"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

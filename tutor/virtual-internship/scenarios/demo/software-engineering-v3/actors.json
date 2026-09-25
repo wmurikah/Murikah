@@ -1,0 +1,86 @@
+[
+  {
+    "actor_id": "actor_software_practice_supervisor",
+    "name": "Imani Kilonzo",
+    "actor_class": "supervisor",
+    "job_title": "Practice Engineering Supervisor",
+    "department_id": "dept_software_practice",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign practice work",
+      "review practice work"
+    ],
+    "goals": [
+      "show how the simulated workplace operates"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_practice_context",
+      "fact_software_practice_issue",
+      "fact_software_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice supervisor",
+    "escalation_capabilities": [
+      "practice escalation"
+    ],
+    "allowed_event_ids": [
+      "event_software_practice_unlock_2",
+      "event_software_practice_unlock_3",
+      "event_software_practice_unlock_4",
+      "event_software_practice_pressure"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_practice_stakeholder",
+    "name": "Sara Abdi",
+    "actor_class": "stakeholder",
+    "job_title": "Product Stakeholder",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide fictional context"
+    ],
+    "goals": [
+      "represent a workplace stakeholder"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_practice_context",
+      "fact_software_practice_pressure"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "practice stakeholder",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_practice_peer",
+    "name": "Asha Wekesa",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_software_practice",
+    "reports_to_actor_id": "actor_software_practice_supervisor",
+    "authority": [],
+    "goals": [
+      "model peer interaction"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_practice_context"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

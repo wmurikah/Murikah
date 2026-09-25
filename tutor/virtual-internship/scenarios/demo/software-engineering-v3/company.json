@@ -1,0 +1,47 @@
+{
+  "organization_id": "org_software_practice",
+  "name": "Cedarline Practice Studio",
+  "fictional": true,
+  "sector": "Software technology",
+  "country_region": "Fictional practice environment",
+  "description": "A fictional short-form practice environment for exploring the Software Engineering Virtual Internship workflow.",
+  "products_services": [
+    "practice services"
+  ],
+  "departments": [
+    {
+      "id": "dept_software_practice",
+      "name": "Engineering Practice"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    }
+  ],
+  "systems": [
+    "Practice Workspace"
+  ],
+  "process_references": [
+    "practice workflow"
+  ],
+  "vocabulary": [
+    "reproduction",
+    "test",
+    "change"
+  ],
+  "communication_norms": [
+    "This is a demo experience.",
+    "Use fictional evidence only."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical timing."
+  }
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "fact_audit_practice_context",
+    "key": "audit_practice_context",
+    "value": "A short fictional audit case introduces process review, evidence analysis and stakeholder communication.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_practice_issue",
+    "key": "audit_practice_issue",
+    "value": "A small synthetic control exception becomes visible during the practice sequence.",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_practice_pressure",
+    "key": "audit_practice_pressure",
+    "value": "A simulated stakeholder challenges the quality of the learner's evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": true
+  }
+]
