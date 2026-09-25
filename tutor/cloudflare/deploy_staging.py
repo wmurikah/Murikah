@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[1]
 CONFIG = ROOT / "wrangler.toml"
 GENERATED_CONFIG = ROOT / "wrangler.deploy.generated.toml"
-PREBUILT_IMAGE_REPOSITORY = "murikah-tutor"
+PREBUILT_IMAGE_REPOSITORY = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor"
 APP_NAME = "murikah-tutor-container-staging-TutorContainer"
 VERIFY_BASES = ("https://murikah-tutor-container-staging.hasspe.workers.dev","https://tutor.murikah.com")
 APPLICATION_NOT_FOUND = "APPLICATION_NOT_FOUND"
@@ -68,7 +68,7 @@ def prebuilt_image_tag(revision: str) -> str:
 
 def prepare_deploy_config(image_tag: str, revision: str) -> Path:
     text = CONFIG.read_text(encoding="utf-8")
-    image_marker = 'image = "murikah-tutor:main"'
+    image_marker = 'image = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor:main"'
     if text.count(image_marker) != 1:
         raise RuntimeError("wrangler.toml must contain exactly one managed Tutor image fallback")
     text = text.replace(image_marker, f'image = "{image_tag}"', 1)
