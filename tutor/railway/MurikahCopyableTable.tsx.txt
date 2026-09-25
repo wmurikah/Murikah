@@ -31,13 +31,19 @@ async function copyTable(table: HTMLTableElement): Promise<void> {
     navigator.clipboard &&
     typeof navigator.clipboard.write === "function"
   ) {
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/plain": new Blob([plain], { type: "text/plain" }),
-        "text/html": new Blob([html], { type: "text/html" }),
-      }),
-    ]);
-    return;
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        }),
+      ]);
+      return;
+    } catch {
+      // Some browsers expose ClipboardItem/write but deny rich clipboard
+      // writes. Preserve the useful spreadsheet fallback rather than failing
+      // the whole copy action.
+    }
   }
   await navigator.clipboard.writeText(plain);
 }
