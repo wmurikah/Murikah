@@ -1,0 +1,93 @@
+{
+  "id": "sp_demo_data_analyst",
+  "slug": "demo-data-analyst",
+  "scenario_version_id": "sv_demo_data_analyst_v3",
+  "schema_version": 1,
+  "scenario_version": 3,
+  "title": "Data Analyst Practice Internship",
+  "career_family": "data_analysis",
+  "role_title": "Data Analyst Practice Intern",
+  "region_context": "Fictional practice environment",
+  "company_ref": "org_data_practice",
+  "minimum_duration_days": 14,
+  "expected_workload_band": "light",
+  "classification": "demo",
+  "qualifying": false,
+  "mode": "demo",
+  "physical_competency_classification": "knowledge_work",
+  "physical_competency_limitation_text": "",
+  "catalog": {
+    "schema_version": 1,
+    "catalog_slug": "data-analyst-practice",
+    "career_family_id": "cf_data_analytics_v1",
+    "short_description": "Explore a short Data Analyst demo before committing to a qualifying internship.",
+    "long_description": "A compact demo of the simulated analytics workplace, synthetic data, evidence-based analysis and feedback. It remains non-qualifying.",
+    "internship_type": "practice",
+    "minimum_duration_days": 14,
+    "weekly_hours_min": 2,
+    "weekly_hours_max": 4,
+    "workload_band": "light",
+    "experience_level": "entry",
+    "competencies_developed": [
+      "Data understanding",
+      "Data quality assessment",
+      "Metric definition"
+    ],
+    "sample_responsibilities": [
+      "Review synthetic data context",
+      "Assess a small data-quality issue",
+      "Prepare a short analytical memo"
+    ],
+    "deliverables": [
+      "Practice data-quality note",
+      "Practice analytical memo",
+      "Practice presentation"
+    ],
+    "work_rhythm": "A short demo sequence for exploring the simulated workplace before committing to a qualifying internship.",
+    "prerequisites": "None.",
+    "physical_competency_classification": "knowledge_work",
+    "physical_competency_limitation_text": "",
+    "simulation_disclosure": "This is a demo internship in a fictional workplace.",
+    "completion_overview": "This demo does not satisfy the 90-day qualifying internship requirement and does not issue the qualifying Performance Report or Completion Letter.",
+    "support_summary": "Murikah Mentor support is available for practice work. Practice evidence does not become qualifying completion evidence.",
+    "published": true,
+    "catalog_visible": true,
+    "sort_order": 120,
+    "search_keywords": [
+      "data",
+      "analytics",
+      "practice",
+      "demo"
+    ]
+  },
+  "initial_task_ids": [
+    "task_data_practice_1"
+  ],
+  "initial_event_ids": [
+    "event_data_practice_unlock_2",
+    "event_data_practice_unlock_3",
+    "event_data_practice_unlock_4",
+    "event_data_practice_pressure"
+  ],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "stakeholder",
+    "peer_intern"
+  ],
+  "content_hash": "23b2cf82f93ed48e1bdfee86f4f11c01e8871b00d7ace4c7f2eafd534b43199c",
+  "review_policy": {
+    "midpoint_day": 7,
+    "final_review_day": 14,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

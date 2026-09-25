@@ -1,0 +1,500 @@
+[
+  {
+    "task_id": "task_software_practice_1",
+    "authored_sequence": 1,
+    "title": "Review the practice issue evidence",
+    "category": "routine",
+    "assigned_by_actor_id": "actor_software_practice_supervisor",
+    "business_context": "A short fictional engineering case introduces issue reproduction, design reasoning, testing and communication without arbitrary code execution.",
+    "learner_objective": "Understand the practice engineering context.",
+    "brief": "This is a short demo. Use only fictional evidence and treat the work as practice.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 1
+    },
+    "expected_effort": "1-2 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_practice_peer"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Complete the practice submission. This does not qualify for completion credentials."
+    },
+    "revision_policy": {
+      "max_revisions": 1
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "issue_summary"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_practice_1_v1",
+      "schema_version": 1,
+      "title": "Practice work assessment rubric",
+      "purpose": "Provide evidence-based feedback inside the demo without creating qualifying completion credentials.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the practice task requirements.",
+          "evidence_expectations": "Cite the submitted practice work.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses the supplied practice evidence appropriately.",
+          "evidence_expectations": "Cite evidence use and stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Communicates the practice work clearly.",
+          "evidence_expectations": "Cite structure and traceability.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_practice_2",
+    "authored_sequence": 2,
+    "title": "Prepare a reproduction and diagnosis note",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_software_practice_supervisor",
+    "business_context": "A short fictional engineering case introduces issue reproduction, design reasoning, testing and communication without arbitrary code execution.",
+    "learner_objective": "Reason about the supplied issue safely.",
+    "brief": "This is a short demo. Use only fictional evidence and treat the work as practice.",
+    "dependencies": [
+      "task_software_practice_1"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 4
+    },
+    "expected_effort": "1-2 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_practice_peer"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Complete the practice submission. This does not qualify for completion credentials."
+    },
+    "revision_policy": {
+      "max_revisions": 1
+    },
+    "competency_refs": [
+      "comp_debugging"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_practice_2_v1",
+      "schema_version": 1,
+      "title": "Practice work assessment rubric",
+      "purpose": "Provide evidence-based feedback inside the demo without creating qualifying completion credentials.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the practice task requirements.",
+          "evidence_expectations": "Cite the submitted practice work.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses the supplied practice evidence appropriately.",
+          "evidence_expectations": "Cite evidence use and stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Communicates the practice work clearly.",
+          "evidence_expectations": "Cite structure and traceability.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_practice_3",
+    "authored_sequence": 3,
+    "title": "Draft a small test plan",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_software_practice_supervisor",
+    "business_context": "A short fictional engineering case introduces issue reproduction, design reasoning, testing and communication without arbitrary code execution.",
+    "learner_objective": "Define useful tests and expected behavior.",
+    "brief": "This is a short demo. Use only fictional evidence and treat the work as practice.",
+    "dependencies": [
+      "task_software_practice_2"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 8
+    },
+    "expected_effort": "1-2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_practice_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Complete the practice submission. This does not qualify for completion credentials."
+    },
+    "revision_policy": {
+      "max_revisions": 1
+    },
+    "competency_refs": [
+      "comp_test_reasoning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "test_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_practice_3_v1",
+      "schema_version": 1,
+      "title": "Practice work assessment rubric",
+      "purpose": "Provide evidence-based feedback inside the demo without creating qualifying completion credentials.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the practice task requirements.",
+          "evidence_expectations": "Cite the submitted practice work.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses the supplied practice evidence appropriately.",
+          "evidence_expectations": "Cite evidence use and stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Communicates the practice work clearly.",
+          "evidence_expectations": "Cite structure and traceability.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_practice_4",
+    "authored_sequence": 4,
+    "title": "Present the practice change proposal",
+    "category": "presentation",
+    "assigned_by_actor_id": "actor_software_practice_supervisor",
+    "business_context": "A short fictional engineering case introduces issue reproduction, design reasoning, testing and communication without arbitrary code execution.",
+    "learner_objective": "Summarize the proposed change and limitations.",
+    "brief": "This is a short demo. Use only fictional evidence and treat the work as practice.",
+    "dependencies": [
+      "task_software_practice_3"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "1-2 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_practice_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "trusted_internal_demo",
+      "description": "Complete the practice submission. This does not qualify for completion credentials."
+    },
+    "revision_policy": {
+      "max_revisions": 1
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "presentation"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_practice_4_v1",
+      "schema_version": 1,
+      "title": "Practice work assessment rubric",
+      "purpose": "Provide evidence-based feedback inside the demo without creating qualifying completion credentials.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the practice task requirements.",
+          "evidence_expectations": "Cite the submitted practice work.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses the supplied practice evidence appropriately.",
+          "evidence_expectations": "Cite evidence use and stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Communicates the practice work clearly.",
+          "evidence_expectations": "Cite structure and traceability.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]
