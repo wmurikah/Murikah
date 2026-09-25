@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_project_policy",
+    "key": "project_work_policy",
+    "value": "Project decisions must document scope, dependencies, risks, owners and approved changes.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_method",
+    "key": "project_team_method",
+    "value": "Use structured planning, issue tracking, stakeholder communication and evidence-based escalation.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_project"
+    ],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_priority",
+    "key": "project_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_stakeholder",
+    "key": "project_stakeholder_constraint",
+    "value": "A business sponsor wants an unplanned scope item added without moving the fictional deadline.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_hidden",
+    "key": "project_hidden_exception",
+    "value": "A synthetic upstream dependency will miss its planned handoff unless escalated.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_ethics",
+    "key": "project_ethics_pressure",
+    "value": "A stakeholder will ask to report an at-risk milestone as on track without supporting evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_project_review",
+    "key": "project_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_project_capstone",
+    "key": "project_capstone_context",
+    "value": "The capstone integrates charter, schedule, stakeholder analysis, risk, change, reporting and closeout decisions.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]
