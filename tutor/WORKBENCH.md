@@ -58,12 +58,13 @@ Math Animator output can expose its generated source for editing, but Workbench 
 
 ## Local editing and versions
 
-Workbench autosaves a bounded draft in browser `localStorage` after the user opens it.
+Workbench autosaves a bounded draft in browser `localStorage` only after the user actually edits content or saves a version. Merely opening Workbench does not duplicate the Tutor response into persistent browser storage.
 
 - maximum active draft: 500,000 characters;
 - maximum explicit local versions: 8;
 - local storage keys use opaque IDs/hashes and MUST NOT embed document/table contents;
 - **Reset** restores the exact source supplied by Tutor;
+- **Clear local** removes browser-local edits and versions;
 - **Version** snapshots the current local draft;
 - **Download** creates a portable file without a server request.
 
