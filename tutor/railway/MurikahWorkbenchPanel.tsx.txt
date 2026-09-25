@@ -1,0 +1,478 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Check,
+  Copy,
+  Download,
+  Eye,
+  FilePenLine,
+  History,
+  Plus,
+  RotateCcw,
+  Save,
+  X,
+} from "lucide-react";
+import MarkdownRenderer from "@/components/common/MarkdownRenderer";
+import type { MurikahWorkbenchItem } from "@/lib/murikah-workbench";
+
+const LazyMermaid = dynamic(
+  () => import("@/components/Mermaid").then((module) => module.Mermaid),
+  { ssr: false, loading: () => <div className="p-4 text-sm text-[var(--muted-foreground)]">Rendering diagram…</div> },
+);
+
+const LazyVisualizationViewer = dynamic(
+  () => import("@/components/visualize/VisualizationViewer"),
+  { ssr: false, loading: () => <div className="p-4 text-sm text-[var(--muted-foreground)]">Rendering visualization…</div> },
+);
+
+type StoredVersion = { at: number; content: string };
+type StoredDraft = {
+  sourceFingerprint: string;
+  content: string;
+  updatedAt: number;
+  versions: StoredVersion[];
+};
+
+const STORAGE_PREFIX = "murikah:workbench:v1:";
+const MAX_DRAFT_CHARS = 500_000;
+const MAX_VERSIONS = 8;
+
+function fingerprint(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${value.length}:${(hash >>> 0).toString(36)}`;
+}
+
+function readDraft(item: MurikahWorkbenchItem): StoredDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + item.id);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredDraft;
+    if (
+      parsed?.sourceFingerprint !== fingerprint(item.content) ||
+      typeof parsed.content !== "string" ||
+      !Array.isArray(parsed.versions)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function parseTable(content: string): string[][] {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  return lines
+    .filter((line, index) => line.length > 0 || index < lines.length - 1)
+    .map((line) => line.split("\t"));
+}
+
+function tableToTsv(rows: string[][]): string {
+  return rows.map((row) => row.map((cell) => cell.replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
+}
+
+function extensionFor(item: MurikahWorkbenchItem): string {
+  if (item.renderer === "table") return "tsv";
+  if (item.renderer === "svg") return "svg";
+  if (item.renderer === "mermaid") return "mmd";
+  if (item.renderer === "html") return "html";
+  if (item.renderer === "visualization-payload") return "json";
+  if (item.renderer === "markdown") return "md";
+  const language = (item.language || "").toLowerCase();
+  const known: Record<string, string> = {
+    javascript: "js",
+    typescript: "ts",
+    python: "py",
+    json: "json",
+    css: "css",
+    html: "html",
+    sql: "sql",
+    bash: "sh",
+    shell: "sh",
+  };
+  return known[language] || "txt";
+}
+
+function safeFilename(title: string, extension: string): string {
+  const base = title
+    .trim()
+    .replace(/[^A-Za-z0-9._ -]+/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 80) || "murikah-workbench";
+  return `${base}.${extension}`;
+}
+
+function isolatedSrcDoc(content: string, kind: "svg" | "html"): string {
+  const policy =
+    kind === "html"
+      ? "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'"
+      : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'";
+  const body =
+    kind === "svg"
+      ? `<style>html,body{margin:0;min-height:100%;background:#f7f5f0}body{display:grid;place-items:center;padding:16px;box-sizing:border-box}svg{display:block;max-width:100%;max-height:calc(100vh - 32px);width:auto;height:auto}</style>${content}`
+      : content;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${body}</body></html>`;
+}
+
+function WorkbenchPreview({
+  item,
+  content,
+}: {
+  item: MurikahWorkbenchItem;
+  content: string;
+}) {
+  if (item.renderer === "markdown") {
+    return <MarkdownRenderer content={content} className="text-[14px] leading-7" />;
+  }
+  if (item.renderer === "table") {
+    const rows = parseTable(content);
+    return (
+      <div className="overflow-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-full divide-y divide-[var(--border)] text-sm">
+          <tbody className="divide-y divide-[var(--border)]">
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) =>
+                  rowIndex === 0 ? (
+                    <th key={cellIndex} className="bg-[var(--muted)] px-3 py-2 text-left font-semibold">{cell}</th>
+                  ) : (
+                    <td key={cellIndex} className="px-3 py-2 text-[var(--muted-foreground)]">{cell}</td>
+                  ),
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (item.renderer === "svg") {
+    return (
+      <iframe
+        title="Workbench SVG preview"
+        sandbox=""
+        srcDoc={isolatedSrcDoc(content, "svg")}
+        className="h-[55dvh] min-h-[320px] w-full rounded-xl border border-[var(--border)] bg-[#f7f5f0]"
+      />
+    );
+  }
+  if (item.renderer === "mermaid") {
+    return <LazyMermaid chart={content} className="min-w-0 max-w-full" />;
+  }
+  if (item.renderer === "html") {
+    return (
+      <iframe
+        title="Workbench HTML preview"
+        sandbox="allow-scripts"
+        srcDoc={isolatedSrcDoc(content, "html")}
+        className="h-[55dvh] min-h-[320px] w-full rounded-xl border border-[var(--border)] bg-white"
+      />
+    );
+  }
+  if (
+    item.renderer === "visualization-code" ||
+    item.renderer === "visualization-payload"
+  ) {
+    const original = item.visualizationResult as Record<string, any> | undefined;
+    if (!original) {
+      return <pre className="whitespace-pre-wrap text-sm">{content}</pre>;
+    }
+    try {
+      const next =
+        item.renderer === "visualization-payload"
+          ? {
+              ...original,
+              payload: {
+                ...(original.payload || {}),
+                data: JSON.parse(content),
+              },
+              code: {
+                ...(original.code || {}),
+                content,
+              },
+            }
+          : {
+              ...original,
+              code: {
+                ...(original.code || {}),
+                content,
+              },
+              payload: {
+                ...(original.payload || {}),
+                data: content,
+              },
+            };
+      return <LazyVisualizationViewer result={next as any} workbenchMode />;
+    } catch (error) {
+      return (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-600 dark:text-red-300">
+          Preview cannot render until the JSON is valid: {error instanceof Error ? error.message : "invalid JSON"}
+        </div>
+      );
+    }
+  }
+  return (
+    <pre className="overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 p-4 font-mono text-[13px] leading-6">
+      {content}
+    </pre>
+  );
+}
+
+function TableEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const rows = useMemo(() => {
+    const parsed = parseTable(value);
+    return parsed.length ? parsed : [[""]];
+  }, [value]);
+  const width = Math.max(1, ...rows.map((row) => row.length));
+  const normalized = rows.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill("")]);
+
+  const updateCell = (rowIndex: number, cellIndex: number, next: string) => {
+    const copy = normalized.map((row) => [...row]);
+    copy[rowIndex][cellIndex] = next;
+    onChange(tableToTsv(copy));
+  };
+  const addRow = () => onChange(tableToTsv([...normalized, Array(width).fill("")]));
+  const addColumn = () => onChange(tableToTsv(normalized.map((row) => [...row, ""])));
+
+  return (
+    <div className="min-h-0 space-y-3">
+      <div className="flex gap-2">
+        <button type="button" onClick={addRow} className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--muted)]/50">
+          <Plus size={13} /> Row
+        </button>
+        <button type="button" onClick={addColumn} className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--muted)]/50">
+          <Plus size={13} /> Column
+        </button>
+      </div>
+      <div className="max-h-[65dvh] overflow-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-full border-collapse text-sm">
+          <tbody>
+            {normalized.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex} className="border-b border-r border-[var(--border)] p-0 last:border-r-0">
+                    <input
+                      aria-label={`Row ${rowIndex + 1}, column ${cellIndex + 1}`}
+                      value={cell}
+                      onChange={(event) => updateCell(rowIndex, cellIndex, event.target.value)}
+                      className={`min-w-36 w-full bg-transparent px-3 py-2 outline-none focus:bg-[#A9822E]/5 ${rowIndex === 0 ? "font-semibold" : ""}`}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default function MurikahWorkbenchPanel({
+  item,
+  onClose,
+}: {
+  item: MurikahWorkbenchItem;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState(item.content);
+  const [view, setView] = useState<"edit" | "preview">("edit");
+  const [versions, setVersions] = useState<StoredVersion[]>([]);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "unavailable">("saved");
+  const [copied, setCopied] = useState(false);
+  const initialRef = useRef(item.content);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    initialRef.current = item.content;
+    const stored = readDraft(item);
+    setContent(stored?.content ?? item.content);
+    setVersions(stored?.versions ?? []);
+    setView("edit");
+    setSaveState("saved");
+  }, [item]);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setSaveState("saving");
+    timerRef.current = setTimeout(() => {
+      if (content.length > MAX_DRAFT_CHARS) {
+        setSaveState("unavailable");
+        return;
+      }
+      try {
+        const stored: StoredDraft = {
+          sourceFingerprint: fingerprint(initialRef.current),
+          content,
+          updatedAt: Date.now(),
+          versions,
+        };
+        localStorage.setItem(STORAGE_PREFIX + item.id, JSON.stringify(stored));
+        setSaveState("saved");
+      } catch {
+        setSaveState("unavailable");
+      }
+    }, 350);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [content, item.id, versions]);
+
+  const saveVersion = () => {
+    const next = [{ at: Date.now(), content }, ...versions].slice(0, MAX_VERSIONS);
+    setVersions(next);
+  };
+
+  const reset = () => setContent(item.content);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const download = () => {
+    const extension = extensionFor(item);
+    const mime =
+      extension === "svg"
+        ? "image/svg+xml"
+        : extension === "html"
+          ? "text/html"
+          : extension === "json"
+            ? "application/json"
+            : "text/plain";
+    const url = URL.createObjectURL(new Blob([content], { type: `${mime};charset=utf-8` }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = safeFilename(item.title, extension);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const editorLabel =
+    item.renderer === "svg"
+      ? "SVG source"
+      : item.renderer === "mermaid"
+        ? "Mermaid source"
+        : item.renderer === "visualization-payload"
+          ? "Visualization data"
+          : item.renderer === "visualization-code"
+            ? "Visualization source"
+            : item.renderer === "markdown"
+              ? "Document"
+              : item.renderer === "code"
+                ? item.language || "Code"
+                : "Content";
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2.5 sm:px-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#A9822E]/10 text-[#A9822E]">
+          <FilePenLine size={16} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">{item.title || "Workbench"}</div>
+          <div className="text-[10.5px] text-[var(--muted-foreground)]">
+            {saveState === "saving" ? "Saving locally…" : saveState === "saved" ? "Saved locally" : "Local save unavailable"}
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]" aria-label="Close Workbench" title="Close Workbench">
+          <X size={17} />
+        </button>
+      </header>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--border)] px-3 py-2 sm:px-4">
+        <button type="button" onClick={() => setView("edit")} aria-pressed={view === "edit"} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "edit" ? "bg-[var(--muted)] text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50"}`}>
+          <FilePenLine size={13} /> Edit
+        </button>
+        <button type="button" onClick={() => setView("preview")} aria-pressed={view === "preview"} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "preview" ? "bg-[var(--muted)] text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50"}`}>
+          <Eye size={13} /> Preview
+        </button>
+        <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden />
+        <button type="button" onClick={saveVersion} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]" title="Save a local version">
+          <Save size={13} /> Version
+        </button>
+        <button type="button" onClick={reset} disabled={content === item.content} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)] disabled:opacity-35" title="Reset to Tutor response">
+          <RotateCcw size={13} /> Reset
+        </button>
+        <button type="button" onClick={() => void copy()} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]">
+          {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+        </button>
+        <button type="button" onClick={download} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]">
+          <Download size={13} /> Download
+        </button>
+      </div>
+
+      {versions.length > 0 && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs sm:px-4">
+          <History size={13} className="text-[var(--muted-foreground)]" />
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Restore local version</span>
+            <select
+              defaultValue=""
+              onChange={(event) => {
+                const index = Number(event.target.value);
+                if (Number.isInteger(index) && versions[index]) setContent(versions[index].content);
+                event.target.value = "";
+              }}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-xs"
+            >
+              <option value="">Restore a saved version…</option>
+              {versions.map((version, index) => (
+                <option key={version.at} value={index}>
+                  {new Date(version.at).toLocaleString()}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+        {view === "preview" ? (
+          <WorkbenchPreview item={item} content={content} />
+        ) : item.renderer === "table" ? (
+          <TableEditor value={content} onChange={setContent} />
+        ) : (
+          <div className="flex h-full min-h-[360px] flex-col">
+            <label className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+              {editorLabel}
+            </label>
+            <textarea
+              autoFocus
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              spellCheck={item.renderer === "markdown"}
+              className={`min-h-[360px] flex-1 resize-none rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 outline-none focus:border-[#A9822E] ${item.renderer === "markdown" ? "font-sans text-[14px] leading-7" : "font-mono text-[12.5px] leading-6"}`}
+            />
+          </div>
+        )}
+      </div>
+
+      <footer className="shrink-0 border-t border-[var(--border)] px-3 py-2 text-[10.5px] leading-4 text-[var(--muted-foreground)] sm:px-4">
+        Manual edits stay in this browser and do not call a model. Use Download for a portable copy.
+      </footer>
+    </div>
+  );
+}
