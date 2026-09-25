@@ -82,7 +82,7 @@ def patch_markdown_tables(root: Path) -> None:
       ) : null,'''
     simple_trace_new = '''    table: ({ node, children, ...props }: any) =>
       hasRenderableChildren(children) ? (
-        <MurikahCopyableTable className="my-1 overflow-x-auto rounded border border-[var(--border)]/50">
+        <MurikahCopyableTable className="my-1 rounded border border-[var(--border)]/50">
           <table className="min-w-full text-[inherit]" {...props}>
             {children}
           </table>
@@ -93,7 +93,7 @@ def patch_markdown_tables(root: Path) -> None:
     simple_normal = '''    table: ({ node, children, ...props }: any) =>
       hasRenderableChildren(children) ? (
         <div
-          className={`overflow-x-auto rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
+          className={`rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
         >
           <table
             className="min-w-full divide-y divide-[var(--border)] text-sm"
