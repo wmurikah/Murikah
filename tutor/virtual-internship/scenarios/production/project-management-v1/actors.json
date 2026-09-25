@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_project_supervisor",
+    "name": "Neema Kariuki",
+    "actor_class": "supervisor",
+    "job_title": "Project Supervisor",
+    "department_id": "dept_project",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_project_policy",
+      "fact_project_method",
+      "fact_project_priority",
+      "fact_project_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_project_unlock_02",
+      "event_project_unlock_03",
+      "event_project_unlock_04",
+      "event_project_unlock_05",
+      "event_project_unlock_06",
+      "event_project_unlock_07",
+      "event_project_unlock_08",
+      "event_project_unlock_09",
+      "event_project_unlock_10",
+      "event_project_unlock_11",
+      "event_project_unlock_12",
+      "event_project_unlock_13",
+      "event_project_ethics",
+      "event_project_politics",
+      "event_project_midpoint",
+      "event_project_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_project_manager",
+    "name": "Paul Tembo",
+    "actor_class": "manager",
+    "job_title": "Program Director",
+    "department_id": "dept_project",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_project_policy",
+      "fact_project_method",
+      "fact_project_priority",
+      "fact_project_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_project_stakeholder",
+    "name": "Rania Yusuf",
+    "actor_class": "stakeholder",
+    "job_title": "Business Sponsor",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_project_policy",
+      "fact_project_priority",
+      "fact_project_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_project_colleague",
+    "name": "Mark Mwale",
+    "actor_class": "colleague",
+    "job_title": "Project Coordinator",
+    "department_id": "dept_project",
+    "reports_to_actor_id": "actor_project_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_project_policy",
+      "fact_project_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_project_peer",
+    "name": "Grace Chebet",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_project",
+    "reports_to_actor_id": "actor_project_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_project_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]
