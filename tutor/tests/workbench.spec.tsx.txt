@@ -13,6 +13,7 @@ vi.mock("@/components/common/MarkdownRenderer", () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal("ClipboardItem", undefined);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn(async () => undefined) },
@@ -21,6 +22,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   localStorage.clear();
 });
 
@@ -59,7 +61,8 @@ describe("Murikah Workbench", () => {
   });
 
   it("edits a document locally, previews it, and never calls the network", async () => {
-    const fetchSpy = vi.stubGlobal("fetch", vi.fn());
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
     const item: MurikahWorkbenchItem = {
       id: "message:42",
       kind: "document",
