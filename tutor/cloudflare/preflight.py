@@ -299,12 +299,11 @@ def main() -> int:
             'pattern = "tutor.murikah.com"',
             'custom_domain = true',
             'class_name = "TutorContainer"',
-            'image = "../Dockerfile.railway"',
-            'image_build_context = "../.."',
+            'image = "murikah-tutor:main"',
             'max_instances = 4',
             'instance_type = "standard-2"',
             'rollout_active_grace_period = 0',
-            'MURIKAH_CLOUDFLARE_IMAGE_REV = "2026-09-22-v33"',
+            'MURIKAH_CLOUDFLARE_IMAGE_REV = "source-revision-pinned-at-deploy"',
             'binding = "TUTOR_DB"',
             'migrations_dir = "migrations"',
             'binding = "TUTOR_FILES"',
@@ -325,16 +324,35 @@ def main() -> int:
             'MURIKAH_FAST_CHAT_QWEN_MODEL = "qwen3.8-flash"',
         ),
     )
+    forbid_markers(
+        "tutor/cloudflare/wrangler.toml",
+        (
+            'image = "../Dockerfile.railway"',
+            "image_build_context = ",
+            "image_vars = {",
+        ),
+    )
     require_markers(
         "tutor/cloudflare/deploy_staging.py",
         (
             'APP_NAME = "murikah-tutor-container-staging-TutorContainer"',
+            'REPO_ROOT = ROOT.parents[1]',
+            'GENERATED_CONFIG = ROOT / "wrangler.deploy.generated.toml"',
+            'PREBUILT_IMAGE_REPOSITORY = "murikah-tutor"',
+            'def source_revision() -> str:',
+            'git_object("HEAD:tutor")',
+            'git_object("HEAD:docs/images/murikah_6.png")',
+            'def prebuilt_image_tag(revision: str) -> str:',
+            'def prepare_deploy_config(image_tag: str, revision: str) -> Path:',
+            'image_marker = \'image = "murikah-tutor:main"\'',
+            'config_path: Path=CONFIG',
             'def list_tutor_applications()',
             'def recycle_tutor_application()',
             'TRANSIENT_DEPLOY_ERRORS',
             'REGISTRY_PROPAGATION_MARKERS',
             'DEPLOY_SUCCESS_MARKERS',
             '"no such manifest:"',
+            'Exact prebuilt image is not readable from the Cloudflare registry yet',
             'deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)',
             'def wait_for_runtime_revision(',
             '"/__muri/runtime-revision"',
@@ -2262,6 +2280,7 @@ def main() -> int:
     print(" - fast chat uses provider affinity plus rapid Gemini/NVIDIA/Qwen hedges with a 10s first-token ceiling")
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
+    print(" - production deploys pin an immutable GitHub-built image from Cloudflare managed registry")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
