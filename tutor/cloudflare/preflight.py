@@ -99,6 +99,38 @@ def validate_resend_deploy_policy() -> None:
         )
 
 
+
+def validate_single_owner_release() -> None:
+    """Cloudflare repo builds must never race the authoritative GitHub release."""
+    relative = "tutor/cloudflare/package.json"
+    content = require(relative)
+    if not content:
+        return
+    try:
+        package = json.loads(content)
+    except json.JSONDecodeError as exc:
+        failures.append(f"{relative} is not valid JSON: {exc}")
+        return
+    scripts = package.get("scripts") if isinstance(package, dict) else None
+    if not isinstance(scripts, dict):
+        failures.append(f"{relative} is missing scripts")
+        return
+    staging = str(scripts.get("deploy:staging") or "")
+    release = str(scripts.get("deploy:release") or "")
+    if "deploy_staging.py" in staging or "wrangler deploy" in staging:
+        failures.append(
+            f"{relative} lets Cloudflare repo builds deploy Tutor; deploy:staging must be a no-op delegation"
+        )
+    if "Cloudflare repo deploy is intentionally delegated to the GitHub release workflow" not in staging:
+        failures.append(
+            f"{relative} deploy:staging must explicitly delegate deployment to GitHub"
+        )
+    if "deploy_staging.py" not in release or "--containers-rollout=immediate" not in release:
+        failures.append(
+            f"{relative} deploy:release must run the verified Tutor deployment"
+        )
+
+
 def validate_bootstrap_fixture() -> None:
     """Exercise the Cloudflare settings bootstrap without real provider secrets."""
     bootstrap_path = ROOT / "tutor/railway/bootstrap_runtime.py"
@@ -285,6 +317,8 @@ def main() -> int:
             '"@cloudflare/containers": "0.3.7"',
             '"wrangler": "4.130.0"',
             '"deploy:staging"',
+            '"deploy:release"',
+            'Cloudflare repo deploy is intentionally delegated to the GitHub release workflow',
             'python deploy_staging.py',
             '--containers-rollout=immediate',
             '"check"',
@@ -339,10 +373,18 @@ def main() -> int:
             'REPO_ROOT = ROOT.parents[1]',
             'GENERATED_CONFIG = ROOT / "wrangler.deploy.generated.toml"',
             'PREBUILT_IMAGE_REPOSITORY = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor"',
+            'PREBUILT_IMAGE_NAME = "murikah-tutor"',
+            'RELEASE_OWNER_ENV = "MURIKAH_TUTOR_RELEASE_OWNER"',
+            'RELEASE_OWNER = "github-actions"',
             'def source_revision() -> str:',
             'git_object("HEAD:tutor")',
             'git_object("HEAD:docs/images/murikah_6.png")',
             'def prebuilt_image_tag(revision: str) -> str:',
+            'def require_release_owner() -> None:',
+            'def wait_for_prebuilt_image(',
+            '"containers", "images", "list"',
+            'Registry barrier passed: exact immutable image',
+            '"image_registry_doesnt_contain_image"',
             'def prepare_deploy_config(image_tag: str, revision: str) -> Path:',
             'image_marker = \'image = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor:main"\'',
             'config_path: Path=CONFIG',
@@ -1138,6 +1180,12 @@ def main() -> int:
             '--build-arg "MURIKAH_CLOUDFLARE_IMAGE_REV=${SOURCE_REVISION}"',
             "Publish immutable source image",
             "Publish immutable image to Cloudflare Registry",
+            "Deploy and verify exact Tutor release",
+            "MURIKAH_TUTOR_RELEASE_OWNER: github-actions",
+            "npm --prefix tutor/cloudflare run deploy:release",
+            "npm --prefix tutor/cloudflare run smoke:staging",
+            "Advance last-known-good aliases",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
             "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
             "CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
             'wrangler containers push "${cf_source}"',
@@ -2265,6 +2313,7 @@ def main() -> int:
 
     validate_persistence_migration_fixture()
     validate_resend_deploy_policy()
+    validate_single_owner_release()
     validate_bootstrap_fixture()
     validate_personalization_fixture()
 
@@ -2287,6 +2336,9 @@ def main() -> int:
     print(" - transient overload/capacity payloads trigger provider failover instead of rendering as Tutor answers")
     print(" - Cloudflare startup bypasses supervisord and starts FastAPI + Next.js directly")
     print(" - production deploys pin an immutable GitHub-built image from Cloudflare managed registry")
+    print(" - GitHub Actions is the sole Tutor release owner; Cloudflare repo deploys are inert")
+    print(" - exact immutable image visibility is proven before D1 migration or rollout")
+    print(" - mutable :main aliases advance only after live revision and smoke verification")
     print(" - stale Cloudflare container applications are detected and recycled during deploy")
     print(" - low-level container.running is authoritative for start eligibility")
     print(" - stale getState transitions cannot trigger duplicate start() calls")
