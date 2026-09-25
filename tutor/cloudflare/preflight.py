@@ -1135,7 +1135,13 @@ def main() -> int:
             "python tutor/cloudflare/preflight.py",
             "npm --prefix tutor/cloudflare run check",
             "Build pinned Tutor image",
+            '--build-arg "MURIKAH_CLOUDFLARE_IMAGE_REV=${SOURCE_REVISION}"',
             "Publish immutable source image",
+            "Publish immutable image to Cloudflare Registry",
+            "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            'wrangler containers push "${cf_source}"',
+            'wrangler containers push "${cf_main}"',
         ),
     )
     for phase6_test, marker in (
