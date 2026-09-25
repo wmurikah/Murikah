@@ -681,6 +681,8 @@ def main() -> int:
             'patch_markdown_tables(root)',
             'patch_mermaid(root)',
             'patch_chat_actions(root)',
+            'patch_chat_workspace(root)',
+            'murikah:open-workbench',
             'patch_visualizations(root)',
             'Open in Workbench',
             'Edit in Workbench',
@@ -702,6 +704,15 @@ def main() -> int:
             'Edit diagram',
             'openMurikahWorkbench',
             'renderer: "svg"',
+        ),
+    )
+    require_markers(
+        "tutor/WORKBENCH.md",
+        (
+            "Workbench MUST NOT sit on the ordinary Tutor response path.",
+            "Manual editing is client-side and MUST NOT call an LLM, provider, or Tutor API.",
+            "source-backed visualization results can open in Workbench",
+            "Subsequent Workbench development requirement",
         ),
     )
     require_markers(
