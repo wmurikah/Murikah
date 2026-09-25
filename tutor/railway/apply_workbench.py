@@ -251,6 +251,28 @@ def patch_chat_actions(root: Path) -> None:
     replace_once(path, old, new, "assistant Workbench action")
 
 
+def patch_chat_workspace(root: Path) -> None:
+    path = root / "web/features/chat/components/ChatWorkspace.tsx"
+    old = '''  const setViewerOpen = useCallback((next: boolean) => {
+    setViewerPanelOpen(next);
+    if (typeof window !== "undefined") {
+      browserStorage.writeRaw(
+        "local",
+        "dt:chat:viewer-panel",
+        next ? "1" : "0",
+      );
+    }
+  }, []);'''
+    new = old + '''
+  useEffect(() => {
+    const closeForWorkbench = () => setViewerOpen(false);
+    window.addEventListener("murikah:open-workbench", closeForWorkbench);
+    return () =>
+      window.removeEventListener("murikah:open-workbench", closeForWorkbench);
+  }, [setViewerOpen]);'''
+    replace_once(path, old, new, "Workbench closes Activity panel")
+
+
 def patch_visualizations(root: Path) -> None:
     path = root / "web/components/visualize/VisualizationViewer.tsx"
     replace_once(
@@ -379,6 +401,7 @@ def main() -> None:
     patch_markdown_tables(root)
     patch_mermaid(root)
     patch_chat_actions(root)
+    patch_chat_workspace(root)
     patch_visualizations(root)
     print("[Murikah Tutor] Workbench, editable visuals and copyable tables installed.")
 
