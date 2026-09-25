@@ -352,7 +352,7 @@ def main() -> int:
             'REGISTRY_PROPAGATION_MARKERS',
             'DEPLOY_SUCCESS_MARKERS',
             '"no such manifest:"',
-            'Exact prebuilt image is not readable from the Cloudflare registry yet',
+            'Exact prebuilt image is not readable from the',
             'deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)',
             'def wait_for_runtime_revision(',
             '"/__muri/runtime-revision"',
