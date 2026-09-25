@@ -1,0 +1,14 @@
+{
+  "template_id": "tpl_standard_midpoint_review",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "9b47bcfa3d04cfeed7b770d192774a4c9bc83beacb5e2c2a5fa45466e39a2587",
+  "sections": {
+    "manifest_defaults": {
+      "review_policy": {
+        "midpoint_day": 45
+      }
+    }
+  }
+}

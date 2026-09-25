@@ -1,0 +1,14 @@
+{
+  "template_id": "tpl_standard_final_review",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "85ded058d84ac0ceae69b761fc2d968722e6a190949530a064e67fa49286cb41",
+  "sections": {
+    "manifest_defaults": {
+      "review_policy": {
+        "final_review_day": 90
+      }
+    }
+  }
+}

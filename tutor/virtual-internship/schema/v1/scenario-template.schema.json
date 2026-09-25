@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://murikah.com/schemas/virtual-internship/scenario-template-v1.schema.json",
+  "title": "Murikah Virtual Internship Scenario Template v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template_id","template_version","schema_version","status","content_hash","sections"],
+  "properties": {
+    "template_id": {"type": "string","pattern": "^tpl_[a-z0-9_]{3,80}$"},
+    "template_version": {"type": "integer","minimum": 1},
+    "schema_version": {"const": 1},
+    "status": {"enum": ["published","retired"]},
+    "content_hash": {"type": "string","pattern": "^[0-9a-f]{64}$"},
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manifest_defaults": {"type": "object"},
+        "catalog_defaults": {"type": "object"},
+        "task_defaults": {"type": "object"},
+        "event_defaults": {"type": "object"},
+        "keyed_collections": {"type": "object"}
+      }
+    }
+  }
+}

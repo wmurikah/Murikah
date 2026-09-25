@@ -1,0 +1,17 @@
+{
+  "template_id": "tpl_common_workplace_communication",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "88e73f6c143ad019f3afef6a658ef29060394defc5e5d614f0fb0a8fda25e821",
+  "sections": {
+    "task_defaults": {
+      "allowed_tools": [
+        "document_editor"
+      ],
+      "revision_policy": {
+        "max_revisions": 2
+      }
+    }
+  }
+}

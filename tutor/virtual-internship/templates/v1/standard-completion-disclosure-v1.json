@@ -1,0 +1,13 @@
+{
+  "template_id": "tpl_standard_completion_disclosure",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "667ef818309ed5843b79374d2bed35c6c878caa768f99e14522fac842ea7b665",
+  "sections": {
+    "catalog_defaults": {
+      "completion_overview": "Duration is one requirement. Required assignments, reviews, evidence and the capstone and final review gates must also be met.",
+      "simulation_disclosure": "This is a simulated internship in a fictional workplace. It is not employment with a real organization."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "template_id": "tpl_shared_ethics_event_patterns",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "c61cba3860923f0d52ccfce5b83dd7a5606aec8a544c6b8fcc0c1de11777f535",
+  "sections": {
+    "event_defaults": {
+      "priority": 50,
+      "once": true
+    }
+  }
+}
