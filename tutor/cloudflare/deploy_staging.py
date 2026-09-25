@@ -25,6 +25,9 @@ TRANSIENT_DEPLOY_ERRORS = (
 REGISTRY_PROPAGATION_MARKERS = (
     "no such manifest:",
     "manifest unknown",
+    "manifest_unknown",
+    "manifest does not exist",
+    "image not found",
 )
 DEPLOY_SUCCESS_MARKERS = (
     "deployed murikah-tutor-container-staging triggers",
