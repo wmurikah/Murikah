@@ -723,18 +723,48 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
         return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
       }
 
+      let scenario: {
+        id: string;
+        scenario_pack_id: string;
+        version: number;
+        minimum_duration_days: number;
+        expected_workload_band: string;
+        content_hash: string;
+        manifest_ref: string;
+      } | null = null;
+      let qualifying = true;
+      let mode = 'standard';
+
+      const authority = await resolveCatalogStartAuthority(env.TUTOR_DB, selector, explicitVersionId);
+      if (authority.ok && authority.scenario) {
+        scenario = authority.scenario;
+        qualifying = authority.qualifying === true;
+        mode = authority.mode || (qualifying ? 'standard' : 'demo');
+      } else if (
+        ['sp_foundation_knowledge_work', 'foundation-knowledge-work'].includes(selector)
+      ) {
+        // Preserve the isolated Phase 1 lifecycle fixture without making it a catalog option.
+        scenario = await resolveScenarioVersion(env, selector, explicitVersionId);
+      } else {
+        const error = authority.error || 'scenario_version_not_available';
+        const status = ['scenario_version_required','scenario_version_retired','scenario_content_integrity_failed','catalog_authority_mismatch','completion_policy_missing'].includes(error) ? 409 : 404;
+        return persistenceJson({ error }, status);
+      }
+      if (!scenario) return persistenceJson({ error: 'scenario_version_not_available' }, 404);
+
+      // The current workspace has a single current-internship concept. Block all
+      // parallel starts so a practice session cannot compete with qualifying state.
       const active = await env.TUTOR_DB.prepare(
-        "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+        "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' LIMIT 1",
       )
         .bind(actorId)
         .first<{ id: string }>();
       if (active?.id) {
-        return persistenceJson({ error: 'active_internship_exists' }, 409);
+        return persistenceJson({ error: 'active_internship_exists', active_internship_id: active.id }, 409);
       }
 
-      const scenario = await resolveScenarioVersion(env, selector, explicitVersionId);
-      if (!scenario) return persistenceJson({ error: 'scenario_version_not_available' }, 404);
-
+      // Phase 1 storage keeps a 90-day floor for internship instances. Practice
+      // remains non-qualifying even though its authored task progression is shorter.
       const effectiveMinimumDays = Math.max(
         STANDARD_MINIMUM_INTERNSHIP_DAYS,
         Number(scenario.minimum_duration_days || 0),
@@ -755,12 +785,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           'INSERT INTO internship_instances(' +
             'id, learner_id, scenario_pack_id, scenario_version_id, mode, qualifying, status, lifecycle_stage, ' +
             'started_at, minimum_duration_days, target_end_at, stopped_at, completed_at, start_request_id, created_at, updated_at' +
-            ") VALUES (?, ?, ?, ?, 'standard', 1, 'active', 'started', ?, ?, ?, NULL, NULL, ?, ?, ?)",
+            ") VALUES (?, ?, ?, ?, ?, ?, 'active', 'started', ?, ?, ?, NULL, NULL, ?, ?, ?)",
         ).bind(
           internshipId,
           actorId,
           scenario.scenario_pack_id,
           scenario.id,
+          mode,
+          qualifying ? 1 : 0,
           now,
           effectiveMinimumDays,
           targetEndAt,
@@ -791,7 +823,7 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
           return persistenceJson({ ok: true, idempotent_replay: true, internship: status });
         }
         const active = await env.TUTOR_DB.prepare(
-          "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' AND qualifying = 1 LIMIT 1",
+          "SELECT id FROM internship_instances WHERE learner_id = ? AND status = 'active' LIMIT 1",
         )
           .bind(actorId)
           .first<{ id: string }>();
