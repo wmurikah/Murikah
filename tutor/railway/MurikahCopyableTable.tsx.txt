@@ -118,7 +118,7 @@ export default function MurikahCopyableTable({
           {outcome === "copied" ? "Copied" : outcome === "failed" ? "Retry" : "Copy"}
         </button>
       </div>
-      {children}
+      <div className="overflow-x-auto">{children}</div>
     </div>
   );
 }
