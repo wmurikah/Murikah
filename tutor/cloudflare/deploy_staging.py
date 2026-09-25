@@ -7,7 +7,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parents[1]
 CONFIG = ROOT / "wrangler.toml"
+GENERATED_CONFIG = ROOT / "wrangler.deploy.generated.toml"
+PREBUILT_IMAGE_REPOSITORY = "murikah-tutor"
 APP_NAME = "murikah-tutor-container-staging-TutorContainer"
 VERIFY_BASES = ("https://murikah-tutor-container-staging.hasspe.workers.dev","https://tutor.murikah.com")
 APPLICATION_NOT_FOUND = "APPLICATION_NOT_FOUND"
@@ -38,15 +41,57 @@ def wrangler_path() -> str:
         return found
     raise RuntimeError("wrangler executable was not found")
 
-def expected_image_revision() -> str:
-    text = CONFIG.read_text(encoding="utf-8")
-    match = re.search(r'MURIKAH_CLOUDFLARE_IMAGE_REV\s*=\s*"([^"]+)"', text)
-    if not match:
-        raise RuntimeError("MURIKAH_CLOUDFLARE_IMAGE_REV is missing from wrangler.toml")
-    return match.group(1)
+def source_revision() -> str:
+    def git_object(spec: str) -> str:
+        result = subprocess.run(
+            ["git", "rev-parse", spec],
+            cwd=REPO_ROOT,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        value = result.stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", value):
+            raise RuntimeError(f"unexpected git object id for {spec}: {value!r}")
+        return value
 
-def run_wrangler(*args: str, capture: bool=False, check: bool=True) -> subprocess.CompletedProcess[str]:
-    command = [wrangler_path(), *args, "--config", str(CONFIG)]
+    tutor_tree = git_object("HEAD:tutor")
+    logo_blob = git_object("HEAD:docs/images/murikah_6.png")
+    return f"{tutor_tree}-{logo_blob}"
+
+def prebuilt_image_tag(revision: str) -> str:
+    return f"{PREBUILT_IMAGE_REPOSITORY}:source-{revision}"
+
+def prepare_deploy_config(image_tag: str, revision: str) -> Path:
+    text = CONFIG.read_text(encoding="utf-8")
+    image_marker = 'image = "murikah-tutor:main"'
+    if text.count(image_marker) != 1:
+        raise RuntimeError("wrangler.toml must contain exactly one managed Tutor image fallback")
+    text = text.replace(image_marker, f'image = "{image_tag}"', 1)
+    text, replacements = re.subn(
+        r'(?m)^MURIKAH_CLOUDFLARE_IMAGE_REV = "[^"]+"$',
+        f'MURIKAH_CLOUDFLARE_IMAGE_REV = "{revision}"',
+        text,
+    )
+    if replacements != 1:
+        raise RuntimeError(
+            "wrangler.toml must contain exactly one MURIKAH_CLOUDFLARE_IMAGE_REV runtime variable"
+        )
+    GENERATED_CONFIG.write_text(text, encoding="utf-8")
+    print(
+        "[Murikah Tutor] Deployment pinned to prebuilt Cloudflare Registry image "
+        f"{image_tag}."
+    )
+    return GENERATED_CONFIG
+
+def run_wrangler(
+    *args: str,
+    capture: bool=False,
+    check: bool=True,
+    config_path: Path=CONFIG,
+) -> subprocess.CompletedProcess[str]:
+    command = [wrangler_path(), *args, "--config", str(config_path)]
     environment = os.environ.copy()
     environment["CI"] = "true"
     return subprocess.run(command, cwd=ROOT, env=environment, check=check, text=True,
@@ -75,42 +120,52 @@ def is_transient_deploy_error(output: str) -> bool:
     folded = output.casefold()
     return any(marker in folded for marker in TRANSIENT_DEPLOY_ERRORS)
 
-def deploy(*, attempts: int=8) -> str:
-    delays = (5,8,13,20,30,45,60)
+def deploy(*, attempts: int=12, config_path: Path=CONFIG) -> str:
+    delays = (5,10,15,20,30,45,60,60,60,60,60)
     last_output = ""
     for attempt in range(1, attempts+1):
-        result = run_wrangler("deploy","--containers-rollout=immediate",capture=True,check=False)
+        result = run_wrangler(
+            "deploy",
+            "--containers-rollout=immediate",
+            capture=True,
+            check=False,
+            config_path=config_path,
+        )
         emit_completed_process(result)
         last_output = f"{result.stdout or ''}\n{result.stderr or ''}"
         folded = last_output.casefold()
         registry_pending = any(marker in folded for marker in REGISTRY_PROPAGATION_MARKERS)
         deploy_succeeded = any(marker in folded for marker in DEPLOY_SUCCESS_MARKERS)
-        if result.returncode == 0 and deploy_succeeded:
-            # Wrangler can emit a transient "no such manifest" while its own
-            # internal rollout retry is still converging, then finish with a
-            # successful application update. Trust the final success marker
-            # rather than replaying the whole image build/deploy unnecessarily.
-            return last_output
-        if result.returncode == 0 and not registry_pending:
-            return last_output
-        if result.returncode == 0 and registry_pending:
+        if registry_pending:
             if attempt >= attempts:
                 raise RuntimeError(
-                    "Cloudflare accepted the deploy command but the container registry "
-                    "manifest was still unavailable after all propagation retries."
+                    "The exact prebuilt Tutor image was still unavailable in the "
+                    "Cloudflare managed registry after all bounded retries."
                 )
-            delay = max(20, delays[min(attempt-1,len(delays)-1)])
+            delay = delays[min(attempt-1,len(delays)-1)]
             print(
-                "[Murikah Tutor] Cloudflare accepted the Worker deploy before the "
-                f"container manifest became readable; retrying after {delay}s "
+                "[Murikah Tutor] Exact prebuilt image is not readable from the "
+                f"Cloudflare registry yet; retrying deploy after {delay}s "
                 f"({attempt}/{attempts})."
             )
             time.sleep(delay)
             continue
+        if result.returncode == 0 and deploy_succeeded:
+            return last_output
+        if result.returncode == 0:
+            return last_output
         if attempt >= attempts or not is_transient_deploy_error(last_output):
-            raise subprocess.CalledProcessError(result.returncode,result.args,output=result.stdout,stderr=result.stderr)
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                result.args,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
         delay = delays[min(attempt-1,len(delays)-1)]
-        print(f"[Murikah Tutor] Cloudflare container control plane is still converging; retrying deploy in {delay}s ({attempt}/{attempts}).")
+        print(
+            "[Murikah Tutor] Cloudflare container control plane is still converging; "
+            f"retrying deploy in {delay}s ({attempt}/{attempts})."
+        )
         time.sleep(delay)
     raise RuntimeError("Tutor deploy retry loop exhausted unexpectedly")
 
@@ -297,7 +352,11 @@ def refreshed_failure_detail(expected_revision: str) -> str:
         return f"diagnostics refresh failed: {type(exc).__name__}: {exc}"
 
 
-def recover_fresh_but_unready_runtime(expected_revision: str) -> tuple[dict[str,Any],str]:
+def recover_fresh_but_unready_runtime(
+    expected_revision: str,
+    *,
+    config_path: Path=CONFIG,
+) -> tuple[dict[str,Any],str]:
     """Retry one clean application creation after an image/registry readiness race.
 
     Cloudflare can report a successful Worker deploy while the freshly-pushed
@@ -316,7 +375,7 @@ def recover_fresh_but_unready_runtime(expected_revision: str) -> tuple[dict[str,
         print("[Murikah Tutor] Pre-recycle readiness diagnostics:\n" + before)
     recycle_tutor_application()
     time.sleep(20)
-    deploy()
+    deploy(config_path=config_path)
     fresh, report, base = verify_fresh_runtime(expected_revision, timeout_seconds=180)
     if not fresh:
         detail = refreshed_failure_detail(expected_revision)
@@ -337,62 +396,67 @@ def recover_fresh_but_unready_runtime(expected_revision: str) -> tuple[dict[str,
     return report, base
 
 def main() -> int:
-    expected_revision=expected_image_revision()
+    expected_revision=source_revision()
+    image_tag=prebuilt_image_tag(expected_revision)
     apply_persistence_migrations()
-    application_existed_before=bool(list_tutor_applications())
+    deploy_config=prepare_deploy_config(image_tag,expected_revision)
+    try:
+        application_existed_before=bool(list_tutor_applications())
 
-    deploy()
+        deploy(config_path=deploy_config)
 
-    # First verify the real application instance, not the isolated diagnostics
-    # instance. Give Cloudflare a short window to switch a warm container to the
-    # new image. If it stays stale or unknown, do one deterministic recreation.
-    fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=90)
-    if not fresh:
-        observed=str(status.get("imageRevision") or "").strip()
-        print(
-            "[Murikah Tutor] Main runtime did not switch to the deployed image "
-            f"(observed {observed or 'unknown'}, expected {expected_revision})."
-        )
-        if application_existed_before:
-            print(
-                "[Murikah Tutor] Recycling the stale/indeterminate container application once "
-                "so Cloudflare starts the deployed image cleanly."
-            )
-        else:
-            print(
-                "[Murikah Tutor] Newly-created application did not expose the "
-                "deployed image; recreating it once after registry propagation."
-            )
-        recycle_tutor_application()
-        time.sleep(15)
-        deploy()
-        fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=180)
+        # First verify the real application instance, not the isolated diagnostics
+        # instance. Give Cloudflare a short window to switch a warm container to the
+        # new image. If it stays stale or unknown, do one deterministic recreation.
+        fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=90)
         if not fresh:
             observed=str(status.get("imageRevision") or "").strip()
+            print(
+                "[Murikah Tutor] Main runtime did not switch to the deployed image "
+                f"(observed {observed or 'unknown'}, expected {expected_revision})."
+            )
+            if application_existed_before:
+                print(
+                    "[Murikah Tutor] Recycling the stale/indeterminate container application once "
+                    "so Cloudflare starts the deployed image cleanly."
+                )
+            else:
+                print(
+                    "[Murikah Tutor] Newly-created application did not expose the "
+                    "deployed image; recreating it once after registry propagation."
+                )
+            recycle_tutor_application()
+            time.sleep(15)
+            deploy(config_path=deploy_config)
+            fresh,status,base=wait_for_runtime_revision(expected_revision,timeout_seconds=180)
+            if not fresh:
+                observed=str(status.get("imageRevision") or "").strip()
+                detail=refreshed_failure_detail(expected_revision)
+                raise RuntimeError(
+                    "Tutor application was recreated but the real runtime still did "
+                    f"not expose image {expected_revision} (observed {observed or 'unknown'})"
+                    +(f"\n{detail}" if detail else "")
+                )
+
+        # Image identity is now authoritative. Only then wait for application health.
+        ready=wait_until_ready(base,timeout_seconds=300)
+        if ready.get("ready") is not True or ready.get("httpStatus")!=200:
+            # Refresh isolated diagnostics only for troubleshooting detail. Do not use
+            # its temporarily-unknown image revision as the rollout authority.
             detail=refreshed_failure_detail(expected_revision)
             raise RuntimeError(
-                "Tutor application was recreated but the real runtime still did "
-                f"not expose image {expected_revision} (observed {observed or 'unknown'})"
+                f"Tutor runtime is on image {expected_revision} but did not become "
+                "healthy on port 3782 within the readiness window"
                 +(f"\n{detail}" if detail else "")
             )
 
-    # Image identity is now authoritative. Only then wait for application health.
-    ready=wait_until_ready(base,timeout_seconds=300)
-    if ready.get("ready") is not True or ready.get("httpStatus")!=200:
-        # Refresh isolated diagnostics only for troubleshooting detail. Do not use
-        # its temporarily-unknown image revision as the rollout authority.
-        detail=refreshed_failure_detail(expected_revision)
-        raise RuntimeError(
-            f"Tutor runtime is on image {expected_revision} but did not become "
-            "healthy on port 3782 within the readiness window"
-            +(f"\n{detail}" if detail else "")
+        print(
+            f"[Murikah Tutor] Deployment verified: main runtime image "
+            f"{expected_revision}, port 3782 healthy."
         )
-
-    print(
-        f"[Murikah Tutor] Deployment verified: main runtime image "
-        f"{expected_revision}, port 3782 healthy."
-    )
-    return 0
+        return 0
+    finally:
+        GENERATED_CONFIG.unlink(missing_ok=True)
 
 if __name__=="__main__":
     try:
