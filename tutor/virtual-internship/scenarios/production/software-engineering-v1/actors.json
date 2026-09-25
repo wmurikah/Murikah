@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_software_supervisor",
+    "name": "Imani Kilonzo",
+    "actor_class": "supervisor",
+    "job_title": "Engineering Supervisor",
+    "department_id": "dept_software",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_policy",
+      "fact_software_method",
+      "fact_software_priority",
+      "fact_software_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_software_unlock_02",
+      "event_software_unlock_03",
+      "event_software_unlock_04",
+      "event_software_unlock_05",
+      "event_software_unlock_06",
+      "event_software_unlock_07",
+      "event_software_unlock_08",
+      "event_software_unlock_09",
+      "event_software_unlock_10",
+      "event_software_unlock_11",
+      "event_software_unlock_12",
+      "event_software_unlock_13",
+      "event_software_ethics",
+      "event_software_politics",
+      "event_software_midpoint",
+      "event_software_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_manager",
+    "name": "Theo Mwansa",
+    "actor_class": "manager",
+    "job_title": "Engineering Manager",
+    "department_id": "dept_software",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_policy",
+      "fact_software_method",
+      "fact_software_priority",
+      "fact_software_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_stakeholder",
+    "name": "Sara Abdi",
+    "actor_class": "stakeholder",
+    "job_title": "Product Manager",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_policy",
+      "fact_software_priority",
+      "fact_software_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_colleague",
+    "name": "Ben Ouma",
+    "actor_class": "colleague",
+    "job_title": "Software Engineer",
+    "department_id": "dept_software",
+    "reports_to_actor_id": "actor_software_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_policy",
+      "fact_software_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_software_peer",
+    "name": "Asha Wekesa",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_software",
+    "reports_to_actor_id": "actor_software_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_software_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

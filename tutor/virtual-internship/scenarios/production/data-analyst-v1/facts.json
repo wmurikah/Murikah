@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_data_policy",
+    "key": "data_work_policy",
+    "value": "Published analysis must document metric definitions, source limitations and material assumptions.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_method",
+    "key": "data_team_method",
+    "value": "Use reproducible analytical reasoning, data-quality checks and traceable calculations.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_data"
+    ],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_priority",
+    "key": "data_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_stakeholder",
+    "key": "data_stakeholder_constraint",
+    "value": "A commercial stakeholder wants a decision before all data-quality questions are resolved.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_hidden",
+    "key": "data_hidden_exception",
+    "value": "A synthetic source-system change explains part of the observed metric anomaly.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_ethics",
+    "key": "data_ethics_pressure",
+    "value": "A stakeholder will ask to omit a known data-quality limitation from the summary.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_data_review",
+    "key": "data_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_capstone",
+    "key": "data_capstone_context",
+    "value": "The capstone integrates data-quality assessment, metrics, analysis, visualization reasoning and stakeholder communication.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]
