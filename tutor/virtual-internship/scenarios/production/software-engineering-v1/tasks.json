@@ -1,0 +1,1625 @@
+[
+  {
+    "task_id": "task_software_01",
+    "authored_sequence": 1,
+    "title": "Complete engineering onboarding and repository orientation",
+    "category": "routine",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Understand the simulated product, team and safe working boundaries.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 5
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "meeting_notes"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_01_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_02",
+    "authored_sequence": 2,
+    "title": "Reproduce the reported issue from supplied evidence",
+    "category": "review",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Produce a reproducible problem statement without executing arbitrary code.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_01"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_debugging"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "issue_summary"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_02_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_03",
+    "authored_sequence": 3,
+    "title": "Clarify requirements and acceptance criteria",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Clarify functional and quality requirements.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_02"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 20
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_change_planning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "requirements_document"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_03_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_04",
+    "authored_sequence": 4,
+    "title": "Prepare a technical design note",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Design a scoped solution with risks and trade-offs.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_03"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 28
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_test_reasoning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "design_brief"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_04_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_05",
+    "authored_sequence": 5,
+    "title": "Review the relevant code path",
+    "category": "research",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Read supplied code and trace behavior.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_04"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 36
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_05_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_06",
+    "authored_sequence": 6,
+    "title": "Develop the testing strategy",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Define meaningful tests and expected results.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_05"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 44
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_debugging"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "test_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_06_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "test_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_07",
+    "authored_sequence": 7,
+    "title": "Prepare for the midpoint performance review",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Review evidence quality and development priorities.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_06"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 50
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_change_planning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_07_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_08",
+    "authored_sequence": 8,
+    "title": "Investigate an intermittent defect",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_software_manager",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Debug the synthetic defect using supplied traces and evidence.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_07"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 58
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_test_reasoning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "incident_report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_08_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "incident_report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_09",
+    "authored_sequence": 9,
+    "title": "Respond to a simulated code review",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_software_manager",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Address review comments with technical reasoning.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_08"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 66
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "client_response"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_09_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "client_response"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "client_response"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "client_response"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_10",
+    "authored_sequence": 10,
+    "title": "Draft the documentation change",
+    "category": "review",
+    "assigned_by_actor_id": "actor_software_manager",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Make the proposed change understandable to future maintainers.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_09"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 72
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_debugging"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_10_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_11",
+    "authored_sequence": 11,
+    "title": "Plan the release and rollback approach",
+    "category": "decision",
+    "assigned_by_actor_id": "actor_software_manager",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Plan safe change delivery, monitoring and rollback.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_10"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 80
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_change_planning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "project_plan"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_11_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "project_plan"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_12",
+    "authored_sequence": 12,
+    "title": "Complete the engineering capstone proposal",
+    "category": "capstone",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Integrate design, testing, security and communication.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_11"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 88
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_test_reasoning"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_12_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_software_13",
+    "authored_sequence": 13,
+    "title": "Present final engineering recommendations",
+    "category": "presentation",
+    "assigned_by_actor_id": "actor_software_supervisor",
+    "business_context": "A fictional engineering team must resolve software problems using supplied code excerpts, logs and requirements while preserving safe execution boundaries.",
+    "learner_objective": "Present the proposal, limitations and implementation sequence.",
+    "brief": "Use only the supplied fictional repository excerpts and evidence. Do not execute arbitrary learner-submitted code in the main Tutor container.",
+    "dependencies": [
+      "task_software_12"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 90
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "code_reader"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_software_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_issue_triage"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "presentation"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_software_13_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]

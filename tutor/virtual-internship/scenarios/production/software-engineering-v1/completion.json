@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "required_task_ids": [
+    "task_software_01",
+    "task_software_02",
+    "task_software_03",
+    "task_software_04",
+    "task_software_05",
+    "task_software_06",
+    "task_software_07",
+    "task_software_08",
+    "task_software_09",
+    "task_software_10",
+    "task_software_11",
+    "task_software_12",
+    "task_software_13"
+  ],
+  "required_review_types": [
+    "midpoint"
+  ],
+  "required_competencies": [
+    {
+      "competency_id": "comp_issue_triage",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_debugging",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_change_planning",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_test_reasoning",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    }
+  ],
+  "capstone_task_ids": [
+    "task_software_12"
+  ],
+  "require_final_review": true,
+  "final_review_after_capstone": true
+}

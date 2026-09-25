@@ -1,0 +1,77 @@
+{
+  "organization_id": "org_software",
+  "name": "Cedarline Systems",
+  "fictional": true,
+  "sector": "Software technology",
+  "country_region": "Fictional East African regional market",
+  "description": "A fictional software company used to simulate product engineering work without access to real production systems.",
+  "products_services": [
+    "workflow software",
+    "developer tools"
+  ],
+  "departments": [
+    {
+      "id": "dept_software",
+      "name": "Engineering"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    },
+    {
+      "id": "dept_leadership",
+      "name": "Leadership"
+    }
+  ],
+  "systems": [
+    "Cedarline App",
+    "IssueTrack"
+  ],
+  "process_references": [
+    "issue triage",
+    "change review",
+    "release planning"
+  ],
+  "vocabulary": [
+    "reproduction",
+    "acceptance criteria",
+    "regression",
+    "change risk"
+  ],
+  "communication_norms": [
+    "Separate facts from assumptions.",
+    "Document material decisions and evidence.",
+    "Escalate conflicts through the simulated reporting line."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical internship timing."
+  },
+  "reporting_relationships": [
+    {
+      "manager_actor_id": "actor_software_supervisor",
+      "direct_report_actor_id": "actor_software_colleague"
+    },
+    {
+      "manager_actor_id": "actor_software_supervisor",
+      "direct_report_actor_id": "actor_software_peer"
+    }
+  ],
+  "organization_chart_entries": [
+    {
+      "department_id": "dept_software",
+      "label": "Engineering"
+    },
+    {
+      "department_id": "dept_business",
+      "label": "Business Operations"
+    }
+  ]
+}

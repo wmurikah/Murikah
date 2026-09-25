@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "required_task_ids": [
+    "task_data_01",
+    "task_data_02",
+    "task_data_03",
+    "task_data_04",
+    "task_data_05",
+    "task_data_06",
+    "task_data_07",
+    "task_data_08",
+    "task_data_09",
+    "task_data_10",
+    "task_data_11",
+    "task_data_12",
+    "task_data_13"
+  ],
+  "required_review_types": [
+    "midpoint"
+  ],
+  "required_competencies": [
+    {
+      "competency_id": "comp_data_understanding",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_metric_definition",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_data_quality",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_analytical_interpretation",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    }
+  ],
+  "capstone_task_ids": [
+    "task_data_12"
+  ],
+  "require_final_review": true,
+  "final_review_after_capstone": true
+}
