@@ -294,7 +294,7 @@ def patch_chat_actions(root: Path) -> None:
 
 def patch_chat_workspace(root: Path) -> None:
     path = root / "web/features/chat/components/ChatWorkspace.tsx"
-    old = '''  const setViewerOpen = useCallback((next: boolean) => {
+    set_open = '''  const setViewerOpen = useCallback((next: boolean) => {
     setViewerPanelOpen(next);
     if (typeof window !== "undefined") {
       browserStorage.writeRaw(
@@ -304,14 +304,53 @@ def patch_chat_workspace(root: Path) -> None:
       );
     }
   }, []);'''
-    new = old + '''
+    set_open_new = '''  const setViewerOpen = useCallback((next: boolean) => {
+    setViewerPanelOpen(next);
+    if (typeof window !== "undefined") {
+      if (next) window.dispatchEvent(new Event("murikah:close-workbench"));
+      browserStorage.writeRaw(
+        "local",
+        "dt:chat:viewer-panel",
+        next ? "1" : "0",
+      );
+    }
+  }, []);
   useEffect(() => {
-    const closeForWorkbench = () => setViewerOpen(false);
-    window.addEventListener("murikah:open-workbench", closeForWorkbench);
+    const closeActivityForWorkbench = () => setViewerPanelOpen(false);
+    window.addEventListener("murikah:open-workbench", closeActivityForWorkbench);
     return () =>
-      window.removeEventListener("murikah:open-workbench", closeForWorkbench);
-  }, [setViewerOpen]);'''
-    replace_once(path, old, new, "Workbench closes Activity panel")
+      window.removeEventListener("murikah:open-workbench", closeActivityForWorkbench);
+  }, []);'''
+    replace_once(path, set_open, set_open_new, "Workbench and Activity ownership")
+
+    toggle = '''  const toggleViewerPanel = useCallback(() => {
+    setViewerPanelOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        browserStorage.writeRaw(
+          "local",
+          "dt:chat:viewer-panel",
+          next ? "1" : "0",
+        );
+      }
+      return next;
+    });
+  }, []);'''
+    toggle_new = '''  const toggleViewerPanel = useCallback(() => {
+    setViewerPanelOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        if (next) window.dispatchEvent(new Event("murikah:close-workbench"));
+        browserStorage.writeRaw(
+          "local",
+          "dt:chat:viewer-panel",
+          next ? "1" : "0",
+        );
+      }
+      return next;
+    });
+  }, []);'''
+    replace_once(path, toggle, toggle_new, "Activity closes Workbench")
 
 
 def patch_visualizations(root: Path) -> None:
