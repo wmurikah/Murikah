@@ -21,7 +21,7 @@ concurrency:
   group: tutor-image-${{ github.ref }}
   # Never cancel an in-flight main release after it has started publishing.
   # Pull-request validation remains replaceable by newer commits.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-and-publish:
