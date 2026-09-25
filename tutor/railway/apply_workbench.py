@@ -93,7 +93,7 @@ def patch_markdown_tables(root: Path) -> None:
     simple_normal = '''    table: ({ node, children, ...props }: any) =>
       hasRenderableChildren(children) ? (
         <div
-          className={`rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
+          className={`overflow-x-auto rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
         >
           <table
             className="min-w-full divide-y divide-[var(--border)] text-sm"
@@ -106,7 +106,7 @@ def patch_markdown_tables(root: Path) -> None:
     simple_normal_new = '''    table: ({ node, children, ...props }: any) =>
       hasRenderableChildren(children) ? (
         <MurikahCopyableTable
-          className={`overflow-x-auto rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
+          className={`rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
         >
           <table
             className="min-w-full divide-y divide-[var(--border)] text-sm"
@@ -139,7 +139,7 @@ def patch_markdown_tables(root: Path) -> None:
     rich_normal_new = '''    table: ({ node, children, ...props }: any) =>
       hasRenderableChildren(children) ? (
         <MurikahCopyableTable
-          className={`overflow-x-auto rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
+          className={`rounded-lg border border-[var(--border)] shadow-sm ${gap}`}
           {...lineAttr(node)}
         >
           <table
