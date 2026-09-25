@@ -7,6 +7,7 @@ import { handlePhase6AssessmentPersistenceRoute } from './virtual_internship_pha
 import { handlePhase7PassportPersistenceRoute } from './virtual_internship_phase7';
 import { handlePhase8CompletionPersistenceRoute } from './virtual_internship_phase8';
 import { handlePhase9DocumentPersistenceRoute } from './virtual_internship_phase9';
+import { handlePhase10CatalogPersistenceRoute, resolveCatalogStartAuthority } from './virtual_internship_phase10';
 
 type PersistenceRunResult = { meta?: { changes?: number } };
 type PersistenceStatement = {
@@ -656,6 +657,14 @@ async function handlePersistence(request: Request, env: TutorEnv, url: URL): Pro
     now,
   );
   if (phase9Response) return phase9Response;
+
+  const phase10Response = await handlePhase10CatalogPersistenceRoute(
+    request,
+    { TUTOR_DB: env.TUTOR_DB },
+    route,
+    now,
+  );
+  if (phase10Response) return phase10Response;
 
   if (route === '/scenario-version/resolve' && request.method === 'POST') {
     const body = await requestJson(request);
