@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "check": "python -m py_compile deploy_staging.py && python validate_persistence_config.py && python prepare_runtime_proxy.py && wrangler deploy --dry-run --config wrangler.toml --outdir .wrangler/dry-run",
-    "deploy:staging": "python validate_persistence_config.py && python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate",
+    "deploy:staging": "node -e \"console.log('[Murikah Tutor] Cloudflare repo deploy is intentionally delegated to the GitHub release workflow; no deployment is performed here.')\"",
     "smoke:staging": "python smoke_staging.py",
-    "dev": "wrangler dev --config wrangler.toml"
+    "dev": "wrangler dev --config wrangler.toml",
+    "deploy:release": "python validate_persistence_config.py && python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate"
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7"

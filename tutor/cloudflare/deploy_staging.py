@@ -11,6 +11,9 @@ REPO_ROOT = ROOT.parents[1]
 CONFIG = ROOT / "wrangler.toml"
 GENERATED_CONFIG = ROOT / "wrangler.deploy.generated.toml"
 PREBUILT_IMAGE_REPOSITORY = "registry.cloudflare.com/8332366fc1c7413c55a9fc5cc556b082/murikah-tutor"
+PREBUILT_IMAGE_NAME = "murikah-tutor"
+RELEASE_OWNER_ENV = "MURIKAH_TUTOR_RELEASE_OWNER"
+RELEASE_OWNER = "github-actions"
 APP_NAME = "murikah-tutor-container-staging-TutorContainer"
 VERIFY_BASES = ("https://murikah-tutor-container-staging.hasspe.workers.dev","https://tutor.murikah.com")
 APPLICATION_NOT_FOUND = "APPLICATION_NOT_FOUND"
@@ -28,6 +31,7 @@ REGISTRY_PROPAGATION_MARKERS = (
     "manifest_unknown",
     "manifest does not exist",
     "image not found",
+    "image_registry_doesnt_contain_image",
 )
 DEPLOY_SUCCESS_MARKERS = (
     "deployed murikah-tutor-container-staging triggers",
@@ -65,6 +69,60 @@ def source_revision() -> str:
 
 def prebuilt_image_tag(revision: str) -> str:
     return f"{PREBUILT_IMAGE_REPOSITORY}:source-{revision}"
+
+def require_release_owner() -> None:
+    owner = os.environ.get(RELEASE_OWNER_ENV, "").strip()
+    if owner != RELEASE_OWNER:
+        raise RuntimeError(
+            "Tutor production deployment is single-owner. "
+            f"Set {RELEASE_OWNER_ENV}={RELEASE_OWNER!r} only from the GitHub release workflow."
+        )
+
+def wait_for_prebuilt_image(
+    expected_revision: str,
+    *,
+    timeout_seconds: int=180,
+) -> None:
+    expected_tag = f"source-{expected_revision}"
+    deadline = time.monotonic() + timeout_seconds
+    last_detail = ""
+    while time.monotonic() < deadline:
+        result = run_wrangler(
+            "containers", "images", "list",
+            "--json", "--filter", f"^{PREBUILT_IMAGE_NAME}$",
+            capture=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            try:
+                repositories = parse_json_output(result.stdout or "[]")
+                if isinstance(repositories, list):
+                    for repository in repositories:
+                        if not isinstance(repository, dict):
+                            continue
+                        if str(repository.get("name") or "") != PREBUILT_IMAGE_NAME:
+                            continue
+                        tags = repository.get("tags")
+                        if isinstance(tags, list) and expected_tag in {str(tag) for tag in tags}:
+                            print(
+                                "[Murikah Tutor] Registry barrier passed: exact immutable image "
+                                f"{PREBUILT_IMAGE_NAME}:{expected_tag} is visible."
+                            )
+                            return
+                last_detail = f"tag {expected_tag!r} not present in registry catalog"
+            except Exception as exc:
+                last_detail = f"registry catalog parse failed: {type(exc).__name__}: {exc}"
+        else:
+            last_detail = (
+                (result.stderr or result.stdout or "registry catalog command failed")
+                .strip()
+                .splitlines()[-1]
+            )
+        time.sleep(3)
+    raise RuntimeError(
+        "Cloudflare registry barrier timed out before deployment: "
+        f"{last_detail or 'exact immutable image did not become visible'}"
+    )
 
 def prepare_deploy_config(image_tag: str, revision: str) -> Path:
     text = CONFIG.read_text(encoding="utf-8")
@@ -399,11 +457,15 @@ def recover_fresh_but_unready_runtime(
     return report, base
 
 def main() -> int:
+    require_release_owner()
     expected_revision=source_revision()
     image_tag=prebuilt_image_tag(expected_revision)
-    apply_persistence_migrations()
     deploy_config=prepare_deploy_config(image_tag,expected_revision)
     try:
+        # A release is not allowed to mutate schema or application state until
+        # its exact immutable container artifact is visible in Cloudflare.
+        wait_for_prebuilt_image(expected_revision)
+        apply_persistence_migrations()
         application_existed_before=bool(list_tutor_applications())
 
         deploy(config_path=deploy_config)
