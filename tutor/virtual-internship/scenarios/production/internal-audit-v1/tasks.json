@@ -1,0 +1,1625 @@
+[
+  {
+    "task_id": "task_audit_01",
+    "authored_sequence": 1,
+    "title": "Complete onboarding and independence note",
+    "category": "routine",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Understand the simulated organization and independence expectations.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 5
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "meeting_notes"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_01_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_02",
+    "authored_sequence": 2,
+    "title": "Document the order-to-cash walkthrough",
+    "category": "review",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Capture the process flow and key controls.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_01"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_reconciliation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_02_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_03",
+    "authored_sequence": 3,
+    "title": "Prepare the audit planning note",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Set scope, objectives and evidence needs.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_02"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 20
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_investigation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_03_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_04",
+    "authored_sequence": 4,
+    "title": "Build the risk and control matrix",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Assess risks and map controls to risks.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_03"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 28
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_written_communication"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_04_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_05",
+    "authored_sequence": 5,
+    "title": "Create the evidence index and sampling plan",
+    "category": "research",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Plan evidence gathering and sampling.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_04"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 36
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_05_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_06",
+    "authored_sequence": 6,
+    "title": "Perform the reconciliation and analytical review",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Test evidence and reconcile synthetic records.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_05"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 44
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_reconciliation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_06_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_07",
+    "authored_sequence": 7,
+    "title": "Prepare for the midpoint performance review",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Reflect on evidence quality and development priorities.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_06"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 50
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_investigation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_07_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_08",
+    "authored_sequence": 8,
+    "title": "Investigate a control exception",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_audit_manager",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Investigate the synthetic exception without assuming a cause.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_07"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 58
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_written_communication"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_08_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_09",
+    "authored_sequence": 9,
+    "title": "Draft stakeholder management communication",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_audit_manager",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Communicate evidence needs professionally.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_08"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 66
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "email"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_09_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "email"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "email"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "email"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_10",
+    "authored_sequence": 10,
+    "title": "Develop the audit finding",
+    "category": "review",
+    "assigned_by_actor_id": "actor_audit_manager",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Develop a supported issue with criteria, condition, cause, effect and action.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_09"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 72
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_reconciliation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "issue_summary"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_10_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "issue_summary"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_11",
+    "authored_sequence": 11,
+    "title": "Revise the working paper independently",
+    "category": "decision",
+    "assigned_by_actor_id": "actor_audit_manager",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Respond to review comments with increasing independence.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_10"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 80
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_investigation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_11_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_12",
+    "authored_sequence": 12,
+    "title": "Complete the audit capstone",
+    "category": "capstone",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Integrate planning, fieldwork and communication into a defensible capstone.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_11"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 88
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_written_communication"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_12_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_audit_13",
+    "authored_sequence": 13,
+    "title": "Present the final audit summary",
+    "category": "presentation",
+    "assigned_by_actor_id": "actor_audit_supervisor",
+    "business_context": "A fictional assurance engagement requires defensible planning, evidence, analysis and communication across business stakeholders.",
+    "learner_objective": "Present conclusions, limitations and next actions.",
+    "brief": "Use only fictional case material and learner-visible evidence. Record assumptions, sources and unresolved questions.",
+    "dependencies": [
+      "task_audit_12"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 90
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_audit_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_process_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "presentation"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_audit_13_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite submitted work showing how the requested outcome was addressed.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite sections showing evidence use, analysis or clearly stated uncertainty.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite structure, explanation, labels or traceability elements.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]

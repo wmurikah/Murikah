@@ -1,0 +1,16 @@
+[
+  {
+    "decision_id": "decision_audit_ethics",
+    "label": "How will you respond to the workplace pressure?",
+    "options": [
+      {
+        "option_id": "clarify",
+        "label": "Clarify the evidence and expectations before proceeding."
+      },
+      {
+        "option_id": "escalate",
+        "label": "Escalate through the simulated reporting line with documented evidence."
+      }
+    ]
+  }
+]

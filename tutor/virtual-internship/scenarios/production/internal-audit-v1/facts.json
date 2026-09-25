@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_audit_policy",
+    "key": "audit_work_policy",
+    "value": "Professional assurance work must be supported by traceable evidence and documented assumptions.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_policy",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_method",
+    "key": "audit_team_method",
+    "value": "Use the audit methodology, retain source references and distinguish evidence from inference.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_audit"
+    ],
+    "source": "fictional_methodology",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_priority",
+    "key": "audit_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "workplace_update",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_stakeholder",
+    "key": "audit_stakeholder_constraint",
+    "value": "Operations has a competing close deadline.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_stakeholder_note",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_hidden",
+    "key": "audit_hidden_exception",
+    "value": "A material control exception is present in the synthetic case data and should be discovered through the authored work.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "sealed_case_file",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_ethics",
+    "key": "audit_ethics_pressure",
+    "value": "A stakeholder will ask for a faster conclusion than the evidence currently supports.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "scheduled_event",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_audit_review",
+    "key": "audit_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "review_schedule",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_audit_capstone",
+    "key": "audit_capstone_context",
+    "value": "The capstone combines planning, fieldwork, issue development and stakeholder communication evidence.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_file",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]

@@ -1,0 +1,77 @@
+{
+  "organization_id": "org_audit",
+  "name": "Aster Vale Services Group",
+  "fictional": true,
+  "sector": "Diversified services",
+  "country_region": "Fictional East African regional market",
+  "description": "A fictional regional services group used to simulate professional internal audit work without real employer data.",
+  "products_services": [
+    "business services",
+    "regional operations"
+  ],
+  "departments": [
+    {
+      "id": "dept_audit",
+      "name": "Internal Audit"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    },
+    {
+      "id": "dept_leadership",
+      "name": "Leadership"
+    }
+  ],
+  "systems": [
+    "Aster ERP",
+    "ControlDesk"
+  ],
+  "process_references": [
+    "order-to-cash",
+    "procure-to-pay",
+    "monthly close"
+  ],
+  "vocabulary": [
+    "control objective",
+    "walkthrough",
+    "working paper",
+    "finding"
+  ],
+  "communication_norms": [
+    "Separate facts from assumptions.",
+    "Document material decisions and evidence.",
+    "Escalate conflicts through the simulated reporting line."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical internship timing."
+  },
+  "reporting_relationships": [
+    {
+      "manager_actor_id": "actor_audit_supervisor",
+      "direct_report_actor_id": "actor_audit_colleague"
+    },
+    {
+      "manager_actor_id": "actor_audit_supervisor",
+      "direct_report_actor_id": "actor_audit_peer"
+    }
+  ],
+  "organization_chart_entries": [
+    {
+      "department_id": "dept_audit",
+      "label": "Internal Audit"
+    },
+    {
+      "department_id": "dept_business",
+      "label": "Business Operations"
+    }
+  ]
+}

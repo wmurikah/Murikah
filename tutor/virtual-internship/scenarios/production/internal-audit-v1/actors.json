@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_audit_supervisor",
+    "name": "Nia Otieno",
+    "actor_class": "supervisor",
+    "job_title": "Internal Audit Supervisor",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_policy",
+      "fact_audit_method",
+      "fact_audit_priority",
+      "fact_audit_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_audit_unlock_02",
+      "event_audit_unlock_03",
+      "event_audit_unlock_04",
+      "event_audit_unlock_05",
+      "event_audit_unlock_06",
+      "event_audit_unlock_07",
+      "event_audit_unlock_08",
+      "event_audit_unlock_09",
+      "event_audit_unlock_10",
+      "event_audit_unlock_11",
+      "event_audit_unlock_12",
+      "event_audit_unlock_13",
+      "event_audit_ethics",
+      "event_audit_politics",
+      "event_audit_midpoint",
+      "event_audit_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_manager",
+    "name": "Jonas Mbeki",
+    "actor_class": "manager",
+    "job_title": "Head of Assurance",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_policy",
+      "fact_audit_method",
+      "fact_audit_priority",
+      "fact_audit_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_stakeholder",
+    "name": "Amina Farah",
+    "actor_class": "stakeholder",
+    "job_title": "Operations Manager",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_policy",
+      "fact_audit_priority",
+      "fact_audit_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_colleague",
+    "name": "Eli Kamau",
+    "actor_class": "colleague",
+    "job_title": "Senior Internal Auditor",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": "actor_audit_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_policy",
+      "fact_audit_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_audit_peer",
+    "name": "Ruth Achieng",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_audit",
+    "reports_to_actor_id": "actor_audit_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_audit_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]
