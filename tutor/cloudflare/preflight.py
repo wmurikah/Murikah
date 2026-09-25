@@ -587,6 +587,14 @@ def main() -> int:
             'COPY tutor/railway/brand_chat_status.py /opt/murikah/brand_chat_status.py',
             'COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py',
             'python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor',
+            'COPY tutor/railway/apply_workbench.py /opt/murikah/apply_workbench.py',
+            'COPY tutor/railway/murikah-workbench.ts.txt /opt/murikah/murikah-workbench.ts',
+            'COPY tutor/railway/MurikahWorkbenchHost.tsx.txt /opt/murikah/MurikahWorkbenchHost.tsx',
+            'COPY tutor/railway/MurikahWorkbenchPanel.tsx.txt /opt/murikah/MurikahWorkbenchPanel.tsx',
+            'COPY tutor/railway/MurikahCopyableTable.tsx.txt /opt/murikah/MurikahCopyableTable.tsx',
+            'python /opt/murikah/apply_workbench.py /src/DeepTutor',
+            'COPY tutor/tests/workbench.spec.tsx.txt ./tests/integration/workbench.spec.tsx',
+            'tests/integration/workbench.spec.tsx',
             'COPY tutor/railway/add_virtual_internship_placeholder.py /opt/murikah/add_virtual_internship_placeholder.py',
             'COPY tutor/railway/murikah-virtual-internship-page.tsx.txt /opt/murikah/murikah-virtual-internship-page.tsx',
             'python /opt/murikah/add_virtual_internship_placeholder.py /src/DeepTutor /opt/murikah/murikah-virtual-internship-page.tsx',
@@ -626,6 +634,112 @@ def main() -> int:
             'ENTRYPOINT ["/app/murikah-tutor-entrypoint.sh"]',
         ),
     )
+    require_markers(
+        "tutor/railway/MurikahWorkbenchHost.tsx.txt",
+        (
+            'dynamic(() => import("./MurikahWorkbenchPanel")',
+            'MURIKAH_WORKBENCH_CLOSE_EVENT',
+            'MURIKAH_WORKBENCH_OPEN_EVENT',
+            'aria-label="Murikah Workbench"',
+            'md:w-[min(46vw,720px)]',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahWorkbenchPanel.tsx.txt",
+        (
+            'murikah:workbench:v1:',
+            'MAX_DRAFT_CHARS = 500_000',
+            'Manual edits stay in this browser and do not call a model.',
+            'content === initialRef.current && versions.length === 0',
+            'Clear local',
+            'renderer === "visualization-code"',
+            'renderer === "visualization-payload"',
+            'sandbox=""',
+            'sandbox="allow-scripts"',
+            'workbenchMode',
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/MurikahWorkbenchPanel.tsx.txt",
+        (
+            'fetch(',
+            'apiFetch(',
+            '/api/',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahCopyableTable.tsx.txt",
+        (
+            'ClipboardItem',
+            '"text/plain"',
+            '"text/html"',
+            'tableToTsv',
+            'Edit table in Workbench',
+        ),
+    )
+    forbid_markers(
+        "tutor/railway/MurikahCopyableTable.tsx.txt",
+        (
+            'sourceId: `table:${content.slice',
+        ),
+    )
+
+    require_markers(
+        "tutor/railway/apply_workbench.py",
+        (
+            'patch_app_shell(root)',
+            'patch_markdown_tables(root)',
+            'patch_mermaid(root)',
+            'patch_code_blocks(root)',
+            'Edit code in Workbench',
+            'patch_chat_actions(root)',
+            'patch_chat_workspace(root)',
+            'murikah:open-workbench',
+            'murikah:close-workbench',
+            'patch_visualizations(root)',
+            'Open in Workbench',
+            'Edit in Workbench',
+            'visualization-payload',
+            'workbenchMode = false',
+        ),
+    )
+    require_markers(
+        "tutor/railway/MurikahDiagramStudio.tsx.txt",
+        (
+            'Edit in Workbench',
+            'renderer: "svg"',
+            'openMurikahWorkbench',
+        ),
+    )
+    require_markers(
+        "tutor/railway/enhance_guest_diagram.py",
+        (
+            'Edit diagram',
+            'openMurikahWorkbench',
+            'renderer: "svg"',
+        ),
+    )
+    require_markers(
+        "tutor/WORKBENCH.md",
+        (
+            "Workbench MUST NOT sit on the ordinary Tutor response path.",
+            "Manual editing is client-side and MUST NOT call an LLM, provider, or Tutor API.",
+            "source-backed visualization results can open in Workbench",
+            "Subsequent Workbench development requirement",
+        ),
+    )
+    require_markers(
+        "tutor/tests/workbench.spec.tsx.txt",
+        (
+            'copies rendered tables as tab-separated text',
+            'never calls the network',
+            'does not persist an untouched Tutor response',
+            'edits table cells as structured rows',
+            'script-disabled isolated frame',
+            'keeps explicit local versions',
+        ),
+    )
+
     require_markers(
         "tutor/cloudflare/src/index.ts",
         (
@@ -2373,6 +2487,10 @@ def main() -> int:
     print(" - Math Animator planning/summary JSON stages use bounded multi-provider recovery with deterministic fallbacks")
     print(" - Math Animator code generation gets an independent provider fallback and raw JSON/provider errors stay out of learner UI")
     print(" - Diagram Design has a real page scroller and renders its SVG before explanation")
+    print(" - Murikah Workbench lazy-loads only after user opt-in; manual editing makes no model or API call")
+    print(" - Markdown tables copy as HTML plus TSV and can open as structured editable tables")
+    print(" - source-backed Mermaid, SVG, Chart.js, HTML, plugin and GeoGebra visualizations can open in Workbench")
+    print(" - Workbench SVG/HTML previews remain sandboxed and browser-local drafts are size/version bounded")
     print(" - Deep Solve performs one hidden final repair before surfacing an empty-answer failure")
     print(" - production persistence cutover remains gated on the destructive container-replacement acceptance test")
     return 0

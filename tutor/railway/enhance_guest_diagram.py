@@ -103,7 +103,23 @@ function DiagramMessage({ content }: { content: string }) {
           loading="lazy"
         />
       </div>
-      <p className="text-[11px] leading-5 text-[var(--muted-foreground)]">Diagram preview is isolated from the Tutor page and cannot run scripts or load external resources.</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] leading-5 text-[var(--muted-foreground)]">Diagram preview is isolated from the Tutor page and cannot run scripts or load external resources.</p>
+        <button
+          type="button"
+          onClick={() =>
+            openMurikahWorkbench({
+              kind: "diagram",
+              renderer: "svg",
+              title: "Tutor diagram",
+              content: diagram.svg,
+            })
+          }
+          className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)]/60 hover:text-[var(--foreground)]"
+        >
+          Edit diagram
+        </button>
+      </div>
     </div>
   );
 }

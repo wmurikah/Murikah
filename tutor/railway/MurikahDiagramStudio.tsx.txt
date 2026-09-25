@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, LoaderCircle, Sparkles, WandSparkles } from "lucide-react";
+import { Download, FilePenLine, LoaderCircle, Sparkles, WandSparkles } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
+import { openMurikahWorkbench } from "@/lib/murikah-workbench";
 
 const DIAGRAM_TYPES = [
   "Auto",
@@ -210,14 +211,32 @@ export default function MurikahDiagramStudio() {
               Turn a concept, process, architecture, decision or data story into a restrained editorial diagram. Choose a grammar yourself or let Tutor select one.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={downloadSvg}
-            disabled={!diagram?.svg}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Download size={16} /> Download SVG
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                diagram?.svg &&
+                openMurikahWorkbench({
+                  kind: "diagram",
+                  renderer: "svg",
+                  title: prompt.trim() || "Murikah diagram",
+                  content: diagram.svg,
+                })
+              }
+              disabled={!diagram?.svg}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <FilePenLine size={16} /> Edit in Workbench
+            </button>
+            <button
+              type="button"
+              onClick={downloadSvg}
+              disabled={!diagram?.svg}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={16} /> Download SVG
+            </button>
+          </div>
         </div>
 
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm sm:p-5">

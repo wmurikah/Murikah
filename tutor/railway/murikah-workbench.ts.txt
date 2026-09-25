@@ -1,0 +1,62 @@
+export const MURIKAH_WORKBENCH_OPEN_EVENT = "murikah:open-workbench";
+export const MURIKAH_WORKBENCH_CLOSE_EVENT = "murikah:close-workbench";
+
+export type MurikahWorkbenchKind =
+  | "document"
+  | "table"
+  | "code"
+  | "diagram"
+  | "visualization";
+
+export type MurikahWorkbenchRenderer =
+  | "markdown"
+  | "table"
+  | "code"
+  | "svg"
+  | "mermaid"
+  | "html"
+  | "visualization-code"
+  | "visualization-payload";
+
+export type MurikahWorkbenchItem = {
+  id: string;
+  kind: MurikahWorkbenchKind;
+  renderer: MurikahWorkbenchRenderer;
+  title: string;
+  content: string;
+  language?: string;
+  sourceId?: string;
+  visualizationResult?: unknown;
+};
+
+export type MurikahWorkbenchOpenDetail = Omit<MurikahWorkbenchItem, "id"> & {
+  id?: string;
+};
+
+function contentHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function workbenchItemId(detail: MurikahWorkbenchOpenDetail): string {
+  if (detail.id?.trim()) return detail.id.trim();
+  if (detail.sourceId?.trim()) return detail.sourceId.trim();
+  return `${detail.kind}:${detail.renderer}:${contentHash(detail.content)}`;
+}
+
+export function openMurikahWorkbench(detail: MurikahWorkbenchOpenDetail): void {
+  if (typeof window === "undefined") return;
+  const item: MurikahWorkbenchItem = {
+    ...detail,
+    id: workbenchItemId(detail),
+  };
+  window.dispatchEvent(
+    new CustomEvent<MurikahWorkbenchItem>(MURIKAH_WORKBENCH_OPEN_EVENT, {
+      detail: item,
+    }),
+  );
+}

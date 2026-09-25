@@ -31,6 +31,7 @@ import {
   MicOff,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightOpen,
   PenLine,
   Play,
   Route,
@@ -44,6 +45,8 @@ import {
 } from "lucide-react";
 import MurikahSocialButtons from "@/components/auth/MurikahSocialButtons";
 import MurikahInviteFriends from "@/components/auth/MurikahInviteFriends";
+import MurikahWorkbenchHost from "@/components/workbench/MurikahWorkbenchHost";
+import { openMurikahWorkbench } from "@/lib/murikah-workbench";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AuthStatusResponse = { authenticated?: boolean };
@@ -1122,6 +1125,26 @@ export default function MurikahGuestChat() {
                       <div className="mb-2 text-xs font-semibold text-[#A9822E]">Murikah Tutor · {activeMode.label}</div>
                     )}
                     <div className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</div>
+                    {message.role === "assistant" && message.content.trim() && (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openMurikahWorkbench({
+                              sourceId: `guest-message:${handoffIdRef.current}:${index}`,
+                              kind: "document",
+                              renderer: "markdown",
+                              title: "Tutor response",
+                              content: message.content,
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)]/60 hover:text-[var(--foreground)]"
+                        >
+                          <PanelRightOpen size={13} />
+                          Open in Workbench
+                        </button>
+                      </div>
+                    )}
                   </article>
                 ))}
                 {busy && <div className="text-sm text-[var(--muted-foreground)]">Murikah Tutor is thinking…</div>}
@@ -1312,6 +1335,7 @@ export default function MurikahGuestChat() {
             )}
           </section>
         </div>
+        <MurikahWorkbenchHost />
       </div>
     </main>
   );

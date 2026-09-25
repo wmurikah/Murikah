@@ -1,0 +1,57 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
+import {
+  MURIKAH_WORKBENCH_CLOSE_EVENT,
+  MURIKAH_WORKBENCH_OPEN_EVENT,
+  type MurikahWorkbenchItem,
+} from "@/lib/murikah-workbench";
+
+const LazyWorkbenchPanel = dynamic(() => import("./MurikahWorkbenchPanel"), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-full place-items-center px-6 text-sm text-[var(--muted-foreground)]">
+      Opening Workbench…
+    </div>
+  ),
+});
+
+export default function MurikahWorkbenchHost() {
+  const [item, setItem] = useState<MurikahWorkbenchItem | null>(null);
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<MurikahWorkbenchItem>).detail;
+      if (!detail || typeof detail.content !== "string" || !detail.id) return;
+      setItem(detail);
+    };
+    const close = () => setItem(null);
+    window.addEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, open);
+    window.addEventListener(MURIKAH_WORKBENCH_CLOSE_EVENT, close);
+    return () => {
+      window.removeEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, open);
+      window.removeEventListener(MURIKAH_WORKBENCH_CLOSE_EVENT, close);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!item) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setItem(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [item]);
+
+  if (!item) return null;
+
+  return (
+    <aside
+      aria-label="Murikah Workbench"
+      className="fixed inset-0 z-[130] min-h-0 min-w-0 border-l border-[var(--border)] bg-[var(--background)] shadow-2xl md:static md:z-auto md:h-dvh md:w-[min(46vw,720px)] md:min-w-[420px] md:shrink-0 md:shadow-[-12px_0_30px_rgba(0,0,0,0.08)]"
+    >
+      <LazyWorkbenchPanel item={item} onClose={() => setItem(null)} />
+    </aside>
+  );
+}

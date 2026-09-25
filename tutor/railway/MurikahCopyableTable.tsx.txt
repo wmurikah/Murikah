@@ -1,0 +1,123 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
+import { Check, Copy, Pencil, X } from "lucide-react";
+import { openMurikahWorkbench } from "@/lib/murikah-workbench";
+
+type Outcome = "idle" | "copied" | "failed";
+
+function tableToTsv(table: HTMLTableElement): string {
+  return Array.from(table.rows)
+    .map((row) =>
+      Array.from(row.cells)
+        .map((cell) => (cell.innerText || cell.textContent || "").replace(/\s+/g, " ").trim())
+        .join("\t"),
+    )
+    .join("\n");
+}
+
+async function copyTable(table: HTMLTableElement): Promise<void> {
+  const plain = tableToTsv(table);
+  const html = table.outerHTML;
+  if (
+    typeof ClipboardItem !== "undefined" &&
+    navigator.clipboard &&
+    typeof navigator.clipboard.write === "function"
+  ) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        }),
+      ]);
+      return;
+    } catch {
+      // Some browsers expose ClipboardItem/write but deny rich clipboard
+      // writes. Preserve the useful spreadsheet fallback rather than failing
+      // the whole copy action.
+    }
+  }
+  await navigator.clipboard.writeText(plain);
+}
+
+export default function MurikahCopyableTable({
+  children,
+  className = "",
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [outcome, setOutcome] = useState<Outcome>("idle");
+  const resetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetRef.current) clearTimeout(resetRef.current);
+    },
+    [],
+  );
+
+  const settle = useCallback((next: Outcome) => {
+    setOutcome(next);
+    if (resetRef.current) clearTimeout(resetRef.current);
+    resetRef.current = setTimeout(() => setOutcome("idle"), 1600);
+  }, []);
+
+  const onCopy = useCallback(async () => {
+    const table = rootRef.current?.querySelector("table");
+    if (!table) return settle("failed");
+    try {
+      await copyTable(table);
+      settle("copied");
+    } catch {
+      settle("failed");
+    }
+  }, [settle]);
+
+  const onEdit = useCallback(() => {
+    const table = rootRef.current?.querySelector("table");
+    if (!table) return;
+    const content = tableToTsv(table);
+    openMurikahWorkbench({
+      kind: "table",
+      renderer: "table",
+      title: "Table",
+      content,
+    });
+  }, []);
+
+  return (
+    <div ref={rootRef} className={`group/murikah-table relative ${className}`} {...props}>
+      <div className="pointer-events-none absolute right-2 top-2 z-10 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover/murikah-table:opacity-100 sm:group-focus-within/murikah-table:opacity-100">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="pointer-events-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--background)]/95 px-2 py-1 text-[10.5px] font-medium text-[var(--muted-foreground)] shadow-sm backdrop-blur hover:text-[var(--foreground)]"
+          aria-label="Edit table in Workbench"
+          title="Edit table in Workbench"
+        >
+          <Pencil size={11} strokeWidth={1.7} />
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => void onCopy()}
+          className="pointer-events-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--background)]/95 px-2 py-1 text-[10.5px] font-medium text-[var(--muted-foreground)] shadow-sm backdrop-blur hover:text-[var(--foreground)]"
+          aria-label={outcome === "copied" ? "Copied table" : outcome === "failed" ? "Could not copy table" : "Copy table"}
+          title="Copy table"
+        >
+          {outcome === "copied" ? <Check size={11} /> : outcome === "failed" ? <X size={11} /> : <Copy size={11} />}
+          {outcome === "copied" ? "Copied" : outcome === "failed" ? "Retry" : "Copy"}
+        </button>
+      </div>
+      <div className="overflow-x-auto">{children}</div>
+    </div>
+  );
+}
