@@ -677,6 +677,13 @@ def main() -> int:
             'Edit table in Workbench',
         ),
     )
+    forbid_markers(
+        "tutor/railway/MurikahCopyableTable.tsx.txt",
+        (
+            'sourceId: `table:${content.slice',
+        ),
+    )
+
     require_markers(
         "tutor/railway/apply_workbench.py",
         (
