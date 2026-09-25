@@ -164,7 +164,7 @@ def patch_mermaid(root: Path) -> None:
     old = '''  return (
     <div
       ref={containerRef}
-      className={`my-6 flex justify-center overflow-x-auto ${className}`}
+      className={`my-6 flex w-full min-w-0 max-w-full justify-center overflow-auto overscroll-contain rounded-xl touch-auto ${className} [&>svg]:h-auto [&>svg]:max-h-[70dvh] [&>svg]:max-w-full`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );'''
