@@ -26,6 +26,7 @@ COPY tutor/railway/refine_guest_experience.py /opt/murikah/refine_guest_experien
 COPY tutor/railway/polish_guest_shell.py /opt/murikah/polish_guest_shell.py
 COPY tutor/railway/render_guest_markdown.py /opt/murikah/render_guest_markdown.py
 COPY tutor/railway/enhance_guest_diagram.py /opt/murikah/enhance_guest_diagram.py
+COPY tutor/railway/apply_workbench.py /opt/murikah/apply_workbench.py
 COPY tutor/railway/add_virtual_internship_placeholder.py /opt/murikah/add_virtual_internship_placeholder.py
 COPY tutor/railway/fluid_visual_outputs.py /opt/murikah/fluid_visual_outputs.py
 COPY tutor/railway/harden_member_runtime.py /opt/murikah/harden_member_runtime.py
@@ -71,6 +72,10 @@ COPY tutor/railway/MurikahGuestChatV2.tsx.txt /opt/murikah/MurikahGuestChat.tsx
 COPY tutor/railway/MurikahGuestResume.tsx.txt /opt/murikah/MurikahGuestResume.tsx
 COPY tutor/railway/MurikahSocialButtons.tsx.txt /opt/murikah/MurikahSocialButtons.tsx
 COPY tutor/railway/MurikahDiagramStudio.tsx.txt /opt/murikah/MurikahDiagramStudio.tsx
+COPY tutor/railway/murikah-workbench.ts.txt /opt/murikah/murikah-workbench.ts
+COPY tutor/railway/MurikahWorkbenchHost.tsx.txt /opt/murikah/MurikahWorkbenchHost.tsx
+COPY tutor/railway/MurikahWorkbenchPanel.tsx.txt /opt/murikah/MurikahWorkbenchPanel.tsx
+COPY tutor/railway/MurikahCopyableTable.tsx.txt /opt/murikah/MurikahCopyableTable.tsx
 COPY tutor/railway/murikah-diagram-page.tsx.txt /opt/murikah/murikah-diagram-page.tsx
 COPY tutor/railway/murikah-virtual-internship-page.tsx.txt /opt/murikah/murikah-virtual-internship-page.tsx
 COPY tutor/railway/MurikahVirtualInternshipWorkspace.tsx.txt /opt/murikah/MurikahVirtualInternshipWorkspace.tsx
@@ -101,6 +106,7 @@ RUN cp /opt/murikah/murikah_fast_lane.py /src/DeepTutor/deeptutor/murikah_fast_l
     && python /opt/murikah/harden_admin_controls.py /src/DeepTutor \
     && python /opt/murikah/harden_math_animator.py /src/DeepTutor \
     && python /opt/murikah/fluid_visual_outputs.py /src/DeepTutor \
+    && python /opt/murikah/apply_workbench.py /src/DeepTutor \
     && python /opt/murikah/validate_guest_overlay.py /src/DeepTutor \
     && python /opt/murikah/persist_learning_journal.py /src/DeepTutor \
     && python /opt/murikah/brand_chat_status.py /src/DeepTutor \
@@ -116,6 +122,7 @@ RUN npm config set fetch-timeout 600000 \
     && npm ci --legacy-peer-deps
 COPY --from=branded-source /src/DeepTutor/web/ ./
 COPY tutor/tests/diagram-studio.spec.tsx.txt ./tests/integration/diagram-studio.spec.tsx
+COPY tutor/tests/workbench.spec.tsx.txt ./tests/integration/workbench.spec.tsx
 COPY tutor/tests/guest-limit.spec.tsx.txt ./tests/integration/guest-limit.spec.tsx
 COPY tutor/tests/auth-sso.spec.tsx.txt ./tests/integration/auth-sso.spec.tsx
 COPY tutor/tests/settings-admin-boundary.spec.tsx.txt ./tests/integration/settings-admin-boundary.spec.tsx
@@ -123,7 +130,7 @@ COPY tutor/tests/verified-email-invites.spec.tsx.txt ./tests/integration/verifie
 COPY tutor/tests/personalization-visible-text.spec.tsx.txt ./tests/integration/personalization-visible-text.spec.tsx
 COPY tutor/tests/personalization.spec.tsx.txt ./tests/integration/personalization.spec.tsx
 COPY tutor/tests/virtual-internship-workspace.spec.tsx.txt ./tests/integration/virtual-internship-workspace.spec.tsx
-RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx tests/integration/personalization.spec.tsx tests/integration/virtual-internship-workspace.spec.tsx
+RUN npx vitest run tests/integration/diagram-studio.spec.tsx tests/integration/workbench.spec.tsx tests/integration/guest-limit.spec.tsx tests/integration/auth-sso.spec.tsx tests/integration/settings-admin-boundary.spec.tsx tests/integration/verified-email-invites.spec.tsx tests/integration/personalization-visible-text.spec.tsx tests/integration/personalization.spec.tsx tests/integration/virtual-internship-workspace.spec.tsx
 RUN mkdir -p /app/deeptutor
 COPY --from=branded-source /src/DeepTutor/deeptutor/__version__.py /app/deeptutor/__version__.py
 RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
