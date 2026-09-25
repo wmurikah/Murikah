@@ -233,6 +233,54 @@
               "maximum": 730
             }
           }
+        },
+        "mode": {
+          "enum": [
+            "standard",
+            "demo",
+            "test"
+          ]
+        },
+        "physical_competency_classification": {
+          "enum": [
+            "knowledge_work",
+            "mixed",
+            "physical_skill_limited"
+          ]
+        },
+        "physical_competency_limitation_text": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "template_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "template_id",
+              "template_version",
+              "content_hash"
+            ],
+            "properties": {
+              "template_id": {
+                "type": "string",
+                "pattern": "^tpl_[a-z0-9_]{3,80}$"
+              },
+              "template_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "content_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "catalog": {
+          "type": "object"
         }
       }
     },
@@ -784,7 +832,10 @@
           ],
           "properties": {
             "kind": {
-              "const": "trusted_internal_demo"
+              "enum": [
+                "trusted_internal_demo",
+                "artifact_submission"
+              ]
             },
             "description": {
               "type": "string",
