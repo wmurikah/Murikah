@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
@@ -311,11 +312,16 @@ export default function MurikahWorkbenchPanel({
     if (timerRef.current) clearTimeout(timerRef.current);
     setSaveState("saving");
     timerRef.current = setTimeout(() => {
-      if (content.length > MAX_DRAFT_CHARS) {
-        setSaveState("unavailable");
-        return;
-      }
       try {
+        if (content === initialRef.current && versions.length === 0) {
+          localStorage.removeItem(STORAGE_PREFIX + item.id);
+          setSaveState("saved");
+          return;
+        }
+        if (content.length > MAX_DRAFT_CHARS) {
+          setSaveState("unavailable");
+          return;
+        }
         const stored: StoredDraft = {
           sourceFingerprint: fingerprint(initialRef.current),
           content,
@@ -339,6 +345,18 @@ export default function MurikahWorkbenchPanel({
   };
 
   const reset = () => setContent(item.content);
+
+  const clearLocal = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + item.id);
+    } catch {
+      // Storage may be unavailable in hardened/private browser modes.
+    }
+    setVersions([]);
+    setContent(item.content);
+    setSaveState("saved");
+  };
 
   const copy = async () => {
     try {
@@ -422,6 +440,11 @@ export default function MurikahWorkbenchPanel({
         <button type="button" onClick={download} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]">
           <Download size={13} /> Download
         </button>
+        {(content !== item.content || versions.length > 0) && (
+          <button type="button" onClick={clearLocal} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--muted-foreground)] hover:bg-red-500/10 hover:text-red-600" title="Discard browser-local edits and versions">
+            <Trash2 size={13} /> Clear local
+          </button>
+        )}
       </div>
 
       {versions.length > 0 && (
