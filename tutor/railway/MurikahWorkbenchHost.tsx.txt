@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {
+  MURIKAH_WORKBENCH_CLOSE_EVENT,
   MURIKAH_WORKBENCH_OPEN_EVENT,
   type MurikahWorkbenchItem,
 } from "@/lib/murikah-workbench";
@@ -25,8 +26,13 @@ export default function MurikahWorkbenchHost() {
       if (!detail || typeof detail.content !== "string" || !detail.id) return;
       setItem(detail);
     };
+    const close = () => setItem(null);
     window.addEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, open);
-    return () => window.removeEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, open);
+    window.addEventListener(MURIKAH_WORKBENCH_CLOSE_EVENT, close);
+    return () => {
+      window.removeEventListener(MURIKAH_WORKBENCH_OPEN_EVENT, open);
+      window.removeEventListener(MURIKAH_WORKBENCH_CLOSE_EVENT, close);
+    };
   }, []);
 
   useEffect(() => {
