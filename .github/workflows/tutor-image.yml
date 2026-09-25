@@ -19,7 +19,9 @@ permissions:
 
 concurrency:
   group: tutor-image-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel an in-flight main release after it has started publishing.
+  # Pull-request validation remains replaceable by newer commits.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-publish:
@@ -103,19 +105,33 @@ jobs:
         run: |
           set -euo pipefail
           cf_source="murikah-tutor:source-${SOURCE_REVISION}"
-          cf_main="murikah-tutor:main"
           docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${cf_source}"
           tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_source}" --config tutor/cloudflare/wrangler.toml
-          docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${cf_main}"
-          tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_main}" --config tutor/cloudflare/wrangler.toml
 
-      - name: Publish main alias
+      - name: Deploy and verify exact Tutor release
+        if: github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MURIKAH_TUTOR_RELEASE_OWNER: github-actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix tutor/cloudflare run deploy:release
+          npm --prefix tutor/cloudflare run smoke:staging
+
+      - name: Advance last-known-good aliases
         if: github.ref == 'refs/heads/main'
         env:
           SOURCE_REVISION: ${{ steps.revision.outputs.value }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
+          cf_main="murikah-tutor:main"
+          docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${cf_main}"
+          tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_main}" --config tutor/cloudflare/wrangler.toml
           docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${IMAGE}:main"
           docker push "${IMAGE}:main"
