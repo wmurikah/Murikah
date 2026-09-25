@@ -638,6 +638,7 @@ def main() -> int:
         "tutor/railway/MurikahWorkbenchHost.tsx.txt",
         (
             'dynamic(() => import("./MurikahWorkbenchPanel")',
+            'MURIKAH_WORKBENCH_CLOSE_EVENT',
             'MURIKAH_WORKBENCH_OPEN_EVENT',
             'aria-label="Murikah Workbench"',
             'md:w-[min(46vw,720px)]',
@@ -649,6 +650,8 @@ def main() -> int:
             'murikah:workbench:v1:',
             'MAX_DRAFT_CHARS = 500_000',
             'Manual edits stay in this browser and do not call a model.',
+            'content === initialRef.current && versions.length === 0',
+            'Clear local',
             'renderer === "visualization-code"',
             'renderer === "visualization-payload"',
             'sandbox=""',
@@ -685,6 +688,7 @@ def main() -> int:
             'patch_chat_actions(root)',
             'patch_chat_workspace(root)',
             'murikah:open-workbench',
+            'murikah:close-workbench',
             'patch_visualizations(root)',
             'Open in Workbench',
             'Edit in Workbench',
@@ -722,6 +726,7 @@ def main() -> int:
         (
             'copies rendered tables as tab-separated text',
             'never calls the network',
+            'does not persist an untouched Tutor response',
             'edits table cells as structured rows',
             'script-disabled isolated frame',
             'keeps explicit local versions',
