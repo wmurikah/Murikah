@@ -212,11 +212,33 @@ async function installDefinition(request:Request,env:ScenarioEnv,now:number):Pro
   }
   for(const fact of facts)statements.push(env.TUTOR_DB.prepare('INSERT INTO scenario_facts(scenario_version_id, fact_id, fact_key, initial_value_json, mutability, visibility, visibility_scopes_json, source, initially_revealed, future_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(versionId,id(fact.id),id(fact.key),JSON.stringify(fact.value),String(fact.mutability),String(fact.visibility),JSON.stringify(asArray(fact.visibility_scopes)),String(fact.source||''),fact.initially_revealed===true?1:0,fact.future_only===true?1:0));
+  const phase10Catalog=asObject(shape.manifest.catalog);
   for(const task of tasks){
     const due=asObject(task.due_policy);
+    const taskId=id(task.task_id);
     statements.push(env.TUTOR_DB.prepare('INSERT INTO scenario_task_definitions(scenario_version_id, task_id, authored_sequence, title, category, assigned_by_actor_id, initial_state, due_offset_days, definition_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(versionId,id(task.task_id),int(task.authored_sequence),String(task.title||''),String(task.category||''),id(task.assigned_by_actor_id),String(task.initial_state||''),int(due.days),JSON.stringify(stable(task))));
-    for(const dep of asArray(task.dependencies).map(id))statements.push(env.TUTOR_DB.prepare('INSERT INTO scenario_task_dependencies(scenario_version_id, task_id, depends_on_task_id) VALUES (?, ?, ?)').bind(versionId,id(task.task_id),dep));
+      .bind(versionId,taskId,int(task.authored_sequence),String(task.title||''),String(task.category||''),id(task.assigned_by_actor_id),String(task.initial_state||''),int(due.days),JSON.stringify(stable(task))));
+    for(const dep of asArray(task.dependencies).map(id))statements.push(env.TUTOR_DB.prepare('INSERT INTO scenario_task_dependencies(scenario_version_id, task_id, depends_on_task_id) VALUES (?, ?, ?)').bind(versionId,taskId,dep));
+    if(Object.keys(phase10Catalog).length){
+      const rubric=asObject(task.rubric),rubricId=id(rubric.rubric_id);
+      const competencyRefs=asArray(task.competency_refs).map(id).filter(Boolean);
+      const contextTags=JSON.stringify({
+        career_family:String(shape.manifest.career_family||''),
+        role_family:String(shape.manifest.career_family||''),
+        scenario_pack_id:sv.scenario_pack_id,
+        task_category:String(task.category||''),
+        domain:String(shape.manifest.career_family||''),
+        work_context:taskId,
+      });
+      for(const criterion of arrayOfObjects(rubric.criteria)){
+        const criterionId=id(criterion.criterion_id);
+        for(const competencyId of competencyRefs){
+          statements.push(env.TUTOR_DB.prepare(
+            'INSERT OR IGNORE INTO competency_assessment_mappings(mapping_version,scenario_version_id,task_id,rubric_id,criterion_id,competency_id,definition_version,sub_competency_id,context_tags_json,created_at) VALUES (1,?,?,?,?,?,1,\'\',?,?)'
+          ).bind(versionId,taskId,rubricId,criterionId,competencyId,contextTags,now));
+        }
+      }
+    }
   }
   for(const event of events){
     statements.push(env.TUTOR_DB.prepare('INSERT INTO scenario_event_definitions(scenario_version_id, event_id, authored_sequence, event_type, priority, once_only, audit_label, definition_json) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
