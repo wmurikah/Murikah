@@ -12,11 +12,12 @@ export type Phase10Env = { TUTOR_DB: Phase10Database };
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]{2,127}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
 const PHYSICAL = new Set(["knowledge_work", "mixed", "physical_skill_limited"]);
 const INTERNSHIP_TYPES = new Set(["qualifying", "practice"]);
 
 function json(payload: unknown, status = 200): Response {
-  return Response.json(payload, { status, headers: { "cache-control": "no-store" } });
+  return Response.json(payload, { status, headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } });
 }
 function text(value: unknown, max = 2000): string {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
@@ -67,6 +68,7 @@ async function requireAdmin(db: Phase10Database, actorId: string): Promise<boole
   const row = await account(db, actorId);
   return Boolean(row && row.role === "admin" && row.account_status === "active");
 }
+
 function catalogCard(row: Record<string, unknown>) {
   return {
     slug: String(row.catalog_slug || ""),
@@ -146,22 +148,21 @@ async function catalogList(request: Request, env: Phase10Env): Promise<Response>
   if (career) { clauses.push("(cf.slug = ? OR ce.career_family_id = ?)"); binds.push(career, career); }
   if (sector) { clauses.push("lower(ce.sector) = ?"); binds.push(sector); }
   if (INTERNSHIP_TYPES.has(internshipType)) { clauses.push("ce.internship_type = ?"); binds.push(internshipType); }
-  if (["light","standard","intensive"].includes(workload)) { clauses.push("ce.workload_band = ?"); binds.push(workload); }
-  if (["entry","early_career","intermediate"].includes(experience)) { clauses.push("ce.experience_level = ?"); binds.push(experience); }
-  const statement = env.TUTOR_DB.prepare(
+  if (["light", "standard", "intensive"].includes(workload)) { clauses.push("ce.workload_band = ?"); binds.push(workload); }
+  if (["entry", "early_career", "intermediate"].includes(experience)) { clauses.push("ce.experience_level = ?"); binds.push(experience); }
+  const rows = (await env.TUTOR_DB.prepare(
     SELECT_CATALOG + "WHERE " + clauses.join(" AND ") +
-    " ORDER BY CASE ce.internship_type WHEN 'qualifying' THEN 0 ELSE 1 END, ce.sort_order, ce.title, ce.catalog_slug LIMIT 100"
-  ).bind(...binds);
-  const rows = (await statement.all<Record<string, unknown>>()).results || [];
+    " ORDER BY CASE ce.internship_type WHEN 'qualifying' THEN 0 ELSE 1 END, ce.sort_order, ce.title, ce.catalog_slug LIMIT 100",
+  ).bind(...binds).all<Record<string, unknown>>()).results || [];
   return json({ ok: true, count: rows.length, results: rows.map(catalogCard) });
 }
 async function catalogFacets(env: Phase10Env): Promise<Response> {
   const [families, sectors] = await Promise.all([
     env.TUTOR_DB.prepare(
-      "SELECT id, slug, title, short_title, sort_order FROM career_families WHERE active = 1 ORDER BY sort_order, title"
+      "SELECT id, slug, title, short_title, sort_order FROM career_families WHERE active = 1 ORDER BY sort_order, title",
     ).all<Record<string, unknown>>(),
     env.TUTOR_DB.prepare(
-      "SELECT DISTINCT sector FROM internship_catalog_entries WHERE catalog_state = 'published' AND visible = 1 ORDER BY sector"
+      "SELECT DISTINCT sector FROM internship_catalog_entries WHERE catalog_state = 'published' AND visible = 1 ORDER BY sector",
     ).all<Record<string, unknown>>(),
   ]);
   return json({
@@ -210,10 +211,10 @@ async function projectCatalog(request: Request, env: Phase10Env, now: number): P
   const scenarioVersionId = id(body.scenario_version_id);
   if (!scenarioVersionId) return json({ error: "scenario_version_not_available" }, 404);
   const source = await env.TUTOR_DB.prepare(
-    "SELECT sv.id, sv.scenario_pack_id, sv.version, sv.status, sv.content_hash, sv.manifest_ref, " +
-    "sp.slug AS pack_slug, sp.title AS pack_title, sp.role_title, sp.status AS pack_status, c.canonical_json, c.content_hash AS installed_hash, c.manifest_ref AS installed_ref " +
-    "FROM scenario_versions sv JOIN scenario_packs sp ON sp.id = sv.scenario_pack_id " +
-    "JOIN scenario_version_content c ON c.scenario_version_id = sv.id WHERE sv.id = ? LIMIT 1"
+    "SELECT sv.id,sv.scenario_pack_id,sv.version,sv.status,sv.content_hash,sv.manifest_ref," +
+    "sp.slug AS pack_slug,sp.title AS pack_title,sp.role_title,sp.status AS pack_status,c.canonical_json,c.content_hash AS installed_hash,c.manifest_ref AS installed_ref " +
+    "FROM scenario_versions sv JOIN scenario_packs sp ON sp.id=sv.scenario_pack_id " +
+    "JOIN scenario_version_content c ON c.scenario_version_id=sv.id WHERE sv.id=? LIMIT 1",
   ).bind(scenarioVersionId).first<Record<string, unknown>>();
   if (!source || source.status !== "published" || source.pack_status !== "published") return json({ error: "scenario_version_not_available" }, 404);
   if (source.content_hash !== source.installed_hash || source.manifest_ref !== source.installed_ref) return json({ error: "scenario_content_integrity_failed" }, 409);
@@ -221,15 +222,15 @@ async function projectCatalog(request: Request, env: Phase10Env, now: number): P
   const manifest = object(definition.manifest);
   const company = object(definition.company);
   const catalog = object(manifest.catalog);
-  const error = validateCatalog(manifest, catalog);
-  if (error) return json({ error }, 409);
+  const validationError = validateCatalog(manifest, catalog);
+  if (validationError) return json({ error: validationError }, 409);
   const familyId = id(catalog.career_family_id);
-  const family = await env.TUTOR_DB.prepare("SELECT id, active FROM career_families WHERE id = ? LIMIT 1")
+  const family = await env.TUTOR_DB.prepare("SELECT id,active FROM career_families WHERE id=? LIMIT 1")
     .bind(familyId).first<{ id: string; active: number }>();
   if (!family || family.active !== 1) return json({ error: "career_family_not_available" }, 409);
   const qualifying = manifest.qualifying === true;
   if (qualifying) {
-    const completion = await env.TUTOR_DB.prepare("SELECT scenario_version_id FROM scenario_completion_policies WHERE scenario_version_id = ? LIMIT 1")
+    const completion = await env.TUTOR_DB.prepare("SELECT scenario_version_id FROM scenario_completion_policies WHERE scenario_version_id=? LIMIT 1")
       .bind(scenarioVersionId).first<{ scenario_version_id: string }>();
     if (!completion) return json({ error: "completion_policy_missing" }, 409);
   }
@@ -237,9 +238,10 @@ async function projectCatalog(request: Request, env: Phase10Env, now: number): P
   const responsibilities = stringList(catalog.sample_responsibilities, 24);
   const deliverables = stringList(catalog.deliverables, 24);
   const keywords = stringList(catalog.search_keywords, 64);
-  const search = [
-    source.pack_title, source.role_title, company.name, company.sector, catalog.short_description,
-    catalog.long_description, ...competencies, ...responsibilities, ...deliverables, ...keywords,
+  const searchable = [
+    source.pack_title, source.role_title, company.name, company.sector,
+    catalog.short_description, catalog.long_description, ...competencies,
+    ...responsibilities, ...deliverables, ...keywords,
   ].map((item) => text(item, 240).toLowerCase()).filter(Boolean).join(" ");
   const metadataHash = await sha256(canonical(catalog));
   const catalogSlug = slug(catalog.catalog_slug);
@@ -257,12 +259,12 @@ async function projectCatalog(request: Request, env: Phase10Env, now: number): P
     text(catalog.work_rhythm, 1000), text(catalog.prerequisites, 800),
     text(catalog.physical_competency_classification, 64), text(catalog.physical_competency_limitation_text, 500),
     text(catalog.simulation_disclosure, 800), text(catalog.completion_overview, 1000), text(catalog.support_summary, 800),
-    JSON.stringify(keywords), search, metadataHash, integer(catalog.sort_order), now, now,
+    JSON.stringify(keywords), searchable, metadataHash, integer(catalog.sort_order), now, now,
   ];
   await env.TUTOR_DB.batch([
     env.TUTOR_DB.prepare(
-      "UPDATE internship_catalog_entries SET catalog_state='retired', visible=0, retired_at=?, updated_at=? " +
-      "WHERE catalog_slug=? AND scenario_version_id<>? AND catalog_state='published'"
+      "UPDATE internship_catalog_entries SET catalog_state='retired',visible=0,retired_at=?,updated_at=? " +
+      "WHERE catalog_slug=? AND scenario_version_id<>? AND catalog_state='published'",
     ).bind(now, now, catalogSlug, scenarioVersionId),
     env.TUTOR_DB.prepare(
       "INSERT INTO internship_catalog_entries(" +
@@ -278,26 +280,33 @@ async function projectCatalog(request: Request, env: Phase10Env, now: number): P
       "responsibilities_json=excluded.responsibilities_json,deliverables_json=excluded.deliverables_json,work_rhythm=excluded.work_rhythm,prerequisites=excluded.prerequisites," +
       "physical_competency_classification=excluded.physical_competency_classification,physical_competency_limitation_text=excluded.physical_competency_limitation_text," +
       "simulation_disclosure=excluded.simulation_disclosure,completion_overview=excluded.completion_overview,support_summary=excluded.support_summary,search_keywords_json=excluded.search_keywords_json," +
-      "searchable_text=excluded.searchable_text,metadata_hash=excluded.metadata_hash,sort_order=excluded.sort_order,published_at=excluded.published_at,updated_at=excluded.updated_at,catalog_state='published',visible=1,retired_at=NULL"
+      "searchable_text=excluded.searchable_text,metadata_hash=excluded.metadata_hash,sort_order=excluded.sort_order,published_at=excluded.published_at,updated_at=excluded.updated_at,catalog_state='published',visible=1,retired_at=NULL",
     ).bind(...values),
   ]);
   return json({ ok: true, scenario_version_id: scenarioVersionId, catalog_slug: catalogSlug, metadata_hash: metadataHash });
 }
+
 function hasExecutablePayload(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasExecutablePayload);
   if (!value || typeof value !== "object") return false;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const normalized = key.toLowerCase().replace(/[^a-z]/g, "");
-    if (["pythoncode","javascriptcode","executablecode","scriptbody","shellcommand"].includes(normalized)) return true;
+    if (["pythoncode", "javascriptcode", "executablecode", "scriptbody", "shellcommand", "powershellcommand", "binarypayload"].includes(normalized)) return true;
     if (hasExecutablePayload(child)) return true;
   }
   return false;
 }
+async function institutionDraft(db: Phase10Database, draftId: string) {
+  return db.prepare("SELECT * FROM institution_scenario_drafts WHERE id=? LIMIT 1")
+    .bind(draftId).first<Record<string, unknown>>();
+}
 async function institutionRoute(request: Request, env: Phase10Env, route: string, now: number): Promise<Response> {
-  const body = await bodyJson(request);
-  const actorId = id(body.actor_id);
+  const url = new URL(request.url);
+  const body = request.method === "GET" ? {} : await bodyJson(request);
+  const actorId = id(request.method === "GET" ? url.searchParams.get("actor_id") : body.actor_id);
   if (!actorId || !(await requireAdmin(env.TUTOR_DB, actorId))) return json({ error: "admin_required" }, 403);
-  const draftId = id(body.draft_id);
+  const draftId = id(request.method === "GET" ? url.searchParams.get("draft_id") : body.draft_id);
+
   if (route === "/institution-scenarios/draft" && request.method === "POST") {
     const draft = object(body.draft);
     if (!draftId || Object.keys(draft).length === 0 || hasExecutablePayload(draft)) return json({ error: "institution_draft_invalid" }, 400);
@@ -307,36 +316,124 @@ async function institutionRoute(request: Request, env: Phase10Env, route: string
       "INSERT INTO institution_scenario_drafts(id,created_by_actor_id,status,draft_json,validation_json,resolved_content_hash,scenario_pack_id,scenario_version_id,catalog_slug,created_at,updated_at,published_at,retired_at) " +
       "VALUES (?,?,'draft',?,'{}','','','','',?,?,NULL,NULL) " +
       "ON CONFLICT(id) DO UPDATE SET draft_json=excluded.draft_json,status='draft',validation_json='{}',resolved_content_hash='',updated_at=excluded.updated_at " +
-      "WHERE institution_scenario_drafts.created_by_actor_id=excluded.created_by_actor_id AND institution_scenario_drafts.status NOT IN ('published','retired')"
+      "WHERE institution_scenario_drafts.created_by_actor_id=excluded.created_by_actor_id AND institution_scenario_drafts.status NOT IN ('published','retired')",
     ).bind(draftId, actorId, raw, now, now).run();
     return json({ ok: true, draft_id: draftId, status: "draft" }, 201);
   }
-  const existing = draftId ? await env.TUTOR_DB.prepare(
-    "SELECT * FROM institution_scenario_drafts WHERE id=? LIMIT 1"
-  ).bind(draftId).first<Record<string, unknown>>() : null;
+  const existing = draftId ? await institutionDraft(env.TUTOR_DB, draftId) : null;
   if (!existing) return json({ error: "institution_draft_not_found" }, 404);
+  if (String(existing.created_by_actor_id || "") !== actorId) return json({ error: "admin_required" }, 403);
+
+  if (route === "/institution-scenarios/get" && request.method === "GET") {
+    return json({
+      ok: true,
+      draft: {
+        id: existing.id,
+        status: existing.status,
+        draft: parse(existing.draft_json, {}),
+        validation: parse(existing.validation_json, {}),
+        resolved_content_hash: existing.resolved_content_hash,
+        scenario_pack_id: existing.scenario_pack_id,
+        scenario_version_id: existing.scenario_version_id,
+        catalog_slug: existing.catalog_slug,
+        created_at: existing.created_at,
+        updated_at: existing.updated_at,
+        published_at: existing.published_at,
+        retired_at: existing.retired_at,
+      },
+    });
+  }
   if (route === "/institution-scenarios/validation" && request.method === "POST") {
-    if (existing.status === "published" || existing.status === "retired") return json({ error: "published_scenario_immutable" }, 409);
+    if (["published", "retired"].includes(String(existing.status || ""))) return json({ error: "published_scenario_immutable" }, 409);
     const validation = object(body.validation);
     const valid = body.valid === true;
     const resolvedHash = valid ? text(body.resolved_content_hash, 64) : "";
-    if (valid && !/^[0-9a-f]{64}$/.test(resolvedHash)) return json({ error: "institution_validation_invalid" }, 400);
+    if (valid && (!HEX64.test(resolvedHash) || validation.validator !== "canonical-pack-v1" || validation.template_resolution !== "phase10-pinned-template-v1")) {
+      return json({ error: "institution_validation_invalid" }, 400);
+    }
     await env.TUTOR_DB.prepare(
-      "UPDATE institution_scenario_drafts SET status=?,validation_json=?,resolved_content_hash=?,updated_at=? WHERE id=?"
+      "UPDATE institution_scenario_drafts SET status=?,validation_json=?,resolved_content_hash=?,updated_at=? WHERE id=?",
     ).bind(valid ? "validated" : "validation_failed", JSON.stringify(validation), resolvedHash, now, draftId).run();
     return json({ ok: true, draft_id: draftId, status: valid ? "validated" : "validation_failed" });
   }
-  if (route === "/institution-scenarios/publish-state" && request.method === "POST") {
+  if (route === "/institution-scenarios/stage" && request.method === "POST") {
+    if (existing.status !== "validated") return json({ error: "institution_draft_not_validated" }, 409);
+    const packId = id(body.scenario_pack_id), packSlug = slug(body.scenario_slug), versionId = id(body.scenario_version_id);
+    const version = integer(body.scenario_version), minimumDays = integer(body.minimum_duration_days);
+    const contentHash = text(body.content_hash, 64), title = text(body.title, 200);
+    const careerFamily = text(body.career_family, 128), roleTitle = text(body.role_title, 160), workload = text(body.expected_workload_band, 32);
+    if (!packId || !packSlug || !versionId || version < 1 || minimumDays < 1 || !HEX64.test(contentHash) || !title || !careerFamily || !roleTitle || contentHash !== existing.resolved_content_hash) {
+      return json({ error: "institution_stage_invalid" }, 400);
+    }
+    const pack = await env.TUTOR_DB.prepare("SELECT id,slug,title,career_family,role_title,status FROM scenario_packs WHERE id=? OR slug=? LIMIT 1")
+      .bind(packId, packSlug).first<Record<string, unknown>>();
+    if (pack && (pack.id !== packId || pack.slug !== packSlug)) return json({ error: "institution_pack_identity_conflict" }, 409);
+    if (pack && pack.status === "published" && (pack.title !== title || pack.career_family !== careerFamily || pack.role_title !== roleTitle)) {
+      return json({ error: "published_scenario_immutable" }, 409);
+    }
+    const versionRow = await env.TUTOR_DB.prepare("SELECT id,scenario_pack_id,version,status,content_hash FROM scenario_versions WHERE id=? OR (scenario_pack_id=? AND version=?) LIMIT 1")
+      .bind(versionId, packId, version).first<Record<string, unknown>>();
+    if (versionRow && (versionRow.id !== versionId || versionRow.scenario_pack_id !== packId || Number(versionRow.version) !== version)) {
+      return json({ error: "institution_version_identity_conflict" }, 409);
+    }
+    if (versionRow && versionRow.status === "published") {
+      return versionRow.content_hash === contentHash
+        ? json({ ok: true, idempotent_replay: true, scenario_pack_id: packId, scenario_version_id: versionId })
+        : json({ error: "published_scenario_immutable" }, 409);
+    }
+    const statements: any[] = [];
+    if (!pack) statements.push(env.TUTOR_DB.prepare(
+      "INSERT INTO scenario_packs(id,slug,title,career_family,role_title,status,created_at,updated_at) VALUES (?,?,?,?,?,'draft',?,?)",
+    ).bind(packId, packSlug, title, careerFamily, roleTitle, now, now));
+    else if (pack.status === "draft") statements.push(env.TUTOR_DB.prepare(
+      "UPDATE scenario_packs SET title=?,career_family=?,role_title=?,updated_at=? WHERE id=? AND status='draft'",
+    ).bind(title, careerFamily, roleTitle, now, packId));
+    if (!versionRow) statements.push(env.TUTOR_DB.prepare(
+      "INSERT INTO scenario_versions(id,scenario_pack_id,version,schema_version,status,manifest_ref,minimum_duration_days,expected_workload_band,content_hash,created_at,published_at) " +
+      "VALUES (?,?,?,1,'draft','',?,?,?, ?,NULL)",
+    ).bind(versionId, packId, version, minimumDays, workload, contentHash, now));
+    else statements.push(env.TUTOR_DB.prepare(
+      "UPDATE scenario_versions SET minimum_duration_days=?,expected_workload_band=?,content_hash=? WHERE id=? AND status='draft'",
+    ).bind(minimumDays, workload, contentHash, versionId));
+    if (statements.length) await env.TUTOR_DB.batch(statements);
+    return json({ ok: true, scenario_pack_id: packId, scenario_version_id: versionId, status: "draft" }, 201);
+  }
+  if (route === "/institution-scenarios/activate" && request.method === "POST") {
     if (existing.status !== "validated") return json({ error: "institution_draft_not_validated" }, 409);
     const versionId = id(body.scenario_version_id);
-    const packId = id(body.scenario_pack_id);
+    const row = await env.TUTOR_DB.prepare(
+      "SELECT sv.id,sv.scenario_pack_id,sv.status,sv.content_hash,sv.manifest_ref,c.content_hash AS installed_hash,c.manifest_ref AS installed_ref,c.canonical_json " +
+      "FROM scenario_versions sv JOIN scenario_version_content c ON c.scenario_version_id=sv.id WHERE sv.id=? LIMIT 1",
+    ).bind(versionId).first<Record<string, unknown>>();
+    if (!row || !["draft", "published"].includes(String(row.status || ""))) return json({ error: "scenario_version_not_available" }, 404);
+    if (row.content_hash !== existing.resolved_content_hash || row.installed_hash !== row.content_hash || row.installed_ref !== row.manifest_ref) {
+      return json({ error: "scenario_content_integrity_failed" }, 409);
+    }
+    const manifest = object(object(parse(row.canonical_json, {})).manifest);
+    if (manifest.qualifying === true) {
+      const policy = await env.TUTOR_DB.prepare("SELECT scenario_version_id FROM scenario_completion_policies WHERE scenario_version_id=? LIMIT 1")
+        .bind(versionId).first<{ scenario_version_id: string }>();
+      if (!policy) return json({ error: "completion_policy_missing" }, 409);
+      if (integer(manifest.minimum_duration_days) < 90 || manifest.classification !== "qualifying" || text(manifest.mode, 32) !== "standard") {
+        return json({ error: "institution_qualification_invariant_failed" }, 409);
+      }
+    }
+    await env.TUTOR_DB.batch([
+      env.TUTOR_DB.prepare("UPDATE scenario_packs SET status='published',updated_at=? WHERE id=? AND status IN ('draft','published')").bind(now, row.scenario_pack_id),
+      env.TUTOR_DB.prepare("UPDATE scenario_versions SET status='published',published_at=COALESCE(published_at,?) WHERE id=? AND status IN ('draft','published')").bind(now, versionId),
+    ]);
+    return json({ ok: true, scenario_pack_id: row.scenario_pack_id, scenario_version_id: versionId, status: "published" });
+  }
+  if (route === "/institution-scenarios/publish-state" && request.method === "POST") {
+    if (existing.status !== "validated") return json({ error: "institution_draft_not_validated" }, 409);
+    const versionId = id(body.scenario_version_id), packId = id(body.scenario_pack_id);
     const entry = await env.TUTOR_DB.prepare(
       "SELECT ce.catalog_slug,sv.content_hash FROM internship_catalog_entries ce JOIN scenario_versions sv ON sv.id=ce.scenario_version_id " +
-      "WHERE ce.scenario_version_id=? AND ce.scenario_pack_id=? AND ce.catalog_state='published' AND ce.visible=1 LIMIT 1"
+      "WHERE ce.scenario_version_id=? AND ce.scenario_pack_id=? AND ce.catalog_state='published' AND ce.visible=1 LIMIT 1",
     ).bind(versionId, packId).first<{ catalog_slug: string; content_hash: string }>();
-    if (!entry || entry.content_hash !== String(existing.resolved_content_hash || "")) return json({ error: "institution_publish_incomplete" }, 409);
+    if (!entry || entry.content_hash !== existing.resolved_content_hash) return json({ error: "institution_publish_incomplete" }, 409);
     await env.TUTOR_DB.prepare(
-      "UPDATE institution_scenario_drafts SET status='published',scenario_pack_id=?,scenario_version_id=?,catalog_slug=?,updated_at=?,published_at=? WHERE id=? AND status='validated'"
+      "UPDATE institution_scenario_drafts SET status='published',scenario_pack_id=?,scenario_version_id=?,catalog_slug=?,updated_at=?,published_at=? WHERE id=? AND status='validated'",
     ).bind(packId, versionId, entry.catalog_slug, now, now, draftId).run();
     return json({ ok: true, draft_id: draftId, status: "published", scenario_version_id: versionId, catalog_slug: entry.catalog_slug });
   }
@@ -346,6 +443,7 @@ async function institutionRoute(request: Request, env: Phase10Env, route: string
     await env.TUTOR_DB.batch([
       env.TUTOR_DB.prepare("UPDATE institution_scenario_drafts SET status='retired',updated_at=?,retired_at=? WHERE id=? AND status='published'").bind(now, now, draftId),
       env.TUTOR_DB.prepare("UPDATE internship_catalog_entries SET catalog_state='retired',visible=0,retired_at=?,updated_at=? WHERE scenario_version_id=?").bind(now, now, versionId),
+      env.TUTOR_DB.prepare("UPDATE scenario_versions SET status='retired' WHERE id=? AND status='published'").bind(versionId),
     ]);
     return json({ ok: true, draft_id: draftId, status: "retired" });
   }
@@ -374,10 +472,9 @@ export async function resolveCatalogStartAuthority(
   if (!selected) return { ok: false, error: "scenario_version_not_available" };
   if (!selectedVersion) {
     const catalogExists = await db.prepare(
-      "SELECT 1 AS present FROM internship_catalog_entries ce JOIN scenario_packs sp ON sp.id=ce.scenario_pack_id WHERE sp.id=? OR sp.slug=? LIMIT 1"
+      "SELECT 1 AS present FROM internship_catalog_entries ce JOIN scenario_packs sp ON sp.id=ce.scenario_pack_id WHERE sp.id=? OR sp.slug=? LIMIT 1",
     ).bind(selected, selected).first<{ present: number }>();
-    if (catalogExists) return { ok: false, error: "scenario_version_required" };
-    return { ok: false, error: "catalog_entry_not_found" };
+    return catalogExists ? { ok: false, error: "scenario_version_required" } : { ok: false, error: "catalog_entry_not_found" };
   }
   const row = await db.prepare(
     "SELECT ce.internship_type,ce.qualifying,ce.mode,ce.catalog_state,ce.visible," +
@@ -385,7 +482,7 @@ export async function resolveCatalogStartAuthority(
     "sp.status AS pack_status,c.content_hash AS installed_hash,c.manifest_ref AS installed_ref,c.canonical_json " +
     "FROM internship_catalog_entries ce JOIN scenario_versions sv ON sv.id=ce.scenario_version_id " +
     "JOIN scenario_packs sp ON sp.id=sv.scenario_pack_id JOIN scenario_version_content c ON c.scenario_version_id=sv.id " +
-    "WHERE ce.scenario_version_id=? AND (sp.id=? OR sp.slug=?) LIMIT 1"
+    "WHERE ce.scenario_version_id=? AND (sp.id=? OR sp.slug=?) LIMIT 1",
   ).bind(selectedVersion, selected, selected).first<Record<string, unknown>>();
   if (!row) return { ok: false, error: "catalog_entry_not_found" };
   if (row.catalog_state !== "published" || Number(row.visible || 0) !== 1 || row.status !== "published" || row.pack_status !== "published") {
@@ -410,16 +507,25 @@ export async function resolveCatalogStartAuthority(
   return {
     ok: true,
     scenario: {
-      id: String(row.id || ""), scenario_pack_id: String(row.scenario_pack_id || ""), version: Number(row.version || 0),
-      minimum_duration_days: Number(row.minimum_duration_days || 0), expected_workload_band: String(row.expected_workload_band || ""),
-      content_hash: String(row.content_hash || ""), manifest_ref: String(row.manifest_ref || ""),
+      id: String(row.id || ""),
+      scenario_pack_id: String(row.scenario_pack_id || ""),
+      version: Number(row.version || 0),
+      minimum_duration_days: Number(row.minimum_duration_days || 0),
+      expected_workload_band: String(row.expected_workload_band || ""),
+      content_hash: String(row.content_hash || ""),
+      manifest_ref: String(row.manifest_ref || ""),
     },
-    qualifying, mode, internship_type: kind,
+    qualifying,
+    mode,
+    internship_type: kind,
   };
 }
 
 export async function handlePhase10CatalogPersistenceRoute(
-  request: Request, env: Phase10Env, route: string, now: number,
+  request: Request,
+  env: Phase10Env,
+  route: string,
+  now: number,
 ): Promise<Response | null> {
   if (route === "/catalog/list" && request.method === "GET") return catalogList(request, env);
   if (route === "/catalog/facets" && request.method === "GET") return catalogFacets(env);
