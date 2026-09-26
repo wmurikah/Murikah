@@ -7,15 +7,17 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"railway"))
 from virtual_internship.validator import SCENARIOS_ROOT, ScenarioValidationError, content_hash, validate_all, validate_pack
 
+HISTORICAL_DEMOS={
+    "internal-audit","internal-audit-v2",
+    "data-analyst","data-analyst-v2",
+    "software-engineering","software-engineering-v2",
+}
+
 class ScenarioSchemaTests(unittest.TestCase):
     def test_all_committed_career_neutral_demo_versions_validate(self):
-        rows=validate_all()
+        rows=[row for row in validate_all(SCENARIOS_ROOT/"demo") if row[0].name in HISTORICAL_DEMOS]
         self.assertEqual(len(rows),6)
-        self.assertEqual({p.name for p,_ in rows},{
-            "internal-audit","internal-audit-v2",
-            "data-analyst","data-analyst-v2",
-            "software-engineering","software-engineering-v2",
-        })
+        self.assertEqual({p.name for p,_ in rows},HISTORICAL_DEMOS)
         for path,digest in rows:
             manifest=json.loads((path/"manifest.json").read_text())
             self.assertFalse(manifest["qualifying"])
@@ -100,7 +102,8 @@ class ScenarioSchemaTests(unittest.TestCase):
     def test_validator_command(self):
         run=subprocess.run([sys.executable,str(ROOT/"scripts/validate_virtual_internship_scenarios.py")],cwd=ROOT.parent,capture_output=True,text=True)
         self.assertEqual(run.returncode,0,run.stdout+run.stderr)
-        self.assertIn("Virtual Internship Phase 2 scenario validation: PASS (6 packs)",run.stdout)
+        self.assertIn("Virtual Internship Phase 2 scenario validation: PASS (6 historical packs preserved)",run.stdout)
+        self.assertIn("Virtual Internship Phase 10 scenario validation: PASS (15 packs, 6 career families, 6 templates)",run.stdout)
 
     @staticmethod
     def _edit(path,fn):
