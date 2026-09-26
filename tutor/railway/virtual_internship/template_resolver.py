@@ -75,17 +75,89 @@ def _merge_keyed(parent: list[Any], child: list[Any], key: str, path: str) -> li
     return [rows[item] for item in order]
 
 
+def _merge_sections(base: dict[str, Any], incoming: dict[str, Any], source: str) -> dict[str, Any]:
+    out = copy.deepcopy(base)
+    for name, value in incoming.items():
+        if name == "keyed_collections":
+            for collection, spec in (value or {}).items():
+                if not isinstance(spec, dict) or not spec.get("key"):
+                    raise TemplateResolutionError(f"{source}: invalid keyed collection declaration")
+                out[collection] = _merge_keyed(
+                    out.get(collection, []),
+                    spec.get("items", []),
+                    str(spec["key"]),
+                    collection,
+                )
+        elif isinstance(value, dict):
+            out[name] = _merge_object(out.get(name, {}), value, name)
+        else:
+            out[name] = copy.deepcopy(value)
+    return out
+
+
+def _ref_key(ref: dict[str, Any]) -> tuple[str, int]:
+    return str(ref.get("template_id") or ""), int(ref.get("template_version") or 0)
+
+
+def _resolve_one(
+    ref: dict[str, Any],
+    templates: dict[tuple[str, int], dict[str, Any]],
+    stack: tuple[tuple[str, int], ...],
+    depth: int,
+) -> dict[str, Any]:
+    if depth > MAX_INHERITANCE_DEPTH:
+        raise TemplateResolutionError("excessive inheritance depth")
+    key = _ref_key(ref)
+    tid, version = key
+    if not tid or version < 1:
+        raise TemplateResolutionError("invalid template reference")
+    if key in stack:
+        chain = " -> ".join(f"{item[0]} v{item[1]}" for item in (*stack, key))
+        raise TemplateResolutionError(f"inheritance cycle: {chain}")
+    template = templates.get(key)
+    if not template:
+        raise TemplateResolutionError(f"missing parent template {tid} v{version}")
+    if template.get("status") != "published":
+        raise TemplateResolutionError(f"unpublished parent template {tid} v{version}")
+    if int(template.get("schema_version") or 0) != TEMPLATE_SCHEMA_VERSION:
+        raise TemplateResolutionError(f"incompatible template schema version for {tid} v{version}")
+    declared_hash = str(ref.get("content_hash") or "")
+    actual_hash = str(template.get("content_hash") or "")
+    if declared_hash != actual_hash:
+        raise TemplateResolutionError(f"template hash mismatch {tid} v{version}")
+
+    resolved: dict[str, Any] = {}
+    parent_refs = template.get("parent_refs") or []
+    if not isinstance(parent_refs, list):
+        raise TemplateResolutionError(f"{tid} v{version}: parent_refs must be a list")
+    parent_seen: set[tuple[str, int]] = set()
+    for parent_ref in parent_refs:
+        if not isinstance(parent_ref, dict):
+            raise TemplateResolutionError(f"{tid} v{version}: invalid parent reference")
+        parent_key = _ref_key(parent_ref)
+        if parent_key in parent_seen:
+            raise TemplateResolutionError(f"duplicate inherited template {parent_key[0]} v{parent_key[1]}")
+        parent_seen.add(parent_key)
+        resolved = _merge_sections(
+            resolved,
+            _resolve_one(parent_ref, templates, (*stack, key), depth + 1),
+            f"{tid} v{version}",
+        )
+    return _merge_sections(resolved, template.get("sections") or {}, f"{tid} v{version}")
+
+
 def resolve_template_sections(
     child: dict[str, Any],
     refs: list[dict[str, Any]],
     templates: dict[tuple[str, int], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Resolve pinned parents.
+    """Resolve exact published template versions using deterministic merge rules.
 
-    Scalar child values override parent values. Object sections merge recursively
-    only inside declared sections. Arrays replace by default. A template may
-    explicitly declare a keyed collection and its stable key. Required published
-    template invariants cannot be deleted because deletion semantics do not exist.
+    Scalars and arrays supplied by the child replace inherited values. Object
+    sections merge recursively only inside explicitly named template sections.
+    Keyed collections merge only when a template declares the stable key.
+    Required inherited values cannot be deleted because deletion semantics do
+    not exist. Parent templates are resolved before the child template.
     """
     templates = templates or load_templates()
     if len(refs) > MAX_INHERITANCE_DEPTH:
@@ -93,39 +165,76 @@ def resolve_template_sections(
     seen: set[tuple[str, int]] = set()
     resolved: dict[str, Any] = {}
     for ref in refs:
-        tid = str(ref.get("template_id") or "")
-        version = int(ref.get("template_version") or 0)
-        key = (tid, version)
+        key = _ref_key(ref)
         if key in seen:
-            raise TemplateResolutionError(f"inheritance cycle or duplicate reference {tid} v{version}")
+            raise TemplateResolutionError(f"duplicate inherited template {key[0]} v{key[1]}")
         seen.add(key)
-        template = templates.get(key)
-        if not template:
-            raise TemplateResolutionError(f"missing parent template {tid} v{version}")
-        if template.get("status") != "published":
-            raise TemplateResolutionError(f"unpublished parent template {tid} v{version}")
-        if int(template.get("schema_version") or 0) != TEMPLATE_SCHEMA_VERSION:
-            raise TemplateResolutionError("incompatible template schema version")
-        if str(ref.get("content_hash") or "") != str(template.get("content_hash") or ""):
-            raise TemplateResolutionError(f"template hash mismatch {tid} v{version}")
-        for name, value in (template.get("sections") or {}).items():
-            if name == "keyed_collections":
-                for collection, spec in (value or {}).items():
-                    if not isinstance(spec, dict) or "key" not in spec:
-                        raise TemplateResolutionError(f"{tid}: invalid keyed collection declaration")
-                    resolved[collection] = _merge_keyed(
-                        resolved.get(collection, []),
-                        spec.get("items", []),
-                        str(spec["key"]),
-                        collection,
-                    )
-            elif isinstance(value, dict):
-                resolved[name] = _merge_object(resolved.get(name, {}), value, name)
-            else:
-                resolved[name] = copy.deepcopy(value)
-    for name, value in child.items():
-        if isinstance(value, dict) and isinstance(resolved.get(name), dict):
-            resolved[name] = _merge_object(resolved[name], value, name)
-        else:
-            resolved[name] = copy.deepcopy(value)
-    return resolved
+        resolved = _merge_sections(resolved, _resolve_one(ref, templates, tuple(), 1), key[0])
+    return _merge_sections(resolved, child, "child scenario")
+
+
+def resolve_scenario_pack(
+    pack: dict[str, Any],
+    templates: dict[tuple[str, int], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Materialize a complete scenario snapshot from its pinned template refs.
+
+    The returned pack is independent of its parents and is the object that must
+    be validated, hashed and persisted. Runtime internship reads never invoke
+    this resolver.
+    """
+    out = copy.deepcopy(pack)
+    manifest = out.get("manifest")
+    if not isinstance(manifest, dict):
+        raise TemplateResolutionError("scenario manifest is missing")
+    refs = manifest.get("template_refs") or []
+    if not refs:
+        return out
+    if not isinstance(refs, list) or any(not isinstance(ref, dict) for ref in refs):
+        raise TemplateResolutionError("manifest.template_refs must be a list of pinned references")
+
+    sections = resolve_template_sections({}, refs, templates)
+    manifest_defaults = sections.get("manifest_defaults") or {}
+    if not isinstance(manifest_defaults, dict):
+        raise TemplateResolutionError("manifest_defaults must be an object")
+    out["manifest"] = _merge_object(manifest_defaults, manifest, "manifest")
+
+    catalog_defaults = sections.get("catalog_defaults") or {}
+    if catalog_defaults:
+        catalog = out["manifest"].get("catalog") or {}
+        if not isinstance(catalog_defaults, dict) or not isinstance(catalog, dict):
+            raise TemplateResolutionError("catalog_defaults and manifest.catalog must be objects")
+        out["manifest"]["catalog"] = _merge_object(catalog_defaults, catalog, "manifest.catalog")
+
+    task_defaults = sections.get("task_defaults") or {}
+    if task_defaults:
+        if not isinstance(task_defaults, dict):
+            raise TemplateResolutionError("task_defaults must be an object")
+        out["tasks"] = [
+            _merge_object(task_defaults, task, f"tasks.{index}")
+            for index, task in enumerate(out.get("tasks") or [])
+        ]
+
+    event_defaults = sections.get("event_defaults") or {}
+    if event_defaults:
+        if not isinstance(event_defaults, dict):
+            raise TemplateResolutionError("event_defaults must be an object")
+        out["events"] = [
+            _merge_object(event_defaults, event, f"events.{index}")
+            for index, event in enumerate(out.get("events") or [])
+        ]
+
+    for collection in ("actors", "facts", "tasks", "events", "decisions"):
+        if collection in sections and collection not in {"task_defaults", "event_defaults"}:
+            inherited = sections[collection]
+            child_rows = out.get(collection) or []
+            if inherited:
+                stable_key = {
+                    "actors": "actor_id",
+                    "facts": "id",
+                    "tasks": "task_id",
+                    "events": "event_id",
+                    "decisions": "decision_id",
+                }[collection]
+                out[collection] = _merge_keyed(inherited, child_rows, stable_key, collection)
+    return out
