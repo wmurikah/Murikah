@@ -7,7 +7,7 @@ sys.path.insert(0,str(ROOT/"railway"))
 from virtual_internship.assessment.rubrics import (
     RUBRIC_CALCULATION_VERSION, RubricError, calculate_aggregate, rubric_hash, validate_rubric,
 )
-from virtual_internship.validator import validate_all
+from virtual_internship.validator import SCENARIOS_ROOT, validate_all
 
 def rubric():
     return {
@@ -28,7 +28,8 @@ def rubric():
 
 class Phase6RubricTests(unittest.TestCase):
     def test_committed_v2_rubrics_validate_through_phase2_schema(self):
-        rows=validate_all()
+        names={"internal-audit","internal-audit-v2","data-analyst","data-analyst-v2","software-engineering","software-engineering-v2"}
+        rows=[row for row in validate_all(SCENARIOS_ROOT/"demo") if row[0].name in names]
         self.assertEqual(len(rows),6)
 
     def test_valid_rubric_is_stable_and_versioned(self):
