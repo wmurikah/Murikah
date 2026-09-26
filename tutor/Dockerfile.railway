@@ -40,6 +40,7 @@ COPY tutor/railway/murikah_fast_lane.py /opt/murikah/murikah_fast_lane.py
 COPY tutor/railway/murikah_context_packet.py /opt/murikah/murikah_context_packet.py
 COPY tutor/railway/murikah_persistence.py /opt/murikah/murikah_persistence.py
 COPY tutor/railway/murikah_virtual_internship.py /opt/murikah/murikah_virtual_internship.py
+COPY tutor/railway/murikah_virtual_internship_admin.py /opt/murikah/murikah_virtual_internship_admin.py
 COPY tutor/railway/virtual_internship /src/DeepTutor/deeptutor/virtual_internship
 COPY tutor/railway/lock_guest_composer.py /opt/murikah/lock_guest_composer.py
 COPY tutor/railway/validate_guest_overlay.py /opt/murikah/validate_guest_overlay.py
@@ -169,6 +170,7 @@ RUN apt-get update \
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_guest.py /app/deeptutor/api/routers/murikah_guest.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_oauth.py /app/deeptutor/api/routers/murikah_oauth.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_virtual_internship.py /app/deeptutor/api/routers/murikah_virtual_internship.py
+COPY --from=branded-source /src/DeepTutor/deeptutor/api/routers/murikah_virtual_internship_admin.py /app/deeptutor/api/routers/murikah_virtual_internship_admin.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_access.py /app/deeptutor/murikah_access.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_email_verification.py /app/deeptutor/murikah_email_verification.py
 COPY --from=branded-source /src/DeepTutor/deeptutor/murikah_personalization.py /app/deeptutor/murikah_personalization.py
