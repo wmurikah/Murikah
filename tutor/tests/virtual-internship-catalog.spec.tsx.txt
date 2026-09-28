@@ -105,7 +105,7 @@ function installFetch(workspaceState: "guest" | "none" = "none") {
   });
 }
 
-describe("Virtual Internship Phase 10 catalog", () => {
+describe("Phase 10 Virtual Internship catalog", () => {
   beforeEach(() => {
     nav.pathname = "/virtual-internship";
     nav.search = "";
@@ -170,6 +170,7 @@ describe("Virtual Internship Phase 10 catalog", () => {
     nav.search = "version=sv_internal_audit_qualifying_v1";
     render(<MurikahVirtualInternshipWorkspace />);
 
+    expect(await screen.findByRole("heading", { level: 1, name: "Review your commitment" })).toBeTruthy();
     const start = await screen.findByRole("button", { name: "Start internship" });
     expect((start as HTMLButtonElement).disabled).toBe(true);
     const checks = screen.getAllByRole("checkbox");
