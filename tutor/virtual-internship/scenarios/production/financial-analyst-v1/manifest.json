@@ -1,0 +1,146 @@
+{
+  "id": "sp_financial_analyst_qualifying",
+  "slug": "financial-analyst-internship",
+  "scenario_version_id": "sv_financial_analyst_qualifying_v1",
+  "schema_version": 1,
+  "scenario_version": 1,
+  "title": "Financial Analyst Virtual Internship",
+  "career_family": "finance",
+  "role_title": "Financial Analyst Intern",
+  "region_context": "Fictional East African regional market",
+  "company_ref": "org_finance",
+  "minimum_duration_days": 90,
+  "expected_workload_band": "standard",
+  "classification": "qualifying",
+  "qualifying": true,
+  "mode": "standard",
+  "physical_competency_classification": "knowledge_work",
+  "physical_competency_limitation_text": "",
+  "template_refs": [
+    {
+      "template_id": "tpl_standard_90_day_knowledge_work",
+      "template_version": 1,
+      "content_hash": "1a5fc3894bbb61fb9a4b00bc23ea41ecac7146334ff7c53be872853e4dfb29fc"
+    },
+    {
+      "template_id": "tpl_common_workplace_communication",
+      "template_version": 1,
+      "content_hash": "88e73f6c143ad019f3afef6a658ef29060394defc5e5d614f0fb0a8fda25e821"
+    },
+    {
+      "template_id": "tpl_standard_midpoint_review",
+      "template_version": 1,
+      "content_hash": "9b47bcfa3d04cfeed7b770d192774a4c9bc83beacb5e2c2a5fa45466e39a2587"
+    },
+    {
+      "template_id": "tpl_standard_final_review",
+      "template_version": 1,
+      "content_hash": "85ded058d84ac0ceae69b761fc2d968722e6a190949530a064e67fa49286cb41"
+    },
+    {
+      "template_id": "tpl_standard_completion_disclosure",
+      "template_version": 1,
+      "content_hash": "667ef818309ed5843b79374d2bed35c6c878caa768f99e14522fac842ea7b665"
+    },
+    {
+      "template_id": "tpl_shared_ethics_event_patterns",
+      "template_version": 1,
+      "content_hash": "c61cba3860923f0d52ccfce5b83dd7a5606aec8a544c6b8fcc0c1de11777f535"
+    }
+  ],
+  "catalog": {
+    "schema_version": 1,
+    "catalog_slug": "financial-analyst-intern",
+    "career_family_id": "cf_finance_v1",
+    "short_description": "Reconcile synthetic financial data, build forecasts, analyze variances and communicate management insights.",
+    "long_description": "Join the fictional Finance team at Bluehaven Consumer Group. The 13-week progression covers source-data review, reconciliation, budgeting, forecasting, variance analysis, financial modeling, scenario analysis, management reporting, capstone work and final review.",
+    "internship_type": "qualifying",
+    "minimum_duration_days": 90,
+    "weekly_hours_min": 8,
+    "weekly_hours_max": 12,
+    "workload_band": "standard",
+    "experience_level": "entry",
+    "competencies_developed": [
+      "Financial reconciliation",
+      "Variance analysis",
+      "Financial modeling",
+      "Management reporting"
+    ],
+    "sample_responsibilities": [
+      "Reconcile synthetic financial data and document assumptions",
+      "Prepare budgets, forecasts and scenario analysis",
+      "Analyze variances and business drivers",
+      "Communicate decision-useful financial insights to simulated stakeholders"
+    ],
+    "deliverables": [
+      "Reconciliation workbook",
+      "Budget and forecast approach",
+      "Variance analysis",
+      "Management reporting memo",
+      "Final analysis capstone"
+    ],
+    "work_rhythm": "A 13-week progression moves from structured onboarding and scoped assignments to cross-functional work, midpoint review, increasingly independent work, a capstone and final review.",
+    "prerequisites": "Basic spreadsheet and accounting familiarity is helpful. All financial data is fictional.",
+    "physical_competency_classification": "knowledge_work",
+    "physical_competency_limitation_text": "",
+    "simulation_disclosure": "This is a simulated internship in a fictional workplace. It is not employment with a real organization.",
+    "completion_overview": "Duration is one requirement. Required assignments, reviews, evidence, capstone work and final review gates must also be met.",
+    "support_summary": "Murikah Mentor support is available within authored assignment limits. Assistance is recorded as part of the evidence context.",
+    "published": true,
+    "catalog_visible": true,
+    "sort_order": 50,
+    "search_keywords": [
+      "finance",
+      "financial analysis",
+      "budget",
+      "forecast",
+      "variance",
+      "modeling",
+      "management reporting"
+    ]
+  },
+  "initial_task_ids": [
+    "task_finance_01"
+  ],
+  "initial_event_ids": [
+    "event_finance_unlock_02",
+    "event_finance_unlock_03",
+    "event_finance_unlock_04",
+    "event_finance_unlock_05",
+    "event_finance_unlock_06",
+    "event_finance_unlock_07",
+    "event_finance_unlock_08",
+    "event_finance_unlock_09",
+    "event_finance_unlock_10",
+    "event_finance_unlock_11",
+    "event_finance_unlock_12",
+    "event_finance_unlock_13",
+    "event_finance_ethics",
+    "event_finance_politics",
+    "event_finance_midpoint",
+    "event_finance_final"
+  ],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "manager",
+    "stakeholder",
+    "colleague",
+    "peer_intern"
+  ],
+  "content_hash": "8eb809382e4deb13eb57f7c9f1ae661128be371829f51b5e1ace2310328ea07a",
+  "review_policy": {
+    "midpoint_day": 45,
+    "final_review_day": 90,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

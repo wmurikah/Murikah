@@ -1,0 +1,35 @@
+[
+  {
+    "id": "fact_software_practice_context",
+    "key": "software_practice_context",
+    "value": "A short fictional engineering case introduces issue reproduction, design reasoning, testing and communication without arbitrary code execution.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_practice_issue",
+    "key": "software_practice_issue",
+    "value": "A synthetic requirements edge case explains the supplied software issue.",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_practice_pressure",
+    "key": "software_practice_pressure",
+    "value": "A simulated stakeholder challenges the quality of the learner's evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": true
+  }
+]

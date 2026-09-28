@@ -1,0 +1,77 @@
+{
+  "organization_id": "org_finance",
+  "name": "Bluehaven Consumer Group",
+  "fictional": true,
+  "sector": "Consumer services",
+  "country_region": "Fictional East African regional market",
+  "description": "A fictional consumer-services group used for budgeting, forecasting and management-analysis simulation with synthetic financial data.",
+  "products_services": [
+    "consumer services",
+    "regional subscriptions"
+  ],
+  "departments": [
+    {
+      "id": "dept_finance",
+      "name": "Finance"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    },
+    {
+      "id": "dept_leadership",
+      "name": "Leadership"
+    }
+  ],
+  "systems": [
+    "Bluehaven Finance",
+    "PlanDesk"
+  ],
+  "process_references": [
+    "monthly reporting",
+    "budgeting",
+    "forecast review"
+  ],
+  "vocabulary": [
+    "variance",
+    "run rate",
+    "forecast",
+    "scenario analysis"
+  ],
+  "communication_norms": [
+    "Separate facts from assumptions.",
+    "Document material decisions and evidence.",
+    "Escalate conflicts through the simulated reporting line."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical internship timing."
+  },
+  "reporting_relationships": [
+    {
+      "manager_actor_id": "actor_finance_supervisor",
+      "direct_report_actor_id": "actor_finance_colleague"
+    },
+    {
+      "manager_actor_id": "actor_finance_supervisor",
+      "direct_report_actor_id": "actor_finance_peer"
+    }
+  ],
+  "organization_chart_entries": [
+    {
+      "department_id": "dept_finance",
+      "label": "Finance"
+    },
+    {
+      "department_id": "dept_business",
+      "label": "Business Operations"
+    }
+  ]
+}

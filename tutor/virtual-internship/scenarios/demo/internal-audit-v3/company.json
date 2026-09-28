@@ -1,0 +1,47 @@
+{
+  "organization_id": "org_audit_practice",
+  "name": "Aster Vale Practice Office",
+  "fictional": true,
+  "sector": "Diversified services",
+  "country_region": "Fictional practice environment",
+  "description": "A fictional short-form practice environment for exploring the Internal Audit Virtual Internship workflow.",
+  "products_services": [
+    "practice services"
+  ],
+  "departments": [
+    {
+      "id": "dept_audit_practice",
+      "name": "Internal Audit Practice"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    }
+  ],
+  "systems": [
+    "Practice Workspace"
+  ],
+  "process_references": [
+    "practice workflow"
+  ],
+  "vocabulary": [
+    "walkthrough",
+    "evidence",
+    "finding"
+  ],
+  "communication_norms": [
+    "This is a demo experience.",
+    "Use fictional evidence only."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical timing."
+  }
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "fact_data_practice_context",
+    "key": "data_practice_context",
+    "value": "A short fictional analytics case introduces data quality, metrics, interpretation and stakeholder communication.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_practice_issue",
+    "key": "data_practice_issue",
+    "value": "A small synthetic data-quality anomaly becomes visible during the practice sequence.",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_data_practice_pressure",
+    "key": "data_practice_pressure",
+    "value": "A simulated stakeholder challenges the quality of the learner's evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_demo",
+    "initially_revealed": false,
+    "future_only": true
+  }
+]

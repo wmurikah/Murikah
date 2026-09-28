@@ -1,0 +1,1638 @@
+[
+  {
+    "task_id": "task_data_01",
+    "authored_sequence": 1,
+    "title": "Complete analytics onboarding and data inventory",
+    "category": "routine",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Understand the data landscape and business context.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 5
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_understanding"
+    ],
+    "initial_state": "available",
+    "deliverable_types": [
+      "meeting_notes"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_01_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "meeting_notes"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_02",
+    "authored_sequence": 2,
+    "title": "Assess source data quality",
+    "category": "review",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Identify completeness, validity and reliability issues.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_01"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 12
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_metric_definition"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_02_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_03",
+    "authored_sequence": 3,
+    "title": "Clarify stakeholder questions and analysis scope",
+    "category": "planning",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Translate stakeholder questions into analytical requirements.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_02"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 20
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_quality"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "requirements_document"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_03_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "requirements_document"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_04",
+    "authored_sequence": 4,
+    "title": "Define core metrics and assumptions",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Define metrics with clear grain and assumptions.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_03"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 28
+    },
+    "expected_effort": "4-6 hours",
+    "difficulty": "introductory",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "moderate_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_analytical_interpretation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_04_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_05",
+    "authored_sequence": 5,
+    "title": "Prepare the analysis plan",
+    "category": "research",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Plan a reproducible evidence-based analysis.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_04"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 36
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_05_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_06",
+    "authored_sequence": 6,
+    "title": "Perform exploratory analysis",
+    "category": "analytical",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Explore patterns without overstating causality.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_05"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 44
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_metric_definition"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_06_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_07",
+    "authored_sequence": 7,
+    "title": "Prepare for the midpoint performance review",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Review evidence quality and development priorities.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_06"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 50
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_colleague"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_quality"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_07_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_08",
+    "authored_sequence": 8,
+    "title": "Investigate a metric anomaly",
+    "category": "investigative",
+    "assigned_by_actor_id": "actor_data_manager",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Investigate a synthetic anomaly and competing explanations.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_07"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 58
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "light_coaching",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_analytical_interpretation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "working_paper"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_08_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "working_paper"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_09",
+    "authored_sequence": 9,
+    "title": "Draft the stakeholder insight memo",
+    "category": "communication",
+    "assigned_by_actor_id": "actor_data_manager",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Communicate insights, uncertainty and follow-up.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_08"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 66
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "memo"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_09_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "memo"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_10",
+    "authored_sequence": 10,
+    "title": "Specify a dashboard and visualization approach",
+    "category": "review",
+    "assigned_by_actor_id": "actor_data_manager",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Specify clear charts, filters and metric definitions.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_09"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 72
+    },
+    "expected_effort": "6-8 hours",
+    "difficulty": "intermediate",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_metric_definition"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "design_brief"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_10_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "design_brief"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_11",
+    "authored_sequence": 11,
+    "title": "Revise the analysis with reduced assistance",
+    "category": "decision",
+    "assigned_by_actor_id": "actor_data_manager",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Incorporate review comments independently.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_10"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 80
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "clarification",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_quality"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_11_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_12",
+    "authored_sequence": 12,
+    "title": "Complete the analytical capstone",
+    "category": "capstone",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Integrate quality, metrics, analysis and communication.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_11"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 88
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_analytical_interpretation"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "report"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_12_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "report"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "task_data_13",
+    "authored_sequence": 13,
+    "title": "Present final findings and limitations",
+    "category": "presentation",
+    "assigned_by_actor_id": "actor_data_supervisor",
+    "business_context": "A fictional analytics team must turn synthetic operational data into documented, reproducible and decision-useful analysis.",
+    "learner_objective": "Present findings, limitations and next analytical steps.",
+    "brief": "Use only supplied synthetic data and scenario documents. Do not execute arbitrary code. Document transformations, assumptions and unresolved quality issues.",
+    "dependencies": [
+      "task_data_12"
+    ],
+    "due_policy": {
+      "kind": "offset_days",
+      "days": 90
+    },
+    "expected_effort": "8-12 hours",
+    "difficulty": "advanced",
+    "allowed_tools": [
+      "document_editor",
+      "spreadsheet",
+      "sql_reasoning"
+    ],
+    "allowed_mentor_support": "none",
+    "stakeholder_actor_ids": [
+      "actor_data_stakeholder"
+    ],
+    "event_references": [],
+    "completion_criteria": {
+      "kind": "artifact_submission",
+      "description": "Submit the required professional work product and complete the authored review cycle."
+    },
+    "revision_policy": {
+      "max_revisions": 2
+    },
+    "competency_refs": [
+      "comp_data_understanding"
+    ],
+    "initial_state": "locked",
+    "deliverable_types": [
+      "presentation"
+    ],
+    "rubric": {
+      "rubric_id": "rubric_task_data_13_v1",
+      "schema_version": 1,
+      "title": "Professional work product assessment rubric",
+      "purpose": "Assess the submitted work against the authored task requirements using only cited evidence.",
+      "calculation": {
+        "method": "weighted_average",
+        "weight_total": 100,
+        "rounding": "half_up_2dp"
+      },
+      "rating_levels": [
+        {
+          "rating_id": "not_yet",
+          "label": "Not yet demonstrated",
+          "value": 25
+        },
+        {
+          "rating_id": "developing",
+          "label": "Developing",
+          "value": 50
+        },
+        {
+          "rating_id": "meets",
+          "label": "Meets expectations",
+          "value": 75
+        },
+        {
+          "rating_id": "exceeds",
+          "label": "Exceeds expectations",
+          "value": 100
+        }
+      ],
+      "criteria": [
+        {
+          "criterion_id": "task_requirements",
+          "description": "Addresses the explicit objective and requirements of the assigned task.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 50,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "evidence_reasoning",
+          "description": "Uses supplied evidence appropriately and distinguishes supported conclusions from assumptions.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 35,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        },
+        {
+          "criterion_id": "deliverable_clarity",
+          "description": "Presents the work product in a clear, traceable professional form.",
+          "evidence_expectations": "Cite specific submitted work that supports this criterion.",
+          "weight": 15,
+          "allowed_rating_ids": [
+            "not_yet",
+            "developing",
+            "meets",
+            "exceeds"
+          ],
+          "deliverable_types": [
+            "presentation"
+          ],
+          "allow_not_assessed": false
+        }
+      ]
+    }
+  }
+]

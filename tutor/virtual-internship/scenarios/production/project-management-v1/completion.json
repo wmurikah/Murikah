@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "required_task_ids": [
+    "task_project_01",
+    "task_project_02",
+    "task_project_03",
+    "task_project_04",
+    "task_project_05",
+    "task_project_06",
+    "task_project_07",
+    "task_project_08",
+    "task_project_09",
+    "task_project_10",
+    "task_project_11",
+    "task_project_12",
+    "task_project_13"
+  ],
+  "required_review_types": [
+    "midpoint"
+  ],
+  "required_competencies": [
+    {
+      "competency_id": "comp_project_planning",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_stakeholder_management",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_project_risk_management",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_change_management",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    }
+  ],
+  "capstone_task_ids": [
+    "task_project_12"
+  ],
+  "require_final_review": true,
+  "final_review_after_capstone": true
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "decision_id": "decision_software_practice_response",
+    "label": "How will you respond to the practice stakeholder challenge?",
+    "options": [
+      {
+        "option_id": "clarify",
+        "label": "Ask for clarification and document the evidence gap."
+      },
+      {
+        "option_id": "escalate",
+        "label": "Escalate the concern through the practice supervisor."
+      }
+    ]
+  }
+]

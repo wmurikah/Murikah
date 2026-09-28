@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "required_task_ids": [
+    "task_cyber_01",
+    "task_cyber_02",
+    "task_cyber_03",
+    "task_cyber_04",
+    "task_cyber_05",
+    "task_cyber_06",
+    "task_cyber_07",
+    "task_cyber_08",
+    "task_cyber_09",
+    "task_cyber_10",
+    "task_cyber_11",
+    "task_cyber_12",
+    "task_cyber_13"
+  ],
+  "required_review_types": [
+    "midpoint"
+  ],
+  "required_competencies": [
+    {
+      "competency_id": "comp_security_asset_review",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_access_control_analysis",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_security_risk_triage",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    },
+    {
+      "competency_id": "comp_security_remediation",
+      "definition_version": 1,
+      "minimum_level": "developing",
+      "minimum_evidence_strength": "supporting",
+      "minimum_evidence_records": 1,
+      "minimum_independent_demonstrations": 0,
+      "minimum_distinct_contexts": 1
+    }
+  ],
+  "capstone_task_ids": [
+    "task_cyber_12"
+  ],
+  "require_final_review": true,
+  "final_review_after_capstone": true
+}

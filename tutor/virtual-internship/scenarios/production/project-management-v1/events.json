@@ -1,0 +1,421 @@
+[
+  {
+    "event_id": "event_project_unlock_02",
+    "authored_sequence": 1,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_01",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_02"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_02",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Map stakeholders and decision roles",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_03",
+    "authored_sequence": 2,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_02",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_03"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_03",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Build the milestone and dependency plan",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_04",
+    "authored_sequence": 3,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_03",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_04"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_04",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Prepare the project risk register",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_05",
+    "authored_sequence": 4,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_04",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_05"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_05",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Define status reporting and issue governance",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_06",
+    "authored_sequence": 5,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_05",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_06"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_06",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Analyze a schedule dependency conflict",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_07",
+    "authored_sequence": 6,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_06",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_07"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_07",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Prepare for the midpoint performance review",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_08",
+    "authored_sequence": 7,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_07",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_08"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_08",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Investigate a scope and delivery issue",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_09",
+    "authored_sequence": 8,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_08",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_09"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_09",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Draft the sponsor status communication",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_10",
+    "authored_sequence": 9,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_09",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_10"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_10",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Assess a formal change request",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_11",
+    "authored_sequence": 10,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_10",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_11"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_11",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Revise the delivery plan independently",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_12",
+    "authored_sequence": 11,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_11",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_12"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_12",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Complete the project capstone",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_unlock_13",
+    "authored_sequence": 12,
+    "event_type": "assignment_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_project_12",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_project_13"
+      }
+    ],
+    "message_template_id": "msg_project_assignment_13",
+    "actor_ids": [
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock Present project closeout recommendations",
+    "learning_objective": "Progress to a more independent assignment after completing prerequisite work."
+  },
+  {
+    "event_id": "event_project_ethics",
+    "authored_sequence": 13,
+    "event_type": "ethics_escalation",
+    "priority": 60,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 35
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_project_ethics"
+      }
+    ],
+    "message_template_id": "msg_project_ethics",
+    "actor_ids": [
+      "actor_project_stakeholder",
+      "actor_project_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Ethics and escalation pressure",
+    "learning_objective": "Respond professionally when delivery pressure conflicts with evidence quality or policy."
+  },
+  {
+    "event_id": "event_project_politics",
+    "authored_sequence": 14,
+    "event_type": "workplace_dynamics",
+    "priority": 55,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 55
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_project_priority",
+        "value": "priority_challenged"
+      }
+    ],
+    "message_template_id": "msg_project_politics",
+    "actor_ids": [
+      "actor_project_stakeholder",
+      "actor_project_manager"
+    ],
+    "once": true,
+    "audit_label": "Cross-functional priority challenge",
+    "learning_objective": "Manage stakeholder pressure without abandoning professional standards."
+  },
+  {
+    "event_id": "event_project_midpoint",
+    "authored_sequence": 15,
+    "event_type": "meeting",
+    "priority": 70,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 45
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_project_review",
+        "value": "midpoint_due"
+      }
+    ],
+    "message_template_id": "msg_project_midpoint",
+    "actor_ids": [
+      "actor_project_supervisor",
+      "actor_project_manager"
+    ],
+    "once": true,
+    "audit_label": "Midpoint performance meeting",
+    "learning_objective": "Use evidence and feedback to plan stronger second-half performance."
+  },
+  {
+    "event_id": "event_project_final",
+    "authored_sequence": 16,
+    "event_type": "meeting",
+    "priority": 80,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 90
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "set_mutable_fact",
+        "fact_id": "fact_project_review",
+        "value": "final_due"
+      }
+    ],
+    "message_template_id": "msg_project_final",
+    "actor_ids": [
+      "actor_project_supervisor",
+      "actor_project_manager"
+    ],
+    "once": true,
+    "audit_label": "Final performance meeting",
+    "learning_objective": "Review the complete body of work and final capstone evidence."
+  }
+]

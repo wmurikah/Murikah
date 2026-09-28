@@ -76,9 +76,9 @@ def main() -> int:
         root / "web" / "app" / "(auth)" / "register" / "page.tsx",
     )
 
-    # Public backend surfaces remain deliberately narrow: a stateless 3-prompt
-    # LLM preview and social sign-in callbacks. DeepTutor's normal routers keep
-    # their existing require_auth/require_admin dependencies.
+    # Backend surfaces are split by authority. Guest catalog reads remain on the
+    # learner router, while institution publishing is a separate authenticated
+    # admin router whose persistence calls are also D1-role checked.
     copy_required(
         overlay / "murikah_guest.py",
         root / "deeptutor" / "api" / "routers" / "murikah_guest.py",
@@ -91,16 +91,20 @@ def main() -> int:
         overlay / "murikah_virtual_internship.py",
         root / "deeptutor" / "api" / "routers" / "murikah_virtual_internship.py",
     )
+    copy_required(
+        overlay / "murikah_virtual_internship_admin.py",
+        root / "deeptutor" / "api" / "routers" / "murikah_virtual_internship_admin.py",
+    )
     api_main = root / "deeptutor" / "api" / "main.py"
     replace_once(
         api_main,
         'from deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402',
-        '''from deeptutor.api.routers.murikah_guest import router as murikah_guest_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_oauth import router as murikah_oauth_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_virtual_internship import router as murikah_virtual_internship_router  # noqa: E402\nfrom deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402''',
+        '''from deeptutor.api.routers.murikah_guest import router as murikah_guest_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_oauth import router as murikah_oauth_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_virtual_internship import router as murikah_virtual_internship_router  # noqa: E402\nfrom deeptutor.api.routers.murikah_virtual_internship_admin import router as murikah_virtual_internship_admin_router  # noqa: E402\nfrom deeptutor.api.routers.multi_user import router as multi_user_router  # noqa: E402''',
     )
     replace_once(
         api_main,
         '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
-        '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(murikah_oauth_router, prefix="/api/auth/oauth", tags=["murikah-oauth"])\napp.include_router(murikah_guest_router, prefix="/api/murikah", tags=["murikah-guest"])\napp.include_router(murikah_virtual_internship_router, prefix="/api/murikah/virtual-internship", tags=["murikah-virtual-internship"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
+        '''# Auth router is public — login/logout/register/status require no token\napp.include_router(auth.router, prefix="/api/auth", tags=["auth"])\napp.include_router(murikah_oauth_router, prefix="/api/auth/oauth", tags=["murikah-oauth"])\napp.include_router(murikah_guest_router, prefix="/api/murikah", tags=["murikah-guest"])\napp.include_router(murikah_virtual_internship_router, prefix="/api/murikah/virtual-internship", tags=["murikah-virtual-internship"])\napp.include_router(murikah_virtual_internship_admin_router, prefix="/api/murikah/virtual-internship/admin", tags=["murikah-virtual-internship-admin"])\napp.include_router(outputs.router, prefix="/files/outputs", tags=["outputs"])''',
     )
 
     # Developer resources stay visible to administrators only. Ordinary users
@@ -119,8 +123,8 @@ def main() -> int:
     )
     replace_once(
         sidebar,
-        '''          <a\n            href={DOCS_URL}\n            target="_blank"\n            rel="noreferrer noopener"\n            title={t("Docs") as string}\n            aria-label={t("Docs") as string}\n            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"\n          >\n            <BookText\n              size={15}\n              strokeWidth={1.8}\n              className="text-blue-600 dark:text-blue-400"\n            />\n          </a>\n          <GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]" />\n          <VersionBadge collapsed />''',
-        '''          {isAdmin && (\n            <>\n              <a\n                href={DOCS_URL}\n                target="_blank"\n                rel="noreferrer noopener"\n                title={t("Docs") as string}\n                aria-label={t("Docs") as string}\n                className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"\n              >\n                <BookText size={15} strokeWidth={1.8} className="text-blue-600 dark:text-blue-400" />\n              </a>\n              <GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]" />\n            </>\n          )}\n          <VersionBadge collapsed />''',
+        '''          <a\n            href={DOCS_URL}\n            target="_blank"\n            rel="noreferrer noopener"\n            title={t("Docs") as string}\n            aria-label={t("Docs") as string}\n            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"\n          >\n            <BookText\n              size={15}\n              strokeWidth={1.8}\n              className="text-blue-600 dark:text-blue-400"\n            />\n          </a>\n          <GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--muted-foreground)]" />\n          <VersionBadge collapsed />''',
+        '''          {isAdmin && (\n            <>\n              <a\n                href={DOCS_URL}\n                target="_blank"\n                rel="noreferrer noopener"\n                title={t("Docs") as string}\n                aria-label={t("Docs") as string}\n                className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"\n              >\n                <BookText size={15} strokeWidth={1.8} className="text-blue-600 dark:text-blue-400" />\n              </a>\n              <GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--muted-foreground)]" />\n            </>\n          )}\n          <VersionBadge collapsed />''',
     )
     replace_once(
         sidebar,

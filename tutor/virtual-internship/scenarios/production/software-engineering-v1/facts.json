@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_software_policy",
+    "key": "software_work_policy",
+    "value": "Engineering changes require a reproducible problem statement, reviewed design and evidence-based test plan.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_method",
+    "key": "software_team_method",
+    "value": "Read supplied code and logs safely, reason about behavior, document proposed changes and never execute arbitrary learner code in the Tutor container.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_software"
+    ],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_priority",
+    "key": "software_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_stakeholder",
+    "key": "software_stakeholder_constraint",
+    "value": "Product wants a rapid fix before the full regression impact is understood.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_hidden",
+    "key": "software_hidden_exception",
+    "value": "A synthetic edge case in the supplied requirements explains the intermittent failure.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_ethics",
+    "key": "software_ethics_pressure",
+    "value": "A stakeholder will ask to skip a documented quality check to meet a fictional release date.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_software_review",
+    "key": "software_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_software_capstone",
+    "key": "software_capstone_context",
+    "value": "The capstone integrates issue reproduction, design, testing, review, documentation and change planning.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]
