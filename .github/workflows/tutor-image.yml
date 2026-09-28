@@ -91,23 +91,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Murikah runtime modules are installed inside the deeptutor package in the final image.
+          # Resolve the packaged artifacts without importing application modules.
+          # Full imports execute DeepTutor runtime config and require startup-only dependencies/env.
           docker run --rm --entrypoint python "${IMAGE}:source-${SOURCE_REVISION}" -c '
-          import importlib
-          modules = (
-              "deeptutor.murikah_persistence",
-              "deeptutor.murikah_access",
-              "deeptutor.murikah_personalization",
-              "deeptutor.api.routers.murikah_guest",
-              "deeptutor.api.routers.murikah_virtual_internship",
-              "deeptutor.api.routers.murikah_virtual_internship_admin",
-              "deeptutor.virtual_internship",
+          from importlib.machinery import PathFinder
+          checks = (
+              ("deeptutor.murikah_persistence", "murikah_persistence", "/app/deeptutor"),
+              ("deeptutor.murikah_access", "murikah_access", "/app/deeptutor"),
+              ("deeptutor.murikah_personalization", "murikah_personalization", "/app/deeptutor"),
+              ("deeptutor.api.routers.murikah_guest", "murikah_guest", "/app/deeptutor/api/routers"),
+              ("deeptutor.api.routers.murikah_virtual_internship", "murikah_virtual_internship", "/app/deeptutor/api/routers"),
+              ("deeptutor.api.routers.murikah_virtual_internship_admin", "murikah_virtual_internship_admin", "/app/deeptutor/api/routers"),
+              ("deeptutor.virtual_internship", "virtual_internship", "/app/deeptutor"),
           )
-          for name in modules:
-              module = importlib.import_module(name)
-              path = getattr(module, "__file__", "") or ""
-              assert path.startswith("/app/deeptutor/"), (name, path)
-              print(f"OK {name} -> {path}")
+          for qualified_name, leaf_name, search_path in checks:
+              spec = PathFinder.find_spec(leaf_name, [search_path])
+              assert spec is not None, qualified_name
+              path = spec.origin or ""
+              assert path.startswith("/app/deeptutor/"), (qualified_name, path)
+              print(f"OK {qualified_name} -> {path}")
           '
 
       - name: Publish immutable source image
