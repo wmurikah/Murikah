@@ -31,6 +31,15 @@ jobs:
       - name: Apply Phase 10 closure patch
         run: python tutor/scripts/phase10_finalize_patch.py prepare
 
+      - name: Normalize documentation EOF
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for name in ("tutor/virtual-internship/README.md", "tutor/cloudflare/PERSISTENCE.md"):
+              path = Path(name)
+              path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8")
+          PY
+
       - name: Check patch whitespace
         run: git diff --check
 
@@ -49,6 +58,11 @@ jobs:
       - name: Close Phase 10 checklist only after gates pass
         run: |
           python tutor/scripts/phase10_finalize_patch.py finalize
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tutor/virtual-internship/README.md")
+          path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8")
+          PY
           git diff --check
 
       - name: Commit focused Phase 10 closure
