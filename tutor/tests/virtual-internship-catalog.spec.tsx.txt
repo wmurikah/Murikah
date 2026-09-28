@@ -1,0 +1,207 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import MurikahVirtualInternshipWorkspace from "@/components/virtual-internship/MurikahVirtualInternshipWorkspace";
+
+const nav = vi.hoisted(() => ({
+  pathname: "/virtual-internship",
+  search: "",
+  push: vi.fn(),
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: nav.refresh }),
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
+
+const qualifying = {
+  slug: "internal-audit-intern",
+  scenario_pack_id: "sp_internal_audit_qualifying",
+  scenario_version_id: "sv_internal_audit_qualifying_v1",
+  scenario_version: 1,
+  internship_type: "qualifying",
+  qualifying: true,
+  mode: "standard",
+  title: "Internal Audit Virtual Internship",
+  role_title: "Internal Audit Intern",
+  simulated_company: "Aster Vale Services Group",
+  sector: "Diversified services",
+  region: "Fictional East African regional market",
+  career_family: { id: "cf_audit_assurance_v1", slug: "audit_assurance", title: "Audit and Assurance" },
+  short_description: "Plan and execute a simulated internal audit engagement.",
+  minimum_duration_days: 90,
+  weekly_workload: { min_hours: 8, max_hours: 12, label: "8-12 hours/week" },
+  workload_band: "standard",
+  experience_level: "entry",
+  competency_preview: ["Process understanding", "Reconciliation", "Investigation"],
+  responsibility_preview: ["Review process documentation", "Assess risks and controls", "Prepare working papers"],
+  deliverable_preview: ["Planning note", "Risk and control matrix", "Final audit summary"],
+  qualification_label: "Qualifying Virtual Internship",
+  physical_competency_classification: "knowledge_work",
+  physical_competency_limitation_text: "",
+};
+
+const practice = {
+  ...qualifying,
+  slug: "internal-audit-practice",
+  scenario_pack_id: "sp_demo_internal_audit",
+  scenario_version_id: "sv_demo_internal_audit_v3",
+  scenario_version: 3,
+  internship_type: "practice",
+  qualifying: false,
+  mode: "demo",
+  title: "Internal Audit Practice Internship",
+  role_title: "Internal Audit Practice Intern",
+  simulated_company: "Aster Vale Practice Office",
+  short_description: "Explore a short Internal Audit demo before committing to a qualifying internship.",
+  minimum_duration_days: 14,
+  weekly_workload: { min_hours: 2, max_hours: 4, label: "2-4 hours/week" },
+  workload_band: "light",
+  qualification_label: "Demo",
+};
+
+const detail = {
+  ...qualifying,
+  server_current_time: 1_790_000_000,
+  long_description: "Join a fictional Internal Audit team and progress through professional assurance work.",
+  competencies: ["Process understanding", "Reconciliation", "Investigation", "Professional communication"],
+  responsibilities: ["Review process documentation", "Assess risks and controls", "Prepare traceable working papers"],
+  deliverables: ["Planning note", "Risk and control matrix", "Evidence index", "Final audit summary"],
+  work_rhythm: "A 13-week progression from onboarding through capstone and final review.",
+  prerequisites: "Basic spreadsheet and professional writing familiarity is helpful.",
+  simulation_disclosure: "This is a simulated internship in a fictional workplace.",
+  completion_overview: "Duration is one requirement. Required assignments, reviews, evidence, capstone work and final review gates must also be met.",
+  support_summary: "Murikah Mentor support is available within authored assignment limits.",
+  exact_scenario_version: { id: "sv_internal_audit_qualifying_v1", version: 1, content_hash: "a".repeat(64) },
+  practice_disclosure: "",
+};
+
+const facets = {
+  ok: true,
+  career_families: [{ id: "cf_audit_assurance_v1", slug: "audit_assurance", title: "Audit and Assurance", short_title: "Audit" }],
+  sectors: ["Diversified services"],
+  internship_types: ["qualifying", "practice"],
+  workload_bands: ["light", "standard", "intensive"],
+  experience_levels: ["entry", "early_career", "intermediate"],
+};
+
+function response(body: unknown, status = 200) {
+  return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+}
+
+function installFetch(workspaceState: "guest" | "none" = "none") {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.endsWith("/workspace")) return response({ state: workspaceState, simulation: true, sections: [] });
+    if (url.includes("/catalog/facets")) return response(facets);
+    if (url.includes("/catalog/internal-audit-intern")) return response({ ok: true, internship: detail });
+    if (url.includes("/catalog?") || url.endsWith("/catalog")) return response({ ok: true, count: 2, results: [qualifying, practice] });
+    if (url.endsWith("/start") && init?.method === "POST") {
+      return response({ state: "active", simulation: true, sections: [], internship: { internship_id: "vi_started" }, company: {}, tasks: [], people: [] });
+    }
+    return response({ error: "not_found" }, 404);
+  });
+}
+
+describe("Virtual Internship Phase 10 catalog", () => {
+  beforeEach(() => {
+    nav.pathname = "/virtual-internship";
+    nav.search = "";
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.refresh.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the marketplace for a member with no active internship", async () => {
+    installFetch("none");
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Choose your Virtual Internship" })).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: "Search internships" })).toBeTruthy();
+    expect(screen.getByLabelText("Career family")).toBeTruthy();
+    expect(screen.getByLabelText("Sector")).toBeTruthy();
+    expect(screen.getByLabelText("Type")).toBeTruthy();
+    expect(screen.getByLabelText("Weekly workload")).toBeTruthy();
+    expect(screen.getByLabelText("Experience")).toBeTruthy();
+    expect(screen.getByText("Qualifying Virtual Internships")).toBeTruthy();
+    expect(screen.getByText("Practice internships")).toBeTruthy();
+    expect(screen.getByText("Aster Vale Services Group")).toBeTruthy();
+    expect(screen.getByText("Minimum 90 calendar days")).toBeTruthy();
+    expect(screen.getByText("8-12 hours/week")).toBeTruthy();
+    expect(screen.getByText("Does not qualify for completion credentials")).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("lets guests browse but routes a qualifying start through existing sign in", async () => {
+    installFetch("guest");
+    nav.pathname = "/virtual-internship/catalog/internal-audit-intern";
+    nav.search = "version=sv_internal_audit_qualifying_v1";
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Internal Audit Intern" })).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Sign in to review commitment" });
+    expect(link.getAttribute("href")).toContain("/login?next=");
+    expect(link.getAttribute("href")).toContain("commitment");
+  });
+
+  it("preserves search and filter choices in the catalog URL", async () => {
+    installFetch("none");
+    render(<MurikahVirtualInternshipWorkspace />);
+    await screen.findByRole("heading", { level: 1, name: "Choose your Virtual Internship" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search internships" }), { target: { value: "audit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(nav.replace).toHaveBeenCalledWith("/virtual-internship?q=audit");
+
+    fireEvent.change(screen.getByLabelText("Career family"), { target: { value: "audit_assurance" } });
+    expect(nav.replace).toHaveBeenCalledWith("/virtual-internship?career=audit_assurance");
+  });
+
+  it("requires commitment acknowledgements and pins the reviewed scenario version", async () => {
+    const fetchMock = installFetch("none");
+    nav.pathname = "/virtual-internship/catalog/internal-audit-intern/commitment";
+    nav.search = "version=sv_internal_audit_qualifying_v1";
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    const start = await screen.findByRole("button", { name: "Start internship" });
+    expect((start as HTMLButtonElement).disabled).toBe(true);
+    const checks = screen.getAllByRole("checkbox");
+    expect(checks).toHaveLength(4);
+    checks.forEach((box) => fireEvent.click(box));
+    expect((start as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(start);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith("/start") && init?.method === "POST");
+      expect(call).toBeTruthy();
+      const payload = JSON.parse(String(call?.[1]?.body || "{}"));
+      expect(payload.scenario_slug).toBe("internal-audit-intern");
+      expect(payload.scenario_version_id).toBe("sv_internal_audit_qualifying_v1");
+      expect(payload.qualifying).toBeUndefined();
+      expect(payload.mode).toBeUndefined();
+    });
+  });
+
+  it("shows a distinct no-results state for filters instead of the old internship empty state", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/workspace")) return response({ state: "none", simulation: true, sections: [] });
+      if (url.includes("/catalog/facets")) return response(facets);
+      if (url.includes("/catalog?")) return response({ ok: true, count: 0, results: [] });
+      return response({ error: "not_found" }, 404);
+    });
+    nav.search = "q=nomatch";
+    render(<MurikahVirtualInternshipWorkspace />);
+
+    expect(await screen.findByText("No internships match those filters.")).toBeTruthy();
+    expect(screen.queryByText("No internship is available right now.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+});
