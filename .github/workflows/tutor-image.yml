@@ -91,6 +91,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Murikah runtime modules are installed inside the deeptutor package in the final image.
           docker run --rm --entrypoint python "${IMAGE}:source-${SOURCE_REVISION}" -c '
           import importlib
           modules = (
