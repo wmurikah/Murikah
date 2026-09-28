@@ -5,7 +5,20 @@ This module deliberately exposes typed operations and no arbitrary state patch.
 """
 from __future__ import annotations
 from typing import Any
-from deeptutor import murikah_persistence
+
+# The same Virtual Internship package is exercised in two deliberate import
+# contexts. Production installs it as ``deeptutor.virtual_internship`` while
+# repository/source regression tests put ``tutor/railway`` on sys.path and
+# import it as top-level ``virtual_internship``. Keep the persistence dependency
+# strict in production, but allow the source-tree sibling module when the
+# DeepTutor package itself is intentionally absent from that test context.
+try:
+    from deeptutor import murikah_persistence
+except ModuleNotFoundError as exc:
+    if exc.name != "deeptutor":
+        raise
+    import murikah_persistence
+
 
 class ScenarioStateService:
     def definition(self, actor_id:str, internship_id:str)->dict[str,Any]:
@@ -24,5 +37,6 @@ class ScenarioStateService:
         return murikah_persistence.scenario_record_decision(actor_id,internship_id,decision_id,option_id,request_id=request_id,expected_revision=expected_revision)
     def evaluate(self, actor_id:str, internship_id:str, *, request_id:str="", expected_revision:int|None=None)->dict[str,Any]:
         return murikah_persistence.scenario_evaluate(actor_id,internship_id,request_id=request_id,expected_revision=expected_revision)
+
 
 __all__=["ScenarioStateService"]
