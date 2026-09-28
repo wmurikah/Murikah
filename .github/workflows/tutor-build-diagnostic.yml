@@ -1,0 +1,40 @@
+name: Diagnose Tutor image build
+
+on:
+  push:
+    branches:
+      - fix/tutor-runtime-overlay-import-path
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build pinned Tutor image and capture log
+        id: build
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          docker build --progress=plain \
+            -f tutor/Dockerfile.railway \
+            --build-arg DEEPTUTOR_COMMIT=7a96bba1ae03401644c17763a2411c28aff3dcc9 \
+            -t murikah-tutor:diagnostic \
+            . 2>&1 | tee tutor-build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tutor-build-log
+          path: tutor-build.log
+          if-no-files-found: error
+
+      - name: Preserve build result
+        if: steps.build.outcome != 'success'
+        run: exit 1
