@@ -36,17 +36,29 @@ jobs:
           PY
           git diff --check
 
-      - name: Exercise branding then Railway overlay against pinned DeepTutor
+      - name: Exercise production-staged overlay against pinned DeepTutor
         run: |
           set -euo pipefail
-          rm -rf /tmp/DeepTutor
-          mkdir -p /tmp/DeepTutor
+          rm -rf /tmp/DeepTutor /tmp/murikah-overlay
+          mkdir -p /tmp/DeepTutor /tmp/murikah-overlay
           git -C /tmp/DeepTutor init
           git -C /tmp/DeepTutor remote add origin https://github.com/HKUDS/DeepTutor.git
           git -C /tmp/DeepTutor fetch --depth 1 origin 7a96bba1ae03401644c17763a2411c28aff3dcc9
           git -C /tmp/DeepTutor checkout --detach FETCH_HEAD
+
+          cp tutor/railway/apply_railway_overlay.py /tmp/murikah-overlay/apply_railway_overlay.py
+          cp tutor/railway/murikah-entry-page.tsx.txt /tmp/murikah-overlay/murikah-entry-page.tsx
+          cp tutor/railway/MurikahGuestChatV2.tsx.txt /tmp/murikah-overlay/MurikahGuestChat.tsx
+          cp tutor/railway/MurikahSocialButtons.tsx.txt /tmp/murikah-overlay/MurikahSocialButtons.tsx
+          cp tutor/railway/murikah-login-page.tsx.txt /tmp/murikah-overlay/murikah-login-page.tsx
+          cp tutor/railway/murikah-register-page.tsx.txt /tmp/murikah-overlay/murikah-register-page.tsx
+          cp tutor/railway/murikah_guest_v2.py /tmp/murikah-overlay/murikah_guest.py
+          cp tutor/railway/murikah_oauth.py /tmp/murikah-overlay/murikah_oauth.py
+          cp tutor/railway/murikah_virtual_internship.py /tmp/murikah-overlay/murikah_virtual_internship.py
+          cp tutor/railway/murikah_virtual_internship_admin.py /tmp/murikah-overlay/murikah_virtual_internship_admin.py
+
           python tutor/scripts/apply_branding.py /tmp/DeepTutor
-          python tutor/railway/apply_railway_overlay.py /tmp/DeepTutor tutor/railway/health-route.ts.txt
+          python /tmp/murikah-overlay/apply_railway_overlay.py /tmp/DeepTutor tutor/railway/health-route.ts.txt
 
       - name: Commit repaired overlay and remove temporary workflow
         run: |
