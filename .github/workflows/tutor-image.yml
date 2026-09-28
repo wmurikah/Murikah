@@ -84,6 +84,31 @@ jobs:
           actual_revision="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "${IMAGE}:source-${SOURCE_REVISION}")"
           test "$actual_revision" = "$SOURCE_REVISION"
 
+      - name: Verify packaged Tutor Python modules
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.value }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/murikah-tutor
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python "${IMAGE}:source-${SOURCE_REVISION}" -c '
+          import importlib
+          modules = (
+              "deeptutor.murikah_persistence",
+              "deeptutor.murikah_access",
+              "deeptutor.murikah_personalization",
+              "deeptutor.api.routers.murikah_guest",
+              "deeptutor.api.routers.murikah_virtual_internship",
+              "deeptutor.api.routers.murikah_virtual_internship_admin",
+              "deeptutor.virtual_internship",
+          )
+          for name in modules:
+              module = importlib.import_module(name)
+              path = getattr(module, "__file__", "") or ""
+              assert path.startswith("/app/deeptutor/"), (name, path)
+              print(f"OK {name} -> {path}")
+          '
+
       - name: Publish immutable source image
         if: github.event_name != 'pull_request'
         env:
