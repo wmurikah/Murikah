@@ -19,7 +19,7 @@ jobs:
           image="ghcr.io/hkuds/deeptutor:1.6.6"
           docker pull "$image"
           docker image inspect "$image" --format 'WorkingDir={{.Config.WorkingDir}} Env={{json .Config.Env}}'
-          docker run --rm --entrypoint python "$image" - <<'PY'
+          docker run --rm -i --entrypoint python "$image" - <<'PY'
           import os
           import sys
           import deeptutor
