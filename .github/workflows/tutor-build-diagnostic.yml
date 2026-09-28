@@ -15,26 +15,34 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Build pinned Tutor image and capture log
-        id: build
+      - name: Build pinned Tutor image
         shell: bash
-        continue-on-error: true
         run: |
-          set -o pipefail
+          set -euo pipefail
           docker build --progress=plain \
             -f tutor/Dockerfile.railway \
             --build-arg DEEPTUTOR_COMMIT=7a96bba1ae03401644c17763a2411c28aff3dcc9 \
             -t murikah-tutor:diagnostic \
-            . 2>&1 | tee tutor-build.log
+            .
 
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tutor-build-log
-          path: tutor-build.log
-          if-no-files-found: error
-
-      - name: Preserve build result
-        if: steps.build.outcome != 'success'
-        run: exit 1
+      - name: Verify packaged Tutor modules use package imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python murikah-tutor:diagnostic -c '
+          import importlib
+          modules = (
+              "deeptutor.murikah_persistence",
+              "deeptutor.murikah_access",
+              "deeptutor.murikah_personalization",
+              "deeptutor.api.routers.murikah_guest",
+              "deeptutor.api.routers.murikah_virtual_internship",
+              "deeptutor.api.routers.murikah_virtual_internship_admin",
+              "deeptutor.virtual_internship",
+          )
+          for name in modules:
+              module = importlib.import_module(name)
+              path = getattr(module, "__file__", "") or ""
+              assert path.startswith("/app/deeptutor/"), (name, path)
+              print(f"OK {name} -> {path}")
+          '
