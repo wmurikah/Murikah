@@ -1,0 +1,66 @@
+name: Finalize Virtual Internship Phase 10
+
+on:
+  push:
+    branches:
+      - feat/tutor-virtual-internship-phase10
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase10-finalize-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[phase10-finalized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out focused branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/tutor-virtual-internship-phase10
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply Phase 10 closure patch
+        run: python tutor/scripts/phase10_finalize_patch.py prepare
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Validate all Virtual Internship scenario packs
+        run: python tutor/scripts/validate_virtual_internship_scenarios.py
+
+      - name: Run Virtual Internship Python regression suite
+        run: python -m unittest discover -s tutor/tests -p 'test_virtual_internship_*.py'
+
+      - name: Validate Cloudflare persistence and packaging invariants
+        run: python tutor/cloudflare/preflight.py
+
+      - name: Validate Tutor deployment invariants
+        run: python tutor/scripts/preflight.py
+
+      - name: Close Phase 10 checklist only after gates pass
+        run: |
+          python tutor/scripts/phase10_finalize_patch.py finalize
+          git diff --check
+
+      - name: Commit focused Phase 10 closure
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/phase10-finalize.yml tutor/scripts/phase10_finalize_patch.py
+          git add tutor/virtual-internship/README.md \
+                  tutor/cloudflare/PERSISTENCE.md \
+                  tutor/cloudflare/preflight_legacy.py \
+                  tutor/tests/virtual-internship-catalog.spec.tsx.txt \
+                  tutor/cloudflare/migrations/0017_virtual_internship_phase10_template_retirement_fix.sql \
+                  tutor/tests/test_virtual_internship_phase10_migration.py
+          git commit -m 'Complete Virtual Internship Phase 10 [phase10-finalized]'
+          git push origin HEAD:feat/tutor-virtual-internship-phase10
