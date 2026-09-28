@@ -337,3 +337,26 @@ The evidence authority is completed Phase 6 assessment criteria plus an authored
 Evidence corrections are append-only `revoked`/`superseded` adjustments. The correction route is available only through the signed private persistence bridge to an active administrator, requires an idempotent request ID and reason, preserves the original evidence row and recalculates the affected Passport aggregate. Learners cannot remove weak evidence from the browser.
 
 Learner reads and export remain owner-scoped through the authenticated Tutor actor and the signed persistence bridge. The browser cannot write competency evidence, levels or aggregation rules. The default JSON export references stable evidence IDs and lineage metadata rather than embedding R2 artifact bytes, includes the Virtual Internship simulation disclosure and excludes display name unless the learner explicitly opts in; any included name is resolved server-side from account personalization. A physical/manual competency definition receives an explicit simulation limitation and virtual evidence cannot silently become Strong physical-competency evidence. There is no public Passport URL or employer verification ID in Phase 7.
+
+## Virtual Internship Phase 10 - career catalog, templates and institution publishing
+
+Phase 10 keeps D1 authoritative for published catalog and scenario metadata. The authored, validated scenario manifest remains the source of truth; publication/bootstrap projects learner-safe searchable metadata into D1 rather than duplicating hidden scenario truth in the frontend.
+
+Primary migration: `tutor/cloudflare/migrations/0016_virtual_internship_phase10_catalog.sql`.
+
+Forward correction: `tutor/cloudflare/migrations/0017_virtual_internship_phase10_template_retirement_fix.sql`. This clears `retired_at` only for scenario template versions whose authoritative status is `published`; it does not rewrite the already-merged historical migration.
+
+Phase 10 structures include:
+
+- `career_families`, using stable family IDs/slugs and validated physical-competency classification;
+- `internship_catalog_entries`, the normalized, indexed learner-safe projection for published/active/catalog-visible scenario versions;
+- `scenario_templates` and `scenario_template_versions`, with stable IDs, explicit versions and immutable publish-time resolved content hashes;
+- controlled institution scenario draft/publish state used by trusted admin/institution actors.
+
+Catalog list/detail/facet routes expose only learner-safe metadata. Hidden facts, actor secrets, future events, rubrics and completion answer keys remain outside catalog DTOs. Ordinary catalog browse performs no R2 reads, model calls or scenario-runtime initialization.
+
+Starting an internship still uses the Phase 1 start lifecycle and D1 ownership boundary. The selected catalog detail pins an exact `scenario_version_id`; the Worker revalidates authentication, membership, active-internship conflict, publication/catalog availability, authoritative qualification/mode, content hash and qualifying completion policy before creation. Browser values cannot set qualifying state, minimum duration or credential eligibility.
+
+Template inheritance is resolved before immutable scenario publication. Runtime internships therefore depend on their fully resolved pinned scenario snapshot, not on a mutable parent template. Publishing a later parent template version does not retroactively alter existing scenario versions or internships.
+
+Practice/demo catalog entries remain non-qualifying and cannot issue qualifying completion records. Institution-created scenarios use declarative data plus the same canonical resolver/validator and qualification invariants as Murikah production packs; executable uploaded code is not part of the scenario contract.

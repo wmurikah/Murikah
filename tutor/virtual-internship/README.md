@@ -1275,15 +1275,15 @@ Each checkbox should normally be completed in order. A PR may cover one or sever
 
 ### Phase 10 — career catalog
 
-- [ ] Career-family schema.
-- [ ] Search/filter.
-- [ ] Scenario template inheritance.
-- [ ] Initial Internal Audit internship.
-- [ ] Initial Data Analyst internship.
-- [ ] Initial Software Engineering internship.
-- [ ] Additional career packs.
-- [ ] Physical-competency limitation labels.
-- [ ] Institution-created scenario workflow.
+- [x] Career-family schema.
+- [x] Search/filter.
+- [x] Scenario template inheritance.
+- [x] Initial Internal Audit internship.
+- [x] Initial Data Analyst internship.
+- [x] Initial Software Engineering internship.
+- [x] Additional career packs.
+- [x] Physical-competency limitation labels.
+- [x] Institution-created scenario workflow.
 
 ### Phase 11 — longitudinal evaluation
 
@@ -2640,7 +2640,7 @@ The existing `virtual-internship-workspace.spec.tsx.txt` covers completed-only i
 
 Phase 9 does not implement server-side PDF, QR code, broad document revocation, statutory industrial-attachment recognition or a full institution endorsement workflow. Those omissions are deliberate and are not represented as implemented.
 
-**Phase 10 career catalog remains unimplemented. Phase 11 longitudinal evaluation remains unimplemented.**
+**Phase 10 career catalog is implemented below. Phase 11 longitudinal evaluation remains unimplemented.**
 
 ## SUBSEQUENT REPORT AND VERIFICATION DEVELOPMENT REQUIREMENT
 
@@ -2778,3 +2778,60 @@ Reuse its ownership, scenario-versioning, duration, idempotency, R2-key and auth
 - Defined broad career coverage and physical-competency limits.
 - Added implementation checklist and test contract.
 - Established placeholder as the first implementation milestone.
+
+## Phase 10 Implementation Record
+
+Status: **implemented and closed after focused Phase 10 validation/preflight gates passed.** Phase 10 consumes the Phase 1 through Phase 9 lifecycle, workplace, artifact, assessment, Competency Passport, completion, report and letter systems. It does not create a second internship engine, start API, completion system, competency system or scenario store.
+
+### Career catalog and learner journey
+
+The no-active-internship experience at `/virtual-internship` is now the learner-facing catalog headed **Choose your Virtual Internship**. It provides deterministic search and filters, qualifying internship cards, a separate Practice internships section, stable detail routes, a commitment review step and exact-version start. An active qualifying internship still opens the existing workplace. Guests may browse catalog/list/detail metadata, while starting a qualifying internship routes through the existing authentication flow and remains verified-member only.
+
+The catalog is projected from validated authored scenario manifests into D1. Browser code does not author qualification, mode, minimum duration or credential eligibility. Catalog cards and detail responses pin an exact published `scenario_version_id`; start continues to use `POST /__muri/persist/internships/start` and server-side lifecycle validation.
+
+### Phase 10 storage and migration
+
+The primary Phase 10 migration is `tutor/cloudflare/migrations/0016_virtual_internship_phase10_catalog.sql`. It adds the normalized career/catalog/template/institution structures used by Phase 10, including `career_families`, `internship_catalog_entries`, `scenario_templates`, `scenario_template_versions` and the controlled institution scenario draft/publishing state.
+
+A forward-only correction in `tutor/cloudflare/migrations/0017_virtual_internship_phase10_template_retirement_fix.sql` clears an erroneous `retired_at` value from template versions whose authoritative status is `published`. The historical `0016` migration is not rewritten, so already-applied databases are repaired safely.
+
+### Career-family and physical-scope model
+
+`tutor/virtual-internship/career-families.v1.json` and the Phase 10 schemas provide stable IDs, versioned slugs, descriptions, ordering and physical-competency classification. Catalog UI is data-driven rather than branching on display labels. Physical-scope classifications distinguish knowledge work from mixed or physical-skill-limited scenarios; learner-facing limitation text is shown only when relevant and prior Passport/report limitation safeguards remain authoritative.
+
+### Production and practice internships
+
+Phase 10 publishes six distinct qualifying, standard-mode, 90+ day production packs using fictional organizations:
+
+1. Internal Audit Intern.
+2. Data Analyst Intern.
+3. Software Engineering Intern.
+4. Cybersecurity Analyst Intern.
+5. Financial Analyst Intern.
+6. Project Management Intern.
+
+Each production pack uses the common scenario engine, multi-week task/event progression, workplace actors and communications, mapped artifacts, rubrics and competency evidence, midpoint/final review, capstone work and a non-empty Phase 8 completion policy. The Phase 9 report and letter systems therefore receive role, organization, workload, assignment and competency metadata from the pinned scenario version.
+
+The historical Internal Audit, Data Analyst and Software Engineering demo packs remain non-qualifying. Their catalog projection is separated as **Practice internships** with explicit **Demo** and **Does not qualify for completion credentials** disclosure. Demo mode is not converted into standard mode and does not become a qualifying completion path.
+
+### Publish-time scenario template inheritance
+
+Versioned templates under `tutor/virtual-internship/templates/v1/` cover the standard 90-day knowledge-work rhythm, workplace communication, midpoint review, final review, completion disclosure and shared ethics-event patterns. `template_resolver.py` resolves explicitly pinned template versions at publish/validation time using deterministic schema-aware semantics. The resolved canonical scenario is validated and hashed; active internships read the immutable resolved scenario version rather than dynamically inheriting a mutable `latest` parent.
+
+### Institution-created scenario workflow
+
+Trusted institution/admin scenario creation is declarative and controlled. Drafts pass through the same template resolver and canonical validator as Murikah production packs, then through validated/published/retired lifecycle controls. Published versions are immutable, edits create a new version, learners cannot publish, and uploaded executable Python/JavaScript is not a scenario capability. Institution qualification does not bypass the 90-day, completion-policy, assessment/evidence, simulation-disclosure, demo-protection or physical-limitation invariants.
+
+### API, UI and test surface
+
+Phase 10 adds learner-safe catalog list/detail/facet reads, catalog projection/bootstrap support, exact-version start resolution, the marketplace/detail/commitment React surface, institution admin backend routes and the Phase 10 scenario/template validation modules. Catalog browse does not invoke Tutor models, actors, Mentor or assessor. Search/filter state is URL-backed, no-results is distinct from server/catalog failure, and practice/qualifying status is textual rather than color-only.
+
+Regression coverage includes career families, catalog projection/search, exact-version start, practice protection, production-pack quality, scenario schemas/rubrics, template inheritance, institution workflow and frontend marketplace/commitment behavior. `tutor/cloudflare/preflight.py` validates packaging and Phase 10 release invariants in addition to the canonical scenario validator and Tutor preflight.
+
+**Phase 11 longitudinal evaluation remains unimplemented.**
+
+## SUBSEQUENT CAREER CATALOG DEVELOPMENT REQUIREMENT
+
+Any later change to the Virtual Internship catalog, scenario publication, templates, production packs or institution workflow must preserve the Phase 1 through Phase 10 contracts. In particular, later work must not make the browser authoritative for qualification, silently advance a reviewed catalog item to a different scenario version, mutate a published scenario/template version in place, promote Practice/demo packs into qualifying internships, bypass the one-active-qualifying-internship rule, weaken completion/evidence gates, expose hidden scenario truth in catalog responses, or make active internships depend on mutable runtime template inheritance.
+
+New career packs must be added through validated authored scenario metadata and the normalized catalog projection. New institution-created qualifying scenarios must use the same canonical validator, publish-time resolution, immutable snapshot/hash, completion policy and disclosure rules as Murikah-authored packs. Phase 11 longitudinal evaluation remains a separate future phase.

@@ -565,7 +565,7 @@ def main() -> int:
             "phase9-completion-letter-v1",
             "phase9-simulation-disclosure-v1",
             "PDF is not implemented in Phase 9.",
-            "Phase 10 career catalog remains unimplemented",
+            "Phase 10 career catalog is implemented below",
             "Phase 11 longitudinal evaluation remains unimplemented",
         ),
     )
