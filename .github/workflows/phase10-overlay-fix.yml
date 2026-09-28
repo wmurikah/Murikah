@@ -1,0 +1,58 @@
+name: Repair Tutor overlay contract
+
+on:
+  push:
+    branches:
+      - feat/tutor-virtual-internship-phase10
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase10-overlay-fix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[overlay-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/tutor-virtual-internship-phase10
+          fetch-depth: 0
+
+      - name: Align collapsed sidebar target with pinned DeepTutor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tutor/railway/apply_railway_overlay.py')
+          text = path.read_text(encoding='utf-8')
+          old = '<GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--muted-foreground)]" />'
+          new = '<GitHubMarkLink className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]" />'
+          if text.count(old) < 1:
+              raise SystemExit('expected stale collapsed-sidebar overlay target not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Exercise branding then Railway overlay against pinned DeepTutor
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/DeepTutor
+          mkdir -p /tmp/DeepTutor
+          git -C /tmp/DeepTutor init
+          git -C /tmp/DeepTutor remote add origin https://github.com/HKUDS/DeepTutor.git
+          git -C /tmp/DeepTutor fetch --depth 1 origin 7a96bba1ae03401644c17763a2411c28aff3dcc9
+          git -C /tmp/DeepTutor checkout --detach FETCH_HEAD
+          python tutor/scripts/apply_branding.py /tmp/DeepTutor
+          python tutor/railway/apply_railway_overlay.py /tmp/DeepTutor tutor/railway/health-route.ts.txt
+
+      - name: Commit repaired overlay and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/phase10-overlay-fix.yml
+          git add tutor/railway/apply_railway_overlay.py
+          git commit -m 'Fix Tutor sidebar overlay target [overlay-fixed]'
+          git push origin HEAD:feat/tutor-virtual-internship-phase10
