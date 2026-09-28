@@ -1,0 +1,93 @@
+{
+  "id": "sp_demo_internal_audit",
+  "slug": "demo-internal-audit",
+  "scenario_version_id": "sv_demo_internal_audit_v3",
+  "schema_version": 1,
+  "scenario_version": 3,
+  "title": "Internal Audit Practice Internship",
+  "career_family": "internal_audit",
+  "role_title": "Internal Audit Practice Intern",
+  "region_context": "Fictional practice environment",
+  "company_ref": "org_audit_practice",
+  "minimum_duration_days": 14,
+  "expected_workload_band": "light",
+  "classification": "demo",
+  "qualifying": false,
+  "mode": "demo",
+  "physical_competency_classification": "knowledge_work",
+  "physical_competency_limitation_text": "",
+  "catalog": {
+    "schema_version": 1,
+    "catalog_slug": "internal-audit-practice",
+    "career_family_id": "cf_audit_assurance_v1",
+    "short_description": "Explore a short Internal Audit demo before committing to a qualifying internship.",
+    "long_description": "A compact demo of the simulated audit workplace, assignments, evidence, stakeholder communication and feedback. It remains non-qualifying.",
+    "internship_type": "practice",
+    "minimum_duration_days": 14,
+    "weekly_hours_min": 2,
+    "weekly_hours_max": 4,
+    "workload_band": "light",
+    "experience_level": "entry",
+    "competencies_developed": [
+      "Process understanding",
+      "Reconciliation",
+      "Professional communication"
+    ],
+    "sample_responsibilities": [
+      "Review fictional process information",
+      "Analyze a small evidence sample",
+      "Prepare a short stakeholder update"
+    ],
+    "deliverables": [
+      "Practice notes",
+      "Practice working paper",
+      "Practice presentation"
+    ],
+    "work_rhythm": "A short demo sequence for exploring the simulated workplace before committing to a qualifying internship.",
+    "prerequisites": "None.",
+    "physical_competency_classification": "knowledge_work",
+    "physical_competency_limitation_text": "",
+    "simulation_disclosure": "This is a demo internship in a fictional workplace.",
+    "completion_overview": "This demo does not satisfy the 90-day qualifying internship requirement and does not issue the qualifying Performance Report or Completion Letter.",
+    "support_summary": "Murikah Mentor support is available for practice work. Practice evidence does not become qualifying completion evidence.",
+    "published": true,
+    "catalog_visible": true,
+    "sort_order": 110,
+    "search_keywords": [
+      "audit",
+      "practice",
+      "demo",
+      "controls"
+    ]
+  },
+  "initial_task_ids": [
+    "task_audit_practice_1"
+  ],
+  "initial_event_ids": [
+    "event_audit_practice_unlock_2",
+    "event_audit_practice_unlock_3",
+    "event_audit_practice_unlock_4",
+    "event_audit_practice_pressure"
+  ],
+  "required_components": [
+    "manifest.json",
+    "company.json",
+    "facts.json",
+    "actors.json",
+    "tasks.json",
+    "events.json",
+    "decisions.json"
+  ],
+  "available_actor_classes": [
+    "supervisor",
+    "stakeholder",
+    "peer_intern"
+  ],
+  "content_hash": "33e5c794ff367c2af4f9bc482b68a8cd39198b8a306f0338c5c6c701d6bbf5c5",
+  "review_policy": {
+    "midpoint_day": 7,
+    "final_review_day": 14,
+    "demo_accelerated_midpoint_day": 2,
+    "demo_accelerated_final_day": 4
+  }
+}

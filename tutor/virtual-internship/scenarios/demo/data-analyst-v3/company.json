@@ -1,0 +1,47 @@
+{
+  "organization_id": "org_data_practice",
+  "name": "Lumen Harbor Practice Lab",
+  "fictional": true,
+  "sector": "Business analytics",
+  "country_region": "Fictional practice environment",
+  "description": "A fictional short-form practice environment for exploring the Data Analyst Virtual Internship workflow.",
+  "products_services": [
+    "practice services"
+  ],
+  "departments": [
+    {
+      "id": "dept_data_practice",
+      "name": "Analytics Practice"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    }
+  ],
+  "systems": [
+    "Practice Workspace"
+  ],
+  "process_references": [
+    "practice workflow"
+  ],
+  "vocabulary": [
+    "grain",
+    "metric",
+    "quality"
+  ],
+  "communication_norms": [
+    "This is a demo experience.",
+    "Use fictional evidence only."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical timing."
+  }
+}

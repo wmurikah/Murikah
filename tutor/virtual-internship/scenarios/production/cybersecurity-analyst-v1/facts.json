@@ -1,0 +1,92 @@
+[
+  {
+    "id": "fact_cyber_policy",
+    "key": "cyber_work_policy",
+    "value": "Security decisions must use authorized evidence, documented risk reasoning and least-privilege principles.",
+    "mutability": "immutable",
+    "visibility": "public",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_method",
+    "key": "cyber_team_method",
+    "value": "Perform defensive review and risk analysis only. Do not exploit systems or require live offensive access.",
+    "mutability": "immutable",
+    "visibility": "department",
+    "visibility_scopes": [
+      "dept_cyber"
+    ],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_priority",
+    "key": "cyber_priority_pressure",
+    "value": "normal",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_stakeholder",
+    "key": "cyber_stakeholder_constraint",
+    "value": "Operations wants a risk accepted quickly to avoid a simulated maintenance delay.",
+    "mutability": "immutable",
+    "visibility": "actor_specific",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_hidden",
+    "key": "cyber_hidden_exception",
+    "value": "A synthetic privileged-access exception is broader than the first inventory extract suggests.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_ethics",
+    "key": "cyber_ethics_pressure",
+    "value": "A stakeholder will ask to downgrade a supported security risk without additional evidence.",
+    "mutability": "immutable",
+    "visibility": "hidden_truth",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": true
+  },
+  {
+    "id": "fact_cyber_review",
+    "key": "cyber_review_status",
+    "value": "not_started",
+    "mutability": "mutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": true,
+    "future_only": false
+  },
+  {
+    "id": "fact_cyber_capstone",
+    "key": "cyber_capstone_context",
+    "value": "The capstone integrates asset review, access controls, risk triage, incident planning, remediation and communication.",
+    "mutability": "immutable",
+    "visibility": "learner_visible",
+    "visibility_scopes": [],
+    "source": "fictional_case_material",
+    "initially_revealed": false,
+    "future_only": false
+  }
+]

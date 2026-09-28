@@ -1,0 +1,77 @@
+{
+  "organization_id": "org_project",
+  "name": "Summit Bridge Programs",
+  "fictional": true,
+  "sector": "Professional services",
+  "country_region": "Fictional East African regional market",
+  "description": "A fictional project-delivery organization used to simulate planning, stakeholder coordination and change management.",
+  "products_services": [
+    "project delivery",
+    "implementation support"
+  ],
+  "departments": [
+    {
+      "id": "dept_project",
+      "name": "Project Delivery"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    },
+    {
+      "id": "dept_leadership",
+      "name": "Leadership"
+    }
+  ],
+  "systems": [
+    "Summit Planner",
+    "Issue Log"
+  ],
+  "process_references": [
+    "project initiation",
+    "status governance",
+    "change control"
+  ],
+  "vocabulary": [
+    "milestone",
+    "dependency",
+    "issue",
+    "change request"
+  ],
+  "communication_norms": [
+    "Separate facts from assumptions.",
+    "Document material decisions and evidence.",
+    "Escalate conflicts through the simulated reporting line."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical internship timing."
+  },
+  "reporting_relationships": [
+    {
+      "manager_actor_id": "actor_project_supervisor",
+      "direct_report_actor_id": "actor_project_colleague"
+    },
+    {
+      "manager_actor_id": "actor_project_supervisor",
+      "direct_report_actor_id": "actor_project_peer"
+    }
+  ],
+  "organization_chart_entries": [
+    {
+      "department_id": "dept_project",
+      "label": "Project Delivery"
+    },
+    {
+      "department_id": "dept_business",
+      "label": "Business Operations"
+    }
+  ]
+}

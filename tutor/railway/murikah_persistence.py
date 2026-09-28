@@ -727,6 +727,122 @@ def internship_ui_current(actor_id: str) -> dict[str, Any]:
     return value
 
 
+def internship_catalog_list(
+    *,
+    query: str = "",
+    career: str = "",
+    sector: str = "",
+    internship_type: str = "",
+    workload: str = "",
+    experience: str = "",
+) -> dict[str, Any]:
+    """Read learner-safe published catalog metadata. No learner identity is required."""
+    if not enabled():
+        raise PersistenceError("Virtual Internship catalog persistence is unavailable.")
+    params = {
+        "q": _learning_text(query, 120),
+        "career": _learning_text(career, 80),
+        "sector": _learning_text(sector, 120),
+        "type": _learning_text(internship_type, 32),
+        "workload": _learning_text(workload, 32),
+        "experience": _learning_text(experience, 32),
+    }
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/catalog/list?{urlencode(params)}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship catalog response is invalid.")
+    return value
+
+
+def internship_catalog_facets() -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship catalog persistence is unavailable.")
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/catalog/facets")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship catalog facets response is invalid.")
+    return value
+
+
+def internship_catalog_detail(catalog_slug: str, scenario_version_id: str = "") -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship catalog persistence is unavailable.")
+    params = {"slug": _learning_text(catalog_slug, 128)}
+    if scenario_version_id:
+        params["scenario_version_id"] = _learning_text(scenario_version_id, 128)
+    _, raw, _ = _request("GET", f"{PERSIST_PREFIX}/catalog/detail?{urlencode(params)}")
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise PersistenceError("Virtual Internship catalog detail response is invalid.")
+    return value
+
+
+def internship_catalog_project(scenario_version_id: str) -> dict[str, Any]:
+    if not enabled():
+        raise PersistenceError("Virtual Internship catalog persistence is unavailable.")
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/catalog/project",
+        {"scenario_version_id": _learning_text(scenario_version_id, 128)},
+    )
+
+
+def institution_scenario_draft(actor_id: str, draft_id: str, draft: dict[str, Any]) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/institution-scenarios/draft",
+        {"actor_id": _learning_text(actor_id, 128), "draft_id": _learning_text(draft_id, 128), "draft": draft},
+    )
+
+
+def institution_scenario_validation(
+    actor_id: str,
+    draft_id: str,
+    *,
+    valid: bool,
+    validation: dict[str, Any],
+    resolved_content_hash: str = "",
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/institution-scenarios/validation",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "draft_id": _learning_text(draft_id, 128),
+            "valid": bool(valid),
+            "validation": validation,
+            "resolved_content_hash": _learning_text(resolved_content_hash, 64),
+        },
+    )
+
+
+def institution_scenario_publish_state(
+    actor_id: str,
+    draft_id: str,
+    *,
+    scenario_pack_id: str,
+    scenario_version_id: str,
+) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/institution-scenarios/publish-state",
+        {
+            "actor_id": _learning_text(actor_id, 128),
+            "draft_id": _learning_text(draft_id, 128),
+            "scenario_pack_id": _learning_text(scenario_pack_id, 128),
+            "scenario_version_id": _learning_text(scenario_version_id, 128),
+        },
+    )
+
+
+def institution_scenario_retire(actor_id: str, draft_id: str) -> dict[str, Any]:
+    return _json_request(
+        "POST",
+        f"{PERSIST_PREFIX}/institution-scenarios/retire",
+        {"actor_id": _learning_text(actor_id, 128), "draft_id": _learning_text(draft_id, 128)},
+    )
+
+
 def internship_ui_start_options(actor_id: str) -> dict[str, Any]:
     if not enabled():
         raise PersistenceError("Virtual Internship workspace persistence is unavailable.")

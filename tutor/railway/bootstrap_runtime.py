@@ -405,13 +405,8 @@ def bootstrap_cloudflare_video_learning() -> None:
 
 
 
-def bootstrap_virtual_internship_phase6_scenarios() -> None:
-    """Install validated rubric-enabled scenario snapshots into D1.
-
-    The migration publishes only version metadata. This bootstrap supplies the
-    matching immutable canonical definition through the existing private HMAC
-    persistence boundary. Existing v1 snapshots are never rewritten.
-    """
+def bootstrap_virtual_internship_phase10_scenarios() -> None:
+    """Install validated immutable scenarios, completion policies and catalog projections."""
     try:
         from deeptutor import murikah_persistence
         if not murikah_persistence.enabled():
@@ -424,19 +419,27 @@ def bootstrap_virtual_internship_phase6_scenarios() -> None:
     except Exception:
         return
 
-    root = Path("/app/virtual-internship/scenarios/demo")
+    root = Path("/app/virtual-internship/scenarios")
     if not root.exists():
-        raise RuntimeError("Phase 6 Virtual Internship scenario files are missing from the runtime image.")
+        raise RuntimeError("Virtual Internship scenario files are missing from the runtime image.")
+
     installed = 0
+    projected = 0
     for pack_dir in discover_packs(root):
         pack = validate_pack(pack_dir, verify_hash=True)
         manifest = pack.get("manifest") if isinstance(pack, dict) else None
-        if not isinstance(manifest, dict) or int(manifest.get("scenario_version") or 0) < 2:
+        if not isinstance(manifest, dict):
+            continue
+        version = int(manifest.get("scenario_version") or 0)
+        catalog = manifest.get("catalog")
+        # Preserve Phase 2 history: legacy v1 demo snapshots were never part of
+        # the rubric-enabled runtime bootstrap. Phase 10 production v1 packs are.
+        if version < 2 and not isinstance(catalog, dict):
             continue
         scenario_version_id = str(manifest.get("scenario_version_id") or "")
         digest = str(manifest.get("content_hash") or "")
         if not scenario_version_id or len(digest) != 64:
-            raise RuntimeError(f"Invalid Phase 6 scenario manifest in {pack_dir}.")
+            raise RuntimeError(f"Invalid Virtual Internship scenario manifest in {pack_dir}.")
         murikah_persistence.scenario_definition_install(
             scenario_version_id,
             pack,
@@ -450,9 +453,20 @@ def bootstrap_virtual_internship_phase6_scenarios() -> None:
                 policy,
                 policy_hash=completion_policy_hash(policy),
             )
+        if isinstance(catalog, dict):
+            murikah_persistence.internship_catalog_project(scenario_version_id)
+            projected += 1
         installed += 1
     if installed:
-        print(f"[Murikah Tutor] Installed {installed} rubric-enabled Virtual Internship scenario version(s).")
+        print(
+            f"[Murikah Tutor] Installed {installed} Virtual Internship scenario version(s); "
+            f"projected {projected} catalog version(s)."
+        )
+
+
+def bootstrap_virtual_internship_phase6_scenarios() -> None:
+    """Backward-compatible entry point retained for earlier runtime tests."""
+    bootstrap_virtual_internship_phase10_scenarios()
 
 
 
@@ -462,7 +476,7 @@ def main() -> None:
     harden_system_settings()
     bootstrap_cloudflare_model_catalog()
     bootstrap_cloudflare_video_learning()
-    bootstrap_virtual_internship_phase6_scenarios()
+    bootstrap_virtual_internship_phase10_scenarios()
 
 
 if __name__ == "__main__":

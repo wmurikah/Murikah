@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "families": [
+    {"id":"cf_audit_assurance_v1","schema_version":1,"slug":"audit_assurance","title":"Audit and Assurance","short_title":"Audit","description":"Professional assurance, risk, controls, evidence and reporting work.","sort_order":10,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""},
+    {"id":"cf_data_analytics_v1","schema_version":1,"slug":"data_analytics","title":"Data Analytics","short_title":"Data","description":"Data quality, metrics, analysis, interpretation and stakeholder communication.","sort_order":20,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""},
+    {"id":"cf_software_engineering_v1","schema_version":1,"slug":"software_engineering","title":"Software Engineering","short_title":"Software","description":"Software problem solving, design, testing, debugging, review and documentation.","sort_order":30,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""},
+    {"id":"cf_cybersecurity_v1","schema_version":1,"slug":"cybersecurity","title":"Cybersecurity","short_title":"Cybersecurity","description":"Defensive security analysis, control assessment, risk triage and remediation planning.","sort_order":40,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""},
+    {"id":"cf_finance_v1","schema_version":1,"slug":"finance","title":"Finance","short_title":"Finance","description":"Financial analysis, budgeting, forecasting, reconciliation and management reporting.","sort_order":50,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""},
+    {"id":"cf_project_operations_v1","schema_version":1,"slug":"project_operations","title":"Project and Operations Management","short_title":"Projects","description":"Project planning, stakeholder coordination, risk, change and delivery management.","sort_order":60,"active":true,"physical_competency_classification":"knowledge_work","physical_competency_limitation_text":""}
+  ]
+}

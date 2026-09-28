@@ -1,0 +1,25 @@
+{
+  "template_id": "tpl_standard_90_day_knowledge_work",
+  "template_version": 1,
+  "schema_version": 1,
+  "status": "published",
+  "content_hash": "1a5fc3894bbb61fb9a4b00bc23ea41ecac7146334ff7c53be872853e4dfb29fc",
+  "sections": {
+    "manifest_defaults": {
+      "minimum_duration_days": 90,
+      "expected_workload_band": "standard",
+      "review_policy": {
+        "midpoint_day": 45,
+        "final_review_day": 90,
+        "demo_accelerated_midpoint_day": 2,
+        "demo_accelerated_final_day": 4
+      }
+    },
+    "catalog_defaults": {
+      "weekly_hours_min": 8,
+      "weekly_hours_max": 12,
+      "workload_band": "standard",
+      "experience_level": "entry"
+    }
+  }
+}

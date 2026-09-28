@@ -1,0 +1,78 @@
+{
+  "organization_id": "org_cyber",
+  "name": "Orion Ridge Digital",
+  "fictional": true,
+  "sector": "Managed digital services",
+  "country_region": "Fictional East African regional market",
+  "description": "A fictional digital services company used for safe defensive cybersecurity simulation.",
+  "products_services": [
+    "managed platforms",
+    "security operations support"
+  ],
+  "departments": [
+    {
+      "id": "dept_cyber",
+      "name": "Cybersecurity"
+    },
+    {
+      "id": "dept_business",
+      "name": "Business Operations"
+    },
+    {
+      "id": "dept_leadership",
+      "name": "Leadership"
+    }
+  ],
+  "systems": [
+    "Orion Identity",
+    "Risk Register",
+    "Synthetic SIEM"
+  ],
+  "process_references": [
+    "access review",
+    "vulnerability triage",
+    "incident readiness"
+  ],
+  "vocabulary": [
+    "asset",
+    "control",
+    "vulnerability",
+    "risk treatment"
+  ],
+  "communication_norms": [
+    "Separate facts from assumptions.",
+    "Document material decisions and evidence.",
+    "Escalate conflicts through the simulated reporting line."
+  ],
+  "work_calendar": {
+    "timezone_label": "scenario-local-office-time",
+    "work_days": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "notes": "Server UTC controls canonical internship timing."
+  },
+  "reporting_relationships": [
+    {
+      "manager_actor_id": "actor_cyber_supervisor",
+      "direct_report_actor_id": "actor_cyber_colleague"
+    },
+    {
+      "manager_actor_id": "actor_cyber_supervisor",
+      "direct_report_actor_id": "actor_cyber_peer"
+    }
+  ],
+  "organization_chart_entries": [
+    {
+      "department_id": "dept_cyber",
+      "label": "Cybersecurity"
+    },
+    {
+      "department_id": "dept_business",
+      "label": "Business Operations"
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_cyber_supervisor",
+    "name": "Zuri Maina",
+    "actor_class": "supervisor",
+    "job_title": "Security Assurance Lead",
+    "department_id": "dept_cyber",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_cyber_policy",
+      "fact_cyber_method",
+      "fact_cyber_priority",
+      "fact_cyber_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_cyber_unlock_02",
+      "event_cyber_unlock_03",
+      "event_cyber_unlock_04",
+      "event_cyber_unlock_05",
+      "event_cyber_unlock_06",
+      "event_cyber_unlock_07",
+      "event_cyber_unlock_08",
+      "event_cyber_unlock_09",
+      "event_cyber_unlock_10",
+      "event_cyber_unlock_11",
+      "event_cyber_unlock_12",
+      "event_cyber_unlock_13",
+      "event_cyber_ethics",
+      "event_cyber_politics",
+      "event_cyber_midpoint",
+      "event_cyber_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_cyber_manager",
+    "name": "Daniel Chanda",
+    "actor_class": "manager",
+    "job_title": "Head of Cybersecurity",
+    "department_id": "dept_cyber",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_cyber_policy",
+      "fact_cyber_method",
+      "fact_cyber_priority",
+      "fact_cyber_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_cyber_stakeholder",
+    "name": "Hana Ali",
+    "actor_class": "stakeholder",
+    "job_title": "IT Operations Manager",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_cyber_policy",
+      "fact_cyber_priority",
+      "fact_cyber_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_cyber_colleague",
+    "name": "Peter Moyo",
+    "actor_class": "colleague",
+    "job_title": "Security Analyst",
+    "department_id": "dept_cyber",
+    "reports_to_actor_id": "actor_cyber_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_cyber_policy",
+      "fact_cyber_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_cyber_peer",
+    "name": "Winnie Karanja",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_cyber",
+    "reports_to_actor_id": "actor_cyber_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_cyber_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]

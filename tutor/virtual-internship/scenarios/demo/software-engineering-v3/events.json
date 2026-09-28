@@ -1,0 +1,106 @@
+[
+  {
+    "event_id": "event_software_practice_unlock_2",
+    "authored_sequence": 1,
+    "event_type": "practice_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_software_practice_1",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_software_practice_2"
+      }
+    ],
+    "message_template_id": "msg_software_practice_2",
+    "actor_ids": [
+      "actor_software_practice_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock practice task 2",
+    "learning_objective": "Experience deterministic workplace progression in the demo."
+  },
+  {
+    "event_id": "event_software_practice_unlock_3",
+    "authored_sequence": 2,
+    "event_type": "practice_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_software_practice_2",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_software_practice_3"
+      }
+    ],
+    "message_template_id": "msg_software_practice_3",
+    "actor_ids": [
+      "actor_software_practice_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock practice task 3",
+    "learning_objective": "Experience deterministic workplace progression in the demo."
+  },
+  {
+    "event_id": "event_software_practice_unlock_4",
+    "authored_sequence": 3,
+    "event_type": "practice_progression",
+    "priority": 40,
+    "triggers": [
+      {
+        "trigger_type": "task_state",
+        "task_id": "task_software_practice_3",
+        "status": "completed"
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "unlock_task",
+        "task_id": "task_software_practice_4"
+      }
+    ],
+    "message_template_id": "msg_software_practice_4",
+    "actor_ids": [
+      "actor_software_practice_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Unlock practice task 4",
+    "learning_objective": "Experience deterministic workplace progression in the demo."
+  },
+  {
+    "event_id": "event_software_practice_pressure",
+    "authored_sequence": 4,
+    "event_type": "workplace_dynamics",
+    "priority": 50,
+    "triggers": [
+      {
+        "trigger_type": "time_elapsed_days",
+        "days": 6
+      }
+    ],
+    "mutations": [
+      {
+        "mutation_type": "reveal_fact",
+        "fact_id": "fact_software_practice_pressure"
+      }
+    ],
+    "message_template_id": "msg_software_practice_pressure",
+    "actor_ids": [
+      "actor_software_practice_stakeholder",
+      "actor_software_practice_supervisor"
+    ],
+    "once": true,
+    "audit_label": "Practice workplace challenge",
+    "learning_objective": "Experience a short simulated stakeholder challenge."
+  }
+]

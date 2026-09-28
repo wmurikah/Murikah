@@ -1,0 +1,158 @@
+[
+  {
+    "actor_id": "actor_data_supervisor",
+    "name": "Maya Njeri",
+    "actor_class": "supervisor",
+    "job_title": "Analytics Lead",
+    "department_id": "dept_data",
+    "reports_to_actor_id": null,
+    "authority": [
+      "assign professional work",
+      "review work products",
+      "escalate material issues"
+    ],
+    "goals": [
+      "develop reliable evidence-backed work"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_policy",
+      "fact_data_method",
+      "fact_data_priority",
+      "fact_data_hidden"
+    ],
+    "communication_style": {
+      "tone": "direct",
+      "formality": "medium"
+    },
+    "learner_relationship": "direct supervisor",
+    "escalation_capabilities": [
+      "manager escalation"
+    ],
+    "allowed_event_ids": [
+      "event_data_unlock_02",
+      "event_data_unlock_03",
+      "event_data_unlock_04",
+      "event_data_unlock_05",
+      "event_data_unlock_06",
+      "event_data_unlock_07",
+      "event_data_unlock_08",
+      "event_data_unlock_09",
+      "event_data_unlock_10",
+      "event_data_unlock_11",
+      "event_data_unlock_12",
+      "event_data_unlock_13",
+      "event_data_ethics",
+      "event_data_politics",
+      "event_data_midpoint",
+      "event_data_final"
+    ],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_manager",
+    "name": "Kofi Mensah",
+    "actor_class": "manager",
+    "job_title": "Director of Insights",
+    "department_id": "dept_data",
+    "reports_to_actor_id": null,
+    "authority": [
+      "set team priorities",
+      "approve final work"
+    ],
+    "goals": [
+      "deliver useful professional outcomes"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_policy",
+      "fact_data_method",
+      "fact_data_priority",
+      "fact_data_ethics"
+    ],
+    "communication_style": {
+      "tone": "measured",
+      "formality": "high"
+    },
+    "learner_relationship": "department manager",
+    "escalation_capabilities": [
+      "executive escalation"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_stakeholder",
+    "name": "Tessa Mwangi",
+    "actor_class": "stakeholder",
+    "job_title": "Commercial Manager",
+    "department_id": "dept_business",
+    "reports_to_actor_id": null,
+    "authority": [
+      "provide business context"
+    ],
+    "goals": [
+      "protect operational priorities"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_policy",
+      "fact_data_priority",
+      "fact_data_stakeholder"
+    ],
+    "communication_style": {
+      "tone": "pragmatic",
+      "formality": "medium"
+    },
+    "learner_relationship": "cross-functional stakeholder",
+    "escalation_capabilities": [
+      "business clarification"
+    ],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_colleague",
+    "name": "Owen Kibet",
+    "actor_class": "colleague",
+    "job_title": "Data Analyst",
+    "department_id": "dept_data",
+    "reports_to_actor_id": "actor_data_supervisor",
+    "authority": [],
+    "goals": [
+      "support team delivery"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_policy",
+      "fact_data_method"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "medium"
+    },
+    "learner_relationship": "team colleague",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  },
+  {
+    "actor_id": "actor_data_peer",
+    "name": "Leah Nduta",
+    "actor_class": "peer_intern",
+    "job_title": "Peer Intern",
+    "department_id": "dept_data",
+    "reports_to_actor_id": "actor_data_supervisor",
+    "authority": [],
+    "goals": [
+      "complete assigned work responsibly"
+    ],
+    "knowledge_fact_ids": [
+      "fact_data_policy"
+    ],
+    "communication_style": {
+      "tone": "collaborative",
+      "formality": "low"
+    },
+    "learner_relationship": "peer",
+    "escalation_capabilities": [],
+    "allowed_event_ids": [],
+    "active": true
+  }
+]
