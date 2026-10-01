@@ -63,6 +63,7 @@ export default function AccessibilityAssistant() {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<A11yState>(DEFAULTS);
 
+  const shellRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const firstControlRef = useRef<HTMLButtonElement>(null);
@@ -96,6 +97,32 @@ export default function AccessibilityAssistant() {
     setState(DEFAULTS);
   }, []);
 
+  // Keep the floating control above the footer as it enters the viewport, so
+  // it never covers footer links. The calculation is visual-only and does not
+  // change page content or header behaviour.
+  useEffect(() => {
+    let frame = 0;
+    const updateFooterOffset = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const footer = document.querySelector<HTMLElement>('body > footer');
+        if (!footer || !shellRef.current) return;
+        const rect = footer.getBoundingClientRect();
+        const overlap = rect.top < window.innerHeight ? Math.max(0, window.innerHeight - rect.top + 16) : 0;
+        shellRef.current.style.setProperty('--a11y-footer-offset', `${overlap}px`);
+      });
+    };
+
+    updateFooterOffset();
+    window.addEventListener('scroll', updateFooterOffset, { passive: true });
+    window.addEventListener('resize', updateFooterOffset);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', updateFooterOffset);
+      window.removeEventListener('resize', updateFooterOffset);
+    };
+  }, []);
+
   // Escape to close, and click outside to close. Non-modal, so no focus trap.
   useEffect(() => {
     if (!open) return;
@@ -126,7 +153,7 @@ export default function AccessibilityAssistant() {
   const anyOn = state.text > 0 || state.contrast || state.motion || state.links || state.focus;
 
   return (
-    <div className="a11y" data-open={open}>
+    <div ref={shellRef} className="a11y" data-open={open}>
       {open && (
         <div ref={panelRef} className="a11y__panel" role="group" aria-label="Accessibility tools">
           <div className="a11y__head">
