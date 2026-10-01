@@ -43,8 +43,6 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
   />
 
   <section id="hero" class="home-hero on-dark" aria-labelledby="home-title">
-    <span class="home-hero__nav-sentinel" data-home-nav-sentinel aria-hidden="true"></span>
-
     <div class="home-hero__media" aria-hidden="true">
       <picture class="home-hero__picture">
         <source
@@ -362,41 +360,17 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     primaryHref={PRIMARY_CTA.href}
   />
 
-  <script>
-    document.documentElement.classList.add('home-hero-page');
-
-    const homeHeader = document.querySelector<HTMLElement>('[data-home-header]');
-    const navSentinel = document.querySelector<HTMLElement>('[data-home-nav-sentinel]');
-
-    if (homeHeader && navSentinel && 'IntersectionObserver' in window) {
-      const observer = new IntersectionObserver(
-        ([entry]) => homeHeader.classList.toggle('is-scrolled', !entry?.isIntersecting),
-        { threshold: 0 },
-      );
-      observer.observe(navSentinel);
-    }
-  </script>
-
   <style>
     .home-hero {
       --home-hero-gutter: clamp(1.5rem, 8.33vw, 7.5rem);
       position: relative;
       width: 100%;
-      height: min(100svh, 900px);
+      height: min(calc(100svh - var(--header-height)), 900px);
       min-height: 640px;
       overflow: clip;
       background: var(--color-navy);
       color: var(--color-hero-ivory);
       isolation: isolate;
-    }
-
-    .home-hero__nav-sentinel {
-      position: absolute;
-      top: 24px;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      pointer-events: none;
     }
 
     .home-hero__media {
@@ -463,9 +437,7 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
       display: flex;
       align-items: center;
       height: 100%;
-      padding:
-        calc(var(--header-height) + 1.5rem) var(--home-hero-gutter)
-        2.5rem;
+      padding: 1.5rem var(--home-hero-gutter) 2.5rem;
     }
 
     .home-hero__copy {
@@ -710,7 +682,7 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
 
       .home-hero__content {
         align-items: flex-start;
-        padding-top: 120px;
+        padding-top: 56px;
         padding-bottom: 32px;
       }
 
