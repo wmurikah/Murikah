@@ -2,94 +2,209 @@
 import Container from '@/components/primitives/Container.astro';
 import SubscribeForm from '@/components/SubscribeForm.astro';
 import { SITE, PRODUCTS, SOCIAL } from '@/site.config';
+
 const year = new Date().getFullYear();
+const productLinks = [
+  ...PRODUCTS.map((product) => ({ label: product.label, href: product.href })),
+];
+const companyLinks = [
+  { label: 'About', href: '/about' },
+  { label: 'Services', href: '/services' },
+  { label: 'Pricing', href: '/pricing' },
+  { label: 'Contact', href: '/contact' },
+];
+const resourceLinks = [
+  { label: 'Insights', href: '/insights' },
+  { label: 'Research', href: '/research' },
+  { label: 'Internal audit', href: '/internal-audit' },
+  { label: 'Training', href: '/training' },
+];
+const legalLinks = [
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
+];
 const link =
   'inline-flex min-h-8 items-center text-sm text-slate no-underline hover:text-navy hover:underline';
 ---
 
-<footer class="compact-footer border-t border-hairline bg-paper-shade text-slate">
+<footer class="assurance-footer border-t border-hairline bg-paper-shade text-slate">
   <Container>
-    <div class="footer-main flex flex-wrap items-center gap-x-6 gap-y-1">
-      <a
-        href="/"
-        class="inline-flex min-h-8 items-center text-base font-semibold tracking-widest text-navy no-underline"
-        aria-label="Murikah, home">MURIKAH</a
-      >
-      <nav aria-label="Footer products" class="flex flex-wrap gap-x-4">
-        {
-          PRODUCTS.map((product) => (
-            <a href={product.href} class={link}>
-              {product.label}
-            </a>
-          ))
-        }
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="inline-flex no-underline" aria-label="Murikah, home">
+          <img
+            src="/images/murikah-logo-dark.png"
+            alt="Murikah"
+            width="875"
+            height="155"
+            class="h-9 w-auto"
+          />
+        </a>
+        <p>Assurance, governance and systems built around evidence.</p>
+      </div>
+
+      <nav aria-label="Footer product">
+        <h2>Product</h2>
+        <ul>
+          {productLinks.map((item) => <li><a href={item.href} class={link}>{item.label}</a></li>)}
+        </ul>
       </nav>
-      <nav aria-label="Footer company" class="flex flex-wrap gap-x-4 lg:ml-auto">
-        <a href="/about" class={link}>About</a>
-        <a href="/services" class={link}>Services</a>
-        <a href="/pricing" class={link}>Pricing</a>
-        <a href="/insights" class={link}>Insights</a>
-        <a href="/contact" class={link}>Contact</a>
+
+      <nav aria-label="Footer company">
+        <h2>Company</h2>
+        <ul>
+          {companyLinks.map((item) => <li><a href={item.href} class={link}>{item.label}</a></li>)}
+        </ul>
+      </nav>
+
+      <nav aria-label="Footer resources">
+        <h2>Resources</h2>
+        <ul>
+          {resourceLinks.map((item) => <li><a href={item.href} class={link}>{item.label}</a></li>)}
+        </ul>
+      </nav>
+
+      <nav aria-label="Footer legal">
+        <h2>Legal</h2>
+        <ul>
+          {legalLinks.map((item) => <li><a href={item.href} class={link}>{item.label}</a></li>)}
+          <li><a href={`mailto:${SITE.email}`} class={link}>{SITE.email}</a></li>
+        </ul>
       </nav>
     </div>
-    <div
-      class="footer-meta flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-hairline text-xs"
-    >
+
+    <div class="footer-newsletter">
+      <div>
+        <h2>Newsletter</h2>
+        <p>Occasional notes on assurance, governance and the systems behind them.</p>
+      </div>
+      <SubscribeForm
+        source="newsletter"
+        tone="light"
+        buttonLabel="Subscribe"
+        successMessage="Thank you. We will send the occasional note, nothing more."
+        class="footer-newsletter__form"
+      />
+    </div>
+
+    <div class="footer-meta">
       <p>© {year} {SITE.legalName}</p>
-      <a href="/privacy" class={link}>Privacy</a>
-      <a href="/terms" class={link}>Terms</a>
-      {
-        SOCIAL.map((s) => (
-          <a href={s.href} class={link} rel="me noopener" target="_blank">
-            {s.label}
-          </a>
-        ))
-      }
-      <a href={`mailto:${SITE.email}`} class={link}>{SITE.email}</a>
-      <details class="newsletter ml-auto">
-        <summary class="min-h-8 cursor-pointer py-1.5 text-sm text-navy hover:underline">Newsletter</summary>
-        <div class="newsletter-panel">
-          <p class="mb-2 text-sm">Occasional notes on assurance and governance.</p>
-          <SubscribeForm
-            source="newsletter"
-            tone="light"
-            buttonLabel="Subscribe"
-            successMessage="Thank you. We will send the occasional note, nothing more."
-          />
-        </div>
-      </details>
+      <div class="footer-social">
+        {SOCIAL.map((item) => (
+          <a href={item.href} class={link} rel="me noopener" target="_blank">{item.label}</a>
+        ))}
+      </div>
     </div>
   </Container>
 </footer>
+
 <style>
-  .compact-footer {
-    padding-block: var(--marketing-footer-padding);
+  .assurance-footer {
+    padding: 2.5rem 0 6rem;
   }
-  .footer-main {
-    padding-bottom: var(--marketing-footer-padding);
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: minmax(15rem, 1.6fr) repeat(4, minmax(8rem, 1fr));
+    gap: 2rem;
   }
+
+  .footer-brand p {
+    max-width: 19rem;
+    margin-top: 1rem;
+    color: var(--color-slate);
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  .footer-grid h2,
+  .footer-newsletter h2 {
+    margin: 0;
+    color: var(--color-navy);
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .footer-grid ul {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .footer-newsletter {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(22rem, 1.2fr);
+    gap: 2rem;
+    align-items: end;
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-hairline);
+  }
+
+  .footer-newsletter > div > p {
+    max-width: 30rem;
+    margin-top: 0.6rem;
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  .footer-newsletter__form {
+    width: 100%;
+  }
+
   .footer-meta {
-    padding-top: var(--marketing-footer-padding);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 2rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-hairline);
+    font-size: 0.75rem;
   }
-  .newsletter {
-    position: relative;
+
+  .footer-social {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1rem;
   }
-  .newsletter-panel {
-    position: absolute;
-    bottom: 100%;
-    right: 0;
-    width: min(24rem, calc(100vw - 3rem));
-    padding: 1rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-control-border);
-    color: var(--color-ink);
-    border-radius: var(--radius-btn);
-    z-index: 10;
+
+  @media (max-width: 900px) {
+    .footer-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .footer-brand {
+      grid-column: 1 / -1;
+    }
+
+    .footer-newsletter {
+      grid-template-columns: 1fr;
+    }
   }
-  @media (max-width: 639px) {
-    .compact-footer a,
-    summary {
+
+  @media (max-width: 520px) {
+    .assurance-footer {
+      padding: 2rem 0 6rem;
+    }
+
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.75rem 1.25rem;
+    }
+
+    .footer-grid a {
       min-height: 2.75rem;
+    }
+
+    .footer-newsletter {
+      margin-top: 2rem;
     }
   }
 </style>
