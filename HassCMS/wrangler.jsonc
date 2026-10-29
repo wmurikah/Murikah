@@ -1,0 +1,16 @@
+{
+  "name": "hass-cms",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2025-05-21",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -13,7 +13,7 @@ import {
   overdueRunsToday,
   DEFAULT_STALE_REMINDER_DAYS,
   DUE_SOON_DAYS,
-} from '../../src/lib/grc/notify/reminderRules.ts';
+} from '../src/lib/grc/notify/reminderRules.ts';
 
 test('reminderDays uses the configured value and falls back on nonsense', () => {
   assert.equal(reminderDays('7', 3), 7);

@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-const REPO = join(import.meta.dirname, '..', '..');
+const REPO = join(import.meta.dirname, '..');
 const DETAIL = join(REPO, 'src', 'pages', 'grc', 'work-papers', '[id].astro');
 const REPOSITORY = join(REPO, 'src', 'lib', 'grc', 'repos', 'workPapers.ts');
 const CARDS = join(REPO, 'src', 'lib', 'grc', 'reports', 'findingCards.ts');

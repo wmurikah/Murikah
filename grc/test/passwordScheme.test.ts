@@ -21,7 +21,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, verifyPassword } from '../../src/lib/engr/auth/password.ts';
+import { hashPassword, verifyPassword } from '../src/lib/shared/password.ts';
 
 const enc = new TextEncoder();
 

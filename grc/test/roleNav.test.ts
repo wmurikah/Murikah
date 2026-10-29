@@ -12,7 +12,7 @@ import {
   isAuditeeRole,
   canSeeTeamPerformance,
   type NavContext,
-} from '../../src/lib/grc/dashboard/roleNav.ts';
+} from '../src/lib/grc/dashboard/roleNav.ts';
 
 const ctx = (over: Partial<NavContext>): NavContext => ({
   roleCode: 'AUDITOR',

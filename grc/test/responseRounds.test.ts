@@ -18,7 +18,7 @@ import {
   responseDeadline,
   deadlineState,
   DEFAULT_MAX_RESPONSE_ROUNDS,
-} from '../../src/lib/grc/workflow/responseRounds.ts';
+} from '../src/lib/grc/workflow/responseRounds.ts';
 
 test('only the two real decisions are accepted from a form', () => {
   assert.equal(parseDecision('accept'), 'accept');

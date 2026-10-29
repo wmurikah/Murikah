@@ -5,14 +5,14 @@
  */
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkResetPassword, MIN_PASSWORD_LENGTH } from '../../src/lib/grc/auth/passwordPolicy.ts';
+import { checkResetPassword, MIN_PASSWORD_LENGTH } from '../src/lib/grc/auth/passwordPolicy.ts';
 import {
   allowResetRequest,
   resetRateLimitState,
   RESET_EMAIL_LIMIT,
   RESET_IP_LIMIT,
   RESET_WINDOW_MS,
-} from '../../src/lib/grc/auth/resetRateLimit.ts';
+} from '../src/lib/grc/auth/resetRateLimit.ts';
 
 beforeEach(() => resetRateLimitState());
 

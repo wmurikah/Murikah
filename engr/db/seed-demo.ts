@@ -18,7 +18,7 @@
  */
 import { createClient } from '@libsql/client/web';
 import { randomUUID } from 'node:crypto';
-import { hashPassword } from '../../src/lib/engr/auth/password.ts';
+import { hashPassword } from '../src/lib/engr/auth/password.ts';
 
 const url = process.env.TURSO_ENGR_DATABASE_URL;
 const authToken = process.env.TURSO_ENGR_AUTH_TOKEN;

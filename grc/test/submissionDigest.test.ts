@@ -8,8 +8,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDigest, type DigestItem } from '../../src/lib/grc/notify/render.ts';
-import { digestLinks } from '../../src/lib/grc/notify/links.ts';
+import { buildDigest, type DigestItem } from '../src/lib/grc/notify/render.ts';
+import { digestLinks } from '../src/lib/grc/notify/links.ts';
 
 const submitted = (reference: string, title: string, detail = 'Treasury - High'): DigestItem => ({
   subject: `Work paper submitted for review: ${reference}`,

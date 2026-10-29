@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { presignR2Url } from '../../src/lib/grc/storage/sigv4.ts';
+import { presignR2Url } from '../src/lib/grc/storage/sigv4.ts';
 
 const NOW = new Date('2026-07-05T03:00:00.000Z');
 const base = {

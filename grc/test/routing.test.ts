@@ -19,7 +19,7 @@ import {
   isGrcMfaPendingAllowed,
   isGrcInstanceFreePath,
   GRC_PLATFORM_PATH,
-} from '../../src/lib/grc/routing.ts';
+} from '../src/lib/grc/routing.ts';
 
 test('isGrcHost matches the apex, sub-labels and local equivalents only', () => {
   assert.equal(isGrcHost('grc.murikah.com'), true);

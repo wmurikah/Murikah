@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mileageAmountMinor } from '../../src/lib/engr/mileage.ts';
+import { mileageAmountMinor } from '../src/lib/engr/mileage.ts';
 
 test('amount is distance times rate in minor units', () => {
   // 42 km at KES 50/km (5000 minor) is KES 2,100 (210000 minor).

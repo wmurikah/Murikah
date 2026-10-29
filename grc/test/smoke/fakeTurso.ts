@@ -6,7 +6,7 @@
  * that protocol from a `node:sqlite` in-memory database, so the built worker can
  * run locally against a throwaway database with no Turso credentials and no
  * network. The tables are generated from the ground-truth dictionary
- * `grc/db/schema.md` (the same source as the typed column layer), so the smoke
+ * `db/schema.md` (the same source as the typed column layer), so the smoke
  * database always matches the schema the code is compiled against.
  *
  * Only what the client actually sends is implemented: `execute`, `batch` (with
@@ -68,7 +68,7 @@ type StreamResult =
   | { type: 'ok'; response: Record<string, unknown> }
   | { type: 'error'; error: HranaError };
 
-/** Reads the table dictionary out of grc/db/schema.md (same grammar as gen-columns). */
+/** Reads the table dictionary out of db/schema.md (same grammar as gen-columns). */
 export function parseSchema(schemaMdPath: string): Map<string, string[]> {
   const text = readFileSync(schemaMdPath, 'utf8');
   const rowRe = /^- \*\*([a-z_][a-z0-9_]*)\*\*:\s*(.+?)\s*$/;
@@ -90,7 +90,7 @@ export function parseSchema(schemaMdPath: string): Map<string, string[]> {
 /**
  * The constraints the generated smoke schema carries.
  *
- * `grc/db/schema.md` is a column dictionary and records no keys, so every smoke
+ * `db/schema.md` is a column dictionary and records no keys, so every smoke
  * table used to be created with bare untyped columns. That is why a foreign-key
  * violation on the role save passed the smoke test and shipped (audit finding
  * AC-06): a database that enforces nothing cannot refuse anything. These three

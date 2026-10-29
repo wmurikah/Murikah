@@ -18,7 +18,7 @@ import {
   requirementStatus,
   requirementStatusLabel,
   reviewStatusFor,
-} from '../../src/lib/grc/workflow/requirementFlow.ts';
+} from '../src/lib/grc/workflow/requirementFlow.ts';
 
 test('a requirement nobody has answered is outstanding', () => {
   assert.equal(requirementStatus({ hasSubmission: false }), REQUIREMENT_STATUS.OUTSTANDING);

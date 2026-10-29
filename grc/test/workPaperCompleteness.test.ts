@@ -13,7 +13,7 @@ import {
   listMissing,
   missingForSubmission,
   type CompletenessSubject,
-} from '../../src/lib/grc/workflow/workPaperCompleteness.ts';
+} from '../src/lib/grc/workflow/workPaperCompleteness.ts';
 
 const complete: CompletenessSubject = {
   auditAreaId: 'AA-FIN',

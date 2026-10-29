@@ -1,0 +1,291 @@
+---
+import CmsLayout from '@hasscms/layouts/CmsLayout.astro';
+import CmsPageHeader from '@hasscms/components/cms/CmsPageHeader.astro';
+import CmsBadge from '@hasscms/components/cms/CmsBadge.astro';
+import CmsButton from '@hasscms/components/cms/CmsButton.astro';
+import CmsDataTable from '@hasscms/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@hasscms/components/cms/CmsFilterPanel.astro';
+import CmsEmptyState from '@hasscms/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@hasscms/components/cms/CmsErrorState.astro';
+import CmsSelect from '@hasscms/components/cms/CmsSelect.astro';
+
+import { requestDb } from '@hasscms/lib/cms/db';
+import { canViewSlaDashboard, canManageSlaRules } from '@hasscms/lib/cms/permissions';
+import {
+  listExceptions,
+  type ExceptionBucket,
+  type ExceptionRow,
+} from '@hasscms/lib/cms/repos/exceptionAdmin';
+import { sweepDueSlas, verifySlaTables, fromDb } from '@hasscms/lib/cms/sla/engine';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewSlaDashboard(permissions);
+const mayConfigure = canManageSlaRules(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+const params = Astro.url.searchParams;
+const now = new Date();
+
+const allowedBuckets: ExceptionBucket[] = ['all', 'at-risk', 'breached', 'unassigned', 'escalated'];
+const requestedBucket = params.get('bucket') as ExceptionBucket | null;
+const bucket: ExceptionBucket =
+  requestedBucket !== null && allowedBuckets.includes(requestedBucket) ? requestedBucket : 'all';
+const pageNumber = Math.max(1, Math.trunc(Number(params.get('page') ?? '1') || 1));
+const slaType = params.get('slaType') || null;
+const entityType = params.get('entityType') || null;
+
+let page: { items: ExceptionRow[]; total: number; page: number; pageSize: number } = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 25,
+};
+let tablesMissing: string[] = [];
+let loadFailed = false;
+
+if (mayRead) {
+  try {
+    const db = await requestDb(Astro.locals);
+    const verified = await verifySlaTables(db);
+    if (!verified.ok) {
+      tablesMissing = verified.missing;
+    } else {
+      await sweepDueSlas(db, now);
+      page = await listExceptions(
+        db,
+        userId,
+        { bucket, slaType, entityType, page: pageNumber },
+        now,
+      );
+    }
+  } catch (error) {
+    console.error('[cms.exceptions] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+const owner = (row: ExceptionRow) =>
+  row.accountableUserName ?? row.accountableTeamName ?? 'Unassigned';
+const atRisk = (row: ExceptionRow) =>
+  row.status === 'RUNNING' && row.warningAt !== null && fromDb(row.warningAt) <= now;
+
+function minutesFromTarget(row: ExceptionRow): number {
+  const target = fromDb(row.targetAt).getTime();
+  const end = row.stoppedAt === null ? now.getTime() : fromDb(row.stoppedAt).getTime();
+  return Math.max(0, Math.round((end - target) / 60000));
+}
+
+function remaining(row: ExceptionRow): number {
+  return Math.max(0, Math.round((fromDb(row.targetAt).getTime() - now.getTime()) / 60000));
+}
+
+function issue(row: ExceptionRow): string {
+  if (row.status === 'BREACHED') return 'Breached';
+  if (row.escalated) return 'Escalated';
+  if (row.accountableUserName === null && row.accountableTeamName === null) return 'Unassigned';
+  if (atRisk(row)) return 'At risk';
+  return titleCase(row.status);
+}
+
+function issueTone(row: ExceptionRow): 'danger' | 'warning' | 'neutral' | 'info' {
+  if (row.status === 'BREACHED') return 'danger';
+  if (row.escalated || atRisk(row)) return 'warning';
+  if (row.accountableUserName === null && row.accountableTeamName === null) return 'neutral';
+  return 'info';
+}
+
+function due(row: ExceptionRow): string {
+  if (row.status === 'BREACHED') return `${row.targetAt} · ${minutesFromTarget(row)} min overdue`;
+  if (fromDb(row.targetAt) <= now) return `${row.targetAt} · due`;
+  return `${row.targetAt} · ${remaining(row)} min left`;
+}
+
+function recordHref(row: ExceptionRow): string | null {
+  switch (row.entityType) {
+    case 'CASE':
+      return `/app/helpdesk/${row.entityId}`;
+    case 'LEAD':
+      return `/app/crm/${row.entityId}`;
+    case 'OPPORTUNITY':
+      return `/app/crm/opportunities/${row.entityId}`;
+    case 'SALES_ORDER':
+      return `/app/orders/sales/${row.entityId}`;
+    case 'PURCHASE_ORDER':
+      return `/app/orders/purchases/${row.entityId}`;
+    default:
+      return null;
+  }
+}
+
+const BUCKETS: { key: ExceptionBucket; label: string }[] = [
+  { key: 'all', label: 'All exceptions' },
+  { key: 'at-risk', label: 'At risk' },
+  { key: 'breached', label: 'Breached' },
+  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'escalated', label: 'Escalated' },
+];
+
+function bucketHref(nextBucket: ExceptionBucket): string {
+  const next = new URLSearchParams(params);
+  if (nextBucket === 'all') next.delete('bucket');
+  else next.set('bucket', nextBucket);
+  next.delete('page');
+  return `/app/performance?${next.toString()}`;
+}
+---
+
+<CmsLayout title="Exceptions">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to Exceptions"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState title="Exceptions could not be loaded" description="Please try again in a moment." />
+    ) : tablesMissing.length > 0 ? (
+      <CmsErrorState
+        title="Exceptions are not available"
+        description="The required SLA configuration is incomplete."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Exceptions"
+          description="Items that need intervention across CRM, Helpdesk and Orders."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Exceptions' }]}
+        >
+          {mayConfigure && (
+            <CmsButton slot="actions" variant="secondary" href="/app/administration/sla">
+              SLA configuration
+            </CmsButton>
+          )}
+        </CmsPageHeader>
+
+        <nav aria-label="Exception type" class="flex flex-wrap gap-2">
+          {BUCKETS.map((item) => (
+            <a
+              href={bucketHref(item.key)}
+              aria-current={bucket === item.key ? 'page' : undefined}
+              class:list={[
+                'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                bucket === item.key
+                  ? 'bg-cms-royal text-white'
+                  : 'text-cms-ink hover:bg-cms-canvas',
+              ]}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <CmsFilterPanel action="/app/performance" activeCount={Number(slaType !== null) + Number(entityType !== null)}>
+          <Fragment slot="primary">
+            {bucket !== 'all' && <input type="hidden" name="bucket" value={bucket} />}
+            <CmsSelect
+              id="f-entityType"
+              name="entityType"
+              label="Process"
+              value={entityType ?? ''}
+              options={[
+                { value: '', label: 'All processes' },
+                { value: 'CASE', label: 'Helpdesk' },
+                { value: 'LEAD', label: 'CRM leads' },
+                { value: 'SALES_ORDER', label: 'Sales orders' },
+                { value: 'PURCHASE_ORDER', label: 'Purchase orders' },
+              ]}
+            />
+            <CmsSelect
+              id="f-slaType"
+              name="slaType"
+              label="SLA"
+              value={slaType ?? ''}
+              options={[
+                { value: '', label: 'Internal and external' },
+                { value: 'INTERNAL', label: 'Internal' },
+                { value: 'EXTERNAL', label: 'External' },
+              ]}
+            />
+          </Fragment>
+        </CmsFilterPanel>
+
+        <CmsDataTable
+          caption="Exceptions requiring intervention"
+          columns={[
+            { key: 'process', label: 'Process' },
+            { key: 'record', label: 'Record' },
+            { key: 'customer', label: 'Customer', secondary: true },
+            { key: 'issue', label: 'Issue' },
+            { key: 'owner', label: 'Owner', secondary: true },
+            { key: 'due', label: 'Due / overdue' },
+            { key: 'status', label: 'Status' },
+            { key: 'open', label: '' },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => {
+            const href = recordHref(row);
+            return (
+              <tr class="border-b border-cms-line last:border-0">
+                <td class="px-4 py-2.5 text-cms-muted">{titleCase(row.entityType)}</td>
+                <td class="px-4 py-2.5 font-medium text-cms-ink">
+                  {row.entityLabel ?? row.entityId}
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">
+                  {row.customerName ?? '—'}
+                </td>
+                <td class="px-4 py-2.5">
+                  <CmsBadge tone={issueTone(row)} label={issue(row)} />
+                </td>
+                <td class="hidden px-4 py-2.5 text-cms-muted sm:table-cell">{owner(row)}</td>
+                <td class="px-4 py-2.5 text-cms-body-sm text-cms-muted tabular-nums">{due(row)}</td>
+                <td class="px-4 py-2.5 text-cms-muted">{row.ruleName}</td>
+                <td class="px-4 py-2.5 text-right">
+                  {href !== null && (
+                    <a
+                      href={href}
+                      class="font-medium text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      Open
+                    </a>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          <Fragment slot="mobile">
+            {page.items.map((row) => {
+              const href = recordHref(row);
+              return (
+                <div class="flex min-h-16 items-center gap-3 px-4 py-3">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-semibold text-cms-ink">
+                      {row.entityLabel ?? row.entityId}
+                    </span>
+                    <span class="block truncate text-cms-caption text-cms-muted">
+                      {titleCase(row.entityType)} · {due(row)}
+                    </span>
+                  </span>
+                  <CmsBadge tone={issueTone(row)} label={issue(row)} />
+                  {href !== null && (
+                    <a href={href} class="text-cms-body-sm font-medium text-cms-royal">Open</a>
+                  )}
+                </div>
+              );
+            })}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState icon="statusOk" title="No exceptions in this view" />
+          </Fragment>
+        </CmsDataTable>
+
+        <p class="text-cms-caption text-cms-muted">
+          {page.total} exception{page.total === 1 ? '' : 's'}
+        </p>
+      </Fragment>
+    )
+  }
+</CmsLayout>
