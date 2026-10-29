@@ -6,7 +6,7 @@ on:
         description: Product directory to deploy
         required: true
         type: choice
-        options: [HomeWeb, HassCMS, engr, grc]
+        options: [HomeWeb, HassCMS, Engr, GRC]
 jobs:
   deploy:
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-# grc
+# GRC
 
 This directory owns the grc application, database scripts, tests, Worker configuration and local dependency tree.
 

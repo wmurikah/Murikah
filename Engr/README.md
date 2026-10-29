@@ -1,4 +1,4 @@
-# engr
+# Engr
 
 This directory owns the engr application, database scripts, tests, Worker configuration and local dependency tree.
 
