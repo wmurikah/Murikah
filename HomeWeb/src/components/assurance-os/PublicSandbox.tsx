@@ -1,3 +1,4 @@
+import { track } from '@/lib/analytics';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { SandboxProvider, useSandbox } from '@/sandbox/store';
 import type { ScreenId } from '@/sandbox/types';
@@ -45,6 +46,7 @@ function SandboxApp(){
   const [hydrated,setHydrated]=useState(false);
 
   useEffect(()=>{
+    track('sandbox_start', 'sandbox');
     const timer=window.setTimeout(()=>setHydrated(true),180);
     return()=>window.clearTimeout(timer);
   },[]);
@@ -109,7 +111,7 @@ function SandboxApp(){
     <div className="sb-app" aria-label="Assurance OS sample workspace">
       <aside className="sb-sidebar">
         <div className="sb-sidebar__brand">
-          <img src="/images/murikah-logo-dark.png" alt="Murikah" width="875" height="155"/>
+          <img loading="lazy" src="/images/murikah-logo-dark.png" alt="Murikah" width="875" height="155"/>
           <span>Assurance OS</span>
         </div>
 

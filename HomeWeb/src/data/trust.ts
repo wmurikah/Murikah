@@ -9,7 +9,7 @@ export interface TrustLogo {
 }
 
 export const TRUST = {
-  caption: 'GUIDED BY',
+  caption: 'Work aligned to:',
   items: ['IIA Standards', 'ISO/IEC 27001', 'ISO/IEC 42001'],
   logos: [] as TrustLogo[],
 } as const;

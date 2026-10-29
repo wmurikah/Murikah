@@ -52,7 +52,7 @@ const statusClass = isDark ? 'text-paper/80' : 'text-slate';
   >
     <input type="hidden" name="source" value={source} />
     {/* Honeypot */}
-    <div class="hidden" aria-hidden="true">
+    <div style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden" aria-hidden="true">
       <label for={`${fieldId}-company`}>Leave this field empty</label>
       <input
         id={`${fieldId}-company`}

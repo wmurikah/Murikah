@@ -64,7 +64,7 @@ const navLink = isHome ? homeNavLink : standardNavLink;
         {
           /* Dark lockup for the light navigation surface. */
         }
-        <img
+        <img loading="lazy"
           src={isHome ? '/images/murikah-logo-transparent.png' : '/images/murikah-logo-dark.png'}
           alt="Murikah"
           width="875"
@@ -154,10 +154,11 @@ const navLink = isHome ? homeNavLink : standardNavLink;
       </nav>
 
       {/* Desktop CTA, identical to the hero primary action. */}
-      <div class="hidden lg:block">
+      <div class="hidden lg:flex items-center gap-3">
+        <a href="https://grc.murikah.com" class={navLink}>Sign in</a>
         <Button
           href={PRIMARY_CTA.href}
-          variant="primary"
+          variant="secondary"
           size="lg"
           class={isHome ? 'rounded-[6px]' : 'rounded-[12px]'}
         >
@@ -251,6 +252,7 @@ const navLink = isHome ? homeNavLink : standardNavLink;
             ),
           )
         }
+        <a href="https://grc.murikah.com" class="flex min-h-11 items-center px-3 text-navy">Sign in</a>
         <div class="px-1 pt-3">
           <Button href={PRIMARY_CTA.href} variant="primary" size="lg" class="w-full rounded-[12px]">
             {PRIMARY_CTA.label}

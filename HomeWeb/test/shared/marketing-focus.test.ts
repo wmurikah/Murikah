@@ -22,20 +22,11 @@ test('homepage keeps the six-section conversion architecture', async () => {
   assert.match(page, /\/assurance-os\/sandbox/);
 });
 
-test('Platform navigation leads with Assurance OS and groups secondary apps elsewhere', () => {
-  const platform = NAV.find((item) => item.label === 'Platform');
+test('Assurance OS is a direct marketing link and Labs stay out of the header', () => {
+  const platform = NAV.find(item => item.label === 'Assurance OS');
   assert.equal(platform?.href, '/assurance-os');
-  assert.deepEqual(
-    platform?.children?.map((item) => [item.label, item.href]),
-    [
-      ['Assurance OS', '/assurance-os'],
-      ['Try the sandbox', '/assurance-os/sandbox'],
-      ['More from Murikah Labs', '/products'],
-    ],
-  );
-
-  const serialized = JSON.stringify(platform);
-  assert.doesNotMatch(serialized, /cms\.murikah\.com|tutor\.murikah\.com|engr\.murikah\.com/);
+  assert.equal(platform?.children, undefined);
+  assert.doesNotMatch(JSON.stringify(NAV), /More from Murikah Labs|cms\.murikah\.com|tutor\.murikah\.com|engr\.murikah\.com/);
 });
 
 test('More from Murikah Labs excludes Assurance OS from the peer product grid', async () => {

@@ -11,6 +11,7 @@ export interface FieldError {
 
 export interface ContactInput {
   name: string;
+  source: string;
   organisation: string;
   role: string;
   email: string;
@@ -49,11 +50,6 @@ export function validateContact(raw: Record<string, unknown>): {
   if (name.length < 2) errors.push({ field: 'name', message: 'Please enter your name.' });
   if (!EMAIL_RE.test(email))
     errors.push({ field: 'email', message: 'Please enter a valid email address.' });
-  if (message.length < 10)
-    errors.push({
-      field: 'message',
-      message: 'Please add a little more detail (at least 10 characters).',
-    });
 
   if (errors.length > 0) return { errors };
 
@@ -65,6 +61,14 @@ export function validateContact(raw: Record<string, unknown>): {
       role: clamp(role, 120),
       email: clamp(email, 200),
       message: clamp(message, 5000),
+      source: [
+        'contact',
+        raw.location === 'home' ? 'home' : 'contact',
+        ['call', 'demo'].includes(str(raw.intent)) ? str(raw.intent) : '',
+        ['fintech', 'ngo', 'family'].includes(str(raw.segment)) ? str(raw.segment) : '',
+      ]
+        .filter(Boolean)
+        .join(':'),
     },
     errors: [],
   };

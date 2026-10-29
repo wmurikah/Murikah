@@ -38,6 +38,12 @@ export default tseslint.config(
   },
 
   {
+    // Playwright's existing .cjs tests run as CommonJS and use Node's require.
+    files: ['test/e2e/**/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+
+  {
     // Declaration files legitimately use triple-slash references and empty
     // interface extensions (the standard Astro env.d.ts pattern).
     files: ['**/*.d.ts'],

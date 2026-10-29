@@ -23,7 +23,7 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
 
 export function RatingBadge({ rating }: { rating: string }) {
   const tone = rating === 'Critical' ? 'critical' : rating === 'High' ? 'high' : rating === 'Medium' ? 'medium' : 'low';
-  return <Badge tone={tone}>{rating}</Badge>;
+  return <Badge tone={tone}><span aria-hidden="true">{rating === 'Critical' ? '◆' : rating === 'High' ? '▲' : rating === 'Medium' ? '●' : '✓'}</span> {rating}</Badge>;
 }
 
 export function EmptyState({ title, body }: { title: string; body: string }) {

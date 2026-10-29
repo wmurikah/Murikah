@@ -4,7 +4,7 @@ import SubscribeForm from '@/components/SubscribeForm.astro';
 import { SITE, PRODUCTS, SOCIAL } from '@/site.config';
 const year = new Date().getFullYear();
 const link =
-  'inline-flex min-h-8 items-center text-sm text-slate no-underline hover:text-navy hover:underline';
+  'inline-flex min-h-11 items-center text-sm text-slate no-underline hover:text-navy hover:underline';
 ---
 
 <footer class="compact-footer border-t border-hairline bg-paper-shade text-slate">
@@ -12,12 +12,15 @@ const link =
     <div class="footer-main flex flex-wrap items-center gap-x-6 gap-y-1">
       <a
         href="/"
-        class="inline-flex min-h-8 items-center text-base font-semibold tracking-widest text-navy no-underline"
+        class="inline-flex min-h-11 items-center text-base font-semibold tracking-widest text-navy no-underline"
         aria-label="Murikah, home">MURIKAH</a
       >
+      <a href="/assurance-os" class={link}>Assurance OS</a>
+      <a href="https://grc.murikah.com" class={link}>Sign in</a>
+      <span class="text-sm">More from Murikah Labs:</span>
       <nav aria-label="Footer products" class="flex flex-wrap gap-x-4">
         {
-          PRODUCTS.map((product) => (
+          PRODUCTS.filter(product => product.label !== 'Assurance OS').map((product) => (
             <a href={product.href} class={link}>
               {product.label}
             </a>
@@ -37,6 +40,7 @@ const link =
     >
       <p>© {year} {SITE.legalName}</p>
       <a href="/privacy" class={link}>Privacy</a>
+      <button type="button" hidden data-analytics-settings class={link}>Analytics choices</button>
       <a href="/terms" class={link}>Terms</a>
       {
         SOCIAL.map((s) => (
@@ -47,7 +51,7 @@ const link =
       }
       <a href={`mailto:${SITE.email}`} class={link}>{SITE.email}</a>
       <details class="newsletter ml-auto">
-        <summary class="min-h-8 cursor-pointer py-1.5 text-sm text-navy hover:underline">Newsletter</summary>
+        <summary class="min-h-11 cursor-pointer py-1.5 text-sm text-navy hover:underline">Newsletter</summary>
         <div class="newsletter-panel">
           <p class="mb-2 text-sm">Occasional notes on assurance and governance.</p>
           <SubscribeForm

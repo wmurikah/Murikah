@@ -2,20 +2,25 @@
 
 > Assurance. Systems. Intelligence. Pronounced moo-REE-kah, rhymes with Eureka.
 
-Murikah is an AI-native assurance and governance company. It helps regulated mid-market organisations run, prove and continuously improve their internal audit and their AI and system governance, at a fraction of the cost and rigidity of the Big 4 and enterprise governance, risk and compliance (GRC) software. The company combines senior, standards-based assurance judgement with a working software platform in one relationship, priced for the mid-market rather than the global enterprise. Its work follows the IIA Global Internal Audit Standards and the ISO/IEC 27001 and ISO/IEC 42001 standards. Some pages on the site still carry clearly-marked placeholder tokens pending final confirmation.
+Murikah provides internal audit services and Assurance OS for regulated teams in Kenya and East Africa. The website explains the services, publishes software pricing ranges and offers a browser-only sandbox using fictional data. Work is aligned to IIA Standards, ISO/IEC 27001 and ISO/IEC 42001; this is not a claim of accreditation or endorsement.
 
-## The six lines of work
+## Assurance OS and services
 
-- Internal audit: co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and ISO 42001 and AI-governance readiness. https://murikah.com/internal-audit
-- Assurance OS: the subscription platform for work papers, approvals, findings and remediation, follow-ups, board reporting and an AI assistant, priced from about KES 15,000 a month. https://murikah.com/assurance-os
-- Automation: automation builds, CRM and CMS, workflow engineering and custom automations, from a team that audits a process before automating it. https://murikah.com/automation
-- Murikah Advisory: AI strategy and governance roadmaps, research and analytics, and executive decks and board papers. https://murikah.com/advisory
-- Training: training and certification, including CISA preparation, ISO 42001 awareness and lead-auditor readiness, and practical masterclasses. https://murikah.com/training
-- Research: anonymised cross-client benchmarking and an annual flagship report, both forthcoming as the client base grows. https://murikah.com/research
+- Assurance OS: audit plans, work papers, review, findings, actions and committee reporting. Published pricing starts at KES 15,000 per month. https://murikah.com/assurance-os
+- Public sandbox: explore fictional audit records without sign-in. https://murikah.com/assurance-os/sandbox
+- Sign in to Assurance OS: https://grc.murikah.com
+- Internal audit: co-sourced and outsourced internal audit, systems and IT audits, data protection reviews, and AI-governance readiness. https://murikah.com/internal-audit
+- Automation: workflow automation and internal tools. https://murikah.com/automation
+- Advisory: AI strategy, governance roadmaps, analytics and board papers. https://murikah.com/advisory
+- Training: CISA preparation, ISO 42001 awareness and lead-auditor readiness. Contact Murikah for dates and availability. https://murikah.com/training
 
-## Founder and proof
+## Research
 
-Wilberforce L. Murikah is the founder of Murikah. Publicly stated credentials include CISA, ISO/IEC 27001:2022 Lead Auditor and ISO/IEC 42001:2023 Lead Auditor. He is a co-author of peer-reviewed research on AI ethics in auditing and algorithmic profiling. The site also publishes a redacted prior assurance report extract with quantified engagement metrics. https://murikah.com/proof/report-extract
+Research is accessible through Insights. Benchmarking and an annual report are forthcoming; no benchmark figures have been published. https://murikah.com/research
+
+## Standards and proof
+
+Murikah aligns audit work to IIA Standards, ISO/IEC 27001 and ISO/IEC 42001. A redacted report extract shows results from earlier audit work with client details removed: https://murikah.com/proof/report-extract
 
 ## Who it is for
 
@@ -55,3 +60,5 @@ Murikah works to the IIA Global Internal Audit Standards for its internal audit 
 ## Contact
 
 - Email: hello@murikah.com
+
+Call requests receive a time confirmation within one business day. WhatsApp is not yet available; use email or the contact form.

@@ -11,7 +11,7 @@ import FaqPageSchema from '@/components/schema/FaqPage.astro';
 import { SERVICES, PRIMARY_CTA } from '@/site.config';
 import type { FaqItem } from '@/lib/types';
 
-const serviceLines = SERVICES.filter((service) => service.slug !== 'assurance-os');
+const serviceLines = SERVICES.filter((service) => !['assurance-os', 'research'].includes(service.slug));
 
 const comparison: Record<string, { bestFor: string; output: string; start: string }> = {
   'internal-audit': {

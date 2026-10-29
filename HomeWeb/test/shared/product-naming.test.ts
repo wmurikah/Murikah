@@ -13,12 +13,9 @@ test('Assurance OS is the sole buyer-facing name for the audit platform', () => 
   assert.equal(service?.fullName, 'Assurance OS');
   assert.equal(service?.href, '/assurance-os');
 
-  const platform = NAV.find((item) => item.label === 'Platform');
-  assert.ok(
-    platform?.children?.some(
-      (item) => item.label === 'Assurance OS' && item.href === '/assurance-os',
-    ),
-  );
+  const platform = NAV.find((item) => item.label === 'Assurance OS');
+  assert.equal(platform?.href, '/assurance-os');
+  assert.equal(platform?.children, undefined);
   assert.ok(!JSON.stringify(NAV).includes('GRC · Assurance OS'));
 });
 

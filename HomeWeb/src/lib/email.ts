@@ -37,6 +37,7 @@ export async function sendContactNotification(
     `Role:         ${input.role || ', '}`,
     `Email:        ${input.email}`,
     ``,
+    `Source:       ${input.source}`,
     `Message:`,
     input.message,
   ].join('\n');

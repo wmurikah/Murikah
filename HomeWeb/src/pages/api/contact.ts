@@ -59,7 +59,7 @@ export const POST: APIRoute = async ({ request }) => {
     const db = createDbClient(env);
     await db.execute({
       sql: 'INSERT INTO leads (name, organisation, role, email, message, source) VALUES (?, ?, ?, ?, ?, ?)',
-      args: [data.name, data.organisation, data.role, data.email, data.message, 'contact'],
+      args: [data.name, data.organisation, data.role, data.email, data.message, data.source],
     });
   } catch (error) {
     console.error('contact: failed to persist lead', error);

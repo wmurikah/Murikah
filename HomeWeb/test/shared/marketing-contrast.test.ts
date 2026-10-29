@@ -42,6 +42,8 @@ test('marketing text pairs meet WCAG AA contrast thresholds', async () => {
   const token = marketingTokens(css);
 
   const normalTextPairs = [
+    ['muted text on navy', token['--color-on-navy-muted'], token['--color-navy']],
+    ['severity amber on paper', token['--color-status-med'], token['--color-paper']],
     ['body text on paper', token['--color-ink'], token['--color-paper']],
     ['secondary text on paper', token['--color-slate'], token['--color-paper']],
     ['secondary text in light footer', token['--color-slate'], token['--color-paper-shade']],

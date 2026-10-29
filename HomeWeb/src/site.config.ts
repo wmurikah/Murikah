@@ -4,8 +4,7 @@
  * works to, pricing anchors, audience, social links and default SEO. Pull from
  * here rather than retyping copy across files.
  *
- * Murikah speaks as a company ("we"), while founder credentials are shown
- * explicitly where they provide relevant, verifiable trust evidence.
+ * Murikah speaks as a company ("we"), with company-level standards and evidence.
  *
  * Voice rules apply to every string in this file: no em dashes, plain English,
  * British and Kenyan spelling, no superlatives. Only confirmed details belong in public copy.
@@ -54,29 +53,6 @@ export interface AudienceSegment {
   note: string;
   href?: string;
 }
-
-export const FOUNDER = {
-  name: 'Wilberforce L. Murikah',
-  role: 'Founder, Murikah',
-  credentials: [
-    'CISA',
-    'ISO/IEC 27001:2022 Lead Auditor',
-    'ISO/IEC 42001:2023 Lead Auditor',
-  ],
-  research:
-    'Co-author of peer-reviewed research on AI ethics in auditing and algorithmic profiling.',
-  scholarUrl: 'https://scholar.google.com/citations?hl=en&user=KS1Vm5MAAAAJ',
-  papers: [
-    {
-      title: 'Bias and ethics of AI systems applied in auditing: a systematic review',
-      href: 'https://www.sciencedirect.com/science/article/pii/S2468227624002266',
-    },
-    {
-      title: 'Reconciling cultural values with algorithmic profiling',
-      href: 'https://www.sciencedirect.com/science/article/pii/S2772503026000290',
-    },
-  ],
-} as const;
 
 /** Canonical production URL. MUST stay in sync with `site` in astro.config.ts. */
 export const SITE_URL = 'https://murikah.com';
@@ -217,130 +193,18 @@ export const PRODUCTS = [
 ];
 
 export const NAV: NavItem[] = [
+  { label: 'Assurance OS', href: '/assurance-os' },
   {
-    label: 'Solutions',
+    label: 'Services',
     href: '/services',
     match: ['/services', '/internal-audit', '/automation', '/advisory', '/training'],
-    children: [
-      {
-        label: 'Solutions overview',
-        href: '/services',
-        description: 'Connected assurance, automation, advisory and training services.',
-      },
-      {
-        label: 'Internal audit',
-        href: '/internal-audit',
-        description:
-          'Co-sourced and outsourced internal audit, systems audits and governance reviews.',
-      },
-      {
-        label: 'Automation',
-        href: '/automation',
-        description: 'Automation, CRM, CMS and workflow builds.',
-      },
-      {
-        label: 'Advisory',
-        href: '/advisory',
-        description: 'AI strategy, governance roadmaps, analytics and board papers.',
-      },
-      {
-        label: 'Training',
-        href: '/training',
-        description: 'CISA, ISO 42001, lead-auditor readiness and masterclasses.',
-      },
-    ],
+    children: SERVICES.filter((service) =>
+      ['internal-audit', 'automation', 'advisory', 'training'].includes(service.slug),
+    ).map((service) => ({ label: service.name, href: service.href, description: service.summary })),
   },
-  {
-    label: 'Platform',
-    href: '/assurance-os',
-    match: ['/assurance-os', '/products'],
-    children: [
-      {
-        label: 'Assurance OS',
-        href: '/assurance-os',
-        description: 'Plan audits, review evidence and track findings and action plans.',
-      },
-      {
-        label: 'Try the sandbox',
-        href: '/assurance-os/sandbox',
-        description: 'Explore Assurance OS with sample audit data. No sign-in required.',
-      },
-      {
-        label: 'More from Murikah Labs',
-        href: '/products',
-        description: 'Explore CMS, Tutor and ENGR away from the core assurance offer.',
-      },
-    ],
-  },
-  {
-    label: 'Pricing',
-    href: '/pricing',
-    match: ['/pricing'],
-  },
-  {
-    label: 'Insights',
-    href: '/insights',
-    match: ['/insights', '/research'],
-    children: [
-      {
-        label: 'All insights',
-        href: '/insights',
-        description: 'Guides for assurance, governance, AI and data protection.',
-      },
-      {
-        label: 'AI governance',
-        href: '/insights#ai-governance',
-        description: 'ISO 42001, AI governance and readiness guidance.',
-      },
-      {
-        label: 'Internal audit',
-        href: '/insights#internal-audit',
-        description: 'Practical guidance for audit leaders and committees.',
-      },
-      {
-        label: 'Data protection',
-        href: '/insights#data-protection',
-        description: 'ODPC, controller and processor obligations, and privacy reviews.',
-      },
-      {
-        label: 'Research',
-        href: '/research',
-        description: 'Murikah research reports and market benchmarks.',
-      },
-    ],
-  },
-  {
-    label: 'About',
-    href: '/about',
-    match: ['/about'],
-    children: [
-      {
-        label: 'About Murikah',
-        href: '/about',
-        description: 'Clearer assurance, stronger systems and better decisions.',
-      },
-      {
-        label: 'Why Murikah',
-        href: '/about#why-now',
-        description: 'Why the bar for assurance, AI governance and board reporting is rising.',
-      },
-      {
-        label: 'How we work',
-        href: '/about#how-we-work',
-        description: 'Standards in, evidence out.',
-      },
-      {
-        label: 'Standards we follow',
-        href: '/about#standards',
-        description: 'IIA Standards, ISO 27001 and ISO 42001.',
-      },
-      {
-        label: 'What we stand for',
-        href: '/about#what-we-stand-for',
-        description: 'Independence, plain speaking and evidence over assertion.',
-      },
-    ],
-  },
+  { label: 'Pricing', href: '/pricing' },
+  { label: 'Insights', href: '/insights', match: ['/insights', '/research'] },
+  { label: 'About', href: '/about' },
 ];
 
 /** The one gold action across the site. */
