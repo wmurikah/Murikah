@@ -18,7 +18,7 @@ import { createClient } from '@libsql/client/web';
 import { randomUUID } from 'node:crypto';
 // Relative import (Node does not resolve the @engr tsconfig alias) so the same
 // PBKDF2 hashing is used here as at login.
-import { hashPassword } from '../../src/lib/engr/auth/password.ts';
+import { hashPassword } from '../src/lib/engr/auth/password.ts';
 
 const url = process.env.TURSO_ENGR_DATABASE_URL;
 const authToken = process.env.TURSO_ENGR_AUTH_TOKEN;

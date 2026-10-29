@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outFile = join(here, '..', '..', 'src', 'lib', 'grc', 'schema', 'columns.ts');
+const outFile = join(here, '..', 'src', 'lib', 'grc', 'schema', 'columns.ts');
 const schema = readFileSync(join(here, 'schema.md'), 'utf8');
 
 // Each table is one line: `- **table_name**: col1, col2, col3`.

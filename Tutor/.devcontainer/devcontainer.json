@@ -1,0 +1,21 @@
+{
+  "name": "Murikah Tutor",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
+  },
+  "forwardPorts": [
+    3782
+  ],
+  "portsAttributes": {
+    "3782": {
+      "label": "Murikah Tutor",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "postCreateCommand": "chmod +x codespaces/start.sh codespaces/stop.sh codespaces/autostart.sh",
+  "postStartCommand": "bash codespaces/autostart.sh",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/Tutor"
+}

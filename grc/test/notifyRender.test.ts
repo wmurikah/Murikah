@@ -13,7 +13,7 @@ import {
   ccsHoa,
   severityOf,
   isNotificationType,
-} from '../../src/lib/grc/notify/types.ts';
+} from '../src/lib/grc/notify/types.ts';
 import {
   interpolate,
   renderInline,
@@ -21,7 +21,7 @@ import {
   buildDigest,
   escapeHtml,
   planNormalDigests,
-} from '../../src/lib/grc/notify/render.ts';
+} from '../src/lib/grc/notify/render.ts';
 
 test('the catalogue has the source types plus due-soon, password-reset and the requirements loop', () => {
   assert.equal(NOTIFICATION_TYPES.length, 27);

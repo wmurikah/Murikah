@@ -25,7 +25,7 @@ import {
   stageLabel,
   stageOf,
   type AuditeeStanding,
-} from '../../src/lib/grc/workflow/auditeeLoop.ts';
+} from '../src/lib/grc/workflow/auditeeLoop.ts';
 
 const NOBODY: AuditeeStanding = {
   isResponsible: false,

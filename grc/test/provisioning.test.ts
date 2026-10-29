@@ -10,8 +10,8 @@ import {
   buildProvisioningStatements,
   PHASE1_CONFIG_DEFAULTS,
   TRIAL_PLAN_CODE,
-} from '../../src/lib/grc/repos/provisioningDefaults.ts';
-import { DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '../../src/lib/grc/repos/dropdownDefaults.ts';
+} from '../src/lib/grc/repos/provisioningDefaults.ts';
+import { DROPDOWN_KEYS, DROPDOWN_DEFAULTS } from '../src/lib/grc/repos/dropdownDefaults.ts';
 
 const ids = { organizationId: 'ORG1', adminUserId: 'USER1' };
 const input = {

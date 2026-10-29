@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AffiliateScope } from '../../src/lib/grc/auth/affiliateScope.ts';
+import type { AffiliateScope } from '../src/lib/grc/auth/affiliateScope.ts';
 import {
   UNCONFINED,
   resolveAffiliateScope,
@@ -16,7 +16,7 @@ import {
   affiliatePredicate,
   affiliateVisible,
   affiliateScopeKey,
-} from '../../src/lib/grc/auth/affiliateScope.ts';
+} from '../src/lib/grc/auth/affiliateScope.ts';
 
 /** A confined scope, the shape the middleware would produce for a non-group user. */
 const confinedTo = (affiliateCode: string | null): AffiliateScope => ({

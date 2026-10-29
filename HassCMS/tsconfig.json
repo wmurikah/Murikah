@@ -1,0 +1,21 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@hasscms/*": [
+        "src/*"
+      ]
+    }
+  },
+  "include": [
+    ".astro/types.d.ts",
+    "src/**/*"
+  ],
+  "exclude": [
+    "dist",
+    ".wrangler",
+    "node_modules",
+    "test"
+  ]
+}

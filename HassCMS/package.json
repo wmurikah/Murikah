@@ -1,0 +1,57 @@
+{
+  "name": "hass-cms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent Hass Petroleum customer operations application",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "sync": "astro sync",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "cf:typegen": "wrangler types",
+    "cf:dev": "astro build && wrangler dev --config dist/server/wrangler.json",
+    "cf:deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "astro": "astro",
+    "test": "node --experimental-strip-types --test test/cms/*.test.ts test/hosts/*.test.ts test/isolation.test.ts",
+    "db:bootstrap-admin": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/bootstrap-admin.ts"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.0.0",
+    "@fontsource-variable/inter": "^5.0.0",
+    "@libsql/client": "^0.17.4",
+    "astro": "^7.0.2",
+    "jose": "^6.2.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "@tailwindcss/vite": "^4.3.1",
+    "@typescript-eslint/parser": "^8.62.0",
+    "eslint": "^10.5.0",
+    "eslint-plugin-astro": "^2.0.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.8.4",
+    "prettier-plugin-astro": "^0.14.1",
+    "tailwindcss": "^4.3.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.62.0",
+    "wrangler": "^4.104.0"
+  }
+}

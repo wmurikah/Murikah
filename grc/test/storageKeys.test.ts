@@ -13,7 +13,7 @@ import {
   orgPrefix,
   sha256Hex,
   CONTENT_HASH_ALGO,
-} from '../../src/lib/grc/storage/keys.ts';
+} from '../src/lib/grc/storage/keys.ts';
 
 test('safeFilename drops any path and keeps a safe segment', () => {
   assert.equal(safeFilename('../../etc/passwd'), 'passwd');

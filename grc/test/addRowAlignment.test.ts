@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const CSS = readFileSync(join(import.meta.dirname, '..', '..', 'src', 'styles', 'grc.css'), 'utf8');
+const CSS = readFileSync(join(import.meta.dirname, '..', 'src', 'styles', 'grc.css'), 'utf8');
 
 /** The declarations inside one rule, by its exact selector. */
 function ruleBody(selector: string): string {

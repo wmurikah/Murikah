@@ -17,9 +17,9 @@ import { FakeTursoServer } from './fakeTurso.ts';
 import { seedDatabase, SMOKE_SESSION_SECRET } from './seed.ts';
 import { FakeS3Server } from './fakeS3.ts';
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
+const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const WRANGLER_CONFIG = join(REPO_ROOT, 'dist', 'server', 'wrangler.json');
-const SCHEMA_MD = join(REPO_ROOT, 'grc', 'db', 'schema.md');
+const SCHEMA_MD = join(REPO_ROOT, 'db', 'schema.md');
 const HOST = 'grc.localhost';
 const BOOT_TIMEOUT_MS = 120_000;
 

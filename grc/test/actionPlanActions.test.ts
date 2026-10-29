@@ -17,7 +17,7 @@ import {
   isTerminal,
   BOARD_VISIBLE_SET,
   PENDING_SET,
-} from '../../src/lib/grc/workflow/actionPlanActions.ts';
+} from '../src/lib/grc/workflow/actionPlanActions.ts';
 
 test('the enum type is the action-plan status type', () => {
   assert.equal(ACTION_PLAN_ENUM_TYPE, 'ACTION_PLAN_STATUS');

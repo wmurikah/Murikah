@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkNewPassword, MIN_PASSWORD_LENGTH } from '../../src/lib/grc/auth/passwordPolicy.ts';
+import { checkNewPassword, MIN_PASSWORD_LENGTH } from '../src/lib/grc/auth/passwordPolicy.ts';
 
 test('a long, different, matching password passes', () => {
   const r = checkNewPassword('oldTempPass1', 'a-brand-new-passphrase', 'a-brand-new-passphrase');

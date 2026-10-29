@@ -1,0 +1,27 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ],
+      "@grc/*": [
+        "src/lib/grc/*"
+      ],
+      "@shared/*": [
+        "src/lib/shared/*"
+      ]
+    }
+  },
+  "include": [
+    ".astro/types.d.ts",
+    "src/**/*"
+  ],
+  "exclude": [
+    "dist",
+    ".wrangler",
+    "node_modules",
+    "test"
+  ]
+}

@@ -18,7 +18,7 @@ import {
   riskPillClass,
   visibleCards,
   type FindingSource,
-} from '../../src/lib/grc/reports/findingCards.ts';
+} from '../src/lib/grc/reports/findingCards.ts';
 
 const FULL: FindingSource = {
   reference: 'WP/2026/002',

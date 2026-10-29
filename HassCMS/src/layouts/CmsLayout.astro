@@ -1,0 +1,258 @@
+---
+/**
+ * The authenticated CMS shell: a slim navy navigation rail beside a light
+ * canvas, with a compact top bar above the content.
+ *
+ * BaseLayout is deliberately not used. It renders the marketing header and
+ * footer, and corporate navigation must never appear on cms.murikah.com. What
+ * is taken from the shared estate is the stylesheet, imported the same way the
+ * previous CMS layouts and the engr and grc layouts import it, so the @theme
+ * tokens and every Tailwind utility are available without the marketing chrome.
+ *
+ * Unlike src/styles/engr.css and src/styles/grc.css, this product carries no
+ * hand-written stylesheet of its own. Styling is Tailwind utilities in markup
+ * plus the namespaced CMS tokens in src/styles/tokens.css, which is what keeps
+ * the repository's CSS share where it is.
+ *
+ * The rail renders twice, from one component and one data model: as the
+ * persistent rail from lg upwards, and inside the mobile drawer below it.
+ *
+ * There is no session yet, so `user` is a prop with a null default rather than
+ * a read from locals. When authentication lands, this is where locals.cms is
+ * read and the prop disappears.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@hasscms/styles/global.css';
+import CmsDrawer from '@hasscms/components/cms/CmsDrawer.astro';
+import CmsAssistant from '@hasscms/components/cms/CmsAssistant.astro';
+import CmsOverlayScript from '@hasscms/components/cms/CmsOverlayScript.astro';
+import CmsSearchScript from '@hasscms/components/cms/CmsSearchScript.astro';
+import CmsSidebar from '@hasscms/components/cms/CmsSidebar.astro';
+import CmsTopBar from '@hasscms/components/cms/CmsTopBar.astro';
+import CmsIcon from '@hasscms/components/cms/CmsIcon.astro';
+import CmsRailScript from '@hasscms/components/cms/CmsRailScript.astro';
+import CmsNavigationProgress from '@hasscms/components/cms/CmsNavigationProgress.astro';
+
+interface Props {
+  title: string;
+  notificationCount?: number;
+  width?: 'focus' | 'detail' | 'standard' | 'data';
+}
+const { title, notificationCount, width = 'standard' } = Astro.props;
+const contentWidths = {
+  focus: 'max-w-[760px]',
+  detail: 'max-w-[1140px]',
+  standard: 'max-w-[1280px]',
+  data: 'max-w-[1600px]',
+};
+
+/*
+  THE BELL NO LONGER TAXES EVERY PAGE. This block used to create its own
+  database client and resolve the unread count — plus a five-row preview when
+  the count was non-zero — during EVERY page render, so opening the Helpdesk
+  paid notification latency before any Helpdesk byte was written. The bell now
+  renders immediately; the count arrives via /api/notifications/bell shortly
+  after first paint, and the preview is fetched only when the menu is opened.
+  A page that already knows its count (the notifications page, having just
+  marked things read) still passes it and the fetch is skipped for the count.
+*/
+const bellCount = notificationCount ?? 0;
+const bellCountKnown = notificationCount !== undefined;
+
+const pageTitle = `${title} - Hass Petroleum`;
+// The visitor-facing path, captured by the middleware before the /cms rewrite,
+// so the rail marks the item the user thinks they are on.
+const currentPath = Astro.locals.cmsPath ?? '/app';
+
+// The principal, resolved once per request by the middleware guard and read
+// here. There is no client-side authentication store anywhere in this product,
+// so there is nothing to hydrate, nothing to keep in step, and no window in
+// which the browser holds a view the server has not authorised. A page is
+// simply not rendered until the principal is known, which is also why there is
+// no loading state and no skeleton: there is no gap to hide.
+const principal = Astro.locals.cms;
+const permissions = principal?.user.permissions ?? [];
+const DRAWER_ID = 'cms-nav-drawer';
+const ASSISTANT_ID = 'cms-assistant';
+---
+
+<!doctype html>
+<html lang="en-KE" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="group/rail min-h-full bg-cms-canvas text-cms-ink antialiased">
+    {
+      /*
+      ONE GLOBAL NAVIGATION LIFECYCLE, AND THIS IS IT. The activity line is the
+      only shell-level "the next page is coming" affordance; individual pages
+      and components never add their own.
+    */
+    }
+    <CmsNavigationProgress />
+    <a
+      href="#cms-main"
+      class="sr-only rounded-cms bg-cms-navy px-4 py-2 text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50"
+    >
+      Skip to content
+    </a>
+
+    {
+      /*
+      THE PIN IS READ BEFORE THE RAIL PAINTS. Setting it from a script at the
+      end of the body would show every pinned user a narrow rail that jumps
+      wide a moment later, on every page load. This runs inline, in document
+      order, before the rail exists, so the first frame is already correct.
+      A browser with no storage, or one refusing it, simply gets the default.
+    */
+    }
+    <script is:inline nonce={Astro.locals.cmsNonce}>
+      try {
+        if (localStorage.getItem('cms.rail.pinned') === '1') {
+          document.body.dataset.railPinned = 'true';
+        }
+      } catch {
+        /* Private mode, or storage refused. The default is a collapsed rail. */
+      }
+    </script>
+
+    <div class="flex min-h-dvh">
+      {
+        /*
+        THE RAIL COLLAPSES, AND THE PAGE DOES NOT MOVE WHEN IT OPENS.
+
+        Two elements, on purpose. The outer <aside> is the FOOTPRINT: 64px
+        wide, always, so it holds the same space in the flex row whatever the
+        panel is doing. The inner panel is absolutely positioned inside it and
+        is what grows to 256px, overlaying the content rather than pushing it.
+        A rail that reflowed the page every time a mouse passed the left edge
+        would be worse than a permanently wide one.
+
+        It expands on hover, on focus-within so a keyboard user tabbing in can
+        read the labels, and whenever it is pinned. On a touch device there is
+        no hover, so the pin button is the tap that opens it, and the choice
+        persists.
+
+        The width transition is 150ms, and global.css clamps every animation
+        and transition to 0.01ms under prefers-reduced-motion, so it snaps
+        rather than slides for anybody who asked for less movement.
+      */
+      }
+      <aside
+        data-cms-rail
+        class="sticky top-0 z-30 hidden h-dvh w-16 shrink-0 transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 lg:block"
+      >
+        <div
+          class="absolute inset-y-0 left-0 h-dvh w-16 overflow-hidden border-r border-white/10 bg-cms-navy transition-[width] duration-150 group-data-[rail-pinned=true]/rail:w-56 group-data-[rail-touch=true]/rail:w-56 focus-within:w-56 hover:w-56"
+        >
+          {
+            /*
+            LAID OUT AT THE EXPANDED WIDTH, ALWAYS. The panel above is what
+            narrows; this inner column stays 256px wide and is clipped by it.
+            Sizing the column itself would reflow every label as the rail moves,
+            and at 64px it would show the first letters of each word through the
+            clip, which reads as a rendering fault rather than a collapsed rail.
+
+            Every row leads with a 64px icon box, so the label begins exactly at
+            the clip and is either wholly visible or wholly hidden. The wordmark
+            moved to the top bar for the same reason: half of "Petroleum" is not
+            a brand.
+          */
+          }
+          <div class="flex h-full w-56 flex-col py-4">
+            <CmsSidebar currentPath={currentPath} idPrefix="rail" permissions={permissions} />
+            <div class="mt-auto pt-4">
+              <button
+                type="button"
+                data-cms-rail-pin
+                aria-pressed="false"
+                class="flex h-10 w-full items-center rounded-cms pr-3 text-cms-body-sm text-cms-rail-text outline-none hover:bg-cms-navy-soft hover:text-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-cms-navy"
+              >
+                <span class="relative flex w-16 shrink-0 items-center justify-center">
+                  <CmsIcon name="chevronRight" size={18} />
+                  {
+                    /*
+                      THE ONE-TIME CUE, AND IT HAS TO BE VISIBLE AT 64 PIXELS.
+                      A first-time reader sees an icon rail and no words; the
+                      pin control that would explain it is itself only legible
+                      once the rail is open, so telling them there is one is
+                      circular. A small marker beside the control is the part
+                      that survives the clip, and the script removes it for
+                      good the first time this browser expands or pins the
+                      rail. Experienced users never see it again.
+                    */
+                  }
+                  <span
+                    data-cms-rail-hint-dot
+                    hidden
+                    class="absolute end-3 top-2 h-1.5 w-1.5 rounded-full bg-cms-gold"
+                    aria-hidden="true"></span>
+                </span>
+                {
+                  /*
+                  THE LABEL SAYS WHAT PRESSING IT WILL DO, and the line beneath
+                  says whether a choice is currently in force.
+
+                  The rail collapses by default and always has; a rail that will
+                  not collapse is one where somebody pressed "Keep open" — in
+                  this browser, possibly months ago, possibly on a build whose
+                  defaults have since changed. localStorage outranks a later
+                  change of default silently and for ever, and until now nothing
+                  on screen said a preference existed at all, so the only
+                  reading available was "the collapse is broken".
+                */
+                }
+                <span class="flex flex-col items-start leading-tight whitespace-nowrap">
+                  <span data-cms-rail-pin-label>Keep open</span>
+                  <span class="text-cms-caption text-cms-rail-muted" data-cms-rail-pin-note></span>
+                  <span data-cms-rail-hint-text hidden class="text-cms-caption text-cms-rail-muted"
+                    >Hover to expand</span
+                  >
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="flex min-w-0 flex-1 flex-col">
+        <CmsTopBar
+          drawerId={DRAWER_ID}
+          principal={principal}
+          notificationCount={bellCount}
+          notificationCountKnown={bellCountKnown}
+        />
+        <main id="cms-main" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div class:list={['mx-auto flex w-full flex-col gap-8', contentWidths[width]]}>
+            <slot />
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <CmsDrawer id={DRAWER_ID} tone="navigation" title="Navigate">
+      <CmsSidebar currentPath={currentPath} idPrefix="drawer" permissions={permissions} />
+    </CmsDrawer>
+
+    {
+      /*
+        THE ASSISTANT IS IN THE SHELL AND COSTS THE SHELL NOTHING. It renders
+        empty markup and reads nothing: any query here would be added to every
+        page in the application, and Home is at thirteen of its fifteen. It
+        talks to /api/assistant only once somebody opens it.
+      */
+    }
+    {
+      principal !== undefined && principal.user.userType === 'INTERNAL' && (
+        <CmsAssistant id={ASSISTANT_ID} />
+      )
+    }
+
+    <CmsOverlayScript />
+    <CmsRailScript />
+  </body>
+</html>

@@ -11,7 +11,7 @@ import {
   isValidEmail,
   requireText,
   optionalText,
-} from '../../src/lib/grc/repos/setupValidation.ts';
+} from '../src/lib/grc/repos/setupValidation.ts';
 
 test('normaliseCode upper-cases and collapses to underscores', () => {
   assert.equal(normaliseCode('  north region '), 'NORTH_REGION');

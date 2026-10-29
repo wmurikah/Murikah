@@ -17,7 +17,7 @@ import {
   grantForTransition,
   isEditable,
   editableStatuses,
-} from '../../src/lib/grc/workflow/workPaperActions.ts';
+} from '../src/lib/grc/workflow/workPaperActions.ts';
 
 test('the enum type names the workflow as the live database spells it', () => {
   // Build Prompt 61. `status_transitions` keys every workflow by this column and

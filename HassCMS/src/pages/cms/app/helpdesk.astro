@@ -1,0 +1,537 @@
+---
+/**
+ * Service → Cases.
+ *
+ * The operational queue. Five indicators computed over the same scope
+ * predicate as the list, queue presets as URL parameters so a view can be
+ * shared, and factual age only: "Raised 3 days ago", never "late" and never
+ * "breached", because no SLA engine exists until phase 15 and this page will
+ * not fake one.
+ */
+import CmsLayout from '@hasscms/layouts/CmsLayout.astro';
+import CmsPageHeader from '@hasscms/components/cms/CmsPageHeader.astro';
+import CmsButton from '@hasscms/components/cms/CmsButton.astro';
+import CmsBadge from '@hasscms/components/cms/CmsBadge.astro';
+import CmsKpiCard from '@hasscms/components/cms/CmsKpiCard.astro';
+import CmsIcon from '@hasscms/components/cms/CmsIcon.astro';
+import CmsDataTable from '@hasscms/components/cms/CmsDataTable.astro';
+import CmsFilterPanel from '@hasscms/components/cms/CmsFilterPanel.astro';
+import CmsDrawer from '@hasscms/components/cms/CmsDrawer.astro';
+import CmsEmptyState from '@hasscms/components/cms/CmsEmptyState.astro';
+import CmsErrorState from '@hasscms/components/cms/CmsErrorState.astro';
+import CmsInput from '@hasscms/components/cms/CmsInput.astro';
+import CmsSelect from '@hasscms/components/cms/CmsSelect.astro';
+import CmsCaseCreateDrawer from '@hasscms/components/cms/CmsCaseCreateDrawer.astro';
+
+import { requestDb } from '@hasscms/lib/cms/db';
+import { canViewCases, canCreateCases, canManageCaseCategories } from '@hasscms/lib/cms/permissions';
+import {
+  listCases,
+  caseIndicators,
+  serviceOptions,
+  CASE_TYPES,
+  CASE_PRIORITIES,
+  CASE_CHANNELS,
+  CASE_STATUSES,
+  type CaseRow,
+  type CaseIndicators,
+  type ServiceOptions,
+} from '@hasscms/lib/cms/repos/serviceAdmin';
+import { readCaseQuery } from '@hasscms/lib/cms/admin/serviceInput';
+
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const mayRead = canViewCases(permissions);
+const mayCreate = canCreateCases(permissions);
+const mayCategories = canManageCaseCategories(permissions);
+const userId = Astro.locals.cms?.user.userId ?? '';
+
+const params = Astro.url.searchParams;
+const query = readCaseQuery(params);
+
+let page: { items: CaseRow[]; total: number; page: number; pageSize: number } = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 25,
+};
+let indicators: CaseIndicators = {
+  newCases: 0,
+  assignedToMe: 0,
+  inProgress: 0,
+  waiting: 0,
+  resolvedToday: 0,
+};
+let options: ServiceOptions = { categories: [], teams: [], users: [], businessUnits: [] };
+let loadFailed = false;
+
+const now = new Date();
+if (mayRead) {
+  try {
+    const db = await requestDb(Astro.locals);
+    [page, indicators, options] = await Promise.all([
+      listCases(db, userId, query),
+      caseIndicators(db, userId, now),
+      serviceOptions(db),
+    ]);
+  } catch (error) {
+    console.error('[cms.service.cases] load failed', error);
+    loadFailed = true;
+  }
+}
+
+const blank = (label: string) => ({ value: '', label });
+const asOptions = (list: { id: string; label: string }[], empty: string) => [
+  blank(empty),
+  ...list.map((o) => ({ value: o.id, label: o.label })),
+];
+const titleCase = (value: string) =>
+  value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+
+const priorityTone = (priority: string) =>
+  priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : 'neutral';
+const statusTone = (status: string) =>
+  status === 'RESOLVED' || status === 'CLOSED'
+    ? 'success'
+    : status === 'CANCELLED'
+      ? 'neutral'
+      : status.startsWith('WAITING')
+        ? 'warning'
+        : 'info';
+
+/** Factual age in whole days. A fact, not a judgement. */
+function ageDays(raisedAt: string): number {
+  return Math.max(
+    0,
+    Math.floor((now.getTime() - Date.parse(`${raisedAt.replace(' ', 'T')}Z`)) / 86400000),
+  );
+}
+
+/*
+  SEVEN EQUAL QUEUES WAS SEVEN DECISIONS, EVERY TIME.
+  Three of them are what an agent actually opens: their own work, the pile
+  nobody has taken, and everything. The other four are real and stay real —
+  same keys, same URLs, same predicates — but they are a second question, so
+  they are asked second, behind one disclosure. Nothing was removed: `?queue=`
+  still accepts every key it ever accepted, including from a bookmark that
+  never goes through this strip.
+*/
+const PRIMARY_QUEUES = [
+  { key: 'mine', label: 'My cases' },
+  { key: 'unassigned', label: 'Unassigned' },
+  { key: null, label: 'All' },
+];
+const MORE_QUEUES = [
+  { key: 'new', label: 'New' },
+  { key: 'waiting-customer', label: 'Waiting customer' },
+  { key: 'waiting-internal', label: 'Waiting internal' },
+  { key: 'resolved', label: 'Resolved' },
+];
+/** The selected queue's name, so a queue chosen from More says so on the strip. */
+const selectedMore = MORE_QUEUES.find((q) => q.key === query.queue) ?? null;
+function queueHref(key: string | null): string {
+  const next = new URLSearchParams(params);
+  if (key === null) next.delete('queue');
+  else next.set('queue', key);
+  next.delete('page');
+  return `/app/helpdesk?${next.toString()}`;
+}
+function pageHref(target: number): string {
+  const next = new URLSearchParams(params);
+  next.set('page', String(target));
+  return `/app/helpdesk?${next.toString()}`;
+}
+const lastPage = Math.max(1, Math.ceil(page.total / page.pageSize));
+const activeFilters = [
+  query.caseType,
+  query.caseCategoryId,
+  query.priority,
+  query.status,
+  query.assignedTeamId,
+  query.assignedUserId,
+  query.channel,
+  query.raisedFrom,
+  query.raisedTo,
+].filter(Boolean).length;
+const serviceFilterChips = [
+  query.caseType && { key: 'type', label: titleCase(query.caseType) },
+  query.caseCategoryId && {
+    key: 'category',
+    label: options.categories.find((o) => o.id === query.caseCategoryId)?.label ?? 'Category',
+  },
+  query.priority && { key: 'priority', label: titleCase(query.priority) },
+  query.status && { key: 'status', label: titleCase(query.status) },
+  query.assignedTeamId && {
+    key: 'team',
+    label: options.teams.find((o) => o.id === query.assignedTeamId)?.label ?? 'Team',
+  },
+  query.assignedUserId && {
+    key: 'user',
+    label: options.users.find((o) => o.id === query.assignedUserId)?.label ?? 'Assignee',
+  },
+  query.channel && { key: 'channel', label: titleCase(query.channel) },
+  query.raisedFrom && { key: 'from', label: `From ${query.raisedFrom}` },
+  query.raisedTo && { key: 'to', label: `To ${query.raisedTo}` },
+].filter(Boolean) as { key: string; label: string }[];
+const withoutServiceFilter = (key: string) => {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.delete('page');
+  return `/app/helpdesk?${next.toString()}`;
+};
+---
+
+<CmsLayout title="Helpdesk">
+  {
+    !mayRead ? (
+      <CmsErrorState
+        title="You do not have access to service cases"
+        description="Contact your administrator if you think this is a mistake."
+      />
+    ) : loadFailed ? (
+      <CmsErrorState
+        title="Cases could not be loaded"
+        description="Please try again in a moment."
+      />
+    ) : (
+      <Fragment>
+        <CmsPageHeader
+          title="Helpdesk"
+          definition="Ageing here is a fact in days. Whether a promise was kept is the SLA engine decision, and it is reported against the SLA vocabulary rather than as an age."
+          crumbs={[{ label: 'Home', href: '/app' }, { label: 'Helpdesk' }]}
+        >
+          <Fragment slot="actions">
+            <CmsButton variant="ghost" href="/app/helpdesk/review">
+              Review
+            </CmsButton>
+            {mayCreate && (
+              <CmsButton variant="primary" icon="plus" data-cms-case-create>
+                New case
+              </CmsButton>
+            )}
+          </Fragment>
+        </CmsPageHeader>
+        {mayCategories && (
+          <div class="flex justify-end">
+            <a
+              href="/app/helpdesk/categories"
+              class="rounded-cms px-2 py-1 text-cms-caption font-medium text-cms-muted outline-none hover:text-cms-ink focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Manage categories
+            </a>
+          </div>
+        )}
+
+        {/*
+            ONE OF THESE FIVE IS A LINK, AND THE OTHER FOUR ARE NOT. A figure
+            that opens a list showing a different number is worse than a figure
+            that opens nothing, so a KPI is only clickable where its predicate
+            is the queue's predicate, exactly:
+
+              New            status = 'NEW'                      = queue `new`   → linked
+              Assigned to me assigned to me AND still open       ≠ queue `mine`, which is
+                             every case ever assigned to me      → not linked
+              In progress    status = 'IN_PROGRESS'              no queue exists → not linked
+              Waiting        the two waiting statuses together   no single queue → not linked
+              Resolved today resolved_at is today                ≠ queue `resolved`, which is
+                                                                 every resolved case → not linked
+
+            Widening the queues to match the cards, or the cards to match the
+            queues, would be a business-logic change; both are correct as they
+            are and they simply answer different questions.
+          */}
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <CmsKpiCard label="New" value={String(indicators.newCases)} href={queueHref('new')} />
+          <CmsKpiCard label="Assigned to me" value={String(indicators.assignedToMe)} />
+          <CmsKpiCard label="In progress" value={String(indicators.inProgress)} />
+          <CmsKpiCard label="Waiting" value={String(indicators.waiting)} />
+          <CmsKpiCard label="Resolved today" value={String(indicators.resolvedToday)} />
+        </div>
+
+        <nav aria-label="Queues" class="flex flex-wrap items-center gap-2">
+          {PRIMARY_QUEUES.map((q) => (
+            <a
+              href={queueHref(q.key)}
+              aria-current={query.queue === q.key ? 'page' : undefined}
+              class:list={[
+                'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                query.queue === q.key
+                  ? 'bg-cms-royal text-white'
+                  : 'text-cms-ink hover:bg-cms-canvas',
+              ]}
+            >
+              {q.label}
+            </a>
+          ))}
+          {/*
+            "More views", not "More": a disclosure nobody can predict the
+            contents of is a worse affordance than the clutter it replaced. A
+            native details/summary, so it opens from the keyboard and is
+            announced as a disclosure with no script at all.
+
+            WHEN A QUEUE FROM INSIDE IS THE CURRENT ONE, THE SUMMARY SAYS SO
+            and the panel opens on arrival. A person who bookmarked
+            ?queue=resolved must be able to see which queue they are in without
+            opening anything, or the strip is lying about the page's state.
+          */}
+          <details class="relative" open={selectedMore !== null}>
+            <summary
+              class:list={[
+                'inline-flex cursor-pointer list-none items-center gap-1.5 rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                selectedMore === null
+                  ? 'text-cms-muted hover:bg-cms-canvas hover:text-cms-ink'
+                  : 'bg-cms-royal text-white',
+              ]}
+            >
+              {selectedMore === null ? 'More views' : selectedMore.label}
+              <CmsIcon name="chevronDown" size={15} />
+            </summary>
+            <div class="absolute start-0 z-20 mt-1 w-52 overflow-hidden rounded-cms border border-cms-line bg-cms-surface shadow-cms-overlay">
+              {MORE_QUEUES.map((q) => (
+                <a
+                  href={queueHref(q.key)}
+                  aria-current={query.queue === q.key ? 'page' : undefined}
+                  class:list={[
+                    'block px-3 py-2.5 text-cms-body-sm outline-none hover:bg-cms-sunken focus-visible:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+                    query.queue === q.key ? 'font-semibold text-cms-royal' : 'text-cms-ink',
+                  ]}
+                >
+                  {q.label}
+                </a>
+              ))}
+            </div>
+          </details>
+        </nav>
+
+        <CmsFilterPanel action="/app/helpdesk" activeCount={activeFilters}>
+          <Fragment slot="primary">
+            {query.queue !== null && <input type="hidden" name="queue" value={query.queue} />}
+            <div>
+              <CmsInput
+                id="f-q"
+                name="q"
+                label="Search"
+                type="search"
+                value={query.search}
+                hint="Case number, subject, customer or contact."
+              />
+            </div>
+          </Fragment>
+          <Fragment slot="advanced">
+            <CmsSelect
+              id="f-type"
+              name="type"
+              label="Type"
+              value={query.caseType ?? ''}
+              options={[
+                blank('Every type'),
+                ...CASE_TYPES.map((t) => ({ value: t, label: titleCase(t) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-category"
+              name="category"
+              label="Category"
+              value={query.caseCategoryId ?? ''}
+              options={asOptions(options.categories, 'Every category')}
+            />
+            <CmsSelect
+              id="f-priority"
+              name="priority"
+              label="Priority"
+              value={query.priority ?? ''}
+              options={[
+                blank('Every priority'),
+                ...CASE_PRIORITIES.map((p) => ({ value: p, label: titleCase(p) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-status"
+              name="status"
+              label="Status"
+              value={query.status ?? ''}
+              options={[
+                blank('Every status'),
+                ...CASE_STATUSES.map((s) => ({ value: s, label: titleCase(s) })),
+              ]}
+            />
+            <CmsSelect
+              id="f-team"
+              name="team"
+              label="Team"
+              value={query.assignedTeamId ?? ''}
+              options={asOptions(options.teams, 'Every team')}
+            />
+            <CmsSelect
+              id="f-user"
+              name="user"
+              label="Assignee"
+              value={query.assignedUserId ?? ''}
+              options={asOptions(options.users, 'Anyone')}
+            />
+            <CmsSelect
+              id="f-channel"
+              name="channel"
+              label="Channel"
+              value={query.channel ?? ''}
+              options={[
+                blank('Every channel'),
+                ...CASE_CHANNELS.map((ch) => ({ value: ch, label: titleCase(ch) })),
+              ]}
+            />
+            <CmsInput
+              id="f-from"
+              name="from"
+              label="Raised from"
+              type="date"
+              value={query.raisedFrom ?? ''}
+            />
+            <CmsInput
+              id="f-to"
+              name="to"
+              label="Raised to"
+              type="date"
+              value={query.raisedTo ?? ''}
+            />
+          </Fragment>
+          <Fragment slot="chips">
+            {serviceFilterChips.map((chip) => (
+              <a
+                href={withoutServiceFilter(chip.key)}
+                class="rounded-full bg-cms-royal-tint px-3 py-1 text-cms-caption font-medium text-cms-royal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {chip.label} <span aria-hidden="true">×</span>
+                <span class="sr-only">Remove filter</span>
+              </a>
+            ))}
+          </Fragment>
+        </CmsFilterPanel>
+
+        <CmsDataTable
+          caption="Service cases"
+          columns={[
+            { key: 'case', label: 'Case' },
+            { key: 'type', label: 'Type' },
+            { key: 'priority', label: 'Priority' },
+            { key: 'status', label: 'Status' },
+            { key: 'age', label: 'Age', numeric: true },
+          ]}
+          empty={page.items.length === 0}
+        >
+          {page.items.map((row) => (
+            <tr class="border-b border-cms-line last:border-0">
+              <td class="px-4 py-2.5">
+                <a
+                  href={`/app/helpdesk/${row.caseId}`}
+                  class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {row.subject}
+                </a>
+                <span class="ms-2 text-cms-caption text-cms-muted tabular-nums">
+                  {row.caseNumber}
+                </span>
+                <span class="mt-1 block text-cms-caption text-cms-muted">
+                  {[
+                    row.accountName,
+                    row.categoryName,
+                    row.assignedUserName ?? row.assignedTeamName ?? 'Unassigned',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </td>
+              <td class="px-4 py-2.5 text-cms-muted">{titleCase(row.caseType)}</td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={priorityTone(row.priority)} label={titleCase(row.priority)} />
+              </td>
+              <td class="px-4 py-2.5">
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </td>
+              <td class="px-4 py-2.5 text-right text-cms-muted tabular-nums">
+                {ageDays(row.raisedAt)}d
+              </td>
+            </tr>
+          ))}
+          <Fragment slot="mobile">
+            {page.items.map((row) => (
+              <a
+                href={`/app/helpdesk/${row.caseId}`}
+                class="flex min-h-16 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-semibold text-cms-ink">{row.subject}</span>
+                  <span class="block truncate text-cms-caption text-cms-muted">
+                    {row.caseNumber} · {row.accountName} · {ageDays(row.raisedAt)}d
+                  </span>
+                </span>
+                <CmsBadge tone={statusTone(row.status)} label={titleCase(row.status)} />
+              </a>
+            ))}
+          </Fragment>
+          <Fragment slot="empty">
+            <CmsEmptyState
+              icon="service"
+              title="No cases match"
+              description="Try another queue or remove a filter."
+            />
+          </Fragment>
+        </CmsDataTable>
+
+        {page.total > 0 && lastPage > 1 && (
+          <nav aria-label="Pages" class="flex items-center gap-2">
+            <a
+              href={pageHref(Math.max(1, query.page - 1))}
+              class:list={[
+                'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                query.page === 1
+                  ? 'pointer-events-none text-cms-muted opacity-50'
+                  : 'text-cms-royal hover:bg-cms-canvas',
+              ]}
+            >
+              Previous
+            </a>
+            <span class="text-cms-body-sm text-cms-muted">
+              Page {query.page} of {lastPage} · {page.total} cases
+            </span>
+            <a
+              href={pageHref(Math.min(lastPage, query.page + 1))}
+              class:list={[
+                'rounded-cms px-3 py-1.5 text-cms-body-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                query.page === lastPage
+                  ? 'pointer-events-none text-cms-muted opacity-50'
+                  : 'text-cms-royal hover:bg-cms-canvas',
+              ]}
+            >
+              Next
+            </a>
+          </nav>
+        )}
+
+        {mayCreate && (
+          <CmsDrawer id="cms-case-drawer" tone="form" title="New case">
+            <CmsCaseCreateDrawer
+              categories={options.categories}
+              teams={options.teams}
+              users={options.users}
+              businessUnits={options.businessUnits}
+            />
+            <Fragment slot="actions">
+              <CmsButton variant="ghost" data-cms-modal-close>
+                Cancel
+              </CmsButton>
+              <button
+                type="submit"
+                form="cms-case-form"
+                data-cms-case-save
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Create case
+              </button>
+            </Fragment>
+          </CmsDrawer>
+        )}
+      </Fragment>
+    )
+  }
+</CmsLayout>

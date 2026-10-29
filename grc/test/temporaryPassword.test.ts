@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import {
   generateTemporaryPassword,
   TEMPORARY_PASSWORD_CHARS,
-} from '../../src/lib/grc/auth/temporaryPassword.ts';
+} from '../src/lib/grc/auth/temporaryPassword.ts';
 
 test('a generated password is grouped, long enough and readable', () => {
   const pw = generateTemporaryPassword();

@@ -1,0 +1,33 @@
+name: HassCMS standalone
+
+on:
+  push:
+    paths:
+      - 'HassCMS/**'
+      - '.github/workflows/hasscms-ci.yml'
+  pull_request:
+    paths:
+      - 'HassCMS/**'
+      - '.github/workflows/hasscms-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: HassCMS
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: HassCMS/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: HassCMS/.node-version
+          cache: pnpm
+          cache-dependency-path: HassCMS/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Preserve real failures: the extraction does not disable baseline tests.
+      - run: pnpm test
