@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        product: [HomeWeb, HassCMS, engr, grc]
+        product: [HomeWeb, HassCMS, Engr, GRC]
     runs-on: ubuntu-latest
     defaults:
       run:
