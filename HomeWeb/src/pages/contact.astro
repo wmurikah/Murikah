@@ -1,316 +1,44 @@
 ---
-export const prerender = true;
-
+export const prerender = false;
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
-import Button from '@/components/primitives/Button.astro';
-import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
-import { SITE, STANDARDS } from '@/site.config';
-
-const crumbs = [
-  { label: 'Home', href: '/' },
-  { label: 'Contact', href: '/contact' },
-];
-
-// No-JS feedback: the endpoint redirects to /contact?status=… on form posts.
-const status = Astro.url.searchParams.get('status');
-const intent = Astro.url.searchParams.get('intent');
-const isCallIntent = intent === 'call';
-const statusMap: Record<string, { kind: 'success' | 'error'; msg: string }> = {
-  ok: { kind: 'success', msg: "Thanks, we'll be in touch shortly." },
-  invalid: { kind: 'error', msg: 'Please check your details and try again.' },
-  ratelimited: { kind: 'error', msg: 'Too many submissions. Please try again later.' },
-  error: { kind: 'error', msg: 'Something went wrong. Please email us directly.' },
-};
-const initialStatus = status ? statusMap[status] : undefined;
-
-const field =
-  'mt-1.5 block w-full min-h-[2.75rem] rounded-btn border border-control-border bg-surface px-3.5 py-2.5 text-ink placeholder:text-slate aria-[invalid]:border-status-high';
-const labelCls = 'block text-sm font-medium text-navy';
+import ContactForm from '@/components/ContactForm.astro';
+import { SITE } from '@/site.config';
+const params = Astro.url.searchParams;
 ---
 
 <BaseLayout
-  titleFull={isCallIntent ? 'Book a 20-minute call | Murikah' : 'Contact Murikah | Request a demo'}
-  description="Talk to Murikah about internal audit, Assurance OS, AI governance, automation or training. Tell us what you need and we respond within two working days."
+  titleFull="Book a 20-minute call | Murikah"
+  description="Tell us your audit challenge. Book a 20-minute call with Murikah in Nairobi, Kenya."
 >
-  <Section
-    tone="surface"
-    aria-labelledby="page-title"
-    class="relative overflow-hidden border-b border-hairline"
-  >
-    <div aria-hidden="true" class="aperture -top-40 -right-24 h-[30rem] w-[40rem] opacity-50"></div>
-    <div class="relative max-w-3xl">
-      <Breadcrumb items={crumbs} class="mb-7" />
-      <p class="eyebrow">Contact</p>
-      <h1
-        id="page-title"
-        class="mt-5 font-serif text-[length:var(--text-title)] leading-[1.05] font-semibold tracking-[-0.02em] text-balance text-navy"
-      >
-        {isCallIntent ? 'Book a 20-minute call' : 'Talk to Murikah'}
-      </h1>
-      <p class="mt-6 max-w-2xl text-xl text-slate">
-        {
-          isCallIntent
-            ? 'Tell us what you want to discuss and the context we should understand. We will confirm a suitable 20-minute slot and the right person for the conversation.'
-            : 'Tell us about your organisation and what you are trying to achieve, whether that is internal audit, Assurance OS, AI governance, automation or training. We will respond within two working days with the right next step.'
-        }
-      </p>
-    </div>
-  </Section>
-
-  <Section tone="paper">
-    <div class="grid gap-12 lg:grid-cols-12">
-      {/* Form */}
-      <div class="lg:col-span-7">
-        <div
-          id="form-status"
-          role="status"
-          aria-live="polite"
-          class="form-status mb-6"
-          data-kind={initialStatus?.kind}
-          hidden={!initialStatus}
-        >
-          {initialStatus?.msg}
-        </div>
-
-        <p class="mb-6 text-sm text-slate">
-          Required fields are marked *. After your enquiry, we will agree a suitable time if a
-          demonstration or call is needed.
+  <Section tone="paper" aria-labelledby="page-title">
+    <div class="grid gap-12 lg:grid-cols-2">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h1 id="page-title" class="mt-5 text-[length:var(--text-title)] text-navy">
+          Book a 20-minute call
+        </h1>
+        <ol class="mt-8 list-decimal space-y-4 pl-6 text-slate">
+          <li>You tell us your audit challenge.</li>
+          <li>We confirm a time within 1 business day.</li>
+          <li>You leave with a next step, with or without us.</li>
+        </ol>
+        <p class="mt-8">
+          <button
+            type="button"
+            disabled
+            class="min-h-11 rounded-btn border border-control-border px-4 text-slate"
+            title="WhatsApp number to be added">WhatsApp · coming soon</button>
         </p>
-        <form id="contact-form" action="/api/contact" method="post" novalidate class="grid gap-5">
-          <div class="grid gap-5 sm:grid-cols-2">
-            <div>
-              <label for="name" class={labelCls}
-                >Name <span aria-hidden="true" class="text-status-high">*</span></label
-              >
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                autocomplete="name"
-                class={field}
-                aria-describedby="name-error"
-              />
-              <p id="name-error" data-error-for="name" class="field-error" hidden></p>
-            </div>
-            <div>
-              <label for="organisation" class={labelCls}>Organisation</label>
-              <input
-                id="organisation"
-                name="organisation"
-                type="text"
-                autocomplete="organization"
-                class={field}
-              />
-            </div>
-          </div>
-
-          <div class="grid gap-5 sm:grid-cols-2">
-            <div>
-              <label for="role" class={labelCls}>Role</label>
-              <input
-                id="role"
-                name="role"
-                type="text"
-                autocomplete="organization-title"
-                class={field}
-              />
-            </div>
-            <div>
-              <label for="email" class={labelCls}
-                >Email <span aria-hidden="true" class="text-status-high">*</span></label
-              >
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autocomplete="email"
-                class={field}
-                aria-describedby="email-error"
-              />
-              <p id="email-error" data-error-for="email" class="field-error" hidden></p>
-            </div>
-          </div>
-
-          <div>
-            <label for="message" class={labelCls}
-              >Message <span aria-hidden="true" class="text-status-high">*</span></label
-            >
-            <textarea
-              id="message"
-              name="message"
-              rows="6"
-              required
-              class={`${field} resize-y`}
-              aria-describedby="message-error"></textarea>
-            <p id="message-error" data-error-for="message" class="field-error" hidden></p>
-          </div>
-
-          {/* Honeypot, hidden from people, tempting to bots. */}
-          <div class="hidden" aria-hidden="true">
-            <label for="company_website">Leave this field empty</label>
-            <input
-              id="company_website"
-              name="company_website"
-              type="text"
-              tabindex="-1"
-              autocomplete="off"
-            />
-          </div>
-
-          <div class="flex items-center gap-4">
-            <Button type="submit" variant="primary" size="lg">{isCallIntent ? 'Request call' : 'Send message'}</Button>
-            <p class="text-sm text-slate">We respond within two working days.</p>
-          </div>
-        </form>
+        <p class="mt-6"><a href={`mailto:${SITE.email}`}>{SITE.email}</a></p>
+        <p class="mt-3 text-slate">Nairobi, Kenya</p>
       </div>
-
-      {/* Aside */}
-      <aside class="lg:col-span-5">
-        <div class="rounded-card bg-surface p-7 ring-1 ring-hairline/70">
-          <h2 class="text-xl">Prefer email?</h2>
-          <p class="mt-2 text-slate">
-            Reach us directly at{' '}
-            <a href={`mailto:${SITE.email}`} class="font-medium text-blue hover:text-blue-deep"
-              >{SITE.email}</a
-            >.
-          </p>
-          <hr class="my-6 border-hairline" />
-          <h2 class="text-xl">Standards our work follows</h2>
-          <ul class="mt-3 flex flex-wrap gap-2" aria-label="Standards our work follows">
-            {
-              STANDARDS.map((s) => (
-                <li class="rounded-full bg-paper px-3 py-1 text-sm text-ink ring-1 ring-hairline">
-                  {s.short}
-                </li>
-              ))
-            }
-          </ul>
-          <p class="mt-4 text-sm text-slate">
-            Independent, standards-based and platform-backed assurance, built for the mid-market.
-          </p>
-        </div>
-      </aside>
+      <ContactForm
+        location="contact"
+        status={params.get('status')}
+        segment={params.get('segment')}
+        intent={params.get('intent') ?? 'call'}
+      />
     </div>
   </Section>
 </BaseLayout>
-
-<style>
-  /* Form feedback is the one sanctioned use of status colours in the marketing
-     UI, functional validation, conveyed by text + icon + a thin accent, never
-     colour alone (WCAG). */
-  .form-status {
-    border-radius: var(--radius-btn);
-    border-left: 3px solid var(--color-hairline);
-    background: var(--color-surface);
-    padding: 0.85rem 1rem;
-    box-shadow: var(--shadow-card);
-    color: var(--color-ink);
-  }
-  .form-status[data-kind='success'] {
-    border-left-color: var(--color-status-low);
-  }
-  .form-status[data-kind='error'] {
-    border-left-color: var(--color-status-high);
-  }
-  .form-status[data-kind='pending'] {
-    border-left-color: var(--color-blue);
-  }
-  .field-error {
-    margin-top: 0.4rem;
-    font-size: 0.875rem;
-    color: var(--color-status-high);
-  }
-</style>
-
-<script>
-  // Progressive enhancement: inline, immediate feedback (Doherty Threshold).
-  // Without JS the form posts normally and the endpoint redirects with ?status.
-  function initContactForm() {
-    const form = document.querySelector<HTMLFormElement>('#contact-form');
-    if (!form) return;
-    const params = new URLSearchParams(window.location.search);
-    const message = form.querySelector<HTMLTextAreaElement>('[name="message"]');
-    if (params.get('intent') === 'demo' && message && !message.value) {
-      message.value = 'I would like a demonstration of Assurance OS. Our priorities are: ';
-    }
-    if (params.get('intent') === 'call' && message && !message.value) {
-      message.value = 'I would like to book a 20-minute call. I want to discuss: ';
-    }
-    const statusEl = document.querySelector<HTMLElement>('#form-status');
-    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-    const submitLabel = submit?.textContent ?? 'Send message';
-
-    const clearErrors = () => {
-      form.querySelectorAll<HTMLElement>('[data-error-for]').forEach((el) => {
-        el.hidden = true;
-        el.textContent = '';
-      });
-      form
-        .querySelectorAll<HTMLElement>('[aria-invalid]')
-        .forEach((el) => el.removeAttribute('aria-invalid'));
-    };
-
-    const setError = (fieldName: string, message: string) => {
-      const el = form.querySelector<HTMLElement>(`[data-error-for="${fieldName}"]`);
-      if (el) {
-        el.textContent = message;
-        el.hidden = false;
-      }
-      form.querySelector(`[name="${fieldName}"]`)?.setAttribute('aria-invalid', 'true');
-    };
-
-    const setStatus = (message: string, kind: string) => {
-      if (!statusEl) return;
-      statusEl.textContent = message;
-      statusEl.dataset.kind = kind;
-      statusEl.hidden = false;
-    };
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      clearErrors();
-      setStatus('Sending…', 'pending');
-      if (submit) {
-        submit.disabled = true;
-        submit.textContent = 'Sending…';
-      }
-
-      try {
-        const payload = Object.fromEntries(new FormData(form));
-        const res = await fetch(form.action, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          message?: string;
-          errors?: { field: string; message: string }[];
-        };
-
-        if (res.ok && data.ok) {
-          form.reset();
-          setStatus(data.message ?? "Thanks, we'll be in touch.", 'success');
-        } else if (data.errors?.length) {
-          data.errors.forEach((err) => setError(err.field, err.message));
-          setStatus('Please check the highlighted fields.', 'error');
-          form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-        } else {
-          setStatus('Something went wrong. Please email us directly.', 'error');
-        }
-      } catch {
-        setStatus('Network error. Please try again or email us.', 'error');
-      } finally {
-        if (submit) {
-          submit.disabled = false;
-          submit.textContent = submitLabel;
-        }
-      }
-    });
-  }
-
-  initContactForm();
-</script>

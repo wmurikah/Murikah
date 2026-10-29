@@ -6,7 +6,7 @@ import { NAV, PRIMARY_CTA } from '../../src/site.config.ts';
 test('marketing navigation keeps the five-item information architecture', () => {
   assert.deepEqual(
     NAV.map((item) => item.label),
-    ['Solutions', 'Platform', 'Pricing', 'Insights', 'About'],
+    ['Assurance OS', 'Services', 'Pricing', 'Insights', 'About'],
   );
 });
 

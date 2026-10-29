@@ -1,0 +1,60 @@
+---
+import type { AudienceSegment } from '@/site.config';
+interface Props {
+  segment: AudienceSegment;
+  index: number;
+}
+const { segment, index } = Astro.props;
+const details = [
+  [
+    'Regulated by SASRA',
+    'Bring governance, risk and control evidence into the board room.',
+    'SACCO',
+    '/saccos',
+  ],
+  [
+    'Supervised by CBK',
+    'Keep demanding control and reporting requirements connected to the work.',
+    'banking',
+    '/banks',
+  ],
+  [
+    'Regulators and partners',
+    'Keep assurance up to speed with a fast-moving, data-heavy business.',
+    'fintech',
+    '/contact?intent=call&segment=fintech',
+  ],
+  [
+    'Grant and donor requirements',
+    'Show how funds and data are handled against each grant agreement.',
+    'NGO',
+    '/contact?intent=call&segment=ngo',
+  ],
+  [
+    'Board oversight',
+    'Give the board an independent view of controls and risk.',
+    'family business',
+    '/contact?intent=call&segment=family',
+  ],
+][index];
+---
+
+<article class="rounded-[1.4rem] bg-paper p-5 ring-1 ring-hairline">
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    aria-hidden="true"><path d="M3 9 12 3l9 6M5 10v10m7-10v10m7-10v10M3 21h18M3 9h18"></path></svg
+  >
+  <h3 class="mt-4 font-medium text-navy">{segment.name}</h3>
+  <p class="mt-2 text-sm font-medium text-gold">{details[0]}</p>
+  <p class="mt-2 text-base text-slate">{details[1]}</p>
+  <a
+    href={segment.href ?? details[3]}
+    class="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-blue"
+    >See the {details[2]} path →</a
+  >
+</article>

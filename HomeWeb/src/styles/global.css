@@ -479,6 +479,8 @@ html.cms-overlay-open {
   --color-blue: #244660;
   --color-blue-deep: #102f49;
   --color-hero-ivory: #f5f1e8;
+  --color-on-navy-muted: #b8c4d2;
+  --color-status-med: #8b570f;
 
   background-color: #f7f5f0;
   background-image:
@@ -550,8 +552,7 @@ html.cms-overlay-open {
 
 .marketing-shell.ceramic-ink .ceramic-hero {
   background:
-    radial-gradient(circle at 50% 92%, rgba(7, 29, 53, 0.045), transparent 28rem),
-    #faf8f3;
+    radial-gradient(circle at 50% 92%, rgba(7, 29, 53, 0.045), transparent 28rem), #faf8f3;
 }
 
 .marketing-shell.ceramic-ink .hero-luxe {
@@ -569,7 +570,6 @@ html.cms-overlay-open {
     radial-gradient(100% 135% at 72% -30%, rgba(255, 255, 255, 0.1), transparent 58%),
     linear-gradient(180deg, #0b2a49 0%, #071d35 100%);
 }
-
 
 /* Homepage product proof: a captured Assurance OS trace view, not an
    illustrative KPI card. The image is the hero's only load animation. */
@@ -689,4 +689,48 @@ html.cms-overlay-open {
   --color-blue: #073f6b;
   --color-blue-deep: #062f50;
   background: #ffffff;
+}
+
+/* Audit refinements, scoped to the public website. */
+.marketing-shell.ceramic-ink {
+  --color-on-navy-muted: #b8c4d2;
+  --color-status-med: #8b570f;
+  font-size: 16px;
+  line-height: 1.6;
+}
+@media (min-width: 1024px) {
+  .marketing-shell.ceramic-ink {
+    font-size: 18px;
+  }
+}
+.marketing-shell main p {
+  max-width: 75ch;
+}
+.marketing-shell a,
+.marketing-shell button,
+.marketing-shell summary {
+  min-width: 44px;
+}
+.marketing-shell > header .btn-secondary {
+  background: transparent;
+  color: var(--color-navy);
+  border: 1px solid var(--color-navy);
+  box-shadow: none;
+}
+.marketing-shell > header.site-header--home .btn-secondary {
+  background: transparent;
+  color: var(--color-hero-ivory);
+  border-color: var(--color-on-navy-muted);
+}
+.marketing-shell > header .site-primary-nav {
+  gap: clamp(0.5rem, 1.2vw, 1.5rem);
+}
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .marketing-shell > header .site-header-row {
+    gap: 0.75rem;
+  }
+  .marketing-shell > header .btn-secondary {
+    padding-inline: 0.65rem;
+    font-size: 13px;
+  }
 }

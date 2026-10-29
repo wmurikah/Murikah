@@ -1,0 +1,159 @@
+---
+// Public build-time setting. An absent/invalid ID loads no Google code.
+const measurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID ?? '';
+const enabled = /^G-[A-Z0-9]+$/.test(measurementId);
+---
+
+{
+  enabled && (
+    <aside
+      data-analytics-consent
+      data-measurement-id={measurementId}
+      hidden
+      aria-label="Analytics choices"
+      class="analytics-consent"
+    >
+      <p>
+        Allow usage analytics to help improve this website? Form contents and sandbox records are
+        excluded.
+      </p>
+      <div>
+        <>
+          <button type="button" data-analytics-accept>
+            Allow analytics
+          </button>
+          <button type="button" data-analytics-decline>
+            No thanks
+          </button>
+          <a href="/privacy">Privacy</a>
+        </>
+      </div>
+    </aside>
+  )
+}
+<style>
+  .analytics-consent:not([hidden]) {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 80;
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 1.25rem;
+    background: var(--color-paper);
+    color: var(--color-navy);
+    border: 1px solid var(--color-control-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+    font-size: 16px;
+  }
+  .analytics-consent div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 0.75rem;
+  }
+  .analytics-consent button,
+  .analytics-consent a {
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-control-border);
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+  }
+</style>
+<script>
+  const panel = document.querySelector<HTMLElement>('[data-analytics-consent]');
+  const id = panel?.dataset.measurementId;
+  if (panel && id && navigator.doNotTrack !== '1') {
+    const key = 'murikah-analytics-consent';
+    let loaded = false;
+    let allowed = false;
+    type EventDetail = { event: string; location: string };
+    const analyticsWindow = window as Window & {
+      dataLayer?: unknown[];
+      gtag?: (...args: unknown[]) => void;
+    };
+    const readConsent = () => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    };
+    const enable = () => {
+      allowed = true;
+      if (loaded) {
+        analyticsWindow.gtag?.('consent', 'update', { analytics_storage: 'granted' });
+        return;
+      }
+      loaded = true;
+      const queued = (analyticsWindow.dataLayer ?? []).filter(
+        (entry): entry is EventDetail =>
+          !!entry && typeof entry === 'object' && 'event' in entry && 'location' in entry,
+      );
+      analyticsWindow.dataLayer ??= [];
+      // Google's command queue uses the standard gtag IArguments format.
+      analyticsWindow.gtag = function () {
+        // eslint-disable-next-line prefer-rest-params
+        analyticsWindow.dataLayer!.push(arguments);
+      };
+      analyticsWindow.gtag('js', new Date());
+      analyticsWindow.gtag('consent', 'default', {
+        analytics_storage: 'granted',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+      });
+      const pageLocation = location.origin + location.pathname;
+      analyticsWindow.gtag('config', id, {
+        send_page_view: false,
+        allow_google_signals: false,
+        allow_ad_personalization_signals: false,
+        page_location: pageLocation,
+        page_referrer: '',
+      });
+      analyticsWindow.gtag('event', 'page_view', {
+        page_location: pageLocation,
+        page_title: document.title,
+        page_referrer: '',
+      });
+      queued.forEach((detail) =>
+        analyticsWindow.gtag?.('event', detail.event, { location: detail.location }),
+      );
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+      document.head.appendChild(script);
+    };
+    window.addEventListener('murikah:analytics', (event) => {
+      if (!allowed) return;
+      const detail = (event as CustomEvent<EventDetail>).detail;
+      analyticsWindow.gtag?.('event', detail.event, { location: detail.location });
+    });
+    const choose = (grant: boolean) => {
+      try {
+        localStorage.setItem(key, grant ? 'granted' : 'denied');
+      } catch {
+        /* memory-only choice */
+      }
+      panel.hidden = true;
+      if (grant) enable();
+      else {
+        allowed = false;
+        if (loaded) location.reload(); // Unload the tag; subsequent visits load no Google code.
+      }
+    };
+    panel.querySelector('[data-analytics-accept]')?.addEventListener('click', () => choose(true));
+    panel.querySelector('[data-analytics-decline]')?.addEventListener('click', () => choose(false));
+    document.querySelectorAll<HTMLButtonElement>('[data-analytics-settings]').forEach((button) => {
+      button.hidden = false;
+      button.addEventListener('click', () => {
+        panel.hidden = false;
+        panel.querySelector<HTMLButtonElement>('button')?.focus();
+      });
+    });
+    if (readConsent() === 'granted') enable();
+    else if (readConsent() !== 'denied') panel.hidden = false;
+  }
+</script>

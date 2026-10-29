@@ -22,6 +22,7 @@ import Seo from '@/components/Seo.astro';
 import OrganizationSchema from '@/components/schema/Organization.astro';
 import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
+import GoogleAnalytics from '@/components/GoogleAnalytics.astro';
 import AccessibilityAssistant from '@/components/a11y/AccessibilityAssistant';
 import { SITE } from '@/site.config';
 
@@ -110,5 +111,19 @@ const { mainClass, ...seo } = Astro.props;
 
     {/* First-party reading and motion helper; applies to <html>, persists to localStorage. */}
     <AccessibilityAssistant client:idle />
+    <GoogleAnalytics />
   </body>
 </html>
+
+<script>
+  import { track } from '@/lib/analytics';
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!(link instanceof HTMLAnchorElement)) return;
+    const url = new URL(link.href);
+    const location = link.closest('header') ? 'header' : link.closest('footer') ? 'footer' : link.closest('section[id]')?.id ?? 'page';
+    if (url.hostname === 'wa.me') track('whatsapp_click', location);
+    else if (url.origin === window.location.origin && url.pathname === '/contact' && url.searchParams.get('intent') === 'call') track('cta_call_click', location);
+    else if (url.origin === window.location.origin && url.pathname.replace(/\/$/, '') === '/assurance-os/sandbox') track('sandbox_click', location);
+  });
+</script>

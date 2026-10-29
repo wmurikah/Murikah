@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useSandbox } from '@/sandbox/store';
 import { daysBetween, formatDate } from '@/sandbox/date';
-import { Panel, RatingBadge, Badge } from '../Ui';
+import { Panel, Badge } from '../Ui';
 
 const ratings = ['Critical','High','Medium','Low'] as const;
 const stages = ['Planned','Fieldwork','Review','Reporting','Closed'] as const;

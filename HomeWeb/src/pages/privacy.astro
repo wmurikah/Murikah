@@ -26,15 +26,7 @@ const crumbs = [
     >
       Privacy policy
     </h1>
-    <p class="mt-4 text-slate">Last updated: {'{{LEGAL: insert date}}'}</p>
-
-    <div
-      class="mt-6 rounded-card border border-hairline bg-paper p-4 text-sm text-slate"
-      role="note"
-    >
-      <strong class="text-navy">{'{{LEGAL REVIEW REQUIRED}}'}</strong> This is a plain-English template.
-      It must be reviewed and finalised by qualified counsel before launch.
-    </div>
+    <p class="mt-4 text-slate">Last updated: <time datetime="2026-10-29">29 October 2026</time></p>
 
     <Prose class="mt-10">
       <h2>Who we are</h2>
@@ -48,10 +40,10 @@ const crumbs = [
       <p>We collect only what we need to respond to you and run the site:</p>
       <ul>
         <li>
-          Details you submit through the contact form: your name, organisation, role, email and
-          message.
+          Details you submit through the contact form: your name, work email and optional challenge.
+          We also retain the enquiry type and audience segment selected through the site links.
         </li>
-        <li>Your email address if you subscribe to updates or request a checklist.</li>
+        <li>Your email address if you subscribe to updates.</li>
         <li>Basic, privacy-respecting analytics about how the site is used.</li>
       </ul>
 
@@ -66,7 +58,7 @@ const crumbs = [
       <h2>How long we keep it</h2>
       <p>
         We keep personal data only as long as we need it for the purpose it was collected, and then
-        delete it. {'{{LEGAL: confirm specific retention periods}}'}
+        delete it. Contact us to ask about the retention of your enquiry or to request deletion.
       </p>
 
       <h2>Your rights under the Kenya Data Protection Act</h2>
@@ -79,23 +71,19 @@ const crumbs = [
 
       <h2>Service providers</h2>
       <p>
-        We use a small number of trusted providers to operate the site and our email, for example
-        hosting and email delivery. They process data on our instructions, under written terms.
-        {' '}{'{{LEGAL: list processors}}'}
+        Cloudflare hosts this website. Where configured, Turso stores enquiry and subscription
+        records, and Resend delivers enquiry notifications. Google Analytics processes usage events
+        only when enabled and with your permission. These providers may process data outside Kenya;
+        contact us with questions about how your data is handled.
       </p>
 
       <h2>Cookies and analytics</h2>
       <p>
-        We keep cookies to a minimum and use analytics that respect your privacy. Where consent is
-        required for non-essential cookies, we ask for it. {
-          '{{LEGAL: confirm cookie/analytics tooling}}'
-        }
-      </p>
-
-      <h2>ODPC registration</h2>
-      <p>
-        Murikah is registered as a data controller with the Office of the Data Protection
-        Commissioner. {'{{LEGAL: insert ODPC registration number}}'}
+        When enabled, Google Analytics measures page visits and call, sandbox, form and WhatsApp
+        conversions only after you allow analytics. We exclude form contents, sandbox records and
+        URL query parameters from these events. Advertising signals are disabled. You can decline
+        analytics or change your choice using “Analytics choices” in the footer. The sandbox keeps
+        its sample records in your browser whether or not you allow analytics.
       </p>
     </Prose>
   </Section>

@@ -8,7 +8,7 @@ import Card from '@/components/primitives/Card.astro';
 import FeatureGrid from '@/components/primitives/FeatureGrid.astro';
 import Breadcrumb from '@/components/primitives/Breadcrumb.astro';
 import CtaSection from '@/components/primitives/CtaSection.astro';
-import SubscribeForm from '@/components/SubscribeForm.astro';
+import Button from '@/components/primitives/Button.astro';
 import { formatDate, isoDate } from '@/lib/format';
 
 const crumbs = [
@@ -68,6 +68,22 @@ const anchoredGuides = guides.map((g) => {
   </Section>
 
   <Section tone="paper" aria-labelledby="all-guides">
+    <div class="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter insights by topic">
+      {
+        ['All', 'AI governance', 'Internal audit', 'Data protection'].map((topic, index) => (
+          <button
+            type="button"
+            data-topic={index ? categoryAnchor(topic) : 'all'}
+            aria-pressed={index === 0 ? 'true' : 'false'}
+            class="topic-chip min-h-11 rounded-full border border-control-border px-4 text-sm"
+          >
+            {topic}
+          </button>
+        ))
+      }
+      <a href="/research" class="inline-flex min-h-11 items-center px-4 text-sm">Research →</a>
+    </div>
+    <p data-filter-status role="status" class="sr-only"></p>
     <h2 id="all-guides" class="sr-only">All guides</h2>
     {
       guides.length === 0 ? (
@@ -75,7 +91,12 @@ const anchoredGuides = guides.map((g) => {
       ) : (
         <FeatureGrid cols={3}>
           {anchoredGuides.map(({ g, id }) => (
-            <Card id={id} href={`/insights/${g.id}/`} class="flex scroll-mt-28 flex-col">
+            <Card
+              data-insight-category={categoryAnchor(g.data.category)}
+              id={id}
+              href={`/insights/${g.id}/`}
+              class="flex scroll-mt-28 flex-col"
+            >
               {g.data.category && <p class="eyebrow text-xs">{g.data.category}</p>}
               <h3 class="mt-3 text-xl text-navy">{g.data.title}</h3>
               <p class="mt-2 grow text-slate">{g.data.description}</p>
@@ -93,33 +114,28 @@ const anchoredGuides = guides.map((g) => {
     </p>
   </Section>
 
-  {
-    /* Lead magnet and subscribe anchor. The downloadable asset is a placeholder.
-      {{ASSET: final ISO 42001 readiness checklist PDF to add (R2)}} */
-  }
-  <Section id="subscribe" tone="shade" aria-labelledby="lead-magnet" class="scroll-mt-24">
+  <Section id="subscribe" tone="shade" aria-labelledby="readiness-guide" class="scroll-mt-24">
     <div
-      class="grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline/70 sm:p-10 md:grid-cols-2 md:items-center"
+      class="grid gap-8 rounded-card bg-surface p-8 ring-1 ring-hairline sm:p-10 md:grid-cols-2 md:items-center"
     >
       <div>
         <h2
-          id="lead-magnet"
-          class="font-serif text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.02em] text-navy"
+          id="readiness-guide"
+          class="font-serif text-[length:var(--text-title)] leading-[1.08] text-navy"
         >
-          ISO 42001 readiness checklist
+          Start your ISO 42001 readiness review.
         </h2>
         <p class="mt-3 max-w-prose text-slate">
-          A practical, plain-English checklist of the steps an organisation needs to get ready for
-          ISO 42001, the management-system standard for governing AI. Tell us where to send it.
+          Read the practical guide to AI system inventories, responsibilities, risk assessment and
+          the records your review needs.
         </p>
       </div>
-      <SubscribeForm
-        source="iso-42001-checklist"
-        tone="light"
-        buttonLabel="Send me the checklist"
-        successMessage="Thank you. We will email the checklist shortly."
-        class="md:w-full md:max-w-sm md:justify-self-end"
-      />
+      <div class="md:justify-self-end">
+        <Button href="/insights/iso-42001-readiness/" variant="secondary"
+          >Read the readiness guide →</Button
+        >
+        <p class="mt-3 text-sm text-slate">Read online. No email or sign-in needed.</p>
+      </div>
     </div>
   </Section>
 
@@ -129,3 +145,42 @@ const anchoredGuides = guides.map((g) => {
     body="Tell us what you need and see how Murikah turns guidance into working assurance."
   />
 </BaseLayout>
+
+<script>
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-topic]'));
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-insight-category]'));
+  function filter(topic: string) {
+    let count = 0;
+    buttons.forEach((button) =>
+      button.setAttribute('aria-pressed', String(button.dataset.topic === topic)),
+    );
+    cards.forEach((card) => {
+      card.hidden = topic !== 'all' && card.dataset.insightCategory !== topic;
+      if (!card.hidden) count++;
+    });
+    const status = document.querySelector('[data-filter-status]');
+    if (status) status.textContent = `${count} guide${count === 1 ? '' : 's'} shown`;
+  }
+  buttons.forEach((button) =>
+    button.addEventListener('click', () => {
+      const topic = button.dataset.topic ?? 'all';
+      filter(topic);
+      history.replaceState(null, '', topic === 'all' ? location.pathname : `#${topic}`);
+    }),
+  );
+  const fromHash = () => {
+    const topic = location.hash.slice(1);
+    filter(buttons.some((button) => button.dataset.topic === topic) ? topic : 'all');
+  };
+  fromHash();
+  window.addEventListener('hashchange', fromHash);
+</script>
+<style>
+  .topic-chip[aria-pressed='true'] {
+    background: var(--color-navy);
+    color: white;
+  }
+  [data-insight-category][hidden] {
+    display: none;
+  }
+</style>

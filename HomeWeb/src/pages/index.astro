@@ -3,28 +3,28 @@ export const prerender = true;
 
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Section from '@/components/primitives/Section.astro';
-import CtaSection from '@/components/primitives/CtaSection.astro';
+import ContactForm from '@/components/ContactForm.astro';
+import AudienceCard from '@/components/AudienceCard.astro';
 import Button from '@/components/primitives/Button.astro';
 import AuditOsWalkthrough from '@/components/audit-os/AuditOsWalkthrough';
-import { SITE, SERVICES, AUDIENCE, STANDARDS, PRIMARY_CTA, FOUNDER } from '@/site.config';
+import { SITE, SERVICES, AUDIENCE, STANDARDS } from '@/site.config';
 import { HOME_HERO } from '@/data/homeHero';
 import { TRUST } from '@/data/trust';
 
 const permittedLogos = TRUST.logos.filter((logo) => logo.verified && logo.permitted);
 
-const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os').map(
-  (service, index) => ({
-    ...service,
-    shortSummary: [
-      'Independent assurance over operations, systems, governance and data protection.',
-      'Workflow automation and internal tools built after the process is understood.',
-      'AI governance, analytics and decision support for executives and boards.',
-      'Practical training for audit, risk, AI governance and assurance teams.',
-      'Benchmarking and research that turns assurance data into context.',
-    ][index],
-  }),
-);
-
+const serviceCards = SERVICES.filter(
+  (service) => !['assurance-os', 'research'].includes(service.slug),
+).map((service, index) => ({
+  ...service,
+  shortSummary: [
+    'Independent assurance over operations, systems, governance and data protection.',
+    'Workflow automation and internal tools built after the process is understood.',
+    'AI governance, analytics and decision support for executives and boards.',
+    'Practical training for audit, risk, AI governance and assurance teams.',
+    'Benchmarking and research that turns assurance data into context.',
+  ][index],
+}));
 ---
 
 <BaseLayout
@@ -35,124 +35,52 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     slot="head"
     rel="preload"
     as="image"
-    type="image/avif"
-    href="/images/hero/hero-building-1280.avif"
-    imagesrcset="/images/hero/hero-building-768.avif 768w, /images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
-    imagesizes="(min-width: 1024px) 55vw, 100vw"
+    type="image/webp"
+    href="/images/assurance-os/hero.webp"
     fetchpriority="high"
   />
-
   <section id="hero" class="home-hero on-dark" aria-labelledby="home-title">
     <span class="home-hero__nav-sentinel" data-home-nav-sentinel aria-hidden="true"></span>
-
-    <div class="home-hero__media" aria-hidden="true">
-      <picture class="home-hero__picture">
-        <source
-          media="(max-width: 639px)"
-          type="image/avif"
-          srcset="/images/hero/hero-building-768.avif"
-        />
-        <source
-          media="(max-width: 639px)"
-          type="image/webp"
-          srcset="/images/hero/hero-building-768.webp"
-        />
-        <source
-          type="image/avif"
-          srcset="/images/hero/hero-building-1280.avif 1280w, /images/hero/hero-building-1920.avif 1920w"
-          sizes="(min-width: 1024px) 55vw, 100vw"
-        />
-        <source
-          type="image/webp"
-          srcset="/images/hero/hero-building-1280.webp 1280w, /images/hero/hero-building-1920.webp 1920w"
-          sizes="(min-width: 1024px) 55vw, 100vw"
-        />
-        <img
-          src="/images/hero/hero-building.jpg"
-          alt=""
-          width="1920"
-          height="1200"
-          fetchpriority="high"
-          loading="eager"
-          decoding="async"
-        />
-      </picture>
-    </div>
-
-    <div class="home-hero__content">
-      <div class="home-hero__copy">
-        <h1 id="home-title" class="home-hero__headline home-hero__reveal home-hero__reveal--headline">
-          {HOME_HERO.headline.map((line) => <span>{line}</span>)}
-        </h1>
-
-        <div class="home-hero__gold-line home-hero__reveal home-hero__reveal--line" aria-hidden="true">
-        </div>
-
-        <p class="home-hero__body home-hero__reveal home-hero__reveal--body">
-          {HOME_HERO.body}
-        </p>
-
-        <div class="home-hero__actions home-hero__reveal home-hero__reveal--actions">
-          <a class="home-hero__primary" href={HOME_HERO.primary.href}>
-            {HOME_HERO.primary.label}
-          </a>
-          <a class="home-hero__secondary" href={HOME_HERO.secondary.href}>
-            <span>{HOME_HERO.secondary.label}</span>
-            <svg
-              class="home-hero__secondary-arrow"
-              width="18"
-              height="18"
-              viewBox="0 0 18 18"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M3.75 9h10.5m-4-4 4 4-4 4"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </a>
-        </div>
-
-        <div class="home-hero__trust home-hero__reveal home-hero__reveal--trust">
-          <span class="home-hero__trust-caption">{TRUST.caption}</span>
-          <ul class="home-hero__trust-items" aria-label="Standards that guide our work">
-            {TRUST.items.map((item) => <li>{item}</li>)}
-          </ul>
-
-          {
-            permittedLogos.length > 0 && (
-              <div class="home-hero__trust-logos" aria-label="Verified client logos">
-                {permittedLogos.map((logo) =>
-                  logo.href ? (
-                    <a href={logo.href} aria-label={logo.name}>
-                      <img
-                        src={logo.src}
-                        alt={logo.name}
-                        width={logo.width}
-                        height={logo.height}
-                        loading="lazy"
-                      />
-                    </a>
-                  ) : (
-                    <img
-                      src={logo.src}
-                      alt={logo.name}
-                      width={logo.width}
-                      height={logo.height}
-                      loading="lazy"
-                    />
-                  ),
-                )}
-              </div>
-            )
-          }
-        </div>
+    <div class="home-hero__copy">
+      <p class="home-hero__eyebrow">FOR REGULATED TEAMS IN KENYA AND EAST AFRICA</p>
+      <h1 id="home-title">{HOME_HERO.headline.map((line) => <span>{line}</span>)}</h1>
+      <p class="home-hero__body">{HOME_HERO.body}</p>
+      <div class="home-hero__actions">
+        <a class="home-hero__primary" href={HOME_HERO.primary.href}>{HOME_HERO.primary.label}</a>
+        <a class="home-hero__secondary" href={HOME_HERO.secondary.href}
+          >{HOME_HERO.secondary.label} →</a
+        >
       </div>
+      <p class="home-hero__note">The sandbox opens with sample data. No sign-in.</p>
+      <div class="home-hero__trust">
+        <span>{TRUST.caption}</span>
+        <ul aria-label="Standards our work aligns to">
+          {TRUST.items.map((item) => <li>{item}</li>)}
+        </ul>
+      </div>
+      {
+        permittedLogos.map((logo) => (
+          <img
+            src={logo.src}
+            alt={logo.name}
+            width={logo.width}
+            height={logo.height}
+            loading="lazy"
+          />
+        ))
+      }
     </div>
+    <figure class="home-hero__media">
+      <img
+        src="/images/assurance-os/hero.webp"
+        width="1600"
+        height="1000"
+        fetchpriority="high"
+        loading="eager"
+        alt="Assurance OS sandbox: three findings with severity labels, alongside a sample board committee pack."
+      />
+      <figcaption>Inside the Assurance OS sandbox · Fictional sample data</figcaption>
+    </figure>
   </section>
 
   <Section id="proof" tone="paper" aria-labelledby="proof-title" class="border-b border-hairline">
@@ -165,68 +93,60 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
         Evidence before claims.
       </h2>
       <p class="mt-4 text-lg text-slate">
-        The person behind the work, the professional credentials and a quantified prior assurance
-        programme are visible before you buy.
+        See how we work, the standards we use and the evidence before you book.
       </p>
     </div>
 
     <div class="mt-8 grid gap-6 lg:grid-cols-12">
       <article class="rounded-card bg-surface p-6 ring-1 ring-hairline lg:col-span-5">
-        <div class="flex items-start gap-4">
-          <span
-            aria-hidden="true"
-            class="inline-flex size-14 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-semibold tracking-[0.12em] text-paper"
-          >
-            WM
-          </span>
-          <div>
-            <p class="text-xs font-semibold tracking-[0.12em] text-gold uppercase">Founder</p>
-            <h3 class="mt-1 text-2xl text-navy">{FOUNDER.name}</h3>
-            <p class="mt-1 text-sm text-slate">{FOUNDER.role}</p>
-          </div>
-        </div>
-
-        <ul class="mt-5 flex flex-wrap gap-2" aria-label="Founder credentials">
+        <p class="eyebrow">Work aligned to</p>
+        <h3 class="mt-4 text-2xl text-navy">Standards behind the work.</h3>
+        <ul class="mt-5 space-y-5">
           {
-            FOUNDER.credentials.map((credential) => (
-              <li class="rounded-full bg-paper px-3 py-1.5 text-sm font-medium text-navy ring-1 ring-hairline">
-                {credential}
+            STANDARDS.map((standard) => (
+              <li>
+                <>
+                  <h4 class="font-semibold text-navy">{standard.short}</h4>
+                  <p class="mt-1 text-base text-slate">{standard.note}</p>
+                </>
               </li>
             ))
           }
         </ul>
-
-        <p class="mt-5 text-sm leading-relaxed text-slate">{FOUNDER.research}</p>
-        <a
-          href={FOUNDER.scholarUrl}
-          class="mt-4 inline-flex font-medium text-blue no-underline hover:underline"
+        <p class="mt-5 text-sm text-slate">
+          These standards guide our work. They do not imply accreditation or endorsement.
+        </p>
+        <a href="/about#how-we-work" class="mt-4 inline-flex min-h-11 items-center text-blue"
+          >How we work →</a
         >
-          View research record ↗
-        </a>
       </article>
 
       <article class="rounded-card bg-navy p-6 text-paper shadow-card lg:col-span-7">
         <p class="text-xs font-semibold tracking-[0.12em] text-brass-on-dark uppercase">
-          Anonymised prior assurance programme
+          Results from earlier audit work (client details removed)
         </p>
-        <h3 class="mt-3 text-2xl text-white">From dispersed findings to one board-ready evidence trail.</h3>
+        <h3 class="mt-3 text-2xl text-white">
+          From dispersed findings to one board-ready record of evidence.
+        </h3>
         <p class="mt-3 max-w-2xl text-sm leading-relaxed text-paper/75">
-          These are real engagement metrics from prior practitioner work led by the founder. Client,
-          system and location identifiers have been removed.
+          These are real engagement metrics from earlier audit work. Client, system and location
+          identifiers have been removed.
         </p>
 
         <div class="mt-6 grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl bg-white/5 p-4 ring-1 ring-white/15">
             <p class="text-3xl font-semibold text-white">93</p>
-            <p class="mt-1 text-sm text-paper/70">observations consolidated across the programme</p>
+            <p class="mt-1 text-sm text-paper/70">audit observations merged into one register</p>
           </div>
           <div class="rounded-xl bg-white/5 p-4 ring-1 ring-white/15">
             <p class="text-3xl font-semibold text-white">5</p>
-            <p class="mt-1 text-sm text-paper/70">high-priority issues in one critical-platform review</p>
+            <p class="mt-1 text-sm text-paper/70">
+              high-priority issues found in one review of a critical system
+            </p>
           </div>
           <div class="rounded-xl bg-white/5 p-4 ring-1 ring-white/15">
             <p class="text-3xl font-semibold text-white">1</p>
-            <p class="mt-1 text-sm text-paper/70">management tracker carried into board reporting</p>
+            <p class="mt-1 text-sm text-paper/70">action tracker feeding the board report</p>
           </div>
         </div>
 
@@ -234,7 +154,7 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
           href="/proof/report-extract"
           class="mt-6 inline-flex min-h-11 items-center font-medium text-white underline decoration-gold underline-offset-4"
         >
-          Open the redacted report extract →
+          See a redacted report page →
         </a>
       </article>
     </div>
@@ -250,7 +170,12 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     </div>
   </Section>
 
-  <Section id="platform" tone="surface" aria-labelledby="platform-title" class="border-b border-hairline">
+  <Section
+    id="platform"
+    tone="surface"
+    aria-labelledby="platform-title"
+    class="border-b border-hairline"
+  >
     <div class="grid gap-10 lg:grid-cols-12 lg:items-start">
       <div class="lg:col-span-5">
         <p class="eyebrow">Platform</p>
@@ -258,11 +183,11 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
           id="platform-title"
           class="mt-5 text-[length:var(--text-title)] leading-[1.08] font-semibold tracking-[-0.015em] text-navy"
         >
-          Assurance OS is the operating layer for the audit.
+          One workspace from audit plan to board pack.
         </h2>
         <p class="mt-5 max-w-prose text-lg text-slate">
-          Plan engagements, capture work papers, review evidence, raise findings, track actions and
-          prepare committee reporting without rebuilding the trail in separate files.
+          Plan the audit. Store the evidence. Raise the finding. Track the action. Build the
+          committee pack. Keep one trail from start to end.
         </p>
         <div class="mt-7">
           <Button href="/assurance-os/sandbox" size="lg">Try the public sandbox</Button>
@@ -271,6 +196,9 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
           <a href="/assurance-os" class="font-medium text-blue no-underline hover:underline">
             See Assurance OS →
           </a>
+          <a href="/pricing" class="ml-4 inline-flex min-h-11 items-center font-medium text-blue"
+            >See pricing →</a
+          >
         </p>
       </div>
       <div class="lg:col-span-7">
@@ -279,7 +207,12 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     </div>
   </Section>
 
-  <Section id="services" tone="paper" aria-labelledby="services-title" class="border-b border-hairline">
+  <Section
+    id="services"
+    tone="paper"
+    aria-labelledby="services-title"
+    class="border-b border-hairline"
+  >
     <div class="max-w-3xl">
       <p class="eyebrow">Services</p>
       <h2
@@ -306,7 +239,9 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
             </span>
             <span>
               <span class="block text-xl font-semibold text-navy">{service.fullName}</span>
-              <span class="mt-1.5 block text-sm leading-relaxed text-slate">{service.shortSummary}</span>
+              <span class="mt-1.5 block text-sm leading-relaxed text-slate">
+                {service.shortSummary}
+              </span>
               <span class="mt-3 inline-flex text-sm font-medium text-blue group-hover:underline">
                 Compare this service →
               </span>
@@ -317,7 +252,12 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
     </div>
   </Section>
 
-  <Section id="audience" tone="surface" aria-labelledby="audience-title" class="border-b border-hairline">
+  <Section
+    id="audience"
+    tone="surface"
+    aria-labelledby="audience-title"
+    class="border-b border-hairline"
+  >
     <div class="mx-auto max-w-3xl text-center">
       <p class="eyebrow is-centred">Audience</p>
       <h2
@@ -328,39 +268,33 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
       </h2>
     </div>
     <div class="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-      {
-        AUDIENCE.map((segment) =>
-          segment.href ? (
-            <a
-              href={segment.href}
-              class="group rounded-[1.4rem] bg-paper p-5 no-underline ring-1 ring-hairline transition-shadow hover:shadow-card"
-            >
-              <h3 class="font-medium text-navy">{segment.name}</h3>
-              <p class="mt-2 text-sm text-slate">{segment.note}</p>
-              <span class="mt-4 inline-flex text-sm font-medium text-blue group-hover:underline">
-                View your path →
-              </span>
-            </a>
-          ) : (
-            <article class="rounded-[1.4rem] bg-paper p-5 ring-1 ring-hairline">
-              <h3 class="font-medium text-navy">{segment.name}</h3>
-              <p class="mt-2 text-sm text-slate">{segment.note}</p>
-            </article>
-          ),
-        )
-      }
+      {AUDIENCE.map((segment, index) => <AudienceCard segment={segment} index={index} />)}
     </div>
     <p class="mt-6 text-center text-sm text-slate">{SITE.areaServed}</p>
   </Section>
 
-  <CtaSection
-    id="contact"
-    eyebrow="Contact"
-    title="Book a 20-minute call"
-    body="Tell us what you are trying to improve. We will confirm a short call and the right next step."
-    primaryLabel={PRIMARY_CTA.label}
-    primaryHref={PRIMARY_CTA.href}
-  />
+  <Section id="contact" tone="paper" aria-labelledby="contact-title">
+    <div class="grid gap-10 lg:grid-cols-2">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h2 id="contact-title" class="mt-5 text-4xl text-navy">Book a 20-minute call</h2>
+        <ol class="mt-6 list-decimal space-y-3 pl-6 text-slate">
+          <li>You tell us your audit challenge.</li>
+          <li>We confirm a time within 1 business day.</li>
+          <li>You leave with a next step, with or without us.</li>
+        </ol>
+        <p class="mt-6">
+          <button
+            type="button"
+            disabled
+            class="min-h-11 rounded-btn border border-control-border px-4 text-slate"
+            title="WhatsApp number to be added">WhatsApp · coming soon</button>
+        </p>
+        <p class="mt-6"><a href={`mailto:${SITE.email}`}>{SITE.email}</a> · Nairobi, Kenya</p>
+      </div>
+      <ContactForm location="home" />
+    </div>
+  </Section>
 
   <script>
     document.documentElement.classList.add('home-hero-page');
@@ -379,404 +313,120 @@ const serviceCards = SERVICES.filter((service) => service.slug !== 'assurance-os
 
   <style>
     .home-hero {
-      --home-hero-gutter: clamp(1.5rem, 8.33vw, 7.5rem);
       position: relative;
-      width: 100%;
-      height: min(100svh, 900px);
-      min-height: 640px;
-      overflow: clip;
+      display: grid;
+      gap: 2.5rem;
+      align-items: center;
+      padding: 8rem max(1.5rem, 5vw) 4rem;
       background: var(--color-navy);
       color: var(--color-hero-ivory);
-      isolation: isolate;
     }
-
     .home-hero__nav-sentinel {
       position: absolute;
       top: 24px;
       left: 0;
       width: 1px;
       height: 1px;
-      pointer-events: none;
     }
-
-    .home-hero__media {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      width: 100%;
-      overflow: hidden;
-      background: var(--color-navy);
-    }
-
-    .home-hero__picture,
-    .home-hero__picture img {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-
-    .home-hero__picture {
-      --hero-image-opacity: 1;
-      opacity: var(--hero-image-opacity);
-    }
-
-    .home-hero__picture img {
-      object-fit: cover;
-      object-position: 70% center;
-      transform: scale(1.04);
-      animation: home-hero-image-scale 8s var(--ease-out-soft) forwards;
-    }
-
-    .home-hero__media::before,
-    .home-hero__media::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    .home-hero__media::before {
-      z-index: 2;
-      background: var(--color-navy);
-      animation: home-hero-image-fade 900ms var(--ease-out-soft) forwards;
-    }
-
-    .home-hero__media::after {
-      z-index: 1;
-      background:
-        linear-gradient(0deg, var(--color-navy) 0%, transparent 25%),
-        linear-gradient(
-          90deg,
-          var(--color-navy) 0%,
-          var(--color-navy) 27%,
-          rgba(7, 29, 53, 0.92) 34%,
-          rgba(7, 29, 53, 0.74) 44%,
-          rgba(7, 29, 53, 0.48) 56%,
-          rgba(7, 29, 53, 0.2) 68%,
-          rgba(7, 29, 53, 0) 78%
-        );
-    }
-
-    .home-hero__content {
-      position: relative;
-      z-index: 2;
-      display: flex;
-      align-items: center;
-      height: 100%;
-      padding:
-        calc(var(--header-height) + 1.5rem) var(--home-hero-gutter)
-        2.5rem;
-    }
-
-    .home-hero__copy {
-      width: 100%;
-      max-width: 640px;
-    }
-
-    .home-hero__headline {
-      margin: 0;
-      color: var(--color-hero-ivory);
-      font-family: var(--font-display);
-      font-size: clamp(44px, 6vw, 84px);
-      font-weight: 450;
-      line-height: 1.05;
-      letter-spacing: -0.02em;
-      text-wrap: balance;
-    }
-
-    .home-hero__headline span {
-      display: block;
-      white-space: nowrap;
-    }
-
-    .home-hero__gold-line {
-      width: 48px;
-      height: 2px;
-      margin: 32px 0;
-      background: var(--color-brass-on-dark);
-    }
-
-    .home-hero__body {
-      max-width: 34em;
-      margin: 0;
-      color: color-mix(in srgb, var(--color-hero-ivory) 82%, transparent);
-      font-family: var(--font-sans);
-      font-size: clamp(17px, 1.4vw, 21px);
-      font-weight: 350;
+    .home-hero__eyebrow {
+      font-size: 14px;
+      letter-spacing: 0.12em;
       line-height: 1.6;
+      color: var(--color-brass-on-dark);
     }
-
+    h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 4.1vw, 4.5rem);
+      font-weight: 450;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      margin: 1.25rem 0;
+      color: inherit;
+    }
+    h1 span {
+      display: block;
+    }
+    .home-hero__body {
+      max-width: 60ch;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--color-on-navy-muted);
+    }
     .home-hero__actions {
       display: flex;
-      align-items: center;
-      gap: 32px;
-      margin-top: 36px;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 2rem;
     }
-
     .home-hero__primary,
     .home-hero__secondary {
-      min-height: 52px;
-      font-family: var(--font-sans);
-    }
-
-    .home-hero__primary {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 0 28px;
+      min-height: 52px;
+      padding: 0.75rem 1.25rem;
       border-radius: 6px;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .home-hero__primary {
       background: var(--color-brass-on-dark);
       color: var(--color-navy);
-      font-weight: 600;
-      text-decoration: none;
-      transition:
-        background-color 180ms var(--ease-out-soft),
-        transform 180ms var(--ease-out-soft);
     }
-
-    .home-hero__primary:hover {
-      background: color-mix(in srgb, var(--color-brass-on-dark) 94%, white);
-      color: var(--color-navy);
-      transform: translateY(-1px);
+    .home-hero__secondary {
+      border: 1px solid var(--color-on-navy-muted);
+      color: var(--color-hero-ivory);
     }
-
-    .home-hero__primary:focus-visible,
-    .home-hero__secondary:focus-visible {
+    .home-hero a:focus-visible {
       outline: 2px solid var(--color-hero-ivory);
       outline-offset: 3px;
     }
-
-    .home-hero__secondary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: var(--color-hero-ivory);
-      font-weight: 500;
-      text-decoration-line: underline;
-      text-decoration-color: var(--color-brass-on-dark);
-      text-decoration-thickness: 1px;
-      text-underline-offset: 6px;
+    .home-hero__note {
+      font-size: 13px;
+      margin-top: 1rem;
+      color: var(--color-on-navy-muted);
     }
-
-    .home-hero__secondary:hover {
-      color: var(--color-hero-ivory);
-    }
-
-    .home-hero__secondary-arrow {
-      transition: transform 180ms var(--ease-out-soft);
-    }
-
-    .home-hero__secondary:hover .home-hero__secondary-arrow {
-      transform: translateX(4px);
-    }
-
     .home-hero__trust {
-      margin-top: 40px;
-      font-family: var(--font-sans);
+      margin-top: 2rem;
+      font-size: 13px;
+      color: var(--color-on-navy-muted);
     }
-
-    .home-hero__trust-caption {
+    .home-hero__trust ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.25rem;
+      margin-top: 0.5rem;
+    }
+    .home-hero__media {
+      min-width: 0;
+      margin: 0;
+    }
+    .home-hero__media img {
       display: block;
-      color: color-mix(in srgb, var(--color-hero-ivory) 70%, transparent);
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px #0004;
     }
-
-    .home-hero__trust-items {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0;
-      margin: 10px 0 0;
-      padding: 0;
-      color: color-mix(in srgb, var(--color-hero-ivory) 80%, transparent);
-      font-size: 14px;
-      line-height: 1.5;
-      list-style: none;
-    }
-
-    .home-hero__trust-items li + li {
-      margin-left: 0.9rem;
-      padding-left: 0.9rem;
-      border-left: 1px solid color-mix(in srgb, var(--color-hero-ivory) 28%, transparent);
-    }
-
-    .home-hero__trust-logos {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1.25rem;
+    figcaption {
+      font-size: 13px;
+      color: var(--color-on-navy-muted);
       margin-top: 1rem;
     }
-
-    .home-hero__trust-logos a {
-      display: inline-flex;
-      min-width: 44px;
-      min-height: 44px;
-      align-items: center;
-    }
-
-    .home-hero__trust-logos img {
-      max-height: 28px;
-      width: auto;
-    }
-
-    .home-hero__reveal {
-      opacity: 0;
-      transform: translateY(16px);
-      animation: home-hero-reveal 600ms var(--ease-out-soft) forwards;
-    }
-
-    .home-hero__reveal--headline {
-      animation-delay: 0ms;
-    }
-
-    .home-hero__reveal--line {
-      animation-delay: 120ms;
-    }
-
-    .home-hero__reveal--body {
-      animation-delay: 200ms;
-    }
-
-    .home-hero__reveal--actions {
-      animation-delay: 280ms;
-    }
-
-    .home-hero__reveal--trust {
-      animation-delay: 360ms;
-    }
-
-    @keyframes home-hero-reveal {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes home-hero-image-fade {
-      to {
-        opacity: 0;
-      }
-    }
-
-    @keyframes home-hero-image-scale {
-      to {
-        transform: scale(1);
-      }
-    }
-
-    @media (max-width: 1023px) {
-      .home-hero__media {
-        inset: 0;
-        width: 100%;
-      }
-
-      .home-hero__picture {
-        --hero-image-opacity: 0.35;
-      }
-
-      .home-hero__picture img {
-        animation: none;
-        transform: none;
-      }
-
-      .home-hero__media::after {
-        background:
-          linear-gradient(0deg, var(--color-navy) 0%, rgba(7, 29, 53, 0.68) 34%, transparent 70%),
-          linear-gradient(
-            90deg,
-            rgba(7, 29, 53, 0.96) 0%,
-            rgba(7, 29, 53, 0.88) 56%,
-            rgba(7, 29, 53, 0.74) 100%
-          );
-      }
-
-      .home-hero__content {
-        padding-inline: clamp(1.5rem, 6vw, 4rem);
-      }
-
-      .home-hero__headline span {
-        white-space: normal;
-      }
-    }
-
-    @media (max-width: 639px) {
+    @media (min-width: 1024px) {
       .home-hero {
-        min-height: 640px;
+        grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+        gap: 2rem;
+        min-height: 680px;
       }
-
-      .home-hero__content {
-        align-items: flex-start;
-        padding-top: 120px;
-        padding-bottom: 32px;
-      }
-
-      .home-hero__headline {
-        font-size: 40px;
-      }
-
-      .home-hero__gold-line {
-        margin-block: 24px;
-      }
-
-      .home-hero__actions {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-        margin-top: 28px;
-      }
-
-      .home-hero__primary {
+    }
+    @media (max-width: 639px) {
+      .home-hero__actions a {
         width: 100%;
       }
-
-      .home-hero__secondary {
-        align-self: flex-start;
-        min-height: 44px;
-      }
-
-      .home-hero__trust {
-        margin-top: 28px;
-      }
-
-      .home-hero__trust-items {
-        row-gap: 0.45rem;
-      }
-    }
-
-    @media (max-width: 360px) {
-      .home-hero__content {
-        padding-inline: 1.25rem;
-      }
-
-      .home-hero__trust-items li + li {
-        margin-left: 0.65rem;
-        padding-left: 0.65rem;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .home-hero__reveal,
-      .home-hero__picture,
-      .home-hero__picture img,
-      .home-hero__primary,
-      .home-hero__secondary-arrow {
-        opacity: 1;
-        transform: none;
-        animation: none !important;
-        transition: none !important;
-      }
-
-      .home-hero__picture {
-        opacity: var(--hero-image-opacity);
-      }
-
-      .home-hero__media::before {
-        opacity: 0;
-        animation: none !important;
+      .home-hero {
+        padding-top: 7rem;
       }
     }
   </style>

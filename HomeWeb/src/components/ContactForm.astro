@@ -1,0 +1,200 @@
+---
+import Button from '@/components/primitives/Button.astro';
+interface Props {
+  location: 'home' | 'contact';
+  status?: string | null;
+  segment?: string | null;
+  intent?: string | null;
+}
+const { location, status, segment, intent = 'call' } = Astro.props;
+const messages: Record<string, string> = {
+  ok: "Thanks, we'll be in touch shortly.",
+  invalid: 'Please check your name and work email.',
+  ratelimited: 'Too many submissions. Please try again later.',
+  error: 'Something went wrong. Please email hello@murikah.com directly.',
+};
+const feedback = status ? messages[status] : undefined;
+const field =
+  'mt-2 block w-full min-h-11 rounded-btn border border-control-border bg-surface px-3 py-3 text-ink';
+---
+
+<div>
+  <p
+    id="form-status"
+    role="status"
+    aria-live="polite"
+    data-kind={status === 'ok' ? 'success' : 'error'}
+    hidden={!feedback}
+  >
+    {feedback}
+  </p>
+  <form
+    id="contact-form"
+    action="/api/contact"
+    method="post"
+    data-location={location}
+    class="grid gap-5"
+  >
+    <div>
+      <label for="name">Name <span aria-hidden="true">*</span></label>
+      <input
+        id="name"
+        name="name"
+        type="text"
+        required
+        minlength="2"
+        maxlength="200"
+        autocomplete="name"
+        class={field}
+        aria-describedby="name-error"
+      />
+      <p id="name-error" data-error-for="name" class="field-error" hidden></p>
+    </div>
+    <div>
+      <label for="email">Work email <span aria-hidden="true">*</span></label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        required
+        maxlength="200"
+        autocomplete="email"
+        class={field}
+        aria-describedby="email-error"
+      />
+      <p id="email-error" data-error-for="email" class="field-error" hidden></p>
+    </div>
+    <div>
+      <label for="message">One-line challenge <span class="text-slate">(optional)</span></label>
+      <input id="message" name="message" type="text" maxlength="5000" class={field} />
+    </div>
+    <input type="hidden" name="location" value={location} />
+    <input type="hidden" name="intent" value={intent} />
+    <input type="hidden" name="segment" value={segment} />
+    <div class="contact-honeypot" aria-hidden="true">
+      <label for="company_website">Leave this field empty</label>
+      <input
+        id="company_website"
+        name="company_website"
+        type="text"
+        tabindex="-1"
+        autocomplete="off"
+      />
+    </div>
+    <div><Button type="submit" size="lg">Request a 20-minute call</Button></div>
+    <p class="text-sm text-slate">
+      Name and work email are required. We confirm call requests within 1 business day.
+    </p>
+  </form>
+</div>
+<style>
+  .contact-honeypot {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .field-error,
+  [data-kind='error'] {
+    color: var(--color-status-high);
+  }
+  #form-status:not([hidden]) {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+  }
+</style>
+<script>
+  // Progressive enhancement: inline, immediate feedback (Doherty Threshold).
+  // Without JS the form posts normally and the endpoint redirects with ?status.
+  import { track } from '@/lib/analytics';
+  function initContactForm() {
+    const form = document.querySelector<HTMLFormElement>('#contact-form');
+    if (!form) return;
+    const params = new URLSearchParams(window.location.search);
+    const segment = params.get('segment');
+    const intent = params.get('intent');
+    const setHidden = (name: string, value: string | null) => {
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (input && value) input.value = value;
+    };
+    if (['fintech', 'ngo', 'family'].includes(segment ?? '')) setHidden('segment', segment);
+    if (['call', 'demo'].includes(intent ?? '')) setHidden('intent', intent);
+    const statusEl = document.querySelector<HTMLElement>('#form-status');
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const submitLabel = submit?.textContent ?? 'Send message';
+
+    const clearErrors = () => {
+      form.querySelectorAll<HTMLElement>('[data-error-for]').forEach((el) => {
+        el.hidden = true;
+        el.textContent = '';
+      });
+      form
+        .querySelectorAll<HTMLElement>('[aria-invalid]')
+        .forEach((el) => el.removeAttribute('aria-invalid'));
+    };
+
+    const setError = (fieldName: string, message: string) => {
+      const el = form.querySelector<HTMLElement>(`[data-error-for="${fieldName}"]`);
+      if (el) {
+        el.textContent = message;
+        el.hidden = false;
+      }
+      form.querySelector(`[name="${fieldName}"]`)?.setAttribute('aria-invalid', 'true');
+    };
+
+    const setStatus = (message: string, kind: string) => {
+      if (!statusEl) return;
+      statusEl.textContent = message;
+      statusEl.dataset.kind = kind;
+      statusEl.hidden = false;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearErrors();
+      setStatus('Sending…', 'pending');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+      }
+
+      try {
+        const payload = Object.fromEntries(new FormData(form));
+        const res = await fetch(form.action, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          message?: string;
+          errors?: { field: string; message: string }[];
+        };
+
+        if (res.ok && data.ok) {
+          track('form_submit', form.dataset.location ?? 'contact');
+          form.reset();
+          setStatus(data.message ?? "Thanks, we'll be in touch.", 'success');
+        } else if (data.errors?.length) {
+          data.errors.forEach((err) => setError(err.field, err.message));
+          setStatus('Please check the highlighted fields.', 'error');
+          form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+        } else {
+          setStatus('Something went wrong. Please email us directly.', 'error');
+        }
+      } catch {
+        setStatus('Network error. Please try again or email us.', 'error');
+      } finally {
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = submitLabel;
+        }
+      }
+    });
+  }
+
+  initContactForm();
+</script>

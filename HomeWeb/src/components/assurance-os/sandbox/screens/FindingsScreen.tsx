@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSandbox } from '@/sandbox/store';
 import { can, missingPermission } from '@/sandbox/permissions';
 import { daysBetween, formatDate } from '@/sandbox/date';
-import type { Finding, FindingStatus, RiskRating } from '@/sandbox/types';
+import type { FindingStatus, RiskRating } from '@/sandbox/types';
 import { Badge, Button, Drawer, EmptyState, Panel, RatingBadge, TooltipLock } from '../Ui';
 import AiAssistant from '../AiAssistant';
 import { Icon } from '../Icon';
