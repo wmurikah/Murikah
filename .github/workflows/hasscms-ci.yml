@@ -1,14 +1,6 @@
 name: HassCMS standalone
 
 on:
-  push:
-    paths:
-      - 'HassCMS/**'
-      - '.github/workflows/hasscms-ci.yml'
-  pull_request:
-    paths:
-      - 'HassCMS/**'
-      - '.github/workflows/hasscms-ci.yml'
   workflow_dispatch:
 
 jobs:

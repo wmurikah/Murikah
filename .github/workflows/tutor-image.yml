@@ -1,14 +1,6 @@
 name: Build Murikah Tutor image
 
 on:
-  push:
-    paths:
-      - "Tutor/**"
-      - ".github/workflows/tutor-image.yml"
-  pull_request:
-    paths:
-      - "Tutor/**"
-      - ".github/workflows/tutor-image.yml"
   workflow_dispatch:
 
 permissions:

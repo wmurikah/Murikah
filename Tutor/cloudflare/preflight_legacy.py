@@ -1173,7 +1173,7 @@ def main() -> int:
     require_markers(
         ".github/workflows/tutor-image.yml",
         (
-            "pull_request:",
+            "workflow_dispatch:",
             "fetch-depth: 0",
             "timeout-minutes: 60",
             "MURIKAH_TUTOR_BASE_REF: origin/main",

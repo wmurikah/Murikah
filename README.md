@@ -31,7 +31,7 @@ Use Node 22.22.2 and pnpm 10.33.0. Each generated Worker configuration is at tha
 
 This layout replaces the old combined Astro Worker with four independently built Workers. Existing production services have not been changed by this repository refactor. Before deploying HomeWeb over the old `murikah-web` Worker, deploy and configure `hass-cms`, `murikah-engr` and `murikah-grc`, copy each system's own secret bindings through Cloudflare's secure configuration, and move its existing hostname to the corresponding Worker. Confirm login, database access and scheduled jobs before the HomeWeb cutover. Do not deploy HomeWeb first while the other hostnames still point to the old combined Worker.
 
-No database migrations, seeds or production deployments are performed by the reorganization. The manual deployment workflow selects one product. The CI matrix builds and tests each product separately and continues reporting existing test failures.
+No database migrations, seeds or production deployments are performed by the reorganization. All GitHub Actions workflows are manual-only: pushes and pull requests do not start checks, image builds or deployments. Start a workflow explicitly from GitHub’s Actions tab when needed. The deployment workflow selects one product; the CI matrix builds and tests products separately and reports existing test failures.
 
 ## License
 

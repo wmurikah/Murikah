@@ -1,12 +1,7 @@
 name: Deploy Murikah Tutor Wake Worker
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "Tutor/wake-worker/**"
-      - ".github/workflows/deploy-tutor-wake.yml"
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 concurrency:
   group: deploy-murikah-tutor-wake
