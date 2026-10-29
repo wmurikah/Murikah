@@ -1,0 +1,14 @@
+.git
+.vendor
+.venv
+**/node_modules
+**/.wrangler
+**/__pycache__
+.codespaces-data
+data
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*
+!**/.env.example
+*.log

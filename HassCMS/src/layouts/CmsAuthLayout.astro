@@ -1,0 +1,130 @@
+---
+/**
+ * The unauthenticated shell: a navy brand panel on the LEFT, the sign-in form
+ * on the RIGHT, a single column on mobile.
+ *
+ * THE BRAND IS ON THE LEFT AND THE TASK IS ON THE RIGHT. The eye enters at the
+ * top left, meets the brand, and travels to the work. The panels used to be the
+ * other way round, which put the brand at the end of the journey and the task
+ * at the start, so the first thing a person read was the thing they had already
+ * decided about.
+ *
+ * THE FORM SIDE IS THE WIDER OF THE TWO. It was `1fr` of brand against a form
+ * column capped at 34rem, which squeezed the work into a corner of a wide
+ * screen. The proportion is now roughly two to three in the form's favour, and
+ * the form column is capped generously rather than tightly, so it breathes
+ * vertically as well as horizontally.
+ *
+ * THE FORM STILL COMES FIRST IN THE DOM. The brand panel is decorative and is
+ * ordered visually with `order`, so a keyboard or screen-reader user reaches
+ * the form immediately and never travels past a wall of marketing to sign in.
+ * Reversing the visual order did not change that: it is the same trick pointing
+ * the other way.
+ *
+ * No image asset or illustration download. Token-driven colour and the inline
+ * character add warmth without adding a runtime or a network request.
+ *
+ * No marketing chrome, for the same reason as CmsLayout: this is the CMS host.
+ */
+import '@fontsource-variable/inter/wght.css';
+import '@hasscms/styles/global.css';
+import CmsWordmark from '@hasscms/components/cms/CmsWordmark.astro';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+const pageTitle = `${title} - Hass Petroleum`;
+---
+
+<!doctype html>
+<html lang="en-KE" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="min-h-full bg-cms-canvas text-cms-ink antialiased">
+    <div
+      class="auth-shell flex min-h-dvh flex-col lg:grid lg:grid-cols-[minmax(23rem,0.9fr)_minmax(30rem,1.1fr)]"
+    >
+      {/* The form. First in the DOM, second on screen from lg upwards. */}
+      <main
+        class="relative flex flex-1 items-center justify-center overflow-hidden px-5 py-10 sm:px-8 lg:order-2 lg:px-14 lg:py-14"
+      >
+        <div class="auth-form-glow absolute inset-0" aria-hidden="true"></div>
+        <div class="relative w-full max-w-[30rem] rounded-cms-lg bg-cms-surface/95 p-1 sm:p-6">
+          <slot />
+        </div>
+      </main>
+
+      {
+        /*
+        The brand panel. Decorative: nothing here is the only copy of anything.
+
+        ONE IDEA AND A GREAT DEAL OF QUIET SPACE. It carries the wordmark, one
+        line of positioning and the system's name, and nothing else. On a small
+        screen it collapses to a slim band across the top so the form takes the
+        full width, which is why the positioning line is hidden below lg rather
+        than being allowed to push the form off the first screen.
+      */
+      }
+      <aside
+        class="auth-brand relative order-first flex min-h-40 flex-col justify-between gap-5 overflow-hidden border-r border-white/10 px-6 py-6 sm:px-10 lg:order-1 lg:min-h-dvh lg:gap-10 lg:px-14 lg:py-14"
+        aria-hidden="true"
+      >
+        <div class="relative z-10"><CmsWordmark tone="onNavy" size="lg" /></div>
+        <div
+          class="relative z-10 mx-auto flex w-full max-w-md flex-1 items-center justify-center lg:mx-0 lg:block lg:flex-none"
+        >
+          <div class="hidden lg:block">
+            <span class="mb-6 block h-1 w-12 rounded-full bg-cms-gold" aria-hidden="true"></span>
+            <p class="text-cms-display font-semibold tracking-tight text-balance text-white">
+              Customer operations, in one calm view.
+            </p>
+            <p class="mt-4 max-w-sm text-cms-body text-cms-rail-text">
+              From first enquiry to fulfilled order and resolved service request.
+            </p>
+          </div>
+          <div class="w-full"><slot name="brand-character" /></div>
+        </div>
+        <p class="relative z-10 hidden text-cms-caption text-cms-rail-muted lg:block">
+          Customer Relationship, Helpdesk &amp; SLA Management System
+        </p>
+      </aside>
+    </div>
+  </body>
+</html>
+
+<style>
+  .auth-shell {
+    /* Login-only interaction ramp. Keep the wider CMS palette unchanged. */
+    --color-cms-royal: #002169;
+    --color-cms-royal-deep: #00184f;
+    --color-cms-royal-tint: #eaf0ff;
+  }
+
+  .auth-brand {
+    background-image:
+      radial-gradient(
+        circle at 18% 18%,
+        color-mix(in srgb, var(--color-cms-auth-sky) 36%, transparent) 0,
+        transparent 34%
+      ),
+      radial-gradient(
+        circle at 88% 78%,
+        color-mix(in srgb, var(--color-cms-royal) 42%, transparent) 0,
+        transparent 40%
+      ),
+      linear-gradient(145deg, #002169 6%, #0a2e73 58%, #00184f);
+  }
+  .auth-form-glow {
+    background-image: radial-gradient(
+      circle at 78% 12%,
+      var(--color-cms-royal-tint),
+      transparent 38%
+    );
+  }
+</style>

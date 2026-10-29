@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safeNextPath } from '../../src/lib/grc/routing.ts';
+import { safeNextPath } from '../src/lib/grc/routing.ts';
 
 test('a root-relative app path is returned, query and all', () => {
   assert.equal(safeNextPath('/work-papers?status=Submitted'), '/work-papers?status=Submitted');

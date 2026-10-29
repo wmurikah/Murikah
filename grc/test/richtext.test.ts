@@ -13,7 +13,7 @@ import {
   renderInlinesHtml,
   richTextToPlain,
   normaliseRichText,
-} from '../../src/lib/grc/richtext.ts';
+} from '../src/lib/grc/richtext.ts';
 
 test('blocks: headings, paragraphs and lists, with blank lines as separators', () => {
   const blocks = parseRichText('## Head\n### Sub\nplain line\n\n- a\n- b\n1. one\n2) two');

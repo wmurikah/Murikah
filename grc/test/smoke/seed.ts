@@ -19,10 +19,10 @@ import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
   PLATFORM_DEFAULT_ORG,
-} from '../../../src/lib/grc/auth/permissionModules.ts';
+} from '../../src/lib/grc/auth/permissionModules.ts';
 // The same sealed box the worker opens, so the seeded storage connection is a
 // real one the running app can read rather than a shape that only looks right.
-import { seal } from '../../../src/lib/grc/auth/secretBox.ts';
+import { seal } from '../../src/lib/grc/auth/secretBox.ts';
 
 /**
  * The session secret the harness starts the worker with. It is here rather than

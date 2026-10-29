@@ -8,7 +8,7 @@ import {
   checkApprover,
   checkPayer,
   ALLOW_L3_APPROVER_TO_RECORD_PAYMENT,
-} from '../../src/lib/engr/workflow/sod.ts';
+} from '../src/lib/engr/workflow/sod.ts';
 
 test('the submitter cannot approve their own submission', () => {
   const r = checkApprover({ actorId: 'u1', submitterId: 'u1', priorApproverIds: [] });

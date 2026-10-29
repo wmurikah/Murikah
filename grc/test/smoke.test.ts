@@ -23,22 +23,22 @@ import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
 // The same RFC 6238 implementation the worker verifies against, so the round
 // trip computes real codes for the enrolled secret.
-import { totpAt } from '../../src/lib/shared/totp.ts';
+import { totpAt } from '../src/lib/shared/totp.ts';
 // The same challenge shape the worker stores, so the email-code round trip
 // plants known challenges (the smoke run has no Graph mailer to deliver one).
-import { newChallenge, OTP_MAX_ATTEMPTS } from '../../src/lib/grc/auth/emailOtp.ts';
-import type { MfaRecord } from '../../src/lib/grc/auth/mfaRecord.ts';
+import { newChallenge, OTP_MAX_ATTEMPTS } from '../src/lib/grc/auth/emailOtp.ts';
+import type { MfaRecord } from '../src/lib/grc/auth/mfaRecord.ts';
 // The one catalogue the matrix, the save and the seed all read, so the role-save
 // step asserts against the real module list rather than a copy of it.
 import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
   PLATFORM_DEFAULT_ORG,
-} from '../../src/lib/grc/auth/permissionModules.ts';
+} from '../src/lib/grc/auth/permissionModules.ts';
 // The same planner the cron drain uses, so the "one digest, never one email per
 // finding" assertion runs the real grouping rather than a copy of it.
-import { planNormalDigests } from '../../src/lib/grc/notify/render.ts';
-import { digestLinks } from '../../src/lib/grc/notify/links.ts';
+import { planNormalDigests } from '../src/lib/grc/notify/render.ts';
+import { digestLinks } from '../src/lib/grc/notify/links.ts';
 
 const DIGEST_LINKS = digestLinks();
 
@@ -58,7 +58,7 @@ const GRANTED_IN_SAVE: [string, string][] = [
   ['AUDIT_LOG', 'read'],
 ];
 
-const PAGES_DIR = join(import.meta.dirname, '..', '..', 'src', 'pages', 'grc');
+const PAGES_DIR = join(import.meta.dirname, '..', 'src', 'pages', 'grc');
 
 /** Every file under a directory, as paths relative to it. */
 function walk(dir: string, base = dir): string[] {

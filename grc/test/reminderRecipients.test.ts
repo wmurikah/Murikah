@@ -17,14 +17,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@libsql/client/web';
 import { FakeTursoServer } from './smoke/fakeTurso.ts';
-import { listHoaRecipients } from '../../src/lib/grc/notify/recipients.ts';
+import { listHoaRecipients } from '../src/lib/grc/notify/recipients.ts';
 
 const ORG = 'ORG-HASS';
 const OTHER_ORG = 'ORG-COAST';
 
 /** A seeded database with two SUPER_ADMINs, one of them the platform owner. */
 async function seeded(): Promise<{ url: string; close: () => Promise<void> }> {
-  const server = new FakeTursoServer('grc/db/schema.md');
+  const server = new FakeTursoServer('db/schema.md');
   const url = await server.listen();
   const db = server.db;
   for (const org of [ORG, OTHER_ORG]) {
@@ -101,7 +101,7 @@ test('an organisation with only a platform owner in it mails nobody', async () =
   // lookup could see, so every reminder went to them. Mailing nobody is the
   // correct answer, and it is visibly nobody rather than quietly the wrong
   // person.
-  const server = new FakeTursoServer('grc/db/schema.md');
+  const server = new FakeTursoServer('db/schema.md');
   const url = await server.listen();
   try {
     server.db

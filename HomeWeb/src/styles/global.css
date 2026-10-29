@@ -1,0 +1,692 @@
+/**
+ * Global stylesheet, the single Tailwind entry point.
+ * Pulls in Tailwind v4 and the design tokens, then sets restrained base styles.
+ * (Self-hosted fonts are imported from BaseLayout.astro so Vite fingerprints
+ *  and preloads them.)
+ */
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  :root {
+    color-scheme: light;
+    /* One fixed public-header height at every breakpoint: 68px. */
+    --header-height: 4.25rem;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Keep anchored content clear of the sticky header. */
+    scroll-padding-top: 5.5rem;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Never synthesise weights from the variable font. */
+    font-synthesis-weight: none;
+  }
+
+  /* Headings use the neutral sans by default, with tight leading and slightly
+     negative tracking for an Apple-like feel. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--color-navy);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.018em;
+    /* Avoid orphans/awkward breaks in headings. */
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--color-blue);
+    text-underline-offset: 0.18em;
+  }
+
+  :where(img, svg, video, canvas) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* WCAG 2.2, a clearly visible focus indicator on every interactive element.
+     Focus is the one place a brighter, accessible blue is allowed. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* On navy/dark surfaces, a brass focus ring meets contrast far better than
+     blue. Containers with `.on-dark` flip the focus colour for descendants. */
+  .on-dark :focus-visible {
+    outline-color: var(--color-brass);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 32%, transparent);
+  }
+
+  /* Honour reduced-motion: neutralise all transitions/animations + smooth scroll. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Skip-to-content link, hidden until focused (familiar a11y convention). */
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    transform: translateY(-160%);
+    background: var(--color-navy);
+    color: #fff;
+    padding: 0.7rem 1.1rem;
+    border-radius: var(--radius-btn);
+    font-weight: 500;
+    box-shadow: var(--shadow-pop);
+    transition: transform 160ms var(--ease-out-soft);
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  /* Hairline dividers as low-emphasis grouping (Gestalt: common region without
+     heavy borders). */
+  .hairline {
+    border-color: var(--color-hairline);
+  }
+
+  /* ---- Signature: clarity brought to light --------------------------------
+     One restrained light motif. A soft brass aperture sits behind a single key
+     headline, and a fine brass beam recurs as a structural accent. Used
+     sparingly, never scattered across a page. */
+
+  /* Eyebrow: a tracked uppercase label introduced by a short brass beam. */
+  .eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.7rem;
+    max-inline-size: 100%;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    /* Deeper aged brass on light surfaces so the small eyebrow text clears AA
+       contrast; the brighter brass is used on dark surfaces via the rule
+       below (where it has the contrast headroom). */
+    color: var(--color-brass-deep);
+  }
+  .eyebrow::before {
+    content: '';
+    inline-size: 1.75rem;
+    block-size: 1px;
+    flex: none;
+    background: linear-gradient(90deg, transparent, var(--color-brass));
+  }
+  .eyebrow.is-centred {
+    justify-content: center;
+  }
+  .on-dark .eyebrow {
+    color: var(--color-brass-on-dark);
+  }
+
+  /* Beam: a fine gold hairline, fading at both ends, as a structural accent. */
+  .beam {
+    block-size: 1px;
+    border: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-brass) 65%, transparent),
+      transparent
+    );
+  }
+
+  /* Rich navy surface for the rare sections that deliberately need a dark
+     field. It is no longer the default closing CTA or footer treatment. */
+  .navy-rich {
+    background-color: var(--color-obsidian);
+    background-image:
+      radial-gradient(120% 130% at 50% -25%, #12203d 0%, rgba(18, 32, 61, 0) 58%),
+      linear-gradient(180deg, var(--color-navy) 0%, var(--color-obsidian) 100%);
+  }
+
+  /* The aperture, a soft single bloom of light. Render as an aria-hidden child
+     of a relatively-positioned, clipped container and place it behind the
+     headline. Sized and positioned by utilities at the call site. */
+  .aperture {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 9999px;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--color-brass) 26%, transparent) 0%,
+      color-mix(in srgb, var(--color-brass) 9%, transparent) 42%,
+      transparent 72%
+    );
+    filter: blur(6px);
+  }
+
+  /* Fine grain for dark sections, so large navy fields read as rich, not flat.
+     Very low opacity fractal noise; decorative only. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+  }
+
+  /* Reading measure for guides, around 65 to 70 characters. */
+  .measure {
+    max-inline-size: 68ch;
+  }
+}
+
+/* ---- Motion ---------------------------------------------------------------
+   Reveals and the hero load sequence apply only when JavaScript is present
+   (the `js` class is set on <html> before paint), so without JS every element
+   is visible. Reduced motion disables all of it. */
+@layer utilities {
+  .js .reveal {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 0.6s var(--ease-out-soft),
+      transform 0.6s var(--ease-out-soft);
+  }
+  .js .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Hero load: a staggered rise. Set --rise-delay inline per element. */
+  .js .rise {
+    opacity: 0;
+    animation: fade-up 0.7s var(--ease-out-soft) both;
+    animation-delay: var(--rise-delay, 0s);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal,
+  .js .reveal.is-visible,
+  .js .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
+@layer components {
+  /* Light hero canvas: porcelain and warm ivory dominate, with only the
+     faintest single wash of brass in one corner so the field reads as calm and
+     near-monochrome, not decorative. No second colour. */
+  .hero-luxe {
+    background:
+      radial-gradient(
+        circle at 12% 16%,
+        color-mix(in srgb, var(--color-brass) 7%, transparent),
+        transparent 24rem
+      ),
+      linear-gradient(180deg, var(--color-porcelain) 0%, var(--color-ivory) 100%);
+  }
+
+  .orb {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(52px);
+    opacity: 0.5;
+  }
+
+  .orb-one {
+    right: -12rem;
+    top: 7rem;
+    width: 34rem;
+    height: 34rem;
+    background: color-mix(in srgb, var(--color-brass) 9%, transparent);
+  }
+
+  /* Neutral, not a second brand colour, so the canvas stays monochrome. */
+  .orb-two {
+    left: 48%;
+    bottom: -18rem;
+    width: 42rem;
+    height: 42rem;
+    background: color-mix(in srgb, var(--color-navy) 5%, transparent);
+  }
+
+  .premium-card {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    border-radius: 1.75rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(247, 244, 238, 0.82)),
+      var(--color-surface);
+    padding: clamp(1.35rem, 3vw, 2rem);
+    box-shadow: var(--shadow-card);
+    border: 1px solid color-mix(in srgb, var(--color-hairline) 80%, transparent);
+    transition:
+      transform 220ms var(--ease-out-soft),
+      box-shadow 220ms var(--ease-out-soft),
+      border-color 220ms var(--ease-out-soft);
+  }
+
+  .premium-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+    border-color: color-mix(in srgb, var(--color-gold) 42%, var(--color-hairline));
+  }
+}
+
+/* ---- Accessibility assistant settings -------------------------------------
+   Applied to <html> by the assistant (and, before first paint, by the inline
+   script in BaseLayout). Each is a plain, low-risk override so a visitor can
+   read and move through the site on their own terms. */
+@layer utilities {
+  /* Text size steps. Scales the rem-based type across the site. */
+  html[data-a11y-text='1'] {
+    font-size: 106.25%;
+  }
+  html[data-a11y-text='2'] {
+    font-size: 112.5%;
+  }
+  html[data-a11y-text='3'] {
+    font-size: 120%;
+  }
+  html[data-a11y-text='4'] {
+    font-size: 131.25%;
+  }
+
+  /* Higher contrast: darker secondary text and borders, cleaner backgrounds.
+     Overriding the tokens re-colours every utility that reads them. */
+  .a11y-high-contrast {
+    --color-ink: #0a1020;
+    --color-slate: #333c4f;
+    --color-hairline: #8b93a6;
+    --color-paper: #ffffff;
+    --color-paper-shade: #eceef3;
+  }
+  .a11y-high-contrast body {
+    color: #0a1020;
+  }
+
+  /* Clearer links: underline them everywhere, including nav and card links. */
+  .a11y-highlight-links a {
+    text-decoration: underline !important;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.16em;
+  }
+
+  /* Stronger focus: a heavier, high-contrast ring on any focused control. */
+  .a11y-strong-focus :focus-visible {
+    outline: 3px solid var(--color-navy) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 5px var(--color-gold) !important;
+    border-radius: 4px;
+  }
+
+  /* Reduced motion on request: neutralise animation and transitions, matching
+     the prefers-reduced-motion behaviour. */
+  .a11y-reduce-motion,
+  .a11y-reduce-motion *,
+  .a11y-reduce-motion *::before,
+  .a11y-reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .a11y-reduce-motion .js .reveal,
+  .a11y-reduce-motion .js .reveal.is-visible,
+  .a11y-reduce-motion .js .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
+/* On dark surfaces (primarily the header and any deliberate dark feature) the one
+   strong action is deep brass with white text: the single warm accent that pops
+   against the dark, earned rather than loud. It keeps white text on hover and
+   deepens its shadow to lift; the brass is held dark enough (a darkened form of
+   #A9822E) that white stays above AA. Ghost actions switch to a quiet ivory
+   outline. Left unlayered so these win over the button utilities. */
+.on-dark .btn-primary {
+  /* Deep brass with white text clears AA (~5.1:1). A translucent champagne edge
+     and a soft drop shadow give the one action a premium lift. */
+  background-color: #8a6824;
+  color: #ffffff;
+  border: 1px solid rgba(214, 195, 138, 0.45);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+.on-dark .btn-primary:hover {
+  /* A touch brighter, still dark enough that white holds AA (~4.8:1); the
+     deepened shadow does most of the lift. White text kept, per the brief:
+     accessibility over appearance. */
+  background-color: #8f6d1e;
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+.on-dark .btn-ghost {
+  color: var(--color-paper);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+.on-dark .btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+/*
+ * THE PAGE BEHIND A MODAL DOES NOT SCROLL.
+ *
+ * `showModal()` makes the background inert to clicks and to the tab order, but
+ * a wheel or a trackpad still scrolls the document underneath, so the context
+ * a modal exists to hold slides away while somebody fills in a form. The class
+ * is added by CmsOverlayScript while any dialog is open and removed when the
+ * last one closes.
+ *
+ * `scrollbar-gutter` rather than a padding compensation: reserving the gutter
+ * on <html> at all times means removing the scrollbar does not shift the whole
+ * layout sideways by 15px as the modal opens, which is the jump this class
+ * would otherwise introduce while fixing the scroll.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+html.cms-overlay-open {
+  overflow: hidden;
+}
+
+/* Compact public-site rhythm; product workspace tokens remain independent. */
+:root {
+  --marketing-section-padding: clamp(1.5rem, 2.5vw, 2rem);
+  --marketing-footer-padding: 0.5rem;
+}
+
+/* ---- Ceramic Ink ---------------------------------------------------------
+   Public marketing pages only. Ceramic white provides the reading field;
+   deep ink anchors navigation and type; aged brass is the only accent.
+   Product workspaces keep their own namespaced systems. */
+.marketing-shell.ceramic-ink {
+  color-scheme: light;
+
+  --color-obsidian: #041528;
+  --color-header-bg: #071d35;
+  --color-header-veil: #0c2946;
+  --color-demo-button-bg: #071d35;
+  --color-navy: #071d35;
+  --color-navy-deep: #041528;
+  --color-ink: #17283b;
+  --color-graphite: #31465b;
+  --color-slate: #56616d;
+  --color-ivory: #f7f5f0;
+  --color-porcelain: #ffffff;
+  --color-stone: #e9e5dd;
+  --color-hairline: #d7d2c8;
+  --color-control-border: #737e89;
+  --color-paper: #f7f5f0;
+  --color-surface: #ffffff;
+  --color-paper-shade: #efede7;
+  --color-brass: #b78b32;
+  --color-brass-deep: #7b5c1d;
+  --color-brass-soft: #e4d2a4;
+  --color-brass-on-dark: #d1aa58;
+  --color-gold: #7b5c1d;
+  --color-gold-deep: #73561b;
+  --color-champagne: #e4d2a4;
+  --color-blue: #244660;
+  --color-blue-deep: #102f49;
+  --color-hero-ivory: #f5f1e8;
+
+  background-color: #f7f5f0;
+  background-image:
+    radial-gradient(circle at 88% 7%, rgba(7, 29, 53, 0.045), transparent 30rem),
+    linear-gradient(180deg, #ffffff 0%, #f8f7f3 68%, #f2f0ea 100%);
+  background-attachment: fixed;
+}
+
+/* The navigation is a slim paper landmark. A small amount of translucency and
+   blur keeps text legible as content passes underneath the sticky bar. */
+.marketing-shell.ceramic-ink > header,
+.marketing-shell.ceramic-ink #mobile-menu {
+  background: color-mix(in srgb, #faf8f3 95%, transparent);
+  backdrop-filter: blur(14px) saturate(112%);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
+  box-shadow: 0 1px 0 rgba(7, 29, 53, 0.06);
+}
+
+.marketing-shell.ceramic-ink .desktop-nav-menu > div {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 20px 50px rgba(7, 29, 53, 0.12);
+}
+
+/* Homepage-only navigation overlays the dark hero. Other pages retain the
+   existing paper header. A single observer toggles .is-scrolled after 24px. */
+.marketing-shell.ceramic-ink > header.site-header--home {
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  transition:
+    background-color 180ms var(--ease-out-soft),
+    border-color 180ms var(--ease-out-soft);
+}
+
+.marketing-shell.ceramic-ink > header.site-header--home.is-scrolled {
+  background: var(--color-navy);
+  border-color: color-mix(in srgb, var(--color-hero-ivory) 14%, transparent);
+}
+
+.marketing-shell.ceramic-ink > header.site-header--home .btn-primary {
+  min-height: 3.25rem;
+  padding-inline: 1.75rem;
+  border-radius: 6px;
+  border-color: transparent;
+  background: var(--color-brass-on-dark);
+  color: var(--color-navy);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.marketing-shell.ceramic-ink > header.site-header--home .btn-primary:hover {
+  background: color-mix(in srgb, var(--color-brass-on-dark) 94%, white);
+  color: var(--color-navy);
+  transform: translateY(-1px);
+}
+
+.marketing-shell.ceramic-ink > header.site-header--home .btn-primary:focus-visible {
+  outline: 2px solid var(--color-hero-ivory);
+  outline-offset: 3px;
+}
+
+.home-hero-page .a11y {
+  bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.marketing-shell.ceramic-ink .ceramic-hero {
+  background:
+    radial-gradient(circle at 50% 92%, rgba(7, 29, 53, 0.045), transparent 28rem),
+    #faf8f3;
+}
+
+.marketing-shell.ceramic-ink .hero-luxe {
+  background: #faf8f3;
+}
+
+.marketing-shell.ceramic-ink main > .bg-surface:not(.ceramic-hero) {
+  background:
+    radial-gradient(circle at 94% 12%, rgba(7, 29, 53, 0.025), transparent 24rem), #ffffff;
+}
+
+.marketing-shell.ceramic-ink .navy-rich {
+  background-color: #071d35;
+  background-image:
+    radial-gradient(100% 135% at 72% -30%, rgba(255, 255, 255, 0.1), transparent 58%),
+    linear-gradient(180deg, #0b2a49 0%, #071d35 100%);
+}
+
+
+/* Homepage product proof: a captured Assurance OS trace view, not an
+   illustrative KPI card. The image is the hero's only load animation. */
+.hero-product-frame {
+  box-shadow: 0 30px 80px rgba(7, 29, 53, 0.15);
+}
+
+.hero-product-shot {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: hero-product-in 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes hero-product-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 639px) {
+  .hero-product-frame {
+    max-height: clamp(9rem, 42vw, 13rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-product-shot {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* Glass is selective: raised cards only, never navigation or reading fields. */
+.marketing-shell.ceramic-ink .premium-card,
+.marketing-shell.ceramic-ink .rounded-card:is(.bg-surface, .bg-paper) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(244, 242, 236, 0.88)),
+    rgba(255, 255, 255, 0.9);
+  border-color: rgba(101, 145, 176, 0.24);
+  backdrop-filter: blur(18px) saturate(112%);
+  -webkit-backdrop-filter: blur(18px) saturate(112%);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.94),
+    0 18px 46px rgba(7, 29, 53, 0.08);
+}
+
+.marketing-shell.ceramic-ink .premium-card:hover,
+.marketing-shell.ceramic-ink .rounded-card:is(.bg-surface, .bg-paper):hover {
+  border-color: rgba(7, 29, 53, 0.32);
+  box-shadow:
+    inset 0 1px #ffffff,
+    0 24px 58px rgba(7, 29, 53, 0.12);
+}
+
+.marketing-shell.ceramic-ink .btn-primary {
+  background: #071d35;
+  color: #ffffff;
+  border-color: rgba(183, 139, 50, 0.55);
+}
+
+.marketing-shell.ceramic-ink .btn-primary:hover {
+  background: #102f49;
+  color: #ffffff;
+}
+
+/* Header and hero use the same primary-action treatment. */
+.marketing-shell.ceramic-ink > header .btn-primary {
+  background: #071d35;
+  color: #ffffff;
+  border-color: rgba(7, 29, 53, 0.25);
+  box-shadow: 0 8px 22px rgba(7, 29, 53, 0.12);
+}
+
+.marketing-shell.ceramic-ink > header .btn-primary:hover {
+  background: #102f49;
+  color: #ffffff;
+}
+
+.marketing-shell.ceramic-ink .btn-secondary,
+.marketing-shell.ceramic-ink .btn-ghost {
+  color: #071d35;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: inset 0 0 0 1px var(--color-control-border);
+}
+
+.marketing-shell.ceramic-ink .btn-secondary:hover,
+.marketing-shell.ceramic-ink .btn-ghost:hover {
+  color: #041528;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(7, 29, 53, 0.45);
+}
+
+/* Dark chrome always receives a local pearl foreground reset. */
+.marketing-shell.ceramic-ink .on-dark {
+  --color-paper: #f7fbfe;
+  --color-surface: #ffffff;
+  --color-navy: #071d35;
+}
+
+.marketing-shell.ceramic-ink .grain::after {
+  opacity: 0.035;
+}
+
+/* User-selected high contrast remains authoritative over the theme. */
+.a11y-high-contrast .marketing-shell.ceramic-ink {
+  --color-navy: #06172b;
+  --color-ink: #06172b;
+  --color-slate: #27394c;
+  --color-paper: #ffffff;
+  --color-surface: #ffffff;
+  --color-paper-shade: #edf3f7;
+  --color-stone: #e2e9ee;
+  --color-hairline: #617386;
+  --color-control-border: #56697d;
+  --color-blue: #073f6b;
+  --color-blue-deep: #062f50;
+  background: #ffffff;
+}

@@ -18,7 +18,7 @@ import {
   uploadFailureMessage,
   uploadLogLine,
   uploadPercent,
-} from '../../src/lib/grc/storage/uploadFeedback.ts';
+} from '../src/lib/grc/storage/uploadFeedback.ts';
 
 const ORIGIN = 'https://grc.murikah.com';
 

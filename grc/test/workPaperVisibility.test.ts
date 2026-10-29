@@ -11,8 +11,8 @@ import {
   restrictToOwnFindings,
   seesForeignDrafts,
   type WorkPaperViewer,
-} from '../../src/lib/grc/repos/workPaperVisibility.ts';
-import { UNCONFINED } from '../../src/lib/grc/auth/affiliateScope.ts';
+} from '../src/lib/grc/repos/workPaperVisibility.ts';
+import { UNCONFINED } from '../src/lib/grc/auth/affiliateScope.ts';
 
 const viewer = (over: Partial<WorkPaperViewer>): WorkPaperViewer => ({
   userId: 'U1',

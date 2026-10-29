@@ -1,0 +1,117 @@
+---
+/**
+ * Administration: a settings environment, chunked.
+ *
+ * TWELVE DESTINATIONS AT EQUAL WEIGHT IS TWELVE DECISIONS. It rendered as one
+ * flat list of identical rows, so finding Users meant reading Users, and so
+ * did finding AI, and Hick's law charges for the other eleven whether or not
+ * the reader wanted any of them. Four groups of two to five is a glance, and
+ * the group headings carry the information scent the row labels alone could
+ * not: a person looking for Access review now knows to read People & access
+ * rather than all twelve.
+ *
+ * NOTHING WAS REMOVED. Every destination this page has ever offered is still
+ * here, at the same route, behind the same permission. The change is which
+ * heading it sits under and, for exactly one of them, how prominent it is.
+ *
+ * ADVANCED IS LAST AND HOLDS THE DESIGN REFERENCE. A component gallery is
+ * developer tooling; presenting it beside Users implies an operator should
+ * treat the two as comparable administrative surfaces. It stays reachable,
+ * keeps its route and its permission, and is collapsed by default so it is one
+ * press away rather than in the way.
+ *
+ * THE LIST IS NOT WRITTEN HERE. It is the Administration slice of
+ * @hasscms/lib/cms/destinations, which the rail and page search read too, so a
+ * destination cannot be searchable and unlisted or listed and unsearchable.
+ * Each entry is shown only to somebody who could actually use it — presentation
+ * and not access control: the workspace behind Organisation checks the
+ * permission for itself, and every endpoint under it refuses a caller who lacks
+ * it whether or not this page ever rendered a link.
+ */
+import CmsLayout from '@hasscms/layouts/CmsLayout.astro';
+import CmsPageHeader from '@hasscms/components/cms/CmsPageHeader.astro';
+import CmsCard from '@hasscms/components/cms/CmsCard.astro';
+import CmsIcon from '@hasscms/components/cms/CmsIcon.astro';
+import { adminGroups, type CmsDestination } from '@hasscms/lib/cms/destinations';
+
+// Rendered on the server for every request, never prerendered. Without this the
+// page is baked at build time and the permission check below runs once during
+// the build rather than per request.
+export const prerender = false;
+
+const permissions = Astro.locals.cms?.user.permissions ?? [];
+const groups = adminGroups(permissions);
+
+/**
+ * Advanced is the one group that opens closed.
+ *
+ * Everything above it is administration somebody came here to do. This is
+ * tooling, and progressive disclosure means the reader chooses to see it
+ * rather than scrolling past it every time.
+ */
+const isAdvanced = (group: string) => group === 'Advanced';
+---
+
+<CmsLayout title="Administration">
+  <CmsPageHeader
+    title="Administration"
+    crumbs={[{ label: 'Home', href: '/app' }, { label: 'Administration' }]}
+  />
+
+  {
+    groups.length === 0 ? (
+      <CmsCard>
+        <p class="text-cms-body-sm text-cms-muted">
+          You do not hold any administration permission, so there is nothing here for you to
+          configure. Ask a system administrator if you believe that is wrong.
+        </p>
+      </CmsCard>
+    ) : (
+      <div class="flex flex-col gap-6">
+        {groups.map((section) => {
+          const rows = (
+            <div class="overflow-hidden rounded-cms-lg border border-cms-line bg-cms-surface">
+              {section.entries.map((entry: CmsDestination) => (
+                <a
+                  href={entry.href}
+                  class="group flex items-center gap-4 border-b border-cms-line px-5 py-4 outline-none last:border-0 hover:bg-cms-sunken focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+                >
+                  <span class="min-w-0 flex-1 text-cms-card font-semibold text-cms-navy">
+                    {entry.label}
+                  </span>
+                  <CmsIcon
+                    name="chevronRight"
+                    size={17}
+                    class="shrink-0 text-cms-muted group-hover:text-cms-royal"
+                  />
+                </a>
+              ))}
+            </div>
+          );
+
+          /*
+            A NATIVE DISCLOSURE, so Advanced works from the keyboard, is
+            announced as one, and needs no script. The groups above it are
+            headings rather than controls: a label either does something when
+            pressed or does not look as though it might.
+          */
+          return isAdvanced(section.group) ? (
+            <details class="flex flex-col gap-2">
+              <summary class="cursor-pointer text-cms-caption font-semibold tracking-wide text-cms-muted uppercase outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                {section.group}
+              </summary>
+              <div class="mt-2">{rows}</div>
+            </details>
+          ) : (
+            <section class="flex flex-col gap-2">
+              <h2 class="text-cms-caption font-semibold tracking-wide text-cms-muted uppercase">
+                {section.group}
+              </h2>
+              {rows}
+            </section>
+          );
+        })}
+      </div>
+    )
+  }
+</CmsLayout>

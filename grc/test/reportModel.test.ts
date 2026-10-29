@@ -11,7 +11,7 @@ import type {
   ActionPlan,
   Observation,
   ReportDataset,
-} from '../../src/lib/grc/reports/reportTypes.ts';
+} from '../src/lib/grc/reports/reportTypes.ts';
 import {
   buildReport,
   parseReportFilters,
@@ -22,7 +22,7 @@ import {
   applyModelFilters,
   defaultDateRange,
   splitRecommendations,
-} from '../../src/lib/grc/reports/reportModel.ts';
+} from '../src/lib/grc/reports/reportModel.ts';
 
 const NOW = new Date('2026-07-04T00:00:00Z');
 

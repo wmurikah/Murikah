@@ -21,7 +21,7 @@ import {
   PLATFORM_DEFAULT_ORG,
   selectScopedRows,
   type ScopedMatrixRow,
-} from '../../src/lib/grc/auth/matrix.ts';
+} from '../src/lib/grc/auth/matrix.ts';
 
 const auditor = buildMatrix([
   { moduleCode: 'WORK_PAPER', actionCode: 'read', isAllowed: true },
