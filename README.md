@@ -6,8 +6,8 @@ Five independently built systems live in this repository:
 | --- | --- | --- |
 | [HomeWeb](HomeWeb/) | Public website and marketing | murikah.com |
 | [HassCMS](HassCMS/) | Hass customer operations | cms.murikah.com |
-| [engr](engr/) | Engineering Rhythm | engr.murikah.com |
-| [grc](grc/) | Audit and risk | grc.murikah.com |
+| [Engr](Engr/) | Engineering Rhythm | engr.murikah.com |
+| [GRC](GRC/) | Audit and risk | grc.murikah.com |
 | [Tutor](Tutor/) | AI learning and virtual internships | tutor.murikah.com |
 
 Each system owns its source, documentation, database tooling, assets, dependencies, configuration and tests. Generic helpers needed by multiple systems have local copies, so building a system does not require another system's checkout or package tree. Product documentation is kept inside its folder; there is no root application, docs directory, shared dependency installation or compatibility symlink.
@@ -16,7 +16,7 @@ GitHub Actions entry points remain in `.github/workflows/`, as required by GitHu
 
 ## Development
 
-For HomeWeb, HassCMS, engr or grc, enter that directory and run:
+For HomeWeb, HassCMS, Engr or GRC, enter that directory and run:
 
 ```sh
 pnpm install --frozen-lockfile
