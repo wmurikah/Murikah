@@ -13,7 +13,7 @@
  * WHAT IT CHECKS, MECHANICALLY. Every `sql:` template in the GRC source is
  * parsed for the tables it names after FROM, JOIN, UPDATE and INSERT INTO, and
  * for every `alias.column` whose alias that statement binds to a table. Each is
- * looked up in the committed dictionary (`grc/db/schema.md`, the same source the
+ * looked up in the committed dictionary (`db/schema.md`, the same source the
  * typed columns and the smoke database are generated from). A table or column
  * that is not there fails here, in CI, rather than in production.
  *
@@ -32,10 +32,10 @@ import { seedDatabase } from './smoke/seed.ts';
 import {
   WORK_PAPER_ENUM_TYPE,
   enumTypeForEntity,
-} from '../../src/lib/grc/workflow/workPaperActions.ts';
+} from '../src/lib/grc/workflow/workPaperActions.ts';
 
-const REPO = join(import.meta.dirname, '..', '..');
-const SCHEMA_MD = join(REPO, 'grc', 'db', 'schema.md');
+const REPO = join(import.meta.dirname, '..');
+const SCHEMA_MD = join(REPO, 'db', 'schema.md');
 
 /** The GRC source that talks to the database. */
 const ROOTS = [
@@ -218,7 +218,7 @@ test('every column a migration adds is recorded in the committed schema', () => 
   // never learned about leaves the typed layer, the smoke database and the live
   // one disagreeing, which is how the round_number fault arrived.
   const schema = parseSchema(SCHEMA_MD);
-  const dir = join(REPO, 'grc', 'db', 'migrations');
+  const dir = join(REPO, 'db', 'migrations');
   const findings: Finding[] = [];
   for (const name of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
     const sql = readFileSync(join(dir, name), 'utf8').replace(/^\s*--.*$/gm, '');
@@ -248,7 +248,7 @@ test('every table a migration creates has the column list the dictionary records
   // another. The ALTER check above only ever saw columns added to a table that
   // already existed.
   const schema = parseSchema(SCHEMA_MD);
-  const dir = join(REPO, 'grc', 'db', 'migrations');
+  const dir = join(REPO, 'db', 'migrations');
   const findings: Finding[] = [];
   for (const name of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
     const sql = readFileSync(join(dir, name), 'utf8').replace(/^\s*--.*$/gm, '');

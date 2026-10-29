@@ -13,16 +13,16 @@ import {
   EMAIL_MAX_FAILURES,
   IP_MAX_FAILURES,
   THROTTLE_WINDOW_MINUTES,
-} from '../../src/lib/grc/auth/loginThrottle.ts';
-import { authenticatorAllowedForRole } from '../../src/lib/grc/auth/mfaPolicy.ts';
+} from '../src/lib/grc/auth/loginThrottle.ts';
+import { authenticatorAllowedForRole } from '../src/lib/grc/auth/mfaPolicy.ts';
 import {
   sessionLiveness,
   SESSION_IDLE_SECONDS,
   SESSION_TOUCH_INTERVAL_SECONDS,
-} from '../../src/lib/grc/auth/sessionRules.ts';
-import { seal, open } from '../../src/lib/grc/auth/secretBox.ts';
-import { otpauthUrl } from '../../src/lib/grc/auth/otpauth.ts';
-import { totpAt, verifyTotp } from '../../src/lib/shared/totp.ts';
+} from '../src/lib/grc/auth/sessionRules.ts';
+import { seal, open } from '../src/lib/grc/auth/secretBox.ts';
+import { otpauthUrl } from '../src/lib/grc/auth/otpauth.ts';
+import { totpAt, verifyTotp } from '../src/lib/shared/totp.ts';
 
 const SECRET_B64 = Buffer.from('a-32-byte-secret-for-unit-tests!').toString('base64');
 

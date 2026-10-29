@@ -17,7 +17,7 @@ import {
   OTP_RESEND_COOLDOWN_MS,
   OTP_MAX_ATTEMPTS,
   type EmailOtpChallenge,
-} from '../../src/lib/grc/auth/emailOtp.ts';
+} from '../src/lib/grc/auth/emailOtp.ts';
 import {
   parseMfaRecord,
   canStartEnrolment,
@@ -27,8 +27,8 @@ import {
   withEmailDefault,
   switchToEmailRecord,
   type MfaRecord,
-} from '../../src/lib/grc/auth/mfaRecord.ts';
-import { buildOtpEmail } from '../../src/lib/grc/notify/render.ts';
+} from '../src/lib/grc/auth/mfaRecord.ts';
+import { buildOtpEmail } from '../src/lib/grc/notify/render.ts';
 
 const NOW = 1_754_000_000_000;
 

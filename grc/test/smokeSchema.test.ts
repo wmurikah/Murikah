@@ -2,7 +2,7 @@
  * The smoke database enforces its constraints (Build Prompt 43).
  *
  * This is the test that would have caught the role-save failure before it
- * shipped. The smoke schema is generated from `grc/db/schema.md`, a column
+ * shipped. The smoke schema is generated from `db/schema.md`, a column
  * dictionary that records no keys, so every table used to be created with bare
  * untyped columns: no foreign key, NOT NULL or CHECK violation could be raised,
  * and a write the live database refuses passed the smoke run (audit finding
@@ -21,7 +21,7 @@ import {
   PERMISSION_ACTIONS,
   PERMISSION_MODULES,
   PLATFORM_DEFAULT_ORG,
-} from '../../src/lib/grc/auth/permissionModules.ts';
+} from '../src/lib/grc/auth/permissionModules.ts';
 
 const SCHEMA_MD = join(import.meta.dirname, '..', 'db', 'schema.md');
 

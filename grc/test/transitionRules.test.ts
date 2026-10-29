@@ -11,7 +11,7 @@ import {
   evaluateTransition,
   allowedNextStatuses,
   type TransitionRule,
-} from '../../src/lib/grc/workflow/transitionRules.ts';
+} from '../src/lib/grc/workflow/transitionRules.ts';
 
 // A small work-paper-like workflow: DRAFT -> IN_REVIEW -> APPROVED, with a
 // reviewer-only approval that needs a comment, and a reject back to DRAFT.

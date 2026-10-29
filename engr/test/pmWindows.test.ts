@@ -16,7 +16,7 @@ import {
   decidePmActions,
   staleStamps,
   nextDueDate,
-} from '../../src/lib/engr/time.ts';
+} from '../src/lib/engr/time.ts';
 
 const clear = { notified1mAt: null, notified2wAt: null, allocated: false };
 

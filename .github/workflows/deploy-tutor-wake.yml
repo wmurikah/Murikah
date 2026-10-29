@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "tutor/wake-worker/**"
+      - "Tutor/wake-worker/**"
       - ".github/workflows/deploy-tutor-wake.yml"
   workflow_dispatch: {}
 
@@ -36,11 +36,11 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
       - name: Install wake worker dependencies
-        working-directory: tutor/wake-worker
-        run: npm install --no-audit --no-fund
+        working-directory: Tutor/wake-worker
+        run: npm ci --no-audit --no-fund
 
       - name: Deploy with Wrangler
-        working-directory: tutor/wake-worker
+        working-directory: Tutor/wake-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -14,7 +14,7 @@ import {
   checkActionPlanInput,
   safeReturnPath,
   PRIORITIES,
-} from '../../src/lib/grc/repos/actionPlanInput.ts';
+} from '../src/lib/grc/repos/actionPlanInput.ts';
 
 /** The transition endpoint's binding of the shared guard. */
 const safeReturnTo = (raw: string | null, id: string): string =>

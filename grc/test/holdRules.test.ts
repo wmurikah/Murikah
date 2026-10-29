@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { holdCovers, holdFilterFor } from '../../src/lib/grc/repos/holdRules.ts';
+import { holdCovers, holdFilterFor } from '../src/lib/grc/repos/holdRules.ts';
 
 test('a single-entity hold covers exactly that entity', () => {
   const filter = holdFilterFor('work_paper', 'WP-1');

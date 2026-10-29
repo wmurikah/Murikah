@@ -12,14 +12,14 @@ import {
   buildGraphMessage,
   OUTLOOK_REDIRECT_URI,
   GRAPH_SCOPE,
-} from '../../src/lib/grc/notify/graph.ts';
+} from '../src/lib/grc/notify/graph.ts';
 import {
   parseMailConnection,
   rotatedMailRecord,
   staleMailRecord,
   type MailConnectionRecord,
-} from '../../src/lib/grc/notify/mailRecord.ts';
-import { seal, open } from '../../src/lib/grc/auth/secretBox.ts';
+} from '../src/lib/grc/notify/mailRecord.ts';
+import { seal, open } from '../src/lib/grc/auth/secretBox.ts';
 
 test('the authorize URL targets the consumers endpoint with the delegated scopes', () => {
   const url = new URL(authorizeUrl('client-123', 'sealed-state'));

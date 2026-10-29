@@ -11,9 +11,9 @@ import {
   extractJson,
   maskKey,
   AI_DISCLAIMER,
-} from '../../src/lib/grc/ai/validation.ts';
-import { buildRequest, parseResponse } from '../../src/lib/grc/ai/providers.ts';
-import { validateActionPlanPrompt, workPaperInsightsPrompt } from '../../src/lib/grc/ai/prompts.ts';
+} from '../src/lib/grc/ai/validation.ts';
+import { buildRequest, parseResponse } from '../src/lib/grc/ai/providers.ts';
+import { validateActionPlanPrompt, workPaperInsightsPrompt } from '../src/lib/grc/ai/prompts.ts';
 
 const NOW = new Date('2026-07-05T00:00:00Z');
 

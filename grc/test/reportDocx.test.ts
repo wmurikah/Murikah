@@ -6,14 +6,14 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ReportDocument } from '../../src/lib/grc/reports/reportTypes.ts';
+import type { ReportDocument } from '../src/lib/grc/reports/reportTypes.ts';
 import {
   reportDocumentParts,
   documentXml,
   reportFilename,
   esc,
-} from '../../src/lib/grc/reports/docx/wordml.ts';
-import { makeZip, crc32 } from '../../src/lib/grc/reports/docx/zip.ts';
+} from '../src/lib/grc/reports/docx/wordml.ts';
+import { makeZip, crc32 } from '../src/lib/grc/reports/docx/zip.ts';
 
 function sampleDoc(): ReportDocument {
   return {

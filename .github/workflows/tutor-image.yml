@@ -3,13 +3,11 @@ name: Build Murikah Tutor image
 on:
   push:
     paths:
-      - "tutor/**"
-      - "docs/images/murikah_6.png"
+      - "Tutor/**"
       - ".github/workflows/tutor-image.yml"
   pull_request:
     paths:
-      - "tutor/**"
-      - "docs/images/murikah_6.png"
+      - "Tutor/**"
       - ".github/workflows/tutor-image.yml"
   workflow_dispatch:
 
@@ -40,24 +38,23 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check origin/main...HEAD
-          python tutor/scripts/preflight.py
-          python tutor/cloudflare/preflight.py
+          python Tutor/scripts/preflight.py
+          python Tutor/cloudflare/preflight.py
 
       - name: Validate Cloudflare Worker bundle
         shell: bash
         run: |
           set -euo pipefail
-          npm install --prefix tutor/cloudflare --no-audit --no-fund
-          npm --prefix tutor/cloudflare run check
+          npm ci --prefix Tutor/cloudflare --no-audit --no-fund
+          npm --prefix Tutor/cloudflare run check
 
       - name: Compute Tutor source revision
         id: revision
         shell: bash
         run: |
           set -euo pipefail
-          tutor_tree="$(git rev-parse HEAD:tutor)"
-          logo_blob="$(git rev-parse HEAD:docs/images/murikah_6.png)"
-          source_revision="${tutor_tree}-${logo_blob}"
+          tutor_tree="$(git rev-parse HEAD:Tutor)"
+          source_revision="${tutor_tree}"
           echo "value=${source_revision}" >> "$GITHUB_OUTPUT"
           echo "Tutor source revision: ${source_revision}"
 
@@ -78,9 +75,9 @@ jobs:
           docker build \
             --build-arg "MURIKAH_CLOUDFLARE_IMAGE_REV=${SOURCE_REVISION}" \
             --label "com.murikah.tutor.source-revision=${SOURCE_REVISION}" \
-            --file tutor/Dockerfile.railway \
+            --file Tutor/Dockerfile.railway \
             --tag "${IMAGE}:source-${SOURCE_REVISION}" \
-            .
+            Tutor
           actual_revision="$(docker image inspect -f '{{ index .Config.Labels "com.murikah.tutor.source-revision" }}' "${IMAGE}:source-${SOURCE_REVISION}")"
           test "$actual_revision" = "$SOURCE_REVISION"
 
@@ -106,7 +103,7 @@ jobs:
           set -euo pipefail
           cf_source="murikah-tutor:source-${SOURCE_REVISION}"
           docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${cf_source}"
-          tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_source}" --config tutor/cloudflare/wrangler.toml
+          Tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_source}" --config Tutor/cloudflare/wrangler.toml
 
       - name: Deploy and verify exact Tutor release
         if: github.ref == 'refs/heads/main'
@@ -117,8 +114,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm --prefix tutor/cloudflare run deploy:release
-          npm --prefix tutor/cloudflare run smoke:staging
+          npm --prefix Tutor/cloudflare run deploy:release
+          npm --prefix Tutor/cloudflare run smoke:staging
 
       - name: Advance last-known-good aliases
         if: github.ref == 'refs/heads/main'
@@ -132,6 +129,6 @@ jobs:
           set -euo pipefail
           cf_main="murikah-tutor:main"
           docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${cf_main}"
-          tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_main}" --config tutor/cloudflare/wrangler.toml
+          Tutor/cloudflare/node_modules/.bin/wrangler containers push "${cf_main}" --config Tutor/cloudflare/wrangler.toml
           docker tag "${IMAGE}:source-${SOURCE_REVISION}" "${IMAGE}:main"
           docker push "${IMAGE}:main"

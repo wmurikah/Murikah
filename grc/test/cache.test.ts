@@ -18,7 +18,7 @@ import {
   namespaceFor,
   CACHE_TTL,
   PLATFORM_NAMESPACE,
-} from '../../src/lib/grc/cache/keys.ts';
+} from '../src/lib/grc/cache/keys.ts';
 import {
   encodeEnvelope,
   decodeEnvelope,
@@ -26,15 +26,15 @@ import {
   addCounters,
   parseCounters,
   hitRate,
-} from '../../src/lib/grc/cache/envelope.ts';
-import { MemoryCache } from '../../src/lib/grc/cache/memory.ts';
-import { UpstashCache } from '../../src/lib/grc/cache/upstash.ts';
+} from '../src/lib/grc/cache/envelope.ts';
+import { MemoryCache } from '../src/lib/grc/cache/memory.ts';
+import { UpstashCache } from '../src/lib/grc/cache/upstash.ts';
 import {
   cacheAsideWith,
   invalidateKeysWith,
   invalidatePrefixesWith,
   LOCAL_MAX_TTL_SECONDS,
-} from '../../src/lib/grc/cache/core.ts';
+} from '../src/lib/grc/cache/core.ts';
 
 const HASS = 'org-hass';
 const OTHER = 'org-other';

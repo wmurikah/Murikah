@@ -18,7 +18,7 @@ import {
   isPublicAppPath,
   isEngrApiPath,
   routeDecision,
-} from '../../src/lib/engr/routing.ts';
+} from '../src/lib/engr/routing.ts';
 
 const req = (host: string | null, url = 'https://example.com/login'): Request =>
   new Request(url, host === null ? undefined : { headers: { host } });
