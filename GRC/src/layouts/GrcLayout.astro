@@ -337,7 +337,10 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
           el.hidden = n === 0;
         });
       };
+      let refreshing = false;
       const refresh = async (): Promise<void> => {
+        if (document.hidden || refreshing) return;
+        refreshing = true;
         try {
           const res = await fetch('/api/sidebar-counts', {
             headers: { accept: 'application/json' },
@@ -345,6 +348,8 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
           if (res.ok) applyCounts(await res.json());
         } catch {
           // best-effort; the server-rendered counts stand
+        } finally {
+          refreshing = false;
         }
       };
       setInterval(refresh, 60000);

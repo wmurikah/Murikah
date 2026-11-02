@@ -273,13 +273,20 @@ def recycle_tutor_application() -> None:
 def fetch_json(base: str, path: str, *, timeout: float) -> dict[str,Any]:
     separator="&" if "?" in path else "?"
     url=f"{base.rstrip('/')}{path}{separator}deploy_check={time.time_ns()}"
-    request=Request(url,headers={"accept":"application/json","cache-control":"no-cache","user-agent":"Murikah-Tutor-Deploy-Verification/1.0"})
+    is_action = path in ("/__muri/wake", "/__muri/container-diagnostics")
+    request=Request(url, method="POST" if is_action else "GET",
+        headers={"accept":"application/json","cache-control":"no-cache",
+                 "origin":base.rstrip('/'),"user-agent":"Murikah-Tutor-Deploy-Verification/1.0"})
     with urlopen(request,timeout=timeout) as response:
         payload=json.loads(response.read().decode("utf-8"))
     if not isinstance(payload,dict): raise RuntimeError(f"unexpected JSON payload from {base}{path}")
     return payload
 
 def runtime_revision_payload(base: str, *, timeout: float=20.0) -> dict[str,Any]:
+    # Deployment verification is an explicit operator action, unlike monitoring.
+    status = fetch_json(base, "/__muri/runtime-status", timeout=timeout)
+    if not status.get("running"):
+        fetch_json(base, "/__muri/wake", timeout=timeout)
     return fetch_json(base, "/__muri/runtime-revision", timeout=timeout)
 
 def wait_for_runtime_revision(

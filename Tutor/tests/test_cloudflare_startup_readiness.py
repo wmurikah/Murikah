@@ -84,7 +84,7 @@ class CloudflareStartupReadinessTests(unittest.TestCase):
         text = smoke.read_text(encoding="utf-8")
         self.assertIn("def wait_for_ownership_reconciliation()", text)
         self.assertIn("MURIKAH_TUTOR_OWNERSHIP_TIMEOUT", text)
-        ready = text.index('if parsed.get("ready") is True:')
+        ready = text.index('if parsed.get("ready") is True and revision_verified:')
         ownership = text.index("wait_for_ownership_reconciliation()", ready)
         self.assertGreater(ownership, ready)
 

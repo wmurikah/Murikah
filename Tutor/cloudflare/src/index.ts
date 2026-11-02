@@ -1929,8 +1929,9 @@ export class TutorContainer extends Container<TutorEnv> {
 
     let startError = '';
     try {
-      this.ctx.container.start({
-        env: runtimeEnv,
+      // Use the SDK lifecycle so startup arms idle alarms and monitoring.
+      await this.start({
+        envVars: runtimeEnv,
         enableInternet: true,
         entrypoint: [CLOUDFLARE_ENTRYPOINT],
       });
@@ -1954,6 +1955,20 @@ export class TutorContainer extends Container<TutorEnv> {
       error: status.error || (status.running ? undefined : startError || undefined),
       workerSecretConfigured: true,
     };
+  }
+
+  // A status/proxy race must never auto-start without the configured runtime env.
+  override async fetch(request: Request): Promise<Response> {
+    if (!this.ctx.container.running) {
+      return new Response('Tutor is dormant. Open Tutor to resume.', { status: 503 });
+    }
+    return super.fetch(request);
+  }
+
+  override async onActivityExpired(): Promise<void> {
+    console.log('Murikah Tutor idle timeout reached; stopping container');
+    // SIGTERM lets the existing persistence loop perform its final checkpoint.
+    await this.stop();
   }
 
   async runtimeStatus(): Promise<RuntimeStatus> {
@@ -2013,7 +2028,7 @@ export class TutorContainer extends Container<TutorEnv> {
 
     if (this.ctx.container.running) {
       try {
-        this.ctx.container.destroy('Restarting Murikah staging diagnostic');
+        await this.destroy();
       } catch (error) {
         report.preflightDestroyError = errorText(error);
       }
@@ -2024,8 +2039,8 @@ export class TutorContainer extends Container<TutorEnv> {
 
     let startError = '';
     try {
-      this.ctx.container.start({
-        env: runtimeEnv,
+      await this.start({
+        envVars: runtimeEnv,
         enableInternet: true,
         entrypoint: ['/bin/sh', '-c', "trap 'exit 0' TERM INT; while :; do sleep 60; done"],
       });
@@ -2152,7 +2167,7 @@ export class TutorContainer extends Container<TutorEnv> {
     } finally {
       try {
         if (this.ctx.container.running) {
-          this.ctx.container.destroy('Murikah staging diagnostic complete');
+          await this.destroy();
         }
       } catch (error) {
         report.cleanupError = errorText(error);
@@ -2259,14 +2274,36 @@ function workerConfig(runtimeEnv: Record<string, string>, env: TutorEnv): Respon
 }
 
 function startingShell(
-  message = 'Preparing your learning space. You can stay on this page.',
+  message = 'Tutor is dormant to conserve compute. Open it when you are ready to learn.',
+  waiting = false,
 ): Response {
   const safeMessage = message.replace(
     /[<>&]/g,
     (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char] || char,
   );
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}header{height:80px;display:flex;align-items:center;padding:0 clamp(20px,4vw,40px);border-bottom:1px solid #dfe4e6;background:#fff}.brand{border-radius:12px;background:#1E2A30;color:#fff;padding:12px 20px;font-size:18px;font-weight:760}.brand span{color:#C59A39;margin:0 8px}main{width:min(900px,100%);min-height:calc(100dvh - 80px);margin:auto;padding:clamp(28px,5vw,52px) clamp(20px,4vw,40px);display:flex;flex-direction:column}h1{font-size:clamp(26px,4vw,38px);letter-spacing:-.035em;margin:0 0 12px}p{color:#66747b;line-height:1.6;margin:0}.bar{width:min(420px,100%);height:3px;margin-top:22px;border-radius:999px;overflow:hidden;background:#e1e5e7}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:12px;font-size:13px;color:#879298}.composer{margin-top:auto;border:1px solid #d8dee1;border-radius:30px;background:#fff;padding:20px;box-shadow:0 12px 40px rgba(30,42,48,.06)}.prompt{min-height:58px;color:#879298;font-size:18px}.tools{display:flex;align-items:center;justify-content:space-between;color:#66747b}.send{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#e7ebed;color:#1E2A30;font-size:23px}</style></head><body><header><div class="brand">Murikah <span>|</span> Tutor</div></header><main><section><h1>How can I help you learn today?</h1><p id="status">${safeMessage}</p><div class="bar"></div><div class="small" id="small">Preparing your guest workspace…</div></section><div class="composer"><div class="prompt">Ask anything…</div><div class="tools"><span>Chat</span><span class="send">↑</span></div></div></main><script>(function(){let attempts=0;async function check(){attempts++;try{const r=await fetch('/__muri/runtime-status',{cache:'no-store'});const s=await r.json();if(s.ready){location.reload();return;}if(s.workerSecretConfigured===false){document.getElementById('status').textContent='Tutor staging configuration is incomplete.';document.getElementById('small').textContent='The runtime secret binding needs attention.';return;}if(attempts>40){document.getElementById('status').textContent='Tutor is still starting.';document.getElementById('small').textContent='You can stay on this page; it will open automatically.';}}catch(e){}setTimeout(check,attempts<15?750:1500);}check();})();</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Murikah Tutor</title><style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:#f6f7f7;color:#1E2A30;font-family:Inter,system-ui,sans-serif}header{height:80px;display:flex;align-items:center;padding:0 clamp(20px,4vw,40px);border-bottom:1px solid #dfe4e6;background:#fff}.brand{border-radius:12px;background:#1E2A30;color:#fff;padding:12px 20px;font-size:18px;font-weight:760}.brand span{color:#C59A39;margin:0 8px}main{width:min(900px,100%);min-height:calc(100dvh - 80px);margin:auto;padding:clamp(28px,5vw,52px) clamp(20px,4vw,40px);display:flex;flex-direction:column}h1{font-size:clamp(26px,4vw,38px);letter-spacing:-.035em;margin:0 0 12px}p{color:#66747b;line-height:1.6;margin:0}.bar{width:min(420px,100%);height:3px;margin-top:22px;border-radius:999px;overflow:hidden;background:#e1e5e7}.bar:after{content:"";display:block;width:32%;height:100%;border-radius:999px;background:#A9822E;animation:move 1.15s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}.small{margin-top:12px;font-size:13px;color:#879298}.composer{margin-top:auto;border:1px solid #d8dee1;border-radius:30px;background:#fff;padding:20px;box-shadow:0 12px 40px rgba(30,42,48,.06)}.prompt{min-height:58px;color:#879298;font-size:18px}.tools{display:flex;align-items:center;justify-content:space-between;color:#66747b}.send{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#e7ebed;color:#1E2A30;font-size:23px}</style></head><body><header><div class="brand">Murikah <span>|</span> Tutor</div></header><main><section><h1>How can I help you learn today?</h1><p id="status">${safeMessage}</p><form id="wake" method="post" action="/__muri/wake"><button type="submit" style="margin-top:24px;padding:12px 24px;border:0;border-radius:24px;background:#1E2A30;color:white;font:inherit;cursor:pointer">Open Tutor</button></form><div class="bar" id="progress" hidden></div><div class="small" id="small">Tutor will pause again after 30 minutes without activity.</div></section><div class="composer"><div class="prompt">Ask anything…</div><div class="tools"><span>Chat</span><span class="send">↑</span></div></div></main><script>(function(){
+const form=document.getElementById('wake'),status=document.getElementById('status'),small=document.getElementById('small'),progress=document.getElementById('progress');
+let timer,attempts=0,waiting=${waiting ? 'true' : 'false'};
+function showWaiting(){form.hidden=true;progress.hidden=false;status.textContent='Preparing your learning space. This can take a minute.';small.textContent='You can stay on this page; Tutor will open when ready.';}
+function retry(message){waiting=false;form.hidden=false;progress.hidden=true;form.querySelector('button').disabled=false;status.textContent=message;small.textContent='Select Open Tutor to try again.';}
+async function check(){
+ if(!waiting||document.hidden)return;
+ attempts++;
+ try{const response=await fetch('/__muri/runtime-status',{cache:'no-store'});const state=await response.json();
+ if(state.ready){location.reload();return;}
+ if(state.workerSecretConfigured===false){retry('Tutor is temporarily unavailable.');return;}
+ if(!state.running||attempts>=60){retry('Tutor could not finish starting.');return;}
+ }catch(error){if(attempts>=60){retry('Tutor could not be reached.');return;}}
+ timer=setTimeout(check,3000);
+}
+form.addEventListener('submit',async function(event){event.preventDefault();form.querySelector('button').disabled=true;
+ try{const response=await fetch('/__muri/wake',{method:'POST',headers:{accept:'application/json'}});if(!response.ok)throw new Error('Wake failed');waiting=true;attempts=0;showWaiting();check();}
+ catch(error){retry('Tutor could not be opened.');}
+});
+document.addEventListener('visibilitychange',function(){clearTimeout(timer);if(waiting&&!document.hidden)check();});
+if(waiting){showWaiting();check();}
+})();</script></body></html>`,
     {
       status: 200,
       headers: {
@@ -2292,8 +2329,7 @@ async function safeStatus(
   }
 
   try {
-    let status = await tutor.runtimeStatus();
-    if (!status.running) status = await tutor.ensureStarted(runtimeEnv);
+    const status = await tutor.runtimeStatus();
     return { ...status, workerSecretConfigured: true };
   } catch (error) {
     console.error('Murikah Tutor runtime RPC failed', error);
@@ -2326,11 +2362,46 @@ async function cachedStatus(
   return statusInFlight;
 }
 
+const WAKE_COOKIE = '__Host-murikah-tutor-open';
+const WAKE_COOKIE_SECONDS = 7 * 24 * 60 * 60;
+
+async function wakeCookie(secret: string): Promise<string> {
+  const expires = Math.floor(Date.now() / 1000) + WAKE_COOKIE_SECONDS;
+  const value = `wake:${expires}`;
+  return `${WAKE_COOKIE}=${expires}.${await hmacHex(secret, value)}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${WAKE_COOKIE_SECONDS}`;
+}
+
+async function hasWakeCookie(request: Request, secret: string): Promise<boolean> {
+  if (secret.length < 32) return false;
+  const value = (request.headers.get('cookie') || '').split(';')
+    .map((part) => part.trim()).find((part) => part.startsWith(`${WAKE_COOKIE}=`))
+    ?.slice(WAKE_COOKIE.length + 1) || '';
+  const [expires, signature] = value.split('.');
+  if (!/^\d+$/.test(expires || '') || Number(expires) <= Date.now() / 1000 ||
+      Number(expires) > Date.now() / 1000 + WAKE_COOKIE_SECONDS || !signature) return false;
+  const bytes = hexBytes(signature);
+  if (!bytes) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  return crypto.subtle.verify('HMAC', key, bytes, new TextEncoder().encode(`wake:${expires}`));
+}
+
+function explicitAction(request: Request): Response | null {
+  if (request.method !== 'POST') {
+    return new Response('Use POST for this action', { status: 405, headers: { allow: 'POST' } });
+  }
+  if (request.headers.get('origin') !== new URL(request.url).origin) {
+    return new Response('Same-origin action required', { status: 403 });
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: TutorEnv): Promise<Response> {
     const url = new URL(request.url);
     const runtimeEnv = buildContainerEnv(env);
 
+    if (url.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
     if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 });
     if (url.pathname === '/__muri/edge-health') return edgeHealth(env);
     if (url.pathname === '/__muri/worker-config') return workerConfig(runtimeEnv, env);
@@ -2340,6 +2411,8 @@ export default {
     }
 
     if (url.pathname === '/__muri/container-diagnostics') {
+      const denied = explicitAction(request);
+      if (denied) return denied;
       try {
         const diagnostic = getContainer(env.TUTOR_CONTAINER, DIAGNOSTIC_INSTANCE);
         const report = await diagnostic.isolatedStartupDiagnostics(runtimeEnv);
@@ -2363,7 +2436,36 @@ export default {
     }
 
     const tutor = getContainer(env.TUTOR_CONTAINER, APP_INSTANCE);
-    const status = await cachedStatus(tutor, runtimeEnv);
+    if (url.pathname === '/__muri/wake') {
+      const denied = explicitAction(request);
+      if (denied) return denied;
+      let status: RuntimeStatus;
+      try {
+        status = await tutor.ensureStarted(runtimeEnv);
+      } catch (error) {
+        console.error('Murikah Tutor wake RPC failed', error);
+        return Response.json({ error: 'Tutor could not be opened. Please try again.' }, {
+          status: 503, headers: { 'cache-control': 'no-store' },
+        });
+      }
+      readyCacheUntil = 0;
+      if (!status.running) return Response.json(status, { status: 503, headers: { 'cache-control': 'no-store' } });
+      const headers = new Headers({ 'cache-control': 'no-store', 'set-cookie': await wakeCookie(runtimeEnv.MURIKAH_TUTOR_AUTH_SECRET) });
+      if (!(request.headers.get('accept') || '').includes('application/json')) {
+        headers.set('location', '/');
+        return new Response(null, { status: 303, headers });
+      }
+      return Response.json(status, { headers });
+    }
+    const isStatus = ['/health', '/__muri/runtime-status', '/__muri/runtime-revision'].includes(url.pathname);
+    // Passive visits, assets, crawlers and monitors never enter the app proxy.
+    const admitted = !isStatus && await hasWakeCookie(request, runtimeEnv.MURIKAH_TUTOR_AUTH_SECRET || '');
+    if (!isStatus && !admitted) {
+      if (request.method !== 'GET' || request.headers.get('upgrade')) return new Response('Open Tutor to continue', { status: 503 });
+      return startingShell();
+    }
+    // Status probes bypass the ready cache and never renew activity or start compute.
+    const status = isStatus ? await safeStatus(tutor, runtimeEnv) : await cachedStatus(tutor, runtimeEnv);
 
     if (url.pathname === '/__muri/runtime-status') {
       return Response.json(status, {
@@ -2385,6 +2487,13 @@ export default {
       );
     }
 
+    if (url.pathname === '/health') {
+      return Response.json({ ...status, status: status.ready ? 'ready' : status.running ? 'starting' : 'dormant' }, {
+        status: status.ready ? 200 : 503,
+        headers: { 'cache-control': 'no-store' },
+      });
+    }
+
     if (status.ready) {
       try {
         const response = await tutor.fetch(request);
@@ -2404,30 +2513,15 @@ export default {
       } catch (error) {
         readyCacheUntil = 0;
         console.error('Murikah Tutor proxy failed', error);
-        return startingShell('Reconnecting to your Tutor…');
+        return startingShell('Select Open Tutor to reconnect.');
       }
-    }
-
-    if (url.pathname === '/health') {
-      return Response.json(
-        {
-          status: hasRequiredRuntimeSecrets(runtimeEnv) ? 'starting' : 'configuration-error',
-          runtime: env.MURIKAH_TUTOR_RUNTIME,
-          workerSecretConfigured: hasRequiredRuntimeSecrets(runtimeEnv),
-          containerState: status.state,
-          error: status.error,
-        },
-        {
-          status: 503,
-          headers: { 'retry-after': '2', 'cache-control': 'no-store' },
-        },
-      );
     }
 
     return startingShell(
       hasRequiredRuntimeSecrets(runtimeEnv)
-        ? 'Preparing your learning space. You can stay on this page.'
+        ? status.running ? 'Preparing your learning space. You can stay on this page.' : 'Tutor is dormant to conserve compute. Open it when you are ready to learn.'
         : 'Tutor staging configuration is incomplete.',
+      status.running,
     );
   },
 };

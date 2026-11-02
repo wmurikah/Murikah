@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --prefix Tutor/cloudflare --no-audit --no-fund
+          npm --prefix Tutor/cloudflare test
           npm --prefix Tutor/cloudflare run check
 
       - name: Compute Tutor source revision
