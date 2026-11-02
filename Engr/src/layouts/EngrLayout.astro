@@ -468,7 +468,10 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         });
       }
 
+      let bellRefreshing = false;
       async function refreshBell() {
+        if (document.hidden || bellRefreshing) return;
+        bellRefreshing = true;
         try {
           const res = await fetch('/api/notifications/count', {
             headers: { accept: 'application/json' },
@@ -490,6 +493,8 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
           });
         } catch {
           /* offline or transient; leave the last known count */
+        } finally {
+          bellRefreshing = false;
         }
       }
 
@@ -498,6 +503,10 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         // A light interval; refreshed on navigation too.
         bellTimer = window.setInterval(refreshBell, 60000);
       }
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) void refreshBell();
+      });
 
       document.addEventListener('astro:page-load', () => {
         enhance();

@@ -7,12 +7,14 @@
     "deploy:staging": "node -e \"console.log('[Murikah Tutor] Cloudflare repo deploy is intentionally delegated to the GitHub release workflow; no deployment is performed here.')\"",
     "smoke:staging": "python smoke_staging.py",
     "dev": "wrangler dev --config wrangler.toml",
-    "deploy:release": "python validate_persistence_config.py && python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate"
+    "deploy:release": "python validate_persistence_config.py && python prepare_runtime_proxy.py && python -m py_compile deploy_staging.py && python deploy_staging.py --containers-rollout=immediate",
+    "test": "node test/dormancy.test.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7"
   },
   "devDependencies": {
-    "wrangler": "4.130.0"
+    "wrangler": "4.130.0",
+    "esbuild": "0.28.1"
   }
 }

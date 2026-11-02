@@ -25,9 +25,11 @@ OWNERSHIP_DEADLINE_SECONDS = int(os.environ.get("MURIKAH_TUTOR_OWNERSHIP_TIMEOUT
 
 
 def get(path: str, timeout: float = 8.0) -> tuple[int, str]:
+    is_action = path in ("/__muri/wake", "/__muri/container-diagnostics")
     request = urllib.request.Request(
         BASE_URL + path,
-        headers={"User-Agent": "murikah-tutor-deploy-smoke/1.2", "Cache-Control": "no-store"},
+        method="POST" if is_action else "GET",
+        headers={"User-Agent": "murikah-tutor-deploy-smoke/1.2", "Cache-Control": "no-store", "Origin": BASE_URL, "Accept": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -124,6 +126,11 @@ def main() -> int:
         print(f"Persistence status: HTTP {persistence_code} {persistence_body[:1000]}")
         return 1
     print(" - D1 persistence, learning journal, ownership and email-verification schemas v1 are ready")
+    # Only this deliberate action starts compute; subsequent probes are read-only.
+    wake_code, wake_body = get("/__muri/wake", timeout=20.0)
+    if wake_code != 200:
+        print(f"Murikah Tutor staging smoke test: FAILED - wake HTTP {wake_code} {wake_body[:300]}")
+        return 1
     started = time.monotonic()
     last: dict = {}
     revision_verified = False
