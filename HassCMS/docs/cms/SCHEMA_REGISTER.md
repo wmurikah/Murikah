@@ -38,6 +38,20 @@ database rather than from a record of intent.
 | —   | `teardown/00_inventory.sql`                                                      | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose                                                                                                                                                                                                                               | Yes                                  | Not applicable, it changes nothing                                    | It is itself a `SELECT`                                   |
 | —   | `teardown/02_drop_all.sql`                                                       | **Drops every CMS table.** For rebuilding a development database, never production                                                                                                                                                                                                                                             | Yes                                  | **No**                                                                | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
 
+## Standalone OIDC storage repair
+
+`db/migrations/003_oidc_transactions_only.sql` is a focused, rerunnable repair
+for the missing `auth_oidc_transactions` table. It adds only that table and
+its PRIMARY KEY/UNIQUE constraints, without modifying identities, users,
+sessions, or customer requests. Run it directly in the CMS Turso database;
+migrations 001 and 002 are not prerequisites. Its final read-only query must
+return ten required columns. The external sign-in storage check in
+`GET /api/health` uses the same column contract.
+
+This is not a complete authentication reconciliation. Existing mismatches in
+provider identity linking/revocation and customer registration must be handled
+separately. See [provider setup](AUTH_PROVIDER_SETUP.md#missing-oidc-transaction-storage-on-an-existing-database).
+
 ## The PERM-041 collision, and how script 12 resolves it
 
 `audit/09_add_audit_permissions.sql` inserts `PERM-041` as
