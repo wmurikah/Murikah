@@ -74,6 +74,27 @@ async function seedPeople(run: (sql: string) => Promise<unknown>): Promise<void>
          ('SID-${userId}','SRC-EXCEL','${userId}','${external}',NULL,1,CURRENT_TIMESTAMP)`,
     );
   }
+  await run(
+    `INSERT OR IGNORE INTO users
+       (user_id,user_type,employee_no,first_name,last_name,display_name,email,phone,status,
+        email_verified_at,timezone,locale,last_login_at,created_at,updated_at)
+     VALUES ('USR-SO-OMAR','INTERNAL',NULL,'Omar','Saad','Omar Saad',
+             'omar.saad@hasspetroleum.com',NULL,'ACTIVE','2026-01-05 08:00:00',
+             'Africa/Lusaka','en-ZM',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+  );
+  await run(
+    `INSERT OR IGNORE INTO workflow_roles
+       (workflow_role_id,role_code,role_name,process_type,description,active,created_at)
+     VALUES ('WROLE-SO-SUP','SO_SUPPLY_OWNER','SO Supply Owner','SALES_ORDER',
+             'Accountable owner for Supply and Loading Authority generation',1,CURRENT_TIMESTAMP)`,
+  );
+  await run(
+    `INSERT OR IGNORE INTO workflow_role_assignments
+       (workflow_role_assignment_id,workflow_role_id,user_id,scope_type,country_id,
+        affiliate_id,business_unit_id,priority,effective_from,effective_to,active,created_at)
+     VALUES ('WRA-SO-SUP-KE','WROLE-SO-SUP','USR-SO-OMAR','AFFILIATE',NULL,
+             'AFF-KE',NULL,10,'2026-01-01',NULL,1,CURRENT_TIMESTAMP)`,
+  );
 }
 
 async function imported(): Promise<TestClient> {
@@ -540,27 +561,45 @@ test('the tabs: every country, one selectable, none hidden', async () => {
   c.close();
 });
 
-test('loading authority records no person and is not judged on the wrong clock', async () => {
+test('Supply is attributed to its configured accountable owner and not the extract actors', async () => {
   const c = await imported();
   const board = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   const loading = fnOf(board.functions, 'Loading authority');
   const rows = board.people.get('Loading authority') ?? [];
   assert.equal(rows.length, 1, 'loading authority should have exactly one row');
-  // THE EXTRACT NAMES NOBODY, so the row names nobody. The work is not
-  // attributed to whoever last touched the order.
-  assert.equal(rows[0]!.person, null);
-  assert.equal(rows[0]!.userId, null);
+  // THE EXTRACT NAMES NOBODY. The accountable owner is therefore read from
+  // the reviewed Supply workflow-role assignment, never guessed from the
+  // creator, finance approver or credit releaser in the spreadsheet.
+  assert.equal(rows[0]!.person, 'Omar Saad');
+  assert.equal(rows[0]!.userId, 'USR-SO-OMAR');
   // The operational duration is real even though the signed receipt-to-LA
   // start is unavailable. It stays visible but unjudged.
   assert.equal(rows[0]!.targetMinutes, null);
   assert.ok((rows[0]!.medianMinutes ?? 0) > 0);
   assert.equal(rows[0]!.volume, loading.volume);
-  // And the panel prints it as "Not recorded" rather than as a blank.
-  const panel = readFileSync(
-    join(here, '..', '..', 'src/components/cms/CmsLoadingAuthorityChart.astro'),
-    'utf8',
-  );
-  assert.match(panel, /'Not recorded'/, 'the panel has no words for an unrecorded actor');
+  c.close();
+});
+
+test('the inclusive period ceiling includes Supply completions on the final day', async () => {
+  const c = await imported();
+  await c.execute(`UPDATE sales_orders SET loading_authority_at = NULL`);
+  const one = (
+    await c.execute(`SELECT sales_order_id FROM sales_orders ORDER BY sales_order_id LIMIT 1`)
+  ).rows[0] as Record<string, unknown>;
+  await c.execute({
+    sql: `UPDATE sales_orders
+             SET order_created_at = '2026-07-31 08:00:00',
+                 loading_authority_at = '2026-07-31 09:00:00'
+           WHERE sales_order_id = ?`,
+    args: [String(one.sales_order_id)],
+  });
+
+  const july = await loadingAuthorityBoard(asClient(c), {
+    from: '2026-07-01',
+    to: '2026-07-31',
+    affiliateId: null,
+  });
+  assert.equal(fnOf(kenya(july).functions, 'Loading authority').volume, 1);
   c.close();
 });
 
@@ -577,6 +616,10 @@ test('the rename is presentation only, and the panel explains only unavailable S
   }
   // The panel is named for what it measures, everywhere a person sees it.
   assert.match(panel, /Loading Authority/);
+  assert.equal(
+    LOADING_AUTHORITY_FUNCTIONS.find((row) => row.key === 'Loading authority')?.label,
+    'Supply',
+  );
   assert.ok(!/Sales order approval/.test(home), 'Home still calls the panel by its old name');
   // THE DATABASE WAS NOT RENAMED WITH IT. The tables and the entity type are
   // untouched, which is what keeps every existing link and query working.
