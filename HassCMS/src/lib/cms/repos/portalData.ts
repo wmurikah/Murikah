@@ -568,7 +568,7 @@ export async function portalSurveys(
   const predicate = accountPredicate(scope, 'si.account_id');
   const result = await db.execute({
     sql: `SELECT si.survey_invitation_id AS id, cs.question_text AS question,
-            si.invited_at AS invited_at, si.expires_at AS expires_at,
+            si.issued_at AS invited_at, si.expires_at AS expires_at,
             sc.case_number AS case_number, sc.case_id AS case_id,
             sr.score AS score, sr.responded_at AS responded_at
           FROM survey_invitations si
@@ -576,7 +576,7 @@ export async function portalSurveys(
           LEFT JOIN service_cases sc ON sc.case_id = si.case_id
           LEFT JOIN survey_responses sr ON sr.survey_response_id = si.survey_response_id
           WHERE ${predicate.sql}
-          ORDER BY si.invited_at DESC`,
+          ORDER BY si.issued_at DESC`,
     args: predicate.args as never[],
   });
   const stamp = toDbTimestamp(now);

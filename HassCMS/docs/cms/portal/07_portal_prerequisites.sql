@@ -1,5 +1,8 @@
 -- ---------------------------------------------------------------------------
 -- CMS Build Prompt 25: customer portal prerequisites.
+-- Survey DDL follows the operator's 2 November 2026 schema export.
+-- Existing databases with that schema need only the application listing fix;
+-- do not rerun these ALTER statements to repair the listing timestamp.
 --
 -- Run by the operator in the Turso console. The application never runs this.
 --
@@ -49,18 +52,23 @@ CREATE TABLE IF NOT EXISTS survey_invitations (
     case_id TEXT,
     account_id TEXT NOT NULL,
     contact_id TEXT,
-    invited_at TEXT NOT NULL,
+    token_hash TEXT UNIQUE,
+    status TEXT NOT NULL CHECK(status IN ('PENDING','SENT','RESPONDED','EXPIRED','CANCELLED')),
+    issued_at TEXT NOT NULL,
     expires_at TEXT,
+    responded_at TEXT,
     survey_response_id TEXT UNIQUE,
-    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE CASCADE,
-    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
-    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE RESTRICT,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
     FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(survey_response_id) ON DELETE SET NULL,
-    UNIQUE(survey_id, case_id, contact_id)
+    UNIQUE(survey_id, case_id, contact_id),
+    CHECK(expires_at IS NULL OR expires_at >= issued_at)
 );
 
-CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, invited_at);
+CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, issued_at);
 CREATE INDEX IF NOT EXISTS idx_entity_attachments_visible ON entity_attachments(entity_type, entity_id, customer_visible);
 
 -- ---------------------------------------------------------------------------

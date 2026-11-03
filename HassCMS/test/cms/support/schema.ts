@@ -1355,24 +1355,30 @@ CREATE INDEX IF NOT EXISTS idx_sla_escalations_instance ON sla_escalation_events
 ALTER TABLE entity_attachments ADD COLUMN customer_visible INTEGER NOT NULL DEFAULT 0 CHECK(customer_visible IN (0,1));
 ALTER TABLE entity_attachments ADD COLUMN portal_document_title TEXT;
 
+-- Survey table refreshed from the 2 November 2026 operator export.
 CREATE TABLE IF NOT EXISTS survey_invitations (
     survey_invitation_id TEXT PRIMARY KEY,
     survey_id TEXT NOT NULL,
     case_id TEXT,
     account_id TEXT NOT NULL,
     contact_id TEXT,
-    invited_at TEXT NOT NULL,
+    token_hash TEXT UNIQUE,
+    status TEXT NOT NULL CHECK(status IN ('PENDING','SENT','RESPONDED','EXPIRED','CANCELLED')),
+    issued_at TEXT NOT NULL,
     expires_at TEXT,
+    responded_at TEXT,
     survey_response_id TEXT UNIQUE,
-    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE CASCADE,
-    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE CASCADE,
-    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (survey_id) REFERENCES customer_surveys(survey_id) ON DELETE RESTRICT,
+    FOREIGN KEY (case_id) REFERENCES service_cases(case_id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE RESTRICT,
     FOREIGN KEY (contact_id) REFERENCES contacts(contact_id) ON DELETE SET NULL,
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(survey_response_id) ON DELETE SET NULL,
-    UNIQUE(survey_id, case_id, contact_id)
+    UNIQUE(survey_id, case_id, contact_id),
+    CHECK(expires_at IS NULL OR expires_at >= issued_at)
 );
 
-CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, invited_at);
+CREATE INDEX IF NOT EXISTS idx_survey_invitations_account ON survey_invitations(account_id, issued_at);
 CREATE INDEX IF NOT EXISTS idx_entity_attachments_visible ON entity_attachments(entity_type, entity_id, customer_visible);
 
 -- ============================================================================

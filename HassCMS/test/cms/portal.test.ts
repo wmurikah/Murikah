@@ -411,8 +411,8 @@ test('a second survey response against one invitation is refused by the database
   const caseId = String(owned.rows[0]?.case_id);
   await c.execute({
     sql: `INSERT INTO survey_invitations
-            (survey_invitation_id, survey_id, case_id, account_id, contact_id, invited_at, expires_at, survey_response_id)
-          VALUES ('SINV-1','SUR-001',?,'ACC-001','CON-001','2026-08-26 09:00:00',NULL,NULL)`,
+            (survey_invitation_id, survey_id, case_id, account_id, contact_id, status, issued_at, expires_at, survey_response_id)
+          VALUES ('SINV-1','SUR-001',?,'ACC-001','CON-001','SENT','2026-08-26 09:00:00',NULL,NULL)`,
     args: [caseId],
   });
 
@@ -433,9 +433,9 @@ test('a second survey response against one invitation is refused by the database
   await assert.rejects(
     () =>
       c.execute(`INSERT INTO survey_invitations
-        (survey_invitation_id, survey_id, case_id, account_id, contact_id, invited_at, expires_at, survey_response_id)
+        (survey_invitation_id, survey_id, case_id, account_id, contact_id, status, issued_at, expires_at, survey_response_id)
         VALUES ('SINV-DUP','SUR-001',(SELECT case_id FROM survey_invitations WHERE survey_invitation_id = 'SINV-1'),
-                'ACC-001','CON-001','2026-08-26 09:00:00',NULL,NULL)`),
+                'ACC-001','CON-001','SENT','2026-08-26 09:00:00',NULL,NULL)`),
     /UNIQUE/i,
   );
 
@@ -847,11 +847,11 @@ test('the feedback list shows the customer their own score and marks an expired 
   const scope = await scopeFor(c, A);
 
   await c.execute(`INSERT INTO survey_invitations
-      (survey_invitation_id, survey_id, case_id, account_id, contact_id, invited_at,
+      (survey_invitation_id, survey_id, case_id, account_id, contact_id, status, issued_at,
        expires_at, survey_response_id)
-    VALUES ('SI-OPEN','SUR-001','CASE-001','ACC-001','CON-001','2026-08-20 09:00:00',
+    VALUES ('SI-OPEN','SUR-001','CASE-001','ACC-001','CON-001','SENT','2026-08-20 09:00:00',
             '2026-09-30 09:00:00',NULL),
-           ('SI-GONE','SUR-002','CASE-002','ACC-001','CON-001','2026-06-01 09:00:00',
+           ('SI-GONE','SUR-002','CASE-002','ACC-001','CON-001','SENT','2026-06-01 09:00:00',
             '2026-06-15 09:00:00',NULL)`);
 
   const answered = await answerPortalSurvey(asClient(c), scope, 'SI-OPEN', 8, 'Sorted', NOW);
@@ -922,4 +922,36 @@ test('a rate limit rule exists for every write a signed-in user can repeat', () 
   // The buckets are distinct, so one cannot spend another's allowance.
   const buckets = rules.map((rule) => rule.bucket);
   assert.equal(new Set(buckets).size, buckets.length);
+});
+
+test('survey listing uses issued_at order while preserving invitedAt and account isolation', async () => {
+  const c = await db();
+  try {
+    const scope = await scopeFor(c, A);
+    assert.deepEqual(await portalSurveys(asClient(c), scope, NOW), []);
+    await c.execute(`INSERT INTO survey_invitations
+        (survey_invitation_id,survey_id,account_id,status,issued_at,created_at)
+      VALUES ('SI-OLDER','SUR-001','ACC-001','SENT','2026-08-20 09:00:00','2026-08-27 09:00:00'),
+             ('SI-NEWER','SUR-001','ACC-001','SENT','2026-08-26 09:00:00','2026-08-26 09:00:00'),
+             ('SI-OTHER','SUR-001','ACC-002','SENT','2026-08-27 09:00:00','2026-08-27 09:00:00')`);
+    const rows = await portalSurveys(asClient(c), scope, NOW);
+    assert.deepEqual(
+      rows.map((row) => row.invitationId),
+      ['SI-NEWER', 'SI-OLDER'],
+    );
+    assert.deepEqual(
+      rows.map((row) => row.invitedAt),
+      ['2026-08-26 09:00:00', '2026-08-20 09:00:00'],
+    );
+    assert.equal(rows[0]?.caseId, null);
+    assert.equal(rows[0]?.answeredAt, null);
+    const otherRows = await portalSurveys(asClient(c), await scopeFor(c, B), NOW);
+    assert.deepEqual(
+      otherRows.map((row) => row.invitationId),
+      ['SI-OTHER'],
+    );
+    assert.deepEqual((await c.execute('PRAGMA foreign_key_check')).rows, []);
+  } finally {
+    c.close();
+  }
 });
