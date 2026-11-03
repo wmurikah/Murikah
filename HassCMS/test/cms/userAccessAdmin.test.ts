@@ -785,11 +785,11 @@ test('no direct user permission or title permission store was created', () => {
   // The whole design rests on a permission belonging to a role and to nothing
   // else, so there is one place to configure it and no way for a role to say
   // NO while an override says YES.
-  const schema = readFileSync('test/cms/support/schema.ts', 'utf8');
-  assert.ok(!/CREATE TABLE IF NOT EXISTS user_permissions/.test(schema));
-  assert.ok(!/CREATE TABLE IF NOT EXISTS job_title_permissions/.test(schema));
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS job_title_access_role_mappings/);
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS job_title_workflow_role_mappings/);
+  const schema = readFileSync('db/schema/cms.sql', 'utf8');
+  assert.ok(!/CREATE TABLE (?:IF NOT EXISTS )?user_permissions/.test(schema));
+  assert.ok(!/CREATE TABLE (?:IF NOT EXISTS )?job_title_permissions/.test(schema));
+  assert.match(schema, /CREATE TABLE (?:IF NOT EXISTS )?job_title_access_role_mappings/);
+  assert.match(schema, /CREATE TABLE (?:IF NOT EXISTS )?job_title_workflow_role_mappings/);
   // Both mapping tables carry the uniqueness rule and the foreign keys.
   assert.match(schema, /UNIQUE\(job_title_id, role_id\)/);
   assert.match(schema, /UNIQUE\(job_title_id, workflow_role_id\)/);

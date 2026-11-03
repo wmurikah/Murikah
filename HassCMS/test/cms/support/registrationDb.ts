@@ -1,13 +1,10 @@
 import { createTestDb, type TestClient } from './db.ts';
-import { LIVE_REGISTRATION_DDL } from './liveRegistrationSchema.ts';
 
 type Statement = Parameters<TestClient['execute']>[0];
 
 /** Real SQLite transactions over the observed registration schema. */
 export function createRegistrationDb() {
   const db = createTestDb();
-  db.raw.exec('DROP TABLE customer_access_requests; DROP TABLE auth_federated_identities;');
-  db.raw.exec(LIVE_REGISTRATION_DDL);
   let tail = Promise.resolve();
   return {
     ...db,

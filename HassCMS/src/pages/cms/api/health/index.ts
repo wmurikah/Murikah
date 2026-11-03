@@ -21,124 +21,36 @@ import { getCmsEnv } from '../../../../lib/cms/env.ts';
 import { getDb } from '../../../../lib/cms/db.ts';
 import { newTraceId } from '../../../../lib/cms/errors.ts';
 import { methodNotAllowed } from '../../../../lib/cms/admin/respond.ts';
-import { OIDC_STORAGE_COLUMNS_SQL } from '../../../../lib/cms/repos/oidcTransactions.ts';
+import { checkCmsHealth, healthHttpStatus } from '../../../../lib/cms/health.ts';
 
 export const prerender = false;
 
-type CheckState = 'ok' | 'degraded' | 'down';
-
-interface Check {
-  name: string;
-  state: CheckState;
-  /** One short sentence. Never an error message from a driver. */
-  detail: string;
-}
-
-/**
- * The prerequisite scripts, by the fact each one adds.
- *
- * Reported because a database that is up and missing them is a database that
- * will refuse half the application, and "the database is fine" would be a
- * true and useless answer.
- */
-const PREREQUISITES: { name: string; sql: string }[] = [
-  {
-    name: 'External sign-in storage',
-    sql: OIDC_STORAGE_COLUMNS_SQL,
-  },
-  {
-    name: 'SLA runtime tables',
-    sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='sla_instances'`,
-  },
-  {
-    name: 'Source completeness columns',
-    sql: `SELECT COUNT(*) AS n FROM pragma_table_info('purchase_order_lines') WHERE name='unit_cost'`,
-  },
-  {
-    name: 'Portal visibility',
-    sql: `SELECT COUNT(*) AS n FROM pragma_table_info('entity_attachments') WHERE name='customer_visible'`,
-  },
-  {
-    name: 'Audit immutability triggers',
-    sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_audit_events%'`,
-  },
-  {
-    // SIX TABLES, COUNTED IN ONE QUERY, BECAUSE A PARTIAL RUN IS THE FAILURE
-    // THAT ACTUALLY HAPPENS. A script that created four of them and stopped
-    // leaves an application that configures a provider and then cannot record
-    // a single message, which is worse than one that refuses at the door.
-    name: 'Assistant and channel tables',
-    sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN
-            ('ai_providers','bot_conversations','bot_messages',
-             'channel_connections','channel_messages','message_classifications')`,
-  },
-];
-
-/**
- * How many rows each prerequisite must find to count as applied.
- *
- * A number rather than a boolean, because two of these are satisfied by more
- * than one object and "at least one exists" would report a half-run script as
- * a healthy one.
- */
-const EXPECTED: Readonly<Record<string, number>> = {
-  'External sign-in storage': 10,
-  'Audit immutability triggers': 2,
-  'Assistant and channel tables': 6,
-};
-
 export const GET: APIRoute = async () => {
-  const checks: Check[] = [{ name: 'Application', state: 'ok', detail: 'Running.' }];
-  let worst: CheckState = 'ok';
   const traceId = newTraceId();
-
+  let db;
   try {
-    const db = await getDb(getCmsEnv());
-    await db.execute('SELECT 1');
-    checks.push({ name: 'Database', state: 'ok', detail: 'Reachable.' });
-
-    for (const prerequisite of PREREQUISITES) {
-      try {
-        const result = await db.execute(prerequisite.sql);
-        const row = result.rows[0] as unknown as Record<string, unknown> | undefined;
-        const present = Number(row?.n ?? 0);
-        const expected = EXPECTED[prerequisite.name] ?? 1;
-        if (present >= expected) {
-          checks.push({ name: prerequisite.name, state: 'ok', detail: 'Applied.' });
-        } else {
-          worst = 'degraded';
-          checks.push({
-            name: prerequisite.name,
-            state: 'degraded',
-            // Names the script, which an operator needs and an attacker
-            // already knows from the public repository.
-            detail: 'Not applied. The operator has not yet run its script.',
-          });
-        }
-      } catch {
-        worst = 'degraded';
-        checks.push({
-          name: prerequisite.name,
-          state: 'degraded',
-          detail: 'Could not be checked.',
-        });
-      }
-    }
-  } catch (error) {
-    // The cause goes to the log with the trace id. It never goes to the
-    // caller: a driver error can name a table, a column and sometimes a host.
-    console.error(`[cms.health] ${traceId}`, error);
-    worst = 'down';
-    checks.push({ name: 'Database', state: 'down', detail: 'Not reachable.' });
+    db = await getDb(getCmsEnv());
+    const result = await checkCmsHealth(db, traceId);
+    return new Response(JSON.stringify({ ...result, traceId }), {
+      status: healthHttpStatus(result.status),
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    });
+  } catch {
+    console.error(`[cms.health] ${traceId} database configuration/connection failed`);
+    return new Response(
+      JSON.stringify({
+        status: 'down',
+        checks: [{ name: 'Database', state: 'down', detail: 'Not reachable.' }],
+        traceId,
+      }),
+      {
+        status: 503,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      },
+    );
+  } finally {
+    db?.close();
   }
-
-  return new Response(JSON.stringify({ status: worst, checks, traceId }, null, 2), {
-    // 503 when the database is down, so an uptime monitor sees a failure
-    // rather than a 200 carrying the word "down" in a field it does not
-    // read. Degraded is still 200: the application serves.
-    status: worst === 'down' ? 503 : 200,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
 };
 
 export const ALL: APIRoute = () => methodNotAllowed('GET');

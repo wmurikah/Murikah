@@ -165,8 +165,8 @@ test('an UPDATE and a DELETE against audit_events are refused by the database', 
   );
 
   // Both errors are recorded in the phase report as evidence.
-  assert.match(updateError, /UPDATE is refused/);
-  assert.match(deleteError, /DELETE is refused/);
+  assert.match(updateError, /updates are not permitted/);
+  assert.match(deleteError, /deletes are not permitted/);
 
   // And the row is exactly as it was written.
   const after = await c.execute({

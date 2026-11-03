@@ -29,7 +29,7 @@ export const GET: APIRoute = async (context) => {
     if (!verified.ok) {
       return apiError(
         'unavailable',
-        `The SLA runtime tables are missing: ${verified.missing.join(', ')}. The operator's prerequisite script has not been run against this database.`,
+        `The SLA runtime schema is incompatible for: ${verified.missing.join(', ')}. Review the schema compatibility report.`,
         503,
       );
     }

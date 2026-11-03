@@ -10,6 +10,7 @@ import { connect } from '../../../../../lib/cms/admin/crudRoute.ts';
 import { requireControlCentre } from '../../../../../lib/cms/admin/guard.ts';
 import { systemHealth, expiringAuthority } from '../../../../../lib/cms/repos/controlCentre.ts';
 import { methodNotAllowed, ok, serverError } from '../../../../../lib/cms/admin/respond.ts';
+import { checkSchemaCompatibility } from '../../../../../lib/cms/schema/compatibility.ts';
 
 export const prerender = false;
 
@@ -20,11 +21,12 @@ export const GET: APIRoute = async (context) => {
   if ('response' in connection) return connection.response;
   try {
     const now = new Date();
-    const [health, expiring] = await Promise.all([
+    const [health, expiring, schemaCompatibility] = await Promise.all([
       systemHealth(connection.db, now),
       expiringAuthority(connection.db, now, 30),
+      checkSchemaCompatibility(connection.db),
     ]);
-    return ok({ ...health, expiring });
+    return ok({ ...health, expiring, schemaCompatibility });
   } catch (error) {
     return serverError('admin.control.health', error);
   }

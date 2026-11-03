@@ -108,7 +108,7 @@ test('every sales order row lands, and the landing does not cost a round trip pe
     )
     .get() as Record<string, unknown>;
   assert.equal(first.affiliate, 'Hass Petroleum Kenya');
-  assert.equal(first.document_number, '3988');
+  assert.equal(first.document_number, 3988);
   c.close();
 });
 

@@ -61,8 +61,8 @@ for the missing `auth_oidc_transactions` table. It adds only that table and
 its PRIMARY KEY/UNIQUE constraints, without modifying identities, users,
 sessions, or customer requests. Run it directly in the CMS Turso database;
 migrations 001 and 002 are not prerequisites. Its final read-only query must
-return ten required columns. The external sign-in storage check in
-`GET /api/health` uses the same column contract.
+return ten required columns. `GET /api/health` now checks its full reviewed
+table contract, including constraints, through the shared schema checker.
 
 This is not a complete authentication reconciliation. Existing mismatches in
 provider identity linking/revocation and customer registration must be handled
@@ -113,11 +113,10 @@ Two consequences, both deliberate:
    all six are present, because a script that created four and stopped leaves
    an application that can configure a provider and then cannot record a
    single message. A half-run script must not read as a healthy one.
-2. **`test/cms/support/schema.ts` mirrors them**, so the next phase discovers a
-   missing table by running the suite rather than by shipping code against a
-   table that is not there. That mirror is copied from the live DDL rather than
-   written from the application's expectations, which is the only direction
-   that catches a disagreement.
+2. **The reviewed `db/schema/cms.sql` baseline contains them.** The shared
+   `test/cms/support/schema.ts` loader and generated compatibility contract use
+   that same source. Changes require review against an export or an incremental
+   migration rather than silently adapting fixtures to application expectations.
 
 If the file is recovered, add it to `assistant/` under this number and delete
 this section.
@@ -156,6 +155,15 @@ The standalone transactional runner
 previews/removes eight audited duplicates while retaining their UNIQUE constraints.
 It is manual and is not run by CMS deployment. See
 [rollout, checks and recovery](REDUNDANT_INDEX_CLEANUP.md).
+
+## Reviewed schema contract and compatibility checks
+
+[`db/schema/cms.sql`](../../db/schema/cms.sql) is the current schema-only reference
+for integration fixtures and the generated runtime compatibility contract. It is
+not a live migration. See [schema contract maintenance and rollout](SCHEMA_CONTRACT.md)
+for `db:schema:generate`, `db:schema:check`, the read-only `db:schema:live` command,
+public readiness and the authorized full report. Existing permission/grant checks
+remain separate.
 
 ## Applying to a new environment
 
