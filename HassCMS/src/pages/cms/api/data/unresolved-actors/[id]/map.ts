@@ -56,7 +56,7 @@ function reasonMessage(reason: string): string {
   if (reason === 'already_resolved') return 'This name has already been mapped.';
   if (reason === 'unknown_user')
     return 'That user does not exist. Create them in user administration first.';
-  if (reason === 'inactive_user') return 'That user is not active.';
+  if (reason === 'inactive_user') return 'That user is inactive or suspended.';
   return 'The mapping could not be made.';
 }
 

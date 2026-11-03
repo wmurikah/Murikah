@@ -1244,12 +1244,12 @@ export type MapActorResult =
   | { ok: false; reason: string };
 
 /**
- * Map a source username to an existing user.
+ * Map a source username to an existing or invited user.
  *
- * NOBODY IS CREATED HERE. A name in an extract is evidence that a person
- * exists somewhere, not authority to mint an account with no email, no
- * assignment and no role. A genuinely new colleague goes through user
- * administration, and this screen then maps their source name to them.
+ * NOBODY IS CREATED HERE. The explicit create-and-map operation first requires
+ * an administrator to supply an email and creates an INVITED account. This
+ * lower-level mapping accepts that invited account so its source work can be
+ * attributed while email verification is still pending.
  *
  * The mapping is stored on source_identities, so the next upload resolves
  * the same name with nobody touching it again.
@@ -1279,7 +1279,9 @@ export async function mapUnresolvedActor(
   });
   const target = user.rows[0];
   if (target === undefined) return { ok: false, reason: 'unknown_user' };
-  if (text(target.status) !== 'ACTIVE') return { ok: false, reason: 'inactive_user' };
+  if (!['ACTIVE', 'INVITED'].includes(text(target.status))) {
+    return { ok: false, reason: 'inactive_user' };
+  }
 
   const username = text(actor.external_username);
   const sourceSystemId = text(actor.source_system_id);

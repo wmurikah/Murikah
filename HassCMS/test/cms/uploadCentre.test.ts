@@ -34,6 +34,7 @@ import {
   MAX_UPLOAD_BYTES,
   affiliateForExtractToken,
 } from '../../src/lib/cms/import/uploadCentre.ts';
+import { createAndMapUnresolvedActor } from '../../src/lib/cms/import/unresolvedUsers.ts';
 import {
   canUploadImportType,
   IMPORTS_UPLOAD,
@@ -480,6 +481,65 @@ test('a name mapped once is recognised on the next upload, with no re-upload of 
     args: ['Mr. Musembi Gabriel Musyoka'],
   });
   assert.equal(Number(later.rows[0]?.n), 1);
+});
+
+test('an administrator can create an invited internal user and map an unresolved name atomically', async () => {
+  const c = await db();
+  const first = await receiveUpload(asClient(c), poUpload(new Uint8Array(PO_FILE)), CTX);
+  const actor = (await listUnresolvedActors(asClient(c))).find(
+    (candidate) => candidate.username === 'MR. MUSEMBI GABRIEL MUSYOKA',
+  );
+  assert.ok(actor);
+
+  const result = await createAndMapUnresolvedActor(
+    asClient(c),
+    {
+      unresolvedActorId: actor.unresolvedActorId,
+      user: {
+        userType: 'INTERNAL',
+        firstName: 'Gabriel',
+        lastName: 'Musembi',
+        displayName: 'Gabriel Musembi',
+        email: 'gabriel.new@example.com',
+        employeeNo: 'EMP-NEW',
+        phone: null,
+        timezone: 'Africa/Nairobi',
+        locale: 'en-KE',
+      },
+      invitation: {
+        tokenId: 'EVT-NEW-ACTOR',
+        tokenHash: 'a'.repeat(64),
+        issuedAt: '2026-08-27 10:00:00',
+        expiresAt: '2026-09-03 10:00:00',
+        rawToken: 'not-stored-in-the-database',
+      },
+      revalidate: true,
+    },
+    CTX,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.user.status, 'INVITED');
+  assert.equal(result.ok && result.user.userType, 'INTERNAL');
+  assert.equal(result.ok && result.revalidated?.rowsExamined > 0, true);
+  const persisted = await c.execute({
+    sql: `SELECT u.status, u.email, si.external_username, ua.status AS actor_status
+          FROM users u
+          JOIN source_identities si ON si.user_id = u.user_id
+          JOIN unresolved_actors ua ON ua.mapped_user_id = u.user_id
+          WHERE u.email = ?`,
+    args: ['gabriel.new@example.com'],
+  });
+  assert.deepEqual(
+    { ...persisted.rows[0] },
+    {
+      status: 'INVITED',
+      email: 'gabriel.new@example.com',
+      external_username: 'MR. MUSEMBI GABRIEL MUSYOKA',
+      actor_status: 'MAPPED',
+    },
+  );
+  assert.equal(first.batchId, actor.firstSeenBatchId);
 });
 
 test('revalidation keeps every row and its provenance, and has nothing left to resolve', async () => {

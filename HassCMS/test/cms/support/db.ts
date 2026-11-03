@@ -41,9 +41,19 @@ export interface TestClient {
     stmts: Stmt[],
     mode?: string,
   ): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }[]>;
+  transaction(mode?: string): Promise<TestTransaction>;
   close(): void;
   /** Test-only escape hatch for arrange and assert steps. */
   raw: DatabaseSync;
+}
+
+export interface TestTransaction {
+  execute(stmt: Stmt | string): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }>;
+  batch(stmts: Stmt[]): Promise<{ rows: Record<string, unknown>[]; rowsAffected: number }[]>;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  close(): void;
+  readonly closed: boolean;
 }
 
 /**
@@ -74,6 +84,35 @@ export function createTestDb(): TestClient {
   db.exec(AUTH_SCHEMA_DDL);
 
   const client: TestClient = {
+    async transaction(mode = 'deferred') {
+      db.exec(mode === 'write' ? 'BEGIN IMMEDIATE' : 'BEGIN');
+      let transactionClosed = false;
+      const finish = (sql: 'COMMIT' | 'ROLLBACK') => {
+        if (transactionClosed) return;
+        db.exec(sql);
+        transactionClosed = true;
+      };
+      return {
+        execute: (stmt) => client.execute(stmt),
+        async batch(stmts) {
+          const results = [];
+          for (const stmt of stmts) results.push(await client.execute(stmt));
+          return results;
+        },
+        async commit() {
+          finish('COMMIT');
+        },
+        async rollback() {
+          finish('ROLLBACK');
+        },
+        close() {
+          finish('ROLLBACK');
+        },
+        get closed() {
+          return transactionClosed;
+        },
+      };
+    },
     async batch(stmts) {
       // A real transaction, so a test proves the batch is atomic rather than
       // merely sequential.
