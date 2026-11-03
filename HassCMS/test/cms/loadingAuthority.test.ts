@@ -74,27 +74,6 @@ async function seedPeople(run: (sql: string) => Promise<unknown>): Promise<void>
          ('SID-${userId}','SRC-EXCEL','${userId}','${external}',NULL,1,CURRENT_TIMESTAMP)`,
     );
   }
-  await run(
-    `INSERT OR IGNORE INTO users
-       (user_id,user_type,employee_no,first_name,last_name,display_name,email,phone,status,
-        email_verified_at,timezone,locale,last_login_at,created_at,updated_at)
-     VALUES ('USR-SO-OMAR','INTERNAL',NULL,'Omar','Saad','Omar Saad',
-             'omar.saad@hasspetroleum.com',NULL,'ACTIVE','2026-01-05 08:00:00',
-             'Africa/Lusaka','en-ZM',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-  );
-  await run(
-    `INSERT OR IGNORE INTO workflow_roles
-       (workflow_role_id,role_code,role_name,process_type,description,active,created_at)
-     VALUES ('WROLE-SO-SUP','SO_SUPPLY_OWNER','SO Supply Owner','SALES_ORDER',
-             'Accountable owner for Supply and Loading Authority generation',1,CURRENT_TIMESTAMP)`,
-  );
-  await run(
-    `INSERT OR IGNORE INTO workflow_role_assignments
-       (workflow_role_assignment_id,workflow_role_id,user_id,scope_type,country_id,
-        affiliate_id,business_unit_id,priority,effective_from,effective_to,active,created_at)
-     VALUES ('WRA-SO-SUP-KE','WROLE-SO-SUP','USR-SO-OMAR','AFFILIATE',NULL,
-             'AFF-KE',NULL,10,'2026-01-01',NULL,1,CURRENT_TIMESTAMP)`,
-  );
 }
 
 async function imported(): Promise<TestClient> {
@@ -162,26 +141,17 @@ test('criterion 9: each function carries its own target, and its people with it'
   const completeBoard = await loadingAuthorityBoard(asClient(c), allTime);
   const board = kenya(completeBoard);
 
-  // Three functions, in the journey's own order, each with its own rule.
+  // The panel contains the two approval functions, in journey order.
   assert.deepEqual(
     board.functions.map((f) => f.fn),
     LOADING_AUTHORITY_FUNCTIONS.map((f) => f.key),
   );
   const finance = fnOf(board.functions, 'Finance approval');
   const credit = fnOf(board.functions, 'Credit release');
-  const loading = fnOf(board.functions, 'Loading authority');
-  console.log(
-    `[targets] finance ${finance.targetMinutes} credit ${credit.targetMinutes} ` +
-      `loading ${loading.targetMinutes}`,
-  );
-  // Finance and Credit are contractual, measurable approval clocks. Loading
-  // authority keeps its operational duration but has no active SLA rule until
-  // the extract records receipt of funds/LPO, where the signed clock begins.
+  // Finance and Credit are the contractual, measurable approval clocks.
   assert.equal(finance.targetMinutes, 15);
   assert.equal(credit.targetMinutes, 15);
-  assert.equal(loading.targetMinutes, null);
-  assert.equal(loading.warningMinutes, null);
-  assert.deepEqual(completeBoard.missingTargets, ['Loading authority']);
+  assert.deepEqual(completeBoard.missingTargets, []);
 
   // A person is judged against THEIR function's target, not the panel's
   // loudest one: every approver row carries the target of the function it
@@ -224,7 +194,6 @@ test('criteria 10 and 11: no rule means grey, unjudged, and only that function',
   const after = kenya(board);
   const finance = fnOf(after.functions, 'Finance approval');
   const credit = fnOf(after.functions, 'Credit release');
-  const loading = fnOf(after.functions, 'Loading authority');
 
   // NOTHING TO BE OVER, SO NOTHING IS CLAIMED. No target, no count, no
   // colour — the panel renders an em dash where the fraction would be.
@@ -238,78 +207,33 @@ test('criteria 10 and 11: no rule means grey, unjudged, and only that function',
     assert.equal(person.overTarget, 0);
   }
   // And the page is told, so it can offer to set the missing one.
-  assert.deepEqual(board.missingTargets, ['Finance approval', 'Loading authority']);
+  assert.deepEqual(board.missingTargets, ['Finance approval']);
 
   // WITHOUT TOUCHING THE OTHERS. Deactivating one rule must not move another,
   // which is the whole reason each is read separately.
   assert.equal(credit.targetMinutes, 15);
   assert.equal(credit.overTarget, creditBefore.overTarget);
-  assert.equal(loading.targetMinutes, null);
   c.close();
 });
 
-/**
- * THE ONE THING THREE EQUAL NUMBERS MAKE INVISIBLE.
- *
- * Temporarily activating the LA rule proves all three functions read their
- * own configuration. Production keeps that rule inactive until its signed
- * start event is captured.
- */
-test('the three targets are read separately, not one read three times', async () => {
+test('the LA-generation rule does not create a third approval function', async () => {
   const c = await imported();
   await c.execute(`UPDATE sla_rules SET active = 1 WHERE sla_rule_id = 'SLAR-SO-LA'`);
-  const at30 = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  const before = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   assert.deepEqual(
-    at30.functions.map((f) => f.targetMinutes),
-    [15, 15, 10],
-    'the panel did not read the signed values independently',
+    before.functions.map((f) => f.fn),
+    ['Finance approval', 'Credit release'],
   );
 
   await c.execute(
     `UPDATE sla_rules SET target_minutes = 90, warning_minutes = 75
       WHERE sla_rule_id = 'SLAR-SO-LA'`,
   );
-  const moved = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  const after = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   assert.deepEqual(
-    moved.functions.map((f) => f.targetMinutes),
-    [15, 15, 90],
-    'moving the loading rule moved a line it should not have',
-  );
-  assert.deepEqual(
-    moved.functions.map((f) => f.warningMinutes),
-    [10, 10, 75],
-    'the warning levels did not follow their own rules',
-  );
-  // The approvers under each function follow their own function, not the
-  // panel's loudest target.
-  for (const f of moved.functions) {
-    for (const person of moved.people.get(f.fn) ?? []) {
-      assert.equal(
-        person.targetMinutes,
-        f.targetMinutes,
-        `${person.person} follows the wrong rule`,
-      );
-    }
-  }
-  // Finance and credit are judged identically before and after, which is what
-  // "only the loading line moved" means for the figures rather than the lines.
-  for (const key of ['Finance approval', 'Credit release']) {
-    assert.equal(fnOf(moved.functions, key).overTarget, fnOf(at30.functions, key).overTarget);
-  }
-  assert.notEqual(
-    fnOf(moved.functions, 'Loading authority').overTarget,
-    fnOf(at30.functions, 'Loading authority').overTarget,
-    'a 30 and a 90 target should not count the same breaches',
-  );
-
-  await c.execute(
-    `UPDATE sla_rules SET target_minutes = 10, warning_minutes = 5
-      WHERE sla_rule_id = 'SLAR-SO-LA'`,
-  );
-  const back = kenya(await loadingAuthorityBoard(asClient(c), allTime));
-  assert.deepEqual(
-    back.functions.map((f) => f.targetMinutes),
-    [15, 15, 10],
+    after.functions.map((f) => [f.fn, f.targetMinutes, f.overTarget]),
+    before.functions.map((f) => [f.fn, f.targetMinutes, f.overTarget]),
+    'an operational LA rule changed Finance or Credit',
   );
   c.close();
 });
@@ -325,23 +249,19 @@ test('the three targets are read separately, not one read three times', async ()
  */
 test('a function that ran nothing keeps its target and counts zero', async () => {
   const c = await imported();
-  await c.execute(`UPDATE sla_rules SET active = 1 WHERE sla_rule_id = 'SLAR-SO-LA'`);
-  await c.execute(`UPDATE sales_orders SET loading_authority_at = NULL`);
+  await c.execute(`UPDATE workflow_stage_instances SET completed_at = NULL
+                    WHERE workflow_stage_id IN (
+                      SELECT workflow_stage_id FROM workflow_stages
+                      WHERE stage_code = 'FINANCE_APPROVAL')`);
   const board = await loadingAuthorityBoard(asClient(c), allTime);
-  const loading = fnOf(kenya(board).functions, 'Loading authority');
-  assert.equal(loading.volume, 0, 'the function still has completions');
-  assert.equal(loading.overTarget, 0);
-  assert.equal(loading.medianMinutes, null, 'a median over nothing is not a number');
+  const finance = fnOf(kenya(board).functions, 'Finance approval');
+  assert.equal(finance.volume, 0, 'the function still has completions');
+  assert.equal(finance.overTarget, 0);
+  assert.equal(finance.medianMinutes, null, 'a median over nothing is not a number');
   // ZERO, NOT UNKNOWN: the rule is still active, so the target is still known
   // and the panel still draws its line.
-  assert.equal(loading.targetMinutes, 10, 'an empty month lost its configured target');
+  assert.equal(finance.targetMinutes, 15, 'an empty month lost its configured target');
   assert.deepEqual(board.missingTargets, [], 'an empty month was reported as unconfigured');
-
-  // UNKNOWN: deactivate the rule and the target really is missing.
-  await c.execute(`UPDATE sla_rules SET active = 0 WHERE sla_rule_id = 'SLAR-SO-LA'`);
-  const without = await loadingAuthorityBoard(asClient(c), allTime);
-  assert.equal(fnOf(kenya(without).functions, 'Loading authority').targetMinutes, null);
-  assert.deepEqual(without.missingTargets, ['Loading authority']);
   c.close();
 });
 
@@ -549,7 +469,7 @@ test('the tabs: every country, one selectable, none hidden', async () => {
   for (const country of board.countries) {
     const own = board.byCountry.get(country.affiliateId);
     assert.ok(own !== undefined, `${country.name} has no board`);
-    assert.equal(own.functions.length, 3, `${country.name} lost a function`);
+    assert.equal(own.functions.length, 2, `${country.name} lost a function`);
   }
   // And the empty ones really are empty, rather than showing everybody's data.
   const uganda = board.byCountry.get('AFF-UG')!;
@@ -561,37 +481,34 @@ test('the tabs: every country, one selectable, none hidden', async () => {
   c.close();
 });
 
-test('Supply is attributed to its configured accountable owner and not the extract actors', async () => {
+test('the panel contains Finance and Credit only', async () => {
   const c = await imported();
   const board = kenya(await loadingAuthorityBoard(asClient(c), allTime));
-  const loading = fnOf(board.functions, 'Loading authority');
-  const rows = board.people.get('Loading authority') ?? [];
-  assert.equal(rows.length, 1, 'loading authority should have exactly one row');
-  // THE EXTRACT NAMES NOBODY. The accountable owner is therefore read from
-  // the reviewed Supply workflow-role assignment, never guessed from the
-  // creator, finance approver or credit releaser in the spreadsheet.
-  assert.equal(rows[0]!.person, 'Omar Saad');
-  assert.equal(rows[0]!.userId, 'USR-SO-OMAR');
-  // The operational duration is real even though the signed receipt-to-LA
-  // start is unavailable. It stays visible but unjudged.
-  assert.equal(rows[0]!.targetMinutes, null);
-  assert.ok((rows[0]!.medianMinutes ?? 0) > 0);
-  assert.equal(rows[0]!.volume, loading.volume);
+  assert.deepEqual(
+    board.functions.map((row) => row.fn),
+    ['Finance approval', 'Credit release'],
+  );
+  assert.equal(board.people.has('Loading authority'), false);
   c.close();
 });
 
-test('the inclusive period ceiling includes Supply completions on the final day', async () => {
+test('the inclusive July ceiling includes Finance approvals on 31 July', async () => {
   const c = await imported();
-  await c.execute(`UPDATE sales_orders SET loading_authority_at = NULL`);
+  await c.execute(`UPDATE workflow_stage_instances SET completed_at = '2026-08-01 09:00:00'
+                    WHERE workflow_stage_id IN (
+                      SELECT workflow_stage_id FROM workflow_stages
+                      WHERE stage_code = 'FINANCE_APPROVAL')`);
   const one = (
-    await c.execute(`SELECT sales_order_id FROM sales_orders ORDER BY sales_order_id LIMIT 1`)
+    await c.execute(`SELECT wsi.workflow_stage_instance_id AS id
+                       FROM workflow_stage_instances wsi
+                       JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
+                      WHERE ws.stage_code = 'FINANCE_APPROVAL' LIMIT 1`)
   ).rows[0] as Record<string, unknown>;
   await c.execute({
-    sql: `UPDATE sales_orders
-             SET order_created_at = '2026-07-31 08:00:00',
-                 loading_authority_at = '2026-07-31 09:00:00'
-           WHERE sales_order_id = ?`,
-    args: [String(one.sales_order_id)],
+    sql: `UPDATE workflow_stage_instances
+             SET started_at = '2026-07-31 08:00:00', completed_at = '2026-07-31 09:00:00'
+           WHERE workflow_stage_instance_id = ?`,
+    args: [String(one.id)],
   });
 
   const july = await loadingAuthorityBoard(asClient(c), {
@@ -599,7 +516,7 @@ test('the inclusive period ceiling includes Supply completions on the final day'
     to: '2026-07-31',
     affiliateId: null,
   });
-  assert.equal(fnOf(kenya(july).functions, 'Loading authority').volume, 1);
+  assert.equal(fnOf(kenya(july).functions, 'Finance approval').volume, 1);
   c.close();
 });
 
@@ -616,10 +533,6 @@ test('the rename is presentation only, and the panel explains only unavailable S
   }
   // The panel is named for what it measures, everywhere a person sees it.
   assert.match(panel, /Loading Authority/);
-  assert.equal(
-    LOADING_AUTHORITY_FUNCTIONS.find((row) => row.key === 'Loading authority')?.label,
-    'Supply',
-  );
   assert.ok(!/Sales order approval/.test(home), 'Home still calls the panel by its old name');
   // THE DATABASE WAS NOT RENAMED WITH IT. The tables and the entity type are
   // untouched, which is what keeps every existing link and query working.

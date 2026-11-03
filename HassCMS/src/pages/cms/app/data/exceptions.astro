@@ -23,6 +23,13 @@ import {
   listUnresolvedActors,
   type UnresolvedActorRow,
 } from '@hasscms/lib/cms/import/uploadCentre';
+import { listJobTitles } from '@hasscms/lib/cms/repos/userAdmin';
+import {
+  listAffiliates,
+  listBusinessUnits,
+  listCountries,
+  listDepartments,
+} from '@hasscms/lib/cms/repos/organisationAdmin';
 
 export const prerender = false;
 
@@ -32,21 +39,49 @@ const mayMap = canManageUsers(permissions);
 
 let actors: UnresolvedActorRow[] = [];
 let people: { value: string; label: string }[] = [];
+let jobTitles: { value: string; label: string }[] = [];
+let departments: { value: string; label: string }[] = [];
+let countries: { value: string; label: string }[] = [];
+let affiliates: { value: string; label: string }[] = [];
+let businessUnits: { value: string; label: string }[] = [];
 let loadFailed = false;
 if (mayView) {
   try {
     const db = await requestDb(Astro.locals);
     actors = await listUnresolvedActors(db);
     if (mayMap) {
-      const users = await db.execute(
-        `SELECT user_id, display_name, email, employee_no, status FROM users
+      const [users, titles, departmentRows, countryRows, affiliateRows, unitRows] =
+        await Promise.all([
+          db.execute(
+            `SELECT user_id, display_name, email, employee_no, status FROM users
          WHERE status IN ('ACTIVE', 'INVITED') AND user_type = 'INTERNAL'
          ORDER BY display_name`,
-      );
+          ),
+          listJobTitles(db),
+          listDepartments(db),
+          listCountries(db),
+          listAffiliates(db),
+          listBusinessUnits(db),
+        ]);
       people = users.rows.map((row) => ({
         value: String(row.user_id),
         label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})${String(row.status) === 'INVITED' ? ' — invited' : ''}`,
       }));
+      jobTitles = titles
+        .filter((row) => row.active)
+        .map((row) => ({ value: row.jobTitleId, label: row.titleName }));
+      departments = departmentRows
+        .filter((row) => row.active)
+        .map((row) => ({ value: row.departmentId, label: row.departmentName }));
+      countries = countryRows
+        .filter((row) => row.active)
+        .map((row) => ({ value: row.countryId, label: row.countryName }));
+      affiliates = affiliateRows
+        .filter((row) => row.active)
+        .map((row) => ({ value: row.affiliateId, label: row.affiliateName }));
+      businessUnits = unitRows
+        .filter((row) => row.active)
+        .map((row) => ({ value: row.businessUnitId, label: row.businessUnitName }));
     }
   } catch (error) {
     console.error('[cms.data.exceptions] load failed', error);
@@ -119,6 +154,7 @@ if (mayView) {
                     type="button"
                     data-cms-actor-map={actor.unresolvedActorId}
                     data-actor-name={actor.username}
+                    data-actor-affiliate={actor.affiliateId ?? ''}
                     class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     Map to a person
@@ -198,8 +234,63 @@ if (mayView) {
                   id="actor-employeeNo"
                   name="employeeNo"
                   label="Employee number"
-                  hint="Optional, and unique where supplied. Organisational access can be assigned in Administration."
+                  hint="Optional, and unique where supplied."
                 />
+                <hr class="border-cms-line" />
+                <p class="text-cms-body-sm font-semibold text-cms-navy">
+                  Organisational assignment
+                </p>
+                <CmsSelect
+                  id="actor-jobTitleId"
+                  name="jobTitleId"
+                  label="Job title"
+                  options={[{ value: '', label: 'Choose a job title' }, ...jobTitles]}
+                  required
+                />
+                <CmsSelect
+                  id="actor-departmentId"
+                  name="departmentId"
+                  label="Department"
+                  options={[{ value: '', label: 'Choose a department' }, ...departments]}
+                  required
+                />
+                <CmsSelect
+                  id="actor-level"
+                  name="level"
+                  label="Assignment level"
+                  options={[
+                    { value: '', label: 'Choose a level' },
+                    { value: 'GROUP', label: 'Group' },
+                    { value: 'COUNTRY', label: 'Country' },
+                    { value: 'AFFILIATE', label: 'Affiliate' },
+                    { value: 'BUSINESS_UNIT', label: 'Business unit' },
+                  ]}
+                  required
+                />
+                <div data-actor-level-field="COUNTRY" hidden>
+                  <CmsSelect
+                    id="actor-countryId"
+                    name="countryId"
+                    label="Country"
+                    options={[{ value: '', label: 'Choose a country' }, ...countries]}
+                  />
+                </div>
+                <div data-actor-level-field="AFFILIATE" hidden>
+                  <CmsSelect
+                    id="actor-affiliateId"
+                    name="affiliateId"
+                    label="Affiliate"
+                    options={[{ value: '', label: 'Choose an affiliate' }, ...affiliates]}
+                  />
+                </div>
+                <div data-actor-level-field="BUSINESS_UNIT" hidden>
+                  <CmsSelect
+                    id="actor-businessUnitId"
+                    name="businessUnitId"
+                    label="Business unit"
+                    options={[{ value: '', label: 'Choose a business unit' }, ...businessUnits]}
+                  />
+                </div>
               </section>
               <CmsCheckbox
                 id="actor-revalidate"
@@ -244,15 +335,31 @@ if (mayView) {
     (form?.querySelector<HTMLInputElement>('input[name="actor-resolution"]:checked')?.value ??
       'existing') as 'existing' | 'new';
 
+  const applyLevel = () => {
+    const level = (document.getElementById('actor-level') as HTMLSelectElement | null)?.value ?? '';
+    form?.querySelectorAll<HTMLElement>('[data-actor-level-field]').forEach((group) => {
+      const mine = group.dataset.actorLevelField === level;
+      group.hidden = !mine;
+      group.querySelectorAll('input, select').forEach((field) => {
+        if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) {
+          field.disabled = !mine;
+        }
+      });
+    });
+  };
+
   const updateResolution = () => {
     const creating = resolution() === 'new';
     if (existingFields) existingFields.hidden = creating;
     if (newFields) newFields.hidden = !creating;
     if (saveLabel) saveLabel.textContent = creating ? 'Create and map' : 'Map';
+    applyLevel();
   };
 
   form?.addEventListener('change', (event) => {
-    if ((event.target as HTMLInputElement | null)?.name === 'actor-resolution') updateResolution();
+    const name = (event.target as HTMLInputElement | HTMLSelectElement | null)?.name;
+    if (name === 'actor-resolution') updateResolution();
+    if (name === 'level') applyLevel();
   });
 
   document.addEventListener('click', (event) => {
@@ -262,6 +369,13 @@ if (mayView) {
     if (nameLabel) nameLabel.textContent = target.getAttribute('data-actor-name') ?? '';
     if (errorBox) errorBox.hidden = true;
     form.reset();
+    const affiliateId = target.getAttribute('data-actor-affiliate') ?? '';
+    if (affiliateId !== '') {
+      const level = document.getElementById('actor-level') as HTMLSelectElement | null;
+      const affiliate = document.getElementById('actor-affiliateId') as HTMLSelectElement | null;
+      if (level) level.value = 'AFFILIATE';
+      if (affiliate) affiliate.value = affiliateId;
+    }
     updateResolution();
     drawer.showModal();
   });
@@ -285,12 +399,18 @@ if (mayView) {
     }
     if (
       mode === 'new' &&
-      [value('actor-firstName'), value('actor-lastName'), value('actor-email')].some(
-        (v) => v === '',
-      )
+      [
+        value('actor-firstName'),
+        value('actor-lastName'),
+        value('actor-email'),
+        value('actor-jobTitleId'),
+        value('actor-departmentId'),
+        value('actor-level'),
+      ].some((v) => v === '')
     ) {
       if (errorBox) {
-        errorBox.textContent = 'Enter the new user’s first name, last name and work email.';
+        errorBox.textContent =
+          'Enter the user’s identity, job title, department and assignment level.';
         errorBox.hidden = false;
       }
       return;
@@ -314,6 +434,12 @@ if (mayView) {
                   lastName: value('actor-lastName'),
                   email: value('actor-email'),
                   employeeNo: value('actor-employeeNo') || null,
+                  jobTitleId: value('actor-jobTitleId'),
+                  departmentId: value('actor-departmentId'),
+                  level: value('actor-level'),
+                  countryId: value('actor-countryId') || null,
+                  affiliateId: value('actor-affiliateId') || null,
+                  businessUnitId: value('actor-businessUnitId') || null,
                   revalidate,
                 }
               : { userId, revalidate },

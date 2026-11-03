@@ -1,22 +1,20 @@
 ---
 /**
- * Loading Authority: three functions, their approvers, one country at a time.
+ * Loading Authority: Finance and Credit approvals, one country at a time.
  *
  * COUNTRY IS A ROW OF TABS AND THE SELECTION IS IN THE URL, so a view can be
  * shared and reloaded. A country with nothing this period is greyed rather
  * than removed: that Uganda exists and had no orders in May is information,
  * and a missing tab is not.
  *
- * THREE FUNCTIONS, ALWAYS OPEN, with their approvers indented beneath. Two
+ * TWO FUNCTIONS, ALWAYS OPEN, with their approvers indented beneath. Two
  * levels, not three. Each row — function and person alike — carries four
  * things and nothing else: name, bar, time, count past target. The bar
  * crossing its own line already says what a state word would.
  *
  * EACH FUNCTION HAS ITS OWN TARGET AND ITS OWN LINE, read from its own rule.
  * Finance and credit share a value today; that is configuration, not a rule
- * of this code. The three lines sit at different places on ONE shared scale,
- * because normalising each row would hide the thing worth seeing: loading
- * authority genuinely takes longer than the approvals before it.
+ * of this code. The two lines share ONE scale.
  *
  * A FUNCTION WITH NO ACTIVE RULE IS GREY AND UNJUDGED — no line, no colour,
  * an em dash where the fraction would be. Calling a duration late when no
@@ -63,8 +61,7 @@ const {
   maySetTargets,
 } = Astro.props;
 
-const loadingAuthorityUnmeasurable = missingTargets.includes('Loading authority');
-const configurableMissingTargets = missingTargets.filter((fn) => fn !== 'Loading authority');
+const configurableMissingTargets = missingTargets;
 
 const functions = board?.functions ?? [];
 /**
@@ -83,8 +80,7 @@ const labelOf = (fn: string): string =>
   LOADING_AUTHORITY_FUNCTIONS.find((f) => f.key === fn)?.label ?? fn;
 
 /**
- * ONE SCALE ACROSS ALL THREE FUNCTIONS. The loading authority line sits three
- * times further along than the other two, and that distance is the point.
+ * ONE SCALE ACROSS FINANCE AND CREDIT.
  */
 const rows = [...functions, ...[...(board?.people.values() ?? [])].flat()];
 const most = Math.max(
@@ -117,7 +113,7 @@ const href = (row: LaStat, view: 'completed' | 'typical' | 'breaches'): string =
     clock: judged ? 'WORKING' : 'WALL',
   });
 
-/** A missing row means neither source evidence nor owner configuration named anyone. */
+/** A person the extract never named. The work is attributed to nobody. */
 const named = (row: LaStat): string =>
   row.isPerson ? (row.person ?? 'Not recorded') : labelOf(row.fn);
 /**
@@ -371,22 +367,6 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
     )
   }
 
-  {
-    /*
-      Missing evidence cannot be inferred from an uncoloured bar. The signed
-      LA term gets its specific data-availability disclosure; other missing
-      rules retain the configurable-target offer.
-    */
-  }
-  {
-    loadingAuthorityUnmeasurable && (
-      <p class="mt-2 text-cms-caption text-cms-muted">
-        The signed 10-minute LA-generation target starts when funds or an LPO are received. That
-        start timestamp is absent from the extract, so this operational duration is not judged
-        against the signed target.
-      </p>
-    )
-  }
   {
     configurableMissingTargets.length > 0 && (
       <p class="mt-2 text-cms-caption text-cms-muted">
