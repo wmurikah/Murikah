@@ -45,6 +45,7 @@ import {
   type ExtractNameClaim,
 } from './extractName.ts';
 import { hashFile } from './workbook.ts';
+import { importRowPresentation } from './rowSemantics.ts';
 
 type Stmt = Extract<InStatement, { sql: string }>;
 const text = (v: unknown): string => String(v ?? '');
@@ -1488,6 +1489,9 @@ export interface RowInspection {
   rowHash: string;
   entityId: string | null;
   importedAt: string | null;
+  /** Business wording; a further event is not presented as discarded data. */
+  displayStatus: string;
+  recordState: string;
   /** Present only where the caller holds the data type's own module access. */
   rawSource: Record<string, string> | null;
   snapshotVersion: number | null;
@@ -1538,6 +1542,15 @@ export async function inspectRow(
       rawSource[key] = value === null || value === undefined ? '' : escapeForDisplay(String(value));
     }
   }
+  const entityId = nullableText(row.entity_id);
+  const errorMessage =
+    row.error_message === null ? null : escapeForDisplay(text(row.error_message));
+  const display = importRowPresentation({
+    importType,
+    rowStatus: text(row.row_status),
+    errorMessage,
+    entityId,
+  });
   return {
     importRowId: text(row.id),
     batchId: text(row.batch_id),
@@ -1545,10 +1558,12 @@ export async function inspectRow(
     sourceRowNumber: Number(row.row_number),
     sourceRecordKey: nullableText(row.source_key),
     rowStatus: text(row.row_status),
-    errorMessage: row.error_message === null ? null : escapeForDisplay(text(row.error_message)),
+    errorMessage,
     rowHash: text(row.row_hash),
-    entityId: nullableText(row.entity_id),
+    entityId,
     importedAt: nullableText(row.imported_at),
+    displayStatus: display.statusLabel,
+    recordState: display.recordLabel,
     rawSource,
     snapshotVersion: row.version_no === null ? null : Number(row.version_no),
     withheld: mayReadValues

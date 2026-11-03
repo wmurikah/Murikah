@@ -53,6 +53,7 @@ import { decideDuplicate } from './contentHash.ts';
 import { alreadyCanonical } from './retry.ts';
 import { newTraceId } from '../errors.ts';
 import { logWriteFailure } from './writeFailure.ts';
+import { SO_ADDITIONAL_EVENT_MESSAGE } from './rowSemantics.ts';
 import {
   planMasterData,
   createMasterData,
@@ -715,7 +716,7 @@ export async function validateSoWorkbook(
           rowsUnresolved += 1;
         } else if (repeatOfEarlierRow) {
           status = 'DUPLICATE';
-          error = 'A further event for an order line this file has already described.';
+          error = SO_ADDITIONAL_EVENT_MESSAGE;
           rowsDuplicate += 1;
         } else if (priorHashes.size === 0) {
           status = 'NEW';
