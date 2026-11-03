@@ -241,7 +241,7 @@ export async function listUploadAffiliates(db: Client): Promise<UploadAffiliate[
  *
  * The three sources, in order of authority:
  *   column    the file's own AFFILIATE column — it wins, always;
- *   filename  the name's entity token, matched against extract_code — the
+ *   filename  the name's entity token, resolved against extract_code — the
  *             purchase order path, and the point of this phase;
  *   operator  the selector, as fallback or as deliberate override.
  * 'none' is the honest fourth state: nothing resolved, Group-wide as before.
@@ -299,6 +299,23 @@ const knownTokens = (affiliates: UploadAffiliate[]) =>
   affiliates
     .filter((a): a is UploadAffiliate & { extractCode: string } => a.extractCode !== null)
     .map((a) => ({ extractCode: a.extractCode, affiliateName: a.affiliateName }));
+
+// The Zambia purchase extract uses ZM and its sales extract uses ZW. Keep the
+// affiliate's configured extract_code as the authority: an exact token match
+// wins, and this alias only resolves through the active ZM record.
+const EXTRACT_TOKEN_ALIASES: Readonly<Record<string, string>> = { ZW: 'ZM' };
+
+export function affiliateForExtractToken(
+  affiliates: readonly UploadAffiliate[],
+  token: string,
+): UploadAffiliate | null {
+  const exact = affiliates.find((affiliate) => affiliate.extractCode === token);
+  if (exact !== undefined) return exact;
+  const canonical = EXTRACT_TOKEN_ALIASES[token];
+  return canonical === undefined
+    ? null
+    : (affiliates.find((affiliate) => affiliate.extractCode === canonical) ?? null);
+}
 
 /**
  * THREE WAYS AN UPLOAD CAN END, AND THE MIDDLE ONE IS NEW.
@@ -494,7 +511,7 @@ export async function receiveUpload(
       ? null
       : (affiliates.find((a) => a.affiliateId === affiliateId)?.affiliateName ?? affiliateId);
   const byToken = (token: string): UploadAffiliate | null =>
-    affiliates.find((a) => a.extractCode === token) ?? null;
+    affiliateForExtractToken(affiliates, token);
 
   // THE OVERRIDE IS THE SAME FILE, PROVEN. Re-reading a previewed batch with
   // a different entity must not become a door past the duplicate rule, so the
