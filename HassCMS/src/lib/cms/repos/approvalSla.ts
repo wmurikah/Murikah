@@ -41,9 +41,11 @@
  *                       one. Clock: the latest preceding milestone that is
  *                       known — credit release, else finance approval, else
  *                       the order's creation — to the invoice.
- *   Loading authority   sales_orders.loading_authority_at. NO ACTOR either.
- *                       Clock: the invoice, else the same fallback chain, to
- *                       the authority.
+ *   Supply              sales_orders.loading_authority_at. The extract has
+ *                       no actor column, so accountability is resolved from
+ *                       the active SO_SUPPLY_OWNER workflow-role assignment
+ *                       for the order's affiliate. Clock: order creation to
+ *                       the authority timestamp.
  *
  * The chain is stated because a per-function duration needs a start, and the
  * extract only dates the ends. Measuring every function from the order's
@@ -496,6 +498,51 @@ const soOrder = (
      AND (:to IS NULL OR so.${endColumn} <= :to)`;
 
 /**
+ * The extract records when the Loading Authority was produced, but not who
+ * produced it. Supply accountability therefore comes from reviewed workflow
+ * configuration, scoped to the order's affiliate/country (with Group as the
+ * final fallback). This names the accountable owner without claiming that the
+ * spreadsheet recorded a performer.
+ */
+const soSupply = (scoped = true): string => `
+  SELECT 'Loading authority' AS fn, 4 AS ord,
+         so.sales_order_id AS entity_id,
+         so.document_number AS document_number,
+         so.affiliate_id AS affiliate_id,
+         supply_owner.user_id AS user_id,
+         COALESCE(supply_owner.display_name, supply_owner.email) AS person,
+         ${LOADING_AUTHORITY_START} AS started_at,
+         so.loading_authority_at AS completed_at,
+         ${MINUTES(LOADING_AUTHORITY_START, 'so.loading_authority_at')} AS minutes,
+         NULL AS target_minutes
+    FROM sales_orders so
+    LEFT JOIN users supply_owner
+      ON supply_owner.user_id = (
+        SELECT wra.user_id
+          FROM workflow_role_assignments wra
+          JOIN workflow_roles wr ON wr.workflow_role_id = wra.workflow_role_id
+          JOIN affiliates own_affiliate ON own_affiliate.affiliate_id = so.affiliate_id
+          JOIN users active_owner ON active_owner.user_id = wra.user_id
+         WHERE wr.role_code = 'SO_SUPPLY_OWNER' AND wr.active = 1
+           AND wra.active = 1 AND active_owner.status = 'ACTIVE'
+           AND wra.effective_from <= date(so.loading_authority_at)
+           AND (wra.effective_to IS NULL OR wra.effective_to >= date(so.loading_authority_at))
+           AND (
+             (wra.scope_type = 'AFFILIATE' AND wra.affiliate_id = so.affiliate_id)
+             OR (wra.scope_type = 'COUNTRY' AND wra.country_id = own_affiliate.country_id)
+             OR wra.scope_type = 'GROUP'
+           )
+         ORDER BY CASE wra.scope_type
+                    WHEN 'AFFILIATE' THEN 1 WHEN 'COUNTRY' THEN 2 ELSE 3 END,
+                  wra.priority, wra.workflow_role_assignment_id
+         LIMIT 1
+      )
+   WHERE so.loading_authority_at IS NOT NULL
+     AND ${scoped ? AFFILIATE('so.affiliate_id') : '1 = 1'}
+     AND (:from IS NULL OR so.loading_authority_at >= :from)
+     AND (:to IS NULL OR so.loading_authority_at <= :to)`;
+
+/**
  * WHERE THE LOADING AUTHORITY CLOCK STARTS, AND WHY IT IS NOT THE INVOICE.
  *
  * It used to be the invoice, falling back to the order — the chain every other
@@ -523,7 +570,7 @@ const SO_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL'),
   soStage('Credit release', 2, 'CREDIT_CHECK'),
   soOrder('Invoicing', 3, 'invoice_created_at', 'so.order_created_at'),
-  soOrder('Loading authority', 4, 'loading_authority_at', LOADING_AUTHORITY_START),
+  soSupply(),
 ].join('\n\n  UNION ALL\n');
 
 /**
@@ -1426,7 +1473,7 @@ export { TARGET_SQL };
 export const LOADING_AUTHORITY_FUNCTIONS = [
   { key: 'Finance approval', label: 'Finance', stage: 'FINANCE_APPROVAL' },
   { key: 'Credit release', label: 'Credit', stage: 'CREDIT_APPROVAL' },
-  { key: 'Loading authority', label: 'Loading authority', stage: 'LOADING_AUTHORITY' },
+  { key: 'Loading authority', label: 'Supply', stage: 'LOADING_AUTHORITY' },
 ] as const;
 
 export type LoadingAuthorityFunction = (typeof LOADING_AUTHORITY_FUNCTIONS)[number];
@@ -1437,7 +1484,7 @@ export interface LaStat {
   readonly fn: string;
   /** Null on a function row; the approver on a person row. */
   readonly userId: string | null;
-  /** Null where the extract records no actor — loading authority, today. */
+  /** Null where neither the extract nor accountable-owner configuration names a user. */
   readonly person: string | null;
   /** True on a person row, so a null person is "Not recorded" and not a total. */
   readonly isPerson: boolean;
@@ -1502,7 +1549,7 @@ export interface LoadingAuthorityTrendPoint {
 const LA_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL', false),
   soStage('Credit release', 2, 'CREDIT_CHECK', false),
-  soOrder('Loading authority', 4, 'loading_authority_at', LOADING_AUTHORITY_START, false),
+  soSupply(false),
 ].join('\n\n  UNION ALL\n');
 
 /** Which rule judges which function, as a CASE over the source's own names. */
@@ -1644,8 +1691,7 @@ const LA_BOARD_SQL = `
 
 /**
  * One monthly Loading Authority series per entity, from the exact order-level
- * source and business-time expression used by the existing panel. There is no
- * actor in the historical extract, so no person is selected or inferred.
+ * source and business-time expression used by the existing panel.
  */
 export async function loadingAuthorityTrend(
   db: Client,
@@ -1699,9 +1745,10 @@ export async function loadingAuthorityBoard(
   // the tabs need every country's figures from one statement, so the country
   // is chosen from the result rather than pushed into the query. A parameter
   // a statement never mentions is refused by the driver, so it is not sent.
+  const window = windowArgs(scope);
   const found = await db.execute({
     sql: LA_BOARD_SQL,
-    args: { from: scope.from, to: scope.to },
+    args: { from: window.from, to: window.to },
   });
   const rows = rowsOf(found);
   const toStat = (row: Record<string, unknown>, isPerson: boolean): LaStat => ({
