@@ -3,6 +3,14 @@ import { newId } from './authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import type { IdentityProvider, OidcPurpose } from '../auth/oidc.ts';
 
+/** Read-only prerequisite probe: absent or partial storage must not look healthy. */
+export const OIDC_STORAGE_COLUMNS_SQL = `SELECT COUNT(*) AS n
+  FROM pragma_table_info('auth_oidc_transactions')
+  WHERE name IN (
+    'transaction_id','provider','purpose','state_hash','nonce_hash',
+    'pkce_verifier','return_path','created_at','expires_at','consumed_at'
+  )`;
+
 export async function createOidcTransaction(
   db: Client,
   input: {

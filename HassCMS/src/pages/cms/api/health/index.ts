@@ -21,6 +21,7 @@ import { getCmsEnv } from '../../../../lib/cms/env.ts';
 import { getDb } from '../../../../lib/cms/db.ts';
 import { newTraceId } from '../../../../lib/cms/errors.ts';
 import { methodNotAllowed } from '../../../../lib/cms/admin/respond.ts';
+import { OIDC_STORAGE_COLUMNS_SQL } from '../../../../lib/cms/repos/oidcTransactions.ts';
 
 export const prerender = false;
 
@@ -41,6 +42,10 @@ interface Check {
  * true and useless answer.
  */
 const PREREQUISITES: { name: string; sql: string }[] = [
+  {
+    name: 'External sign-in storage',
+    sql: OIDC_STORAGE_COLUMNS_SQL,
+  },
   {
     name: 'SLA runtime tables',
     sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='sla_instances'`,
@@ -77,6 +82,7 @@ const PREREQUISITES: { name: string; sql: string }[] = [
  * a healthy one.
  */
 const EXPECTED: Readonly<Record<string, number>> = {
+  'External sign-in storage': 10,
   'Audit immutability triggers': 2,
   'Assistant and channel tables': 6,
 };
