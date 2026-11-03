@@ -16,13 +16,19 @@
  */
 export function busy(button: HTMLButtonElement | null, label: string): () => void {
   if (!button || button.disabled) return () => {};
-  const original = button.textContent ?? '';
+  const original = Array.from(button.childNodes);
+  const spinner = document.createElement('span');
+  spinner.className =
+    'h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none';
+  spinner.setAttribute('aria-hidden', 'true');
   button.disabled = true;
   button.setAttribute('aria-busy', 'true');
-  button.textContent = label;
+  button.classList.add('cursor-progress');
+  button.replaceChildren(spinner, document.createTextNode(label));
   return () => {
     button.disabled = false;
     button.removeAttribute('aria-busy');
-    button.textContent = original;
+    button.classList.remove('cursor-progress');
+    button.replaceChildren(...original);
   };
 }
