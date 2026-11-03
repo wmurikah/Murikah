@@ -31,7 +31,9 @@ not invent those events from unrelated timestamps.
 
 1. Open the `hass-cms` database in Turso.
 2. Run the complete contents of
-   `db/migrations/007_signed_sla_targets.sql` as one script.
+   `db/migrations/007_signed_sla_targets.sql` as one script. Do not add
+   `BEGIN`, `COMMIT` or `END`; Drizzle Studio automatically runs the statements
+   as one transaction and rejects transaction keywords inside the script.
 3. Confirm the final query returns these four rows:
 
 | Rule         | Target | Warning | Active |
