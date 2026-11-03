@@ -38,6 +38,15 @@ database rather than from a record of intent.
 | —   | `teardown/00_inventory.sql`                                                      | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose                                                                                                                                                                                                                               | Yes                                  | Not applicable, it changes nothing                                    | It is itself a `SELECT`                                   |
 | —   | `teardown/02_drop_all.sql`                                                       | **Drops every CMS table.** For rebuilding a development database, never production                                                                                                                                                                                                                                             | Yes                                  | **No**                                                                | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
 
+## Notification and SLA read indexes
+
+`db/migrations/004_notification_sla_indexes.sql` adds five non-unique indexes
+for existing unread, deduplication and SLA sweep predicates. It is rerunnable
+and ends with a definition verification query. It changes no application rows
+and does not run as part of a CMS deployment. See the
+[index review and rollout](NOTIFICATION_SLA_INDEXES.md) and companion read-only
+`db/diagnostics/notification_sla_index_review.sql` before applying it in Turso.
+
 ## SLA runtime schema contract
 
 The breach/escalation writers follow the observed 2 November 2026 schema.
