@@ -12,8 +12,10 @@
 -- SLAR-SO-LA is therefore retained for history and set to the contractual
 -- value, but kept inactive until the start event is captured. Activating it
 -- now would judge order-to-LA time against a receipt-to-LA promise.
-
-BEGIN IMMEDIATE;
+--
+-- No BEGIN/COMMIT statements appear here. Turso Drizzle Studio wraps all
+-- statements in the SQL console in one transaction and rejects embedded
+-- transaction keywords.
 
 UPDATE sla_rules
    SET rule_name = 'SO finance approval — signed SLA',
@@ -55,8 +57,6 @@ UPDATE sla_rules
        active = 1
  WHERE sla_rule_id = 'SLAR-PO-30'
    AND entity_type = 'PURCHASE_ORDER';
-
-COMMIT;
 
 -- Expected result:
 -- SLAR-003   | FINANCE_APPROVAL  | 15 | 10 | 1
