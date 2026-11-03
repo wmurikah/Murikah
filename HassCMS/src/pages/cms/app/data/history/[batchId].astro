@@ -694,21 +694,32 @@ const action = dominantAction(batch?.status ?? '', batchId);
   });
 
   document.getElementById('cms-batch-commit')?.addEventListener('click', async () => {
+    const message = document.getElementById('cms-batch-message');
     if (message) message.textContent = 'Importing.';
-    const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
-    const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!response.ok || result === null) {
-      if (message) message.textContent = 'The import could not be completed.';
-      return;
+    try {
+      const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
+      const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok || result === null) {
+        const error = result?.error as Record<string, unknown> | undefined;
+        const traceId = error?.traceId === undefined ? null : String(error.traceId);
+        if (message) {
+          message.textContent =
+            String(error?.message ?? 'The import could not be completed.') +
+            (traceId === null ? '' : ` Reference ${traceId}.`);
+        }
+        return;
+      }
+      const skipped = (result.skippedReasons ?? []) as { reason: string; rows: number }[];
+      if (message) {
+        message.textContent =
+          String(result.status) === 'PARTIAL'
+            ? `Partial: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsSkipped)} not imported. ${skipped.map((entry) => `${entry.rows} rows: ${entry.reason}`).join('; ')}`
+            : `Imported: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsUnchanged)} unchanged.`;
+      }
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      if (message) message.textContent = 'The import request could not be sent. Try again.';
     }
-    const skipped = (result.skippedReasons ?? []) as { reason: string; rows: number }[];
-    if (message) {
-      message.textContent =
-        String(result.status) === 'PARTIAL'
-          ? `Partial: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsSkipped)} not imported. ${skipped.map((entry) => `${entry.rows} rows: ${entry.reason}`).join('; ')}`
-          : `Imported: ${String(result.documentsCreated)} created, ${String(result.documentsUpdated)} updated, ${String(result.documentsUnchanged)} unchanged.`;
-    }
-    window.setTimeout(() => window.location.reload(), 1200);
   });
 
   document.getElementById('cms-batch-revalidate')?.addEventListener('click', async () => {

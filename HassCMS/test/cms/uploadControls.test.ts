@@ -506,6 +506,26 @@ test('criterion 20: every one of the five states has one dominant action and a s
   assert.notEqual(imported.href, null, 'the action is to open the records');
 });
 
+test('the batch import button declares its status target before sending the commit', () => {
+  const page = readFileSync(
+    join(here, '..', '..', 'src/pages/cms/app/data/history/[batchId].astro'),
+    'utf8',
+  );
+  const start = page.indexOf("document.getElementById('cms-batch-commit')");
+  const end = page.indexOf("document.getElementById('cms-batch-revalidate')", start);
+  assert.ok(start >= 0 && end > start, 'the batch commit handler is missing');
+  const handler = page.slice(start, end);
+  const declaration = handler.indexOf(
+    "const message = document.getElementById('cms-batch-message')",
+  );
+  const firstUse = handler.indexOf('if (message)');
+  const request = handler.indexOf('/commit`');
+  assert.ok(declaration >= 0, 'the commit handler reads an undeclared message variable');
+  assert.ok(declaration < firstUse, 'the status target is read before it is declared');
+  assert.ok(declaration < request, 'the handler can fail before sending the commit request');
+  assert.match(handler, /Reference \$\{traceId\}/, 'a server failure hides its support reference');
+});
+
 // ---------------------------------------------------------------------------
 // Criterion 25: every page this phase touches stays inside its budget.
 // ---------------------------------------------------------------------------
