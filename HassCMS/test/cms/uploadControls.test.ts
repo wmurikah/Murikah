@@ -524,6 +524,21 @@ test('the batch import button declares its status target before sending the comm
   assert.ok(declaration < firstUse, 'the status target is read before it is declared');
   assert.ok(declaration < request, 'the handler can fail before sending the commit request');
   assert.match(handler, /Reference \$\{traceId\}/, 'a server failure hides its support reference');
+  assert.match(handler, /busy\(commitButton, 'Importing…'\)/, 'the import has no busy state');
+});
+
+test('upload and import busy states animate without inventing a percentage', () => {
+  const busySource = readFileSync(join(here, '..', '..', 'src/lib/cms/ui/busy.ts'), 'utf8');
+  const uploadPage = readFileSync(
+    join(here, '..', '..', 'src/pages/cms/app/data/upload.astro'),
+    'utf8',
+  );
+  assert.match(busySource, /animate-spin/);
+  assert.match(busySource, /motion-reduce:animate-none/);
+  assert.match(busySource, /aria-busy/);
+  assert.match(busySource, /button\.disabled = true/);
+  assert.match(uploadPage, /busy\(validateButton as HTMLButtonElement, 'Validating…'\)/);
+  assert.match(uploadPage, /busy\(commitButton as HTMLButtonElement, 'Importing…'\)/);
 });
 
 // ---------------------------------------------------------------------------

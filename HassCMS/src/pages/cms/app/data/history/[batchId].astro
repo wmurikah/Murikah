@@ -546,6 +546,8 @@ const action = dominantAction(batch?.status ?? '', batchId);
 </CmsLayout>
 
 <script>
+  import { busy } from '@hasscms/lib/cms/ui/busy';
+
   const drawer = document.getElementById('cms-row-drawer') as HTMLDialogElement | null;
   const body = document.getElementById('cms-row-body');
   const message = document.getElementById('cms-batch-message');
@@ -693,9 +695,11 @@ const action = dominantAction(batch?.status ?? '', batchId);
     if (response.ok) window.location.reload();
   });
 
-  document.getElementById('cms-batch-commit')?.addEventListener('click', async () => {
+  const commitButton = document.getElementById('cms-batch-commit') as HTMLButtonElement | null;
+  commitButton?.addEventListener('click', async () => {
+    const restore = busy(commitButton, 'Importing…');
     const message = document.getElementById('cms-batch-message');
-    if (message) message.textContent = 'Importing.';
+    if (message) message.textContent = 'Importing records. Keep this page open.';
     try {
       const response = await fetch(`/api/data/imports/${batchId}/commit`, { method: 'POST' });
       const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -707,6 +711,7 @@ const action = dominantAction(batch?.status ?? '', batchId);
             String(error?.message ?? 'The import could not be completed.') +
             (traceId === null ? '' : ` Reference ${traceId}.`);
         }
+        restore();
         return;
       }
       const skipped = (result.skippedReasons ?? []) as { reason: string; rows: number }[];
@@ -719,6 +724,7 @@ const action = dominantAction(batch?.status ?? '', batchId);
       window.setTimeout(() => window.location.reload(), 1200);
     } catch {
       if (message) message.textContent = 'The import request could not be sent. Try again.';
+      restore();
     }
   });
 
