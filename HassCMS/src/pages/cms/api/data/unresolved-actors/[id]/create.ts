@@ -8,7 +8,10 @@
 import type { APIRoute } from 'astro';
 import { requireUsersManage, writeContext } from '../../../../../../lib/cms/admin/guard.ts';
 import { connect } from '../../../../../../lib/cms/admin/crudRoute.ts';
-import { validateCreateUser } from '../../../../../../lib/cms/admin/userInput.ts';
+import {
+  validateAssignment,
+  validateCreateUser,
+} from '../../../../../../lib/cms/admin/userInput.ts';
 import { issueInvitation, describeDelivery } from '../../../../../../lib/cms/admin/invitation.ts';
 import { getCmsEnv, invitationLinksVisible } from '../../../../../../lib/cms/env.ts';
 import { createAndMapUnresolvedActor } from '../../../../../../lib/cms/import/unresolvedUsers.ts';
@@ -34,6 +37,11 @@ export const POST: APIRoute = async (context) => {
   const connection = await connect(context.locals);
   if ('response' in connection) return connection.response;
   const ctx = writeContext(context.request, auth.principal);
+  const assignment = validateAssignment(
+    { ...(body ?? {}), isPrimary: true, active: true },
+    ctx.now.toISOString().slice(0, 10),
+  );
+  if (!assignment.ok) return invalid(assignment.errors);
 
   try {
     const invitation = await issueInvitation(getCmsEnv().sessionSecret, ctx.now);
@@ -42,13 +50,14 @@ export const POST: APIRoute = async (context) => {
       {
         unresolvedActorId: context.params.id ?? '',
         user: parsed.value,
+        assignment: assignment.value,
         invitation,
         revalidate: body?.revalidate === true,
       },
       ctx,
     );
     if (!result.ok) {
-      if (result.kind === 'user') return failure(result.result);
+      if (result.kind === 'user' || result.kind === 'assignment') return failure(result.result);
       return invalid([
         {
           field: 'unresolvedActorId',

@@ -570,6 +570,18 @@ test('an administrator can create an invited internal user and map an unresolved
         timezone: 'Africa/Nairobi',
         locale: 'en-KE',
       },
+      assignment: {
+        jobTitleId: 'JT-FM',
+        departmentId: 'DEP-FIN',
+        level: 'AFFILIATE',
+        countryId: null,
+        affiliateId: 'AFF-KE',
+        businessUnitId: null,
+        effectiveFrom: '2026-08-27',
+        effectiveTo: null,
+        isPrimary: true,
+        active: true,
+      },
       invitation: {
         tokenId: 'EVT-NEW-ACTOR',
         tokenHash: 'a'.repeat(64),
@@ -587,10 +599,14 @@ test('an administrator can create an invited internal user and map an unresolved
   assert.equal(result.ok && result.user.userType, 'INTERNAL');
   assert.equal(result.ok && result.revalidated?.rowsExamined > 0, true);
   const persisted = await c.execute({
-    sql: `SELECT u.status, u.email, si.external_username, ua.status AS actor_status
+    sql: `SELECT u.status, u.email, si.external_username, unresolved.status AS actor_status,
+                 d.department_name, jt.title_name, assignment.affiliate_id
           FROM users u
           JOIN source_identities si ON si.user_id = u.user_id
-          JOIN unresolved_actors ua ON ua.mapped_user_id = u.user_id
+          JOIN unresolved_actors unresolved ON unresolved.mapped_user_id = u.user_id
+          JOIN user_assignments assignment ON assignment.user_id = u.user_id
+          JOIN departments d ON d.department_id = assignment.department_id
+          JOIN job_titles jt ON jt.job_title_id = assignment.job_title_id
           WHERE u.email = ?`,
     args: ['gabriel.new@example.com'],
   });
@@ -601,6 +617,9 @@ test('an administrator can create an invited internal user and map an unresolved
       email: 'gabriel.new@example.com',
       external_username: 'MR. MUSEMBI GABRIEL MUSYOKA',
       actor_status: 'MAPPED',
+      department_name: 'Finance',
+      title_name: 'Finance Manager',
+      affiliate_id: 'AFF-KE',
     },
   );
   assert.equal(first.batchId, actor.firstSeenBatchId);

@@ -119,7 +119,9 @@ const href = (row: LaStat, view: 'completed' | 'typical' | 'breaches'): string =
 
 /** A missing row means neither source evidence nor owner configuration named anyone. */
 const named = (row: LaStat): string =>
-  row.isPerson ? (row.person ?? 'Not recorded') : labelOf(row.fn);
+  row.isPerson
+    ? `${row.person ?? 'Not recorded'}${row.fn === 'Loading authority' && row.person ? ' (accountable)' : ''}`
+    : labelOf(row.fn);
 /**
  * ZERO AND UNKNOWN ARE DIFFERENT FACTS AND MUST NOT SHARE A RENDERING.
  *

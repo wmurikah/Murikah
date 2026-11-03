@@ -9,8 +9,15 @@
 import type { Client } from '@libsql/client/web';
 import type { WriteContext } from '../admin/guard.ts';
 import type { CreateUserInput } from '../admin/userInput.ts';
+import type { AssignmentInput } from '../admin/userInput.ts';
 import type { IssuedInvitation } from '../admin/invitation.ts';
-import { createUser, type CreatedUser, type WriteResult } from '../repos/userAdmin.ts';
+import {
+  createAssignment,
+  createUser,
+  type AssignmentRow,
+  type CreatedUser,
+  type WriteResult,
+} from '../repos/userAdmin.ts';
 import {
   mapUnresolvedActor,
   revalidateBatch,
@@ -19,16 +26,19 @@ import {
 } from './uploadCentre.ts';
 
 type CreateFailure = Extract<WriteResult<CreatedUser>, { ok: false }>;
+type AssignmentFailure = Extract<WriteResult<AssignmentRow>, { ok: false }>;
 
 export type CreateAndMapActorResult =
   | {
       ok: true;
       user: CreatedUser['user'];
+      assignment: AssignmentRow;
       invitationToken: string;
       sourceIdentityId: string;
       revalidated: RevalidateOutcome | null;
     }
   | { ok: false; kind: 'user'; result: CreateFailure }
+  | { ok: false; kind: 'assignment'; result: AssignmentFailure }
   | { ok: false; kind: 'mapping'; reason: string };
 
 export async function createAndMapUnresolvedActor(
@@ -36,6 +46,7 @@ export async function createAndMapUnresolvedActor(
   input: {
     unresolvedActorId: string;
     user: CreateUserInput;
+    assignment: AssignmentInput;
     invitation: IssuedInvitation;
     revalidate: boolean;
   },
@@ -44,6 +55,7 @@ export async function createAndMapUnresolvedActor(
   const tx = await db.transaction('write');
   let batchId = '';
   let created: CreatedUser | null = null;
+  let assignment: AssignmentRow | null = null;
   let mapped: Extract<MapActorResult, { ok: true }> | null = null;
 
   try {
@@ -69,6 +81,18 @@ export async function createAndMapUnresolvedActor(
     }
     created = createResult.value;
 
+    const assignmentResult = await createAssignment(
+      transactionalDb,
+      created.user.userId,
+      input.assignment,
+      ctx,
+    );
+    if (!assignmentResult.ok) {
+      await tx.rollback();
+      return { ok: false, kind: 'assignment', result: assignmentResult };
+    }
+    assignment = assignmentResult.value;
+
     const mapResult = await mapUnresolvedActor(
       transactionalDb,
       {
@@ -91,11 +115,12 @@ export async function createAndMapUnresolvedActor(
   // Revalidation can be comparatively expensive and does not belong inside
   // the account transaction. The durable mapping is already available to it.
   const revalidated = input.revalidate ? await revalidateBatch(db, batchId, ctx) : null;
-  if (created === null || mapped === null)
+  if (created === null || assignment === null || mapped === null)
     throw new Error('Create-and-map transaction lost state.');
   return {
     ok: true,
     user: created.user,
+    assignment,
     invitationToken: created.invitationToken,
     sourceIdentityId: mapped.sourceIdentityId,
     revalidated,

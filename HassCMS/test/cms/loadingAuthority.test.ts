@@ -620,6 +620,7 @@ test('the rename is presentation only, and the panel explains only unavailable S
     LOADING_AUTHORITY_FUNCTIONS.find((row) => row.key === 'Loading authority')?.label,
     'Supply',
   );
+  assert.match(panel, /\(accountable\)/, 'Supply ownership is presented as performed approval');
   assert.ok(!/Sales order approval/.test(home), 'Home still calls the panel by its old name');
   // THE DATABASE WAS NOT RENAMED WITH IT. The tables and the entity type are
   // untouched, which is what keeps every existing link and query working.
