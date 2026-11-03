@@ -512,7 +512,10 @@ const soOrder = (
  *
  * The order's creation always precedes the authority, and it is what the
  * "Order to loading authority" card above the panel already measures, so the
- * panel and that card now answer the same question the same way.
+ * panel and that card answer the same operational question the same way. It
+ * is not the signed LA-generation SLA clock: that clock starts at receipt of
+ * funds or an LPO, which the extract does not carry. Its rule therefore stays
+ * inactive until that event is captured.
  */
 const LOADING_AUTHORITY_START = 'so.order_created_at';
 
@@ -1402,11 +1405,13 @@ export async function approverBoard(db: Client, scope: ApprovalScope): Promise<A
 export { TARGET_SQL };
 
 /* -------------------------------------------------------------------------
- * THE LOADING AUTHORITY PANEL: THREE FUNCTIONS, EACH WITH ITS OWN TARGET
+ * THE LOADING AUTHORITY PANEL: THREE FUNCTIONS, EACH WITH ITS OWN RULE
  * ------------------------------------------------------------------------- */
 
 /**
- * The three functions on the panel, and the rule each is judged by.
+ * The three functions on the panel, and the rule each can be judged by. An
+ * inactive rule yields no target, which is how the signed LA-generation term
+ * remains visible without being applied to the wrong start event.
  *
  * THE MAPPING LIVES HERE AND NOWHERE ELSE. A function's workflow stage and
  * its SLA rule's stage code are NOT the same string — credit release runs on
