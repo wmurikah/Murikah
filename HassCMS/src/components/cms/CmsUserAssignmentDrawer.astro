@@ -1,0 +1,233 @@
+---
+/** Add an organisational posting to an existing internal user. */
+import CmsDrawer from './CmsDrawer.astro';
+import CmsButton from './CmsButton.astro';
+import CmsInput from './CmsInput.astro';
+import CmsSelect from './CmsSelect.astro';
+import type {
+  AffiliateRow,
+  BusinessUnitRow,
+  CountryRow,
+  DepartmentRow,
+} from '@hasscms/lib/cms/repos/organisationAdmin';
+import type { JobTitleRow } from '@hasscms/lib/cms/repos/userAdmin';
+import { ASSIGNMENT_LEVELS } from '@hasscms/lib/cms/admin/userInput';
+
+interface Props {
+  userId: string;
+  countries: CountryRow[];
+  affiliates: AffiliateRow[];
+  businessUnits: BusinessUnitRow[];
+  departments: DepartmentRow[];
+  titles: JobTitleRow[];
+}
+
+const { userId, countries, affiliates, businessUnits, departments, titles } = Astro.props;
+const options = <T extends { active: boolean }>(rows: T[]) => rows.filter((row) => row.active);
+const levelOptions = ASSIGNMENT_LEVELS.map((value) => ({
+  value,
+  label:
+    value === 'GROUP'
+      ? 'Group, the whole of Hass Petroleum'
+      : value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' '),
+}));
+---
+
+<CmsDrawer id="cms-assignment-drawer" tone="form" title="Add organisational assignment">
+  <form id="cms-assignment-form" novalidate class="flex flex-col gap-4" data-user-id={userId}>
+    <p
+      id="cms-assignment-error"
+      role="alert"
+      hidden
+      class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
+    >
+    </p>
+
+    <CmsSelect
+      id="a-jobTitleId"
+      name="jobTitleId"
+      label="Job title"
+      options={options(titles).map((row) => ({ value: row.jobTitleId, label: row.titleName }))}
+      required
+    />
+    <CmsSelect
+      id="a-departmentId"
+      name="departmentId"
+      label="Department"
+      options={options(departments).map((row) => ({
+        value: row.departmentId,
+        label: row.departmentName,
+      }))}
+      required
+    />
+    <CmsSelect
+      id="a-level"
+      name="level"
+      label="Assignment level"
+      options={levelOptions}
+      hint="Choose the scope where this posting applies."
+      required
+    />
+
+    <div data-assignment-level="COUNTRY" hidden>
+      <CmsSelect
+        id="a-countryId"
+        name="countryId"
+        label="Country"
+        options={options(countries).map((row) => ({
+          value: row.countryId,
+          label: row.countryName,
+        }))}
+      />
+    </div>
+    <div data-assignment-level="AFFILIATE" hidden>
+      <CmsSelect
+        id="a-affiliateId"
+        name="affiliateId"
+        label="Affiliate"
+        options={options(affiliates).map((row) => ({
+          value: row.affiliateId,
+          label: `${row.affiliateName} (${row.affiliateCode})`,
+        }))}
+      />
+    </div>
+    <div data-assignment-level="BUSINESS_UNIT" hidden>
+      <CmsSelect
+        id="a-businessUnitId"
+        name="businessUnitId"
+        label="Business unit"
+        options={options(businessUnits).map((row) => ({
+          value: row.businessUnitId,
+          label: row.businessUnitName,
+        }))}
+      />
+    </div>
+
+    <CmsInput id="a-effectiveFrom" name="effectiveFrom" label="Effective from" type="date" />
+    <label class="flex items-center gap-2 text-cms-body-sm text-cms-ink">
+      <input name="isPrimary" type="checkbox" checked class="h-4 w-4" />
+      Primary assignment
+    </label>
+    <p class="text-cms-caption text-cms-muted">
+      Department and posting describe where the user works. Approval authority is assigned
+      separately under Access → Workflow authority.
+    </p>
+  </form>
+
+  <Fragment slot="actions">
+    <CmsButton variant="ghost" data-cms-modal-close>Cancel</CmsButton>
+    <button
+      type="submit"
+      id="cms-assignment-save"
+      form="cms-assignment-form"
+      class="inline-flex h-10 items-center justify-center rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white hover:bg-cms-royal-deep disabled:opacity-60"
+    >
+      Add assignment
+    </button>
+  </Fragment>
+</CmsDrawer>
+
+<script>
+  const drawer = document.getElementById('cms-assignment-drawer');
+  const form = document.getElementById('cms-assignment-form');
+  const save = document.getElementById('cms-assignment-save');
+  const errorBox = document.getElementById('cms-assignment-error');
+
+  if (
+    drawer instanceof HTMLDialogElement &&
+    form instanceof HTMLFormElement &&
+    save instanceof HTMLButtonElement
+  ) {
+    const applyLevel = () => {
+      const levelField = form.elements.namedItem('level');
+      const level = levelField instanceof HTMLSelectElement ? levelField.value : '';
+      form.querySelectorAll('[data-assignment-level]').forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        const active = node.dataset.assignmentLevel === level;
+        node.hidden = !active;
+        node.querySelectorAll('select, input').forEach((field) => {
+          if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement)
+            field.disabled = !active;
+        });
+      });
+    };
+
+    const clearErrors = () => {
+      form.querySelectorAll('[data-field-error]').forEach((node) => {
+        node.textContent = '';
+        node.classList.add('hidden');
+      });
+      form
+        .querySelectorAll('[aria-invalid="true"]')
+        .forEach((node) => node.setAttribute('aria-invalid', 'false'));
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+    };
+
+    const paint = (fields: { field: string; message: string }[]) => {
+      for (const item of fields) {
+        const field = form.elements.namedItem(item.field);
+        if (!(field instanceof HTMLElement) || !field.id) continue;
+        field.setAttribute('aria-invalid', 'true');
+        const message = document.getElementById(`${field.id}-error`);
+        if (message) {
+          message.textContent = item.message;
+          message.classList.remove('hidden');
+        }
+      }
+    };
+
+    form.addEventListener('change', (event) => {
+      if (event.target instanceof HTMLElement && event.target.id === 'a-level') applyLevel();
+    });
+    document.addEventListener('click', (event) => {
+      if (
+        !(event.target instanceof HTMLElement) ||
+        !event.target.closest('[data-cms-assignment-create]')
+      )
+        return;
+      clearErrors();
+      form.reset();
+      applyLevel();
+      drawer.showModal();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearErrors();
+      save.disabled = true;
+      const data = new FormData(form);
+      const body = Object.fromEntries(data.entries());
+      const userId = form.dataset.userId ?? '';
+      try {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/assignments`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; fields?: { field: string; message: string }[] };
+        } | null;
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+        if (payload?.error?.fields) paint(payload.error.fields);
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = payload?.error?.message ?? 'That assignment could not be saved.';
+        }
+      } catch {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = 'There was a problem reaching the server.';
+        }
+      } finally {
+        save.disabled = false;
+      }
+    });
+  }
+</script>
