@@ -3,14 +3,9 @@
  * Data → Exceptions → Unresolved Users.
  *
  * The names an extract used that this product does not recognise. An
- * administrator maps one to an EXISTING person, which writes a source
- * identity and closes the exception. Every later upload then recognises the
- * same name with nobody touching it again, which is the whole point:
- * nobody should resolve the same mapping every month.
- *
- * THIS SCREEN CREATES NOBODY. A name in a spreadsheet is not an account.
- * A genuinely new colleague is created in user administration, where an
- * email address is mandatory, and mapped here afterwards.
+ * administrator maps one to an existing person or explicitly creates an
+ * invited internal user with the missing identity details. Every later upload
+ * then recognises the same name without another manual decision.
  */
 import CmsLayout from '@hasscms/layouts/CmsLayout.astro';
 import CmsPageHeader from '@hasscms/components/cms/CmsPageHeader.astro';
@@ -19,11 +14,15 @@ import CmsDrawer from '@hasscms/components/cms/CmsDrawer.astro';
 import CmsButton from '@hasscms/components/cms/CmsButton.astro';
 import CmsSelect from '@hasscms/components/cms/CmsSelect.astro';
 import CmsCheckbox from '@hasscms/components/cms/CmsCheckbox.astro';
+import CmsInput from '@hasscms/components/cms/CmsInput.astro';
 import CmsEmptyState from '@hasscms/components/cms/CmsEmptyState.astro';
 import CmsErrorState from '@hasscms/components/cms/CmsErrorState.astro';
 import { requestDb } from '@hasscms/lib/cms/db';
 import { canManageUsers, canViewImports } from '@hasscms/lib/cms/permissions';
-import { listUnresolvedActors, type UnresolvedActorRow } from '@hasscms/lib/cms/import/uploadCentre';
+import {
+  listUnresolvedActors,
+  type UnresolvedActorRow,
+} from '@hasscms/lib/cms/import/uploadCentre';
 
 export const prerender = false;
 
@@ -40,12 +39,13 @@ if (mayView) {
     actors = await listUnresolvedActors(db);
     if (mayMap) {
       const users = await db.execute(
-        `SELECT user_id, display_name, email, employee_no FROM users
-         WHERE status = 'ACTIVE' AND user_type = 'INTERNAL' ORDER BY display_name`,
+        `SELECT user_id, display_name, email, employee_no, status FROM users
+         WHERE status IN ('ACTIVE', 'INVITED') AND user_type = 'INTERNAL'
+         ORDER BY display_name`,
       );
       people = users.rows.map((row) => ({
         value: String(row.user_id),
-        label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})`,
+        label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})${String(row.status) === 'INVITED' ? ' — invited' : ''}`,
       }));
     }
   } catch (error) {
@@ -71,7 +71,7 @@ if (mayView) {
       <Fragment>
         <CmsPageHeader
           title="Unresolved users"
-          definition="These are source-system names this product does not recognise. Map one to a person who already exists; nobody is created here."
+          definition="These are source-system names this product does not recognise. Map one to an existing person, or create an invited user after confirming their identity and email."
           crumbs={[
             { label: 'Home', href: '/app' },
             { label: 'Upload Centre', href: '/app/data' },
@@ -148,17 +148,59 @@ if (mayView) {
                 class="rounded-cms border border-cms-negative bg-cms-negative-tint px-3 py-2 text-cms-body-sm text-cms-negative"
               />
               <p class="text-cms-body-sm text-cms-muted">
-                Mapping <span id="cms-actor-name" class="font-medium text-cms-ink" />. If the person
-                does not exist yet, create them in user administration first: an account needs an
-                email address, which a spreadsheet name does not carry.
+                Resolving <span id="cms-actor-name" class="font-medium text-cms-ink" />. Search the
+                directory first. If this is a new person, provide the identity details that the
+                spreadsheet does not contain.
               </p>
-              <CmsSelect
-                id="actor-userId"
-                name="userId"
-                label="Person"
-                required
-                options={[{ value: '', label: 'Choose a person' }, ...people]}
-              />
+              <fieldset class="flex flex-col gap-2">
+                <legend class="text-cms-label font-semibold text-cms-ink">Resolution</legend>
+                <label class="flex items-center gap-2 text-cms-body-sm text-cms-ink">
+                  <input
+                    type="radio"
+                    name="actor-resolution"
+                    value="existing"
+                    checked
+                    class="h-4 w-4 accent-cms-royal"
+                  />
+                  Map to an existing person
+                </label>
+                <label class="flex items-center gap-2 text-cms-body-sm text-cms-ink">
+                  <input
+                    type="radio"
+                    name="actor-resolution"
+                    value="new"
+                    class="h-4 w-4 accent-cms-royal"
+                  />
+                  Create a new invited user
+                </label>
+              </fieldset>
+              <section id="actor-existing-fields">
+                <CmsSelect
+                  id="actor-userId"
+                  name="userId"
+                  label="Person"
+                  required
+                  options={[{ value: '', label: 'Choose a person' }, ...people]}
+                />
+              </section>
+              <section id="actor-new-fields" hidden class="flex flex-col gap-4">
+                <CmsInput id="actor-firstName" name="firstName" label="First name" required />
+                <CmsInput id="actor-lastName" name="lastName" label="Last name" required />
+                <CmsInput
+                  id="actor-email"
+                  name="email"
+                  label="Work email"
+                  type="email"
+                  hint="The account is created as invited and cannot sign in until this address is verified."
+                  required
+                />
+                <CmsInput
+                  id="actor-employeeNo"
+                  name="employeeNo"
+                  label="Employee number"
+                  hint="Optional, and unique where supplied. Organisational access can be assigned in Administration."
+                />
+              </section>
               <CmsCheckbox
                 id="actor-revalidate"
                 name="revalidate"
@@ -176,7 +218,7 @@ if (mayView) {
                 data-cms-actor-save
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-cms bg-cms-royal px-4 text-cms-body-sm font-semibold text-white outline-none hover:bg-cms-royal-deep focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Map
+                <span data-cms-actor-save-label>Map</span>
               </button>
             </Fragment>
           </CmsDrawer>
@@ -193,7 +235,25 @@ if (mayView) {
   const errorBox = document.getElementById('cms-actor-error');
   const nameLabel = document.getElementById('cms-actor-name');
   const message = document.getElementById('cms-actor-message');
+  const existingFields = document.getElementById('actor-existing-fields');
+  const newFields = document.getElementById('actor-new-fields');
+  const saveLabel = document.querySelector('[data-cms-actor-save-label]');
   let actorId = '';
+
+  const resolution = () =>
+    (form?.querySelector<HTMLInputElement>('input[name="actor-resolution"]:checked')?.value ??
+      'existing') as 'existing' | 'new';
+
+  const updateResolution = () => {
+    const creating = resolution() === 'new';
+    if (existingFields) existingFields.hidden = creating;
+    if (newFields) newFields.hidden = !creating;
+    if (saveLabel) saveLabel.textContent = creating ? 'Create and map' : 'Map';
+  };
+
+  form?.addEventListener('change', (event) => {
+    if ((event.target as HTMLInputElement | null)?.name === 'actor-resolution') updateResolution();
+  });
 
   document.addEventListener('click', (event) => {
     const target = (event.target as HTMLElement | null)?.closest('[data-cms-actor-map]');
@@ -202,35 +262,64 @@ if (mayView) {
     if (nameLabel) nameLabel.textContent = target.getAttribute('data-actor-name') ?? '';
     if (errorBox) errorBox.hidden = true;
     form.reset();
+    updateResolution();
     drawer.showModal();
   });
 
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (errorBox) errorBox.hidden = true;
-    const userId =
-      (document.getElementById('actor-userId') as HTMLSelectElement | null)?.value ?? '';
+    const mode = resolution();
+    const value = (id: string) =>
+      (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value.trim() ??
+      '';
+    const userId = value('actor-userId');
     const revalidate =
       (document.getElementById('actor-revalidate') as HTMLInputElement | null)?.checked ?? false;
-    if (userId === '') {
+    if (mode === 'existing' && userId === '') {
       if (errorBox) {
         errorBox.textContent = 'Choose the person this name belongs to.';
         errorBox.hidden = false;
       }
       return;
     }
-    // The success path stays on this page for 1.5s before reloading; the
-    // drawer is closed by then, so restoring the button is safe on every path.
+    if (
+      mode === 'new' &&
+      [value('actor-firstName'), value('actor-lastName'), value('actor-email')].some(
+        (v) => v === '',
+      )
+    ) {
+      if (errorBox) {
+        errorBox.textContent = 'Enter the new user’s first name, last name and work email.';
+        errorBox.hidden = false;
+      }
+      return;
+    }
+    // The success path briefly stays on this page before reloading; the drawer
+    // is closed by then, so restoring the button is safe on every path.
     const restore = busy(
       form?.querySelector<HTMLButtonElement>('[type="submit"]') ?? null,
-      'Mapping…',
+      mode === 'new' ? 'Creating…' : 'Mapping…',
     );
     try {
-      const response = await fetch(`/api/data/unresolved-actors/${actorId}/map`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId, revalidate }),
-      });
+      const response = await fetch(
+        `/api/data/unresolved-actors/${actorId}/${mode === 'new' ? 'create' : 'map'}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(
+            mode === 'new'
+              ? {
+                  firstName: value('actor-firstName'),
+                  lastName: value('actor-lastName'),
+                  email: value('actor-email'),
+                  employeeNo: value('actor-employeeNo') || null,
+                  revalidate,
+                }
+              : { userId, revalidate },
+          ),
+        },
+      );
       const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
       if (!response.ok) {
         const errors = (payload?.errors ?? []) as { message: string }[];
@@ -243,12 +332,17 @@ if (mayView) {
       drawer?.close();
       const revalidated = payload?.revalidated as Record<string, unknown> | null;
       if (message) {
-        message.textContent =
+        const base =
           revalidated === null || revalidated === undefined
             ? 'The name is mapped. Later uploads will recognise it.'
             : `The name is mapped. ${String(revalidated.rowsExamined)} rows examined, ${String(revalidated.rowsResolved)} resolved.`;
+        const invitation = payload?.invitation as Record<string, unknown> | undefined;
+        message.textContent =
+          mode === 'new'
+            ? `${base} The user was created as invited. ${String(invitation?.message ?? (invitation?.path ? `Invitation: ${String(invitation.path)}` : ''))}`.trim()
+            : base;
       }
-      window.setTimeout(() => window.location.reload(), 1500);
+      window.setTimeout(() => window.location.reload(), mode === 'new' ? 5000 : 1500);
     } finally {
       restore();
     }
