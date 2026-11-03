@@ -338,9 +338,9 @@ test('warning fires exactly once under repeated sweeps, breach writes exactly on
   // A second insert against the UNIQUE constraint is refused by the database.
   await assert.rejects(
     c.execute({
-      sql: `INSERT INTO sla_breaches (sla_breach_id, sla_instance_id, entity_type, entity_id, breached_at, target_at)
-            VALUES ('SLAB-DUP', ?, 'CASE', ?, ?, ?)`,
-      args: [instanceId, made.value.caseId, targetAt, targetAt],
+      sql: `INSERT INTO sla_breaches (sla_breach_id, sla_instance_id, breached_at)
+            VALUES ('SLAB-DUP', ?, ?)`,
+      args: [instanceId, targetAt],
     }),
     /UNIQUE constraint failed/,
   );

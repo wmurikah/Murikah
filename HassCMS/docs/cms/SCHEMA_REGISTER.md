@@ -38,6 +38,13 @@ database rather than from a record of intent.
 | —   | `teardown/00_inventory.sql`                                                      | Read-only. Counts every table before a teardown, so an operator sees what they are about to lose                                                                                                                                                                                                                               | Yes                                  | Not applicable, it changes nothing                                    | It is itself a `SELECT`                                   |
 | —   | `teardown/02_drop_all.sql`                                                       | **Drops every CMS table.** For rebuilding a development database, never production                                                                                                                                                                                                                                             | Yes                                  | **No**                                                                | `SELECT COUNT(*) FROM sqlite_master` returns 0 CMS tables |
 
+## SLA runtime schema contract
+
+The breach/escalation writers follow the observed 2 November 2026 schema.
+No migration is required for the [SLA write reconciliation](SLA_SCHEMA_RECONCILIATION.md).
+Entity/target stay on `sla_instances`; escalation uses `triggered_at` and an
+explicit status, with notification/event creation in one foreign-key-safe batch.
+
 ## Standalone OIDC storage repair
 
 `db/migrations/003_oidc_transactions_only.sql` is a focused, rerunnable repair

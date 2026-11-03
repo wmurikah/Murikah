@@ -20,14 +20,14 @@ import {
   unreadCount,
   resolveNotificationTarget,
 } from '../../src/lib/cms/notify/notifications.ts';
-import { sweepDueSlas } from '../../src/lib/cms/sla/engine.ts';
+import { sweepDueSlas, stopSla } from '../../src/lib/cms/sla/engine.ts';
 import { registerSlaHandlers, resetSlaRegistration } from '../../src/lib/cms/sla/wiring.ts';
 import {
   resetCaseEventHandlers,
   resetLeadEventHandlers,
   resetSlaWiring,
 } from '../../src/lib/cms/service/events.ts';
-import { createCase } from '../../src/lib/cms/repos/serviceAdmin.ts';
+import { createCase, addCommunication } from '../../src/lib/cms/repos/serviceAdmin.ts';
 import { createActivity } from '../../src/lib/cms/repos/activityAdmin.ts';
 
 const NOW = new Date('2026-08-27T07:00:00Z');
@@ -198,13 +198,18 @@ test('local escalation reaches the local supervisor once, never the Group CFO, w
   // The seeded breached instances (SLAI-002, SLAI-003) escalate too, to the
   // same local policy; this test reads only the escalation for its own case.
   const escalations = await c.execute({
-    sql: `SELECT e.recipient_user_id, e.details_json FROM sla_escalation_events e
+    sql: `SELECT e.recipient_user_id, e.details_json, e.triggered_at, e.status, n.notification_id
+          FROM sla_escalation_events e JOIN notifications n ON n.notification_id=e.notification_id
           JOIN sla_instances i ON i.sla_instance_id = e.sla_instance_id
           WHERE i.entity_type = 'CASE' AND i.entity_id = ?`,
     args: [made.value.caseId],
   });
   assert.equal(escalations.rows.length, 1);
   assert.equal(String(escalations.rows[0]?.recipient_user_id), 'USR-AMN');
+  assert.equal(escalations.rows[0]?.status, 'SENT');
+  assert.equal(escalations.rows[0]?.triggered_at, '2026-08-27 11:00:00');
+  assert.ok(escalations.rows[0]?.notification_id);
+  assert.deepEqual((await c.execute('PRAGMA foreign_key_check')).rows, []);
   const details = JSON.parse(String(escalations.rows[0]?.details_json)) as { why?: string };
   assert.match(details.why ?? '', /exceeded its target/);
   assert.match(details.why ?? '', /local/);
@@ -220,8 +225,8 @@ test('local escalation reaches the local supervisor once, never the Group CFO, w
   await assert.rejects(
     c.execute({
       sql: `INSERT INTO sla_escalation_events
-              (sla_escalation_event_id, sla_instance_id, escalation_level, escalated_at)
-            SELECT 'ESC-DUP', sla_instance_id, 1, '2026-08-27 11:30:00' FROM sla_escalation_events LIMIT 1`,
+              (sla_escalation_event_id, sla_instance_id, escalation_level, triggered_at, status)
+            SELECT 'ESC-DUP', sla_instance_id, 1, '2026-08-27 11:30:00', 'SENT' FROM sla_escalation_events LIMIT 1`,
       args: [],
     }),
     /UNIQUE constraint failed/,
@@ -378,4 +383,224 @@ test('no restricted field reaches a stored message', async () => {
     assert.equal(/KES|USD|UGX/.test(body), false, body);
   }
   c.close();
+});
+
+test('an overdue domain completion records a breach using the observed schema and does not escalate finished work', async () => {
+  const c = await db();
+  try {
+    const made = await createCase(asClient(c), SEED.admin, caseInput(), CTX, true);
+    assert.ok(made.ok);
+    if (!made.ok) return;
+    const late = new Date('2026-08-27T12:00:00Z');
+    await addCommunication(
+      asClient(c),
+      SEED.admin,
+      made.value.caseId,
+      {
+        direction: 'OUTBOUND',
+        channel: 'EMAIL',
+        contactId: null,
+        subject: null,
+        messageSummary: 'Late first response',
+        communicatedAt: '2026-08-27 12:00:00',
+      },
+      { ...CTX, now: late },
+    );
+    await sweepDueSlas(asClient(c), late);
+    await sweepNotifications(asClient(c), late);
+    await sweepNotifications(asClient(c), late);
+    const rows = await c.execute({
+      sql: `SELECT i.sla_instance_id,i.status,i.stopped_at,i.target_at,b.breached_at,b.accountable_user_id
+            FROM sla_instances i JOIN sla_breaches b ON b.sla_instance_id=i.sla_instance_id
+            WHERE i.entity_type='CASE' AND i.entity_id=?`,
+      args: [made.value.caseId],
+    });
+    assert.equal(rows.rows.length, 1);
+    const row = rows.rows[0]!;
+    assert.equal(row.status, 'BREACHED');
+    assert.equal(row.stopped_at, '2026-08-27 12:00:00');
+    assert.equal(row.breached_at, row.target_at);
+    assert.equal(row.accountable_user_id, 'USR-CATH');
+    assert.equal(
+      Number(
+        (
+          await c.execute({
+            sql: 'SELECT COUNT(*) AS n FROM sla_escalation_events WHERE sla_instance_id=?',
+            args: [row.sla_instance_id],
+          })
+        ).rows[0]?.n,
+      ),
+      0,
+    );
+    assert.equal(
+      Number(
+        (
+          await c.execute({
+            sql: "SELECT COUNT(*) AS n FROM notifications WHERE entity_id=? AND notification_type='SLA_BREACH' AND user_id='USR-CATH'",
+            args: [row.sla_instance_id],
+          })
+        ).rows[0]?.n,
+      ),
+      1,
+    );
+    assert.deepEqual((await c.execute('PRAGMA foreign_key_check')).rows, []);
+  } finally {
+    c.close();
+  }
+});
+
+test('direct overdue completion before a sweep records the timer fact needed for exactly one breach notification', async () => {
+  const c = await db();
+  try {
+    const made = await createCase(asClient(c), SEED.admin, caseInput(), CTX, true);
+    assert.ok(made.ok);
+    if (!made.ok) return;
+    const filter = { entityType: 'CASE', entityId: made.value.caseId };
+    const late = new Date('2026-08-27T12:00:00Z');
+    const stopped = await stopSla(asClient(c), filter, late, 'Completed late', SEED.admin);
+    assert.equal(stopped.length, 1);
+    assert.deepEqual(
+      await stopSla(asClient(c), filter, late, 'Repeated completion', SEED.admin),
+      [],
+    );
+    await sweepDueSlas(asClient(c), late);
+    await sweepNotifications(asClient(c), late);
+    await sweepNotifications(asClient(c), late);
+    for (const table of ['sla_breaches', 'sla_timer_events']) {
+      const suffix = table === 'sla_timer_events' ? " AND event_type='BREACH'" : '';
+      assert.equal(
+        Number(
+          (
+            await c.execute({
+              sql: `SELECT COUNT(*) AS n FROM ${table} WHERE sla_instance_id=?${suffix}`,
+              args: [stopped[0]],
+            })
+          ).rows[0]?.n,
+        ),
+        1,
+      );
+    }
+    assert.equal(
+      Number(
+        (
+          await c.execute({
+            sql: "SELECT COUNT(*) AS n FROM notifications WHERE entity_id=? AND notification_type='SLA_BREACH' AND user_id='USR-CATH'",
+            args: [stopped[0]],
+          })
+        ).rows[0]?.n,
+      ),
+      1,
+    );
+  } finally {
+    c.close();
+  }
+});
+
+for (const failAt of ['notification', 'event']) {
+  test(`failed escalation ${failAt} write rolls back its partner and can be retried`, async () => {
+    const c = await db();
+    try {
+      await c.execute("UPDATE teams SET manager_user_id='USR-AMN' WHERE team_id='TEAM-CS-KE'");
+      const made = await createCase(asClient(c), SEED.admin, caseInput(), CTX, true);
+      assert.ok(made.ok);
+      if (!made.ok) return;
+      const instance = String(
+        (
+          await c.execute({
+            sql: "SELECT sla_instance_id FROM sla_instances WHERE entity_type='CASE' AND entity_id=?",
+            args: [made.value.caseId],
+          })
+        ).rows[0]?.sla_instance_id,
+      );
+      const late = new Date('2026-08-27T11:00:00Z');
+      await sweepDueSlas(asClient(c), late);
+      const table = failAt === 'notification' ? 'notifications' : 'sla_escalation_events';
+      const predicate =
+        failAt === 'notification'
+          ? `NEW.entity_id='${instance}' AND NEW.title LIKE 'Escalation:%'`
+          : `NEW.sla_instance_id='${instance}'`;
+      c.raw.exec(
+        `CREATE TRIGGER reject_test_escalation BEFORE INSERT ON ${table} WHEN ${predicate} BEGIN SELECT RAISE(ABORT,'escalation write failed'); END`,
+      );
+      await assert.rejects(() => sweepNotifications(asClient(c), late), /escalation write failed/);
+      const eventCount = () =>
+        c.execute({
+          sql: 'SELECT COUNT(*) AS n FROM sla_escalation_events WHERE sla_instance_id=?',
+          args: [instance],
+        });
+      const notificationCount = () =>
+        c.execute({
+          sql: "SELECT COUNT(*) AS n FROM notifications WHERE entity_id=? AND title LIKE 'Escalation:%'",
+          args: [instance],
+        });
+      assert.equal(Number((await eventCount()).rows[0]?.n), 0);
+      assert.equal(Number((await notificationCount()).rows[0]?.n), 0);
+      c.raw.exec('DROP TRIGGER reject_test_escalation');
+      await sweepNotifications(asClient(c), late);
+      await sweepNotifications(asClient(c), late);
+      assert.equal(Number((await eventCount()).rows[0]?.n), 1);
+      assert.equal(Number((await notificationCount()).rows[0]?.n), 1);
+      assert.deepEqual((await c.execute('PRAGMA foreign_key_check')).rows, []);
+    } finally {
+      c.close();
+    }
+  });
+}
+
+test('failed breach storage rolls back the SLA transition and timer event, then succeeds on retry', async () => {
+  const c = await db();
+  try {
+    const made = await createCase(asClient(c), SEED.admin, caseInput(), CTX, true);
+    assert.ok(made.ok);
+    if (!made.ok) return;
+    const instance = String(
+      (
+        await c.execute({
+          sql: "SELECT sla_instance_id FROM sla_instances WHERE entity_type='CASE' AND entity_id=?",
+          args: [made.value.caseId],
+        })
+      ).rows[0]?.sla_instance_id,
+    );
+    c.raw.exec(
+      `CREATE TRIGGER reject_test_breach BEFORE INSERT ON sla_breaches WHEN NEW.sla_instance_id='${instance}' BEGIN SELECT RAISE(ABORT,'breach write failed'); END`,
+    );
+    const late = new Date('2026-08-27T11:00:00Z');
+    await assert.rejects(() => sweepDueSlas(asClient(c), late), /breach write failed/);
+    assert.equal(
+      (
+        await c.execute({
+          sql: 'SELECT status FROM sla_instances WHERE sla_instance_id=?',
+          args: [instance],
+        })
+      ).rows[0]?.status,
+      'RUNNING',
+    );
+    assert.equal(
+      Number(
+        (
+          await c.execute({
+            sql: "SELECT COUNT(*) AS n FROM sla_timer_events WHERE sla_instance_id=? AND event_type='BREACH'",
+            args: [instance],
+          })
+        ).rows[0]?.n,
+      ),
+      0,
+    );
+    c.raw.exec('DROP TRIGGER reject_test_breach');
+    await sweepDueSlas(asClient(c), late);
+    await sweepDueSlas(asClient(c), late);
+    assert.equal(
+      Number(
+        (
+          await c.execute({
+            sql: 'SELECT COUNT(*) AS n FROM sla_breaches WHERE sla_instance_id=?',
+            args: [instance],
+          })
+        ).rows[0]?.n,
+      ),
+      1,
+    );
+  } finally {
+    c.close();
+  }
 });

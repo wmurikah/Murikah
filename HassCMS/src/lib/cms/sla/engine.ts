@@ -528,9 +528,18 @@ export async function stopSla(
       },
     ];
     if (breached) {
-      // The breach row may already exist from the sweep; INSERT OR IGNORE and
+      // The breach row may already exist from the sweep; the conflict target and
       // the UNIQUE constraint make one primary row the invariant, not a hope.
-      statements.push(breachRowStmt(instance, at));
+      statements.push(
+        {
+          sql: `INSERT INTO sla_timer_events
+                (sla_timer_event_id,sla_instance_id,event_type,event_at,reason,actor_user_id)
+              SELECT ?,?,'BREACH',?,'Target passed before completion',?
+              WHERE NOT EXISTS (SELECT 1 FROM sla_timer_events WHERE sla_instance_id=? AND event_type='BREACH')`,
+          args: [newId('SLATE'), instanceId, instance.targetAt, actorUserId, instanceId],
+        },
+        breachRowStmt(instance, at),
+      );
     }
     await db.batch(statements, 'write');
     stopped.push(instanceId);
@@ -540,17 +549,14 @@ export async function stopSla(
 
 function breachRowStmt(instance: InstanceRow, detectedAt: Date): Stmt {
   return {
-    sql: `INSERT OR IGNORE INTO sla_breaches
-            (sla_breach_id, sla_instance_id, entity_type, entity_id, breached_at, target_at,
-             breach_minutes, accountable_user_id, accountable_team_id,
-             workflow_stage_instance_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO sla_breaches
+            (sla_breach_id, sla_instance_id, breached_at, breach_minutes,
+             accountable_user_id, accountable_team_id, workflow_stage_instance_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(sla_instance_id) DO NOTHING`,
     args: [
       newId('SLAB'),
       instance.slaInstanceId,
-      instance.entityType,
-      instance.entityId,
-      instance.targetAt,
       instance.targetAt,
       Math.max(0, wallMinutesBetween(fromDb(instance.targetAt), detectedAt)),
       instance.accountableUserId,
@@ -574,7 +580,7 @@ export interface SweepResult {
  * sweeps re-fire nothing. Breach sets the status, stamps breached_at with
  * the true target time, and inserts the one primary sla_breaches row, where
  * the UNIQUE constraint is the guarantee and a conflict is handled by
- * INSERT OR IGNORE rather than crashed on.
+ * the instance-specific conflict target rather than crashed on.
  *
  * Notification creation is phase 16's; the WARNING timer event is the fact
  * it will consume.

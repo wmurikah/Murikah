@@ -166,6 +166,7 @@ interface DueInstance {
   accountableUserId: string | null;
   accountableTeamId: string | null;
   targetAt: string;
+  stoppedAt: string | null;
   escalationAfterMinutes: number | null;
   affiliateId: string | null;
 }
@@ -173,7 +174,7 @@ interface DueInstance {
 async function dueInstances(db: Client, eventType: 'WARNING' | 'BREACH'): Promise<DueInstance[]> {
   const result = await db.execute({
     sql: `SELECT i.sla_instance_id, i.entity_type, i.entity_id, i.accountable_user_id,
-                 i.accountable_team_id, i.target_at, r.rule_name, r.escalation_after_minutes,
+                 i.accountable_team_id, i.target_at, i.stopped_at, r.rule_name, r.escalation_after_minutes,
                  COALESCE(sc.case_number, l.lead_number, so.document_number, po.document_number, i.entity_id) AS label,
                  COALESCE(a_case.affiliate_id, a_lead.affiliate_id, so.affiliate_id, po.affiliate_id) AS affiliate_id
           FROM sla_instances i
@@ -199,6 +200,7 @@ async function dueInstances(db: Client, eventType: 'WARNING' | 'BREACH'): Promis
       accountableUserId: nullableText(row.accountable_user_id),
       accountableTeamId: nullableText(row.accountable_team_id),
       targetAt: text(row.target_at),
+      stoppedAt: nullableText(row.stopped_at),
       escalationAfterMinutes:
         row.escalation_after_minutes === null || row.escalation_after_minutes === undefined
           ? null
@@ -296,7 +298,7 @@ export async function sweepNotifications(db: Client, now: Date): Promise<Notific
     }
 
     // Escalation, one level, locally, where the rule configures a window.
-    if (instance.escalationAfterMinutes !== null) {
+    if (instance.escalationAfterMinutes !== null && instance.stoppedAt === null) {
       const escalateAt =
         new Date(`${instance.targetAt.replace(' ', 'T')}Z`).getTime() +
         instance.escalationAfterMinutes * 60000;
@@ -305,48 +307,56 @@ export async function sweepNotifications(db: Client, now: Date): Promise<Notific
         if (supervisor !== null) {
           const exceededBy = Math.round((now.getTime() - escalateAt) / 60000);
           const notificationId = newId('NOTIF');
-          // The escalation event first: UNIQUE(instance, level) makes one
-          // firing per level a database guarantee, and the INSERT OR IGNORE
-          // means a repeat is a no-op rather than a crash. The notification
-          // follows only when the event was actually new.
-          const event = await db.execute({
-            sql: `INSERT OR IGNORE INTO sla_escalation_events
-                    (sla_escalation_event_id, sla_instance_id, escalation_level, escalated_at,
-                     recipient_user_id, notification_id, details_json)
-                  VALUES (?, ?, 1, ?, ?, ?, ?)`,
-            args: [
-              newId('SLAESC'),
-              instance.slaInstanceId,
-              toDbTimestamp(now),
-              supervisor,
-              notificationId,
-              JSON.stringify({
-                why: `${instance.ruleName} on ${instance.label} exceeded its target by more than the configured ${instance.escalationAfterMinutes} minutes, so the local supervisor was notified under the local-before-Group policy.`,
-                ruleName: instance.ruleName,
-                targetAt: instance.targetAt,
-                minutesPastEscalationPoint: exceededBy,
-                policy:
-                  'local team manager, else the affiliate country manager; never Group unless configured',
-              }),
-            ] as never[],
-          });
-          if (Number(event.rowsAffected ?? 0) > 0) {
-            await db.execute({
-              sql: `INSERT INTO notifications
-                      (notification_id, user_id, notification_type, title, message, entity_type,
-                       entity_id, created_at, read_at)
-                    VALUES (?, ?, 'SLA_BREACH', ?, ?, 'SLA_INSTANCE', ?, ?, NULL)`,
-              args: [
-                notificationId,
-                supervisor,
-                `Escalation: ${instance.label} remains past target`,
-                `${instance.ruleName} on ${instance.label} is still open past its escalation point. You are its local supervisor.`,
-                instance.slaInstanceId,
-                toDbTimestamp(now),
-              ],
-            });
-            result.escalations += 1;
-          }
+          // notification_id is an immediate FK in the observed schema. Create
+          // the in-app notification first, then its SENT event in one write
+          // batch. A repeated sweep skips both rows, and either failure rolls
+          // both back. SENT means available in-app, not delivered by email.
+          const results = await db.batch(
+            [
+              {
+                sql: `INSERT INTO notifications
+                      (notification_id,user_id,notification_type,title,message,entity_type,entity_id,created_at,read_at)
+                    SELECT ?,?,'SLA_BREACH',?,?,'SLA_INSTANCE',?,?,NULL
+                    WHERE NOT EXISTS (SELECT 1 FROM sla_escalation_events
+                                      WHERE sla_instance_id=? AND escalation_level=1)`,
+                args: [
+                  notificationId,
+                  supervisor,
+                  `Escalation: ${instance.label} remains past target`,
+                  `${instance.ruleName} on ${instance.label} is still open past its escalation point. You are its local supervisor.`,
+                  instance.slaInstanceId,
+                  toDbTimestamp(now),
+                  instance.slaInstanceId,
+                ],
+              },
+              {
+                sql: `INSERT INTO sla_escalation_events
+                      (sla_escalation_event_id,sla_instance_id,escalation_level,triggered_at,
+                       recipient_user_id,notification_id,status,details_json)
+                    SELECT ?,?,1,?,?,?,'SENT',?
+                    WHERE EXISTS (SELECT 1 FROM notifications WHERE notification_id=?)
+                    ON CONFLICT(sla_instance_id,escalation_level) DO NOTHING`,
+                args: [
+                  newId('SLAESC'),
+                  instance.slaInstanceId,
+                  toDbTimestamp(now),
+                  supervisor,
+                  notificationId,
+                  JSON.stringify({
+                    why: `${instance.ruleName} on ${instance.label} exceeded its target by more than the configured ${instance.escalationAfterMinutes} minutes, so the local supervisor was notified under the local-before-Group policy.`,
+                    ruleName: instance.ruleName,
+                    targetAt: instance.targetAt,
+                    minutesPastEscalationPoint: exceededBy,
+                    policy:
+                      'local team manager, else the affiliate country manager; never Group unless configured',
+                  }),
+                  notificationId,
+                ],
+              },
+            ],
+            'write',
+          );
+          if (Number(results[1]?.rowsAffected ?? 0) > 0) result.escalations += 1;
         }
       }
     }
