@@ -32,6 +32,7 @@ import {
   safeFilename,
   escapeForDisplay,
   MAX_UPLOAD_BYTES,
+  affiliateForExtractToken,
 } from '../../src/lib/cms/import/uploadCentre.ts';
 import {
   canUploadImportType,
@@ -68,6 +69,50 @@ const db = async (): Promise<TestClient> => {
   return c;
 };
 const asClient = (c: TestClient) => c as unknown as Parameters<typeof receiveUpload>[0];
+
+test('Zambia filename tokens ZM and ZW resolve to one affiliate, with exact codes first', () => {
+  const affiliates = [
+    { affiliateId: 'AFF-ZM', affiliateName: 'Hass Petroleum Zambia', extractCode: 'ZM' },
+  ];
+  assert.equal(affiliateForExtractToken(affiliates, 'ZM')?.affiliateId, 'AFF-ZM');
+  assert.equal(affiliateForExtractToken(affiliates, 'ZW')?.affiliateId, 'AFF-ZM');
+  assert.equal(affiliateForExtractToken(affiliates, 'ZZ'), null);
+  assert.equal(
+    affiliateForExtractToken(
+      [...affiliates, { affiliateId: 'AFF-OTHER', affiliateName: 'Other', extractCode: 'ZW' }],
+      'ZW',
+    )?.affiliateId,
+    'AFF-OTHER',
+  );
+});
+
+test('a sales file named ZW agrees with its Zambia AFFILIATE column', async () => {
+  const c = await db();
+  const source = parseWorkbook(SO_FILE).rows[0];
+  assert.ok(source);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet([{ ...source, AFFILIATE: 'Hass Petroleum Zambia' }]),
+    'Orders',
+  );
+  const bytes = new Uint8Array(XLSX.write(workbook, { bookType: 'biff8', type: 'buffer' }));
+  const outcome = await receiveUpload(
+    asClient(c),
+    {
+      ...soUpload(bytes, 'SALES-ZW-01JAN2026-31DEC2026.xls'),
+      sourceSystemId: 'SRC-ORACLE',
+      reportingPeriodFrom: null,
+      reportingPeriodTo: null,
+    },
+    CTX,
+  );
+  assert.equal(outcome.stage, 'READY');
+  assert.equal(outcome.entity?.affiliateId, 'AFF-ZM');
+  assert.equal(outcome.entity?.source, 'column');
+  assert.deepEqual(outcome.entity?.warnings, []);
+  assert.equal(outcome.derivation?.unmappedColumns.length, 0);
+});
 
 const soUpload = (bytes: Uint8Array, filename = 'SO-Ver1.xls') => ({
   importType: 'SALES_ORDER' as const,

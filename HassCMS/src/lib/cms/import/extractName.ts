@@ -21,8 +21,8 @@
  * selection and loses nothing. The one relaxation is the extension's case,
  * because Windows saves .XLS and the extension claims nothing.
  *
- * Pure over its input: no database, no DOM, no clock. The token is matched
- * against affiliates.extract_code by the caller, never interpreted here.
+ * Pure over its input: no database, no DOM, no clock. The token is resolved
+ * against the affiliate catalogue by the caller, including reviewed aliases.
  */
 
 export type ExtractProcess = 'SALES' | 'PURCHASE';
