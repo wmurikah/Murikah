@@ -32,6 +32,7 @@
  * does not unbreak the promise.
  */
 import type { Client, InStatement } from '@libsql/client/web';
+import { checkSchemaCompatibility, SLA_TABLES } from '../schema/compatibility.ts';
 import { newId } from '../repos/authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import {
@@ -53,19 +54,10 @@ export const fromDb = (stamp: string): Date => new Date(`${stamp.replace(' ', 'T
 
 // ---- Table verification -----------------------------------------------------
 
-/**
- * The operator's prerequisite script added sla_breaches and
- * sla_escalation_events. The batch instructions state it has been run; this
- * verifies it with a query wherever the engine actually runs, and the engine
- * refuses to start without them rather than failing later mid-write.
- */
+/** Required SLA columns, CHECK/UNIQUE rules and FKs, not just table names. */
 export async function verifySlaTables(db: Client): Promise<{ ok: boolean; missing: string[] }> {
-  const result = await db.execute(
-    `SELECT name FROM sqlite_master WHERE name IN ('sla_breaches','sla_escalation_events')`,
-  );
-  const present = new Set(result.rows.map((r) => String((r as Record<string, unknown>).name)));
-  const missing = ['sla_breaches', 'sla_escalation_events'].filter((t) => !present.has(t));
-  return { ok: missing.length === 0, missing };
+  const result = await checkSchemaCompatibility(db, SLA_TABLES);
+  return { ok: result.ok, missing: [...new Set(result.issues.map((issue) => issue.table))] };
 }
 
 // ---- Rule resolution --------------------------------------------------------

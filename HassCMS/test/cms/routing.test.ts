@@ -111,6 +111,30 @@ const signIn = (email: string) =>
   worker.call('POST', '/api/auth/login', { body: { email, password: PASSWORD } });
 
 test(
+  'public readiness returns 503 for missing OIDC storage without exposing schema details',
+  { skip: skip() },
+  async () => {
+    const healthy = await worker.call('GET', '/api/health', { cookie: null });
+    assert.equal(healthy.status, 200);
+    assert.equal(JSON.parse(healthy.body).status, 'ok');
+    const ddl = String(
+      worker.db.prepare("SELECT sql FROM sqlite_schema WHERE name='auth_oidc_transactions'").get()
+        ?.sql,
+    );
+    worker.db.exec('DROP TABLE auth_oidc_transactions');
+    try {
+      const degraded = await worker.call('GET', '/api/health', { cookie: null });
+      assert.equal(degraded.status, 503);
+      assert.equal(JSON.parse(degraded.body).status, 'degraded');
+      assert.equal(degraded.headers['cache-control'], 'no-store');
+      assert.doesNotMatch(degraded.body, /auth_oidc_transactions|state_hash|SELECT|turso/i);
+    } finally {
+      worker.db.exec(ddl);
+    }
+  },
+);
+
+test(
   'an unauthenticated request for a protected path redirects to /login',
   { skip: skip() },
   async () => {

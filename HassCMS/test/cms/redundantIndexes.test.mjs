@@ -9,7 +9,13 @@ import {
   removeRedundantIndexes,
 } from '../../db/migrations/005_remove_redundant_indexes.mjs';
 
-const ddl = readFileSync(new URL('./fixtures/redundantIndexes.sql', import.meta.url), 'utf8');
+const ddl =
+  readFileSync(new URL('../../db/schema/cms.sql', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../db/diagnostics/redundant_index_restore.sql', import.meta.url),
+    'utf8',
+  );
 async function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'cms-index-cleanup-'));
   const db = createClient({ url: 'file:' + join(dir, 'test.db') });
@@ -18,7 +24,7 @@ async function setup() {
     close();
     rmSync(dir, { recursive: true, force: true });
   };
-  // This focused fixture contains the eight exported tables, not their FK parents.
+  // Synthetic rows omit parent data; schema comes from the shared baseline.
   await db.execute('PRAGMA foreign_keys=OFF');
   await db.executeMultiple(ddl);
   return db;

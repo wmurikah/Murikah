@@ -12,10 +12,10 @@
  * silently returning nothing, so a repository that starts using a wider API
  * fails loudly here instead of passing a test it never ran.
  *
- * The schema is created from the DDL in ./schema.ts, which is copied verbatim
- * from the operator's hass_cms_turso_v1_FINAL.sql. Foreign keys are ON, and
- * every CHECK constraint is present, so a test proves the code satisfies the
- * real constraints rather than a relaxed copy of them.
+ * The schema is loaded from the reviewed db/schema/cms.sql via schema.ts.
+ * That baseline incorporates the operator export and explicit reviewed repairs;
+ * npm test also checks its generated compatibility manifest. Foreign keys and
+ * every CHECK/UNIQUE constraint are enforced during integration tests.
  */
 import { DatabaseSync } from 'node:sqlite';
 import { AUTH_SCHEMA_DDL } from './schema.ts';

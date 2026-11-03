@@ -200,6 +200,7 @@ for (const definition of [
   test(`same-name incompatible index is preserved and reported: ${definition}`, () => {
     const db = createTestDb();
     try {
+      db.raw.exec('DROP INDEX idx_notifications_user_unread');
       db.raw.exec('CREATE INDEX idx_notifications_user_unread ' + definition);
       const original = db.raw
         .prepare("SELECT sql FROM sqlite_schema WHERE name='idx_notifications_user_unread'")

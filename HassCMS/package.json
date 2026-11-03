@@ -28,7 +28,10 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "astro": "astro",
-    "test": "node --experimental-strip-types --test test/cms/*.test.ts test/cms/*.test.mjs test/hosts/*.test.ts test/isolation.test.ts",
+    "test": "node --experimental-strip-types db/schema-contract.ts --check && node --experimental-strip-types --test test/cms/*.test.ts test/cms/*.test.mjs test/hosts/*.test.ts test/isolation.test.ts",
+    "db:schema:check": "node --experimental-strip-types db/schema-contract.ts --check",
+    "db:schema:generate": "node --experimental-strip-types db/schema-contract.ts --generate",
+    "db:schema:live": "node --experimental-strip-types db/schema-contract.ts --live",
     "db:bootstrap-admin": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/bootstrap-admin.ts"
   },
   "dependencies": {

@@ -437,7 +437,8 @@ INSERT OR IGNORE INTO workflow_stages VALUES
 -- about the code under test.
 -- ============================================================================
 
-INSERT OR IGNORE INTO contacts VALUES
+INSERT OR IGNORE INTO contacts
+(contact_id,account_id,full_name,job_title,email,phone,whatsapp,preferred_channel,is_primary,active,created_at) VALUES
 ('CON-001','ACC-001','John Kamau','Procurement Director','john.kamau@bluepeak.example','+254722200001','+254722200001','WHATSAPP',1,1,CURRENT_TIMESTAMP),
 ('CON-002','ACC-002','Mary Wanjiku','Operations Manager','mary.wanjiku@riftline.example','+254722200002','+254722200002','EMAIL',1,1,CURRENT_TIMESTAMP),
 ('CON-003','ACC-003','Peter Otieno','Supply Chain Manager','peter.otieno@eastgate.example','+254722200003','+254722200003','PHONE',1,1,CURRENT_TIMESTAMP),

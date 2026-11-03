@@ -80,11 +80,11 @@ and adds storage/write overhead back. Inspect any existing name conflict first.
 ## Validation and limits
 
 `node test/cms/redundantIndexes.test.mjs` uses the actual libSQL client with a local
-database and the eight tables' exported definitions. With 200 synthetic rows per
+database and the shared reviewed schema baseline. With 200 synthetic rows per
 table it checks preview behavior, unchanged data and unrelated schema objects,
 retained uniqueness (including case-insensitive email and nullable keys), full-key
 and composite-prefix plans, safe reruns, definition drift, stored forced-index
-references and transaction rollback. The focused fixture omits FK parent tables
+references and transaction rollback. The synthetic seed omits parent rows
 and disables FK enforcement for seeding; no production data is included.
 
 Live counts, write rates, external tools and production performance have not been
