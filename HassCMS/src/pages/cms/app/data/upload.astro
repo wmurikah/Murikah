@@ -216,7 +216,10 @@ if (mayUpload) {
 
 <script>
   import { busy } from '@hasscms/lib/cms/ui/busy';
-  import { parseExtractFilename, EXTRACT_PROCESS_FOR_IMPORT } from '@hasscms/lib/cms/import/extractName';
+  import {
+    parseExtractFilename,
+    EXTRACT_PROCESS_FOR_IMPORT,
+  } from '@hasscms/lib/cms/import/extractName';
 
   interface Summary {
     rowsReceived?: number;
@@ -552,7 +555,10 @@ if (mayUpload) {
           line('Order lines', String(s.orderLines ?? 0)),
           line('New rows', String(s.rowsNew ?? 0)),
           line('Changed rows', String(s.rowsChanged ?? 0)),
-          line('Repeat rows', String(s.rowsDuplicate ?? 0)),
+          line(
+            state.importType === 'SALES_ORDER' ? 'Additional event rows' : 'Duplicate rows',
+            String(s.rowsDuplicate ?? 0),
+          ),
           line('Rows needing a mapping', String(s.rowsUnresolved ?? 0)),
           line('Rejected rows', String(s.rowsRejected ?? 0)),
           line('Unresolved users', String((outcome.unresolvedUsers ?? []).length)),

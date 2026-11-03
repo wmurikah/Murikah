@@ -31,7 +31,15 @@ import {
   type ExceptionQueue,
   type ImportType,
 } from '@hasscms/lib/cms/import/uploadCentre';
-import { importProgress, dominantAction, type ImportProgress } from '@hasscms/lib/cms/import/progress';
+import {
+  importRowPresentation,
+  SO_ADDITIONAL_EVENT_MESSAGE,
+} from '@hasscms/lib/cms/import/rowSemantics';
+import {
+  importProgress,
+  dominantAction,
+  type ImportProgress,
+} from '@hasscms/lib/cms/import/progress';
 import { planBatchDeletion, type BatchDeletePlan } from '@hasscms/lib/cms/import/batchAdmin';
 
 export const prerender = false;
@@ -47,6 +55,8 @@ interface RowLine {
   rowStatus: string;
   errorMessage: string | null;
   entityId: string | null;
+  displayStatus: string;
+  recordState: string;
 }
 
 let batch: BatchSummaryRow | undefined;
@@ -58,6 +68,7 @@ let audits: { eventType: string; action: string; at: string; after: string | nul
 // complete with no JavaScript at all.
 let progress: ImportProgress | null = null;
 let deletion: BatchDeletePlan | null = null;
+let additionalEventRows = 0;
 let loadFailed = false;
 if (mayView) {
   try {
@@ -69,22 +80,38 @@ if (mayView) {
       queues = await exceptionQueues(db, batchId);
       const rowResult = await db.execute({
         sql: `SELECT import_row_id, source_row_number, source_record_key, row_status,
-                error_message, entity_id
+                error_message, entity_id,
+                (SELECT COUNT(*) FROM import_rows events
+                  WHERE events.import_batch_id = ? AND events.error_message = ?) AS event_count
               FROM import_rows WHERE import_batch_id = ?
               ORDER BY CASE row_status WHEN 'REJECTED' THEN 0 WHEN 'UNRESOLVED' THEN 1 ELSE 2 END,
                        source_row_number
               LIMIT 200`,
-        args: [batchId],
+        args: [batchId, SO_ADDITIONAL_EVENT_MESSAGE, batchId],
       });
-      rows = rowResult.rows.map((raw) => ({
-        importRowId: String(raw.import_row_id),
-        sourceRowNumber: Number(raw.source_row_number),
-        sourceRecordKey: raw.source_record_key === null ? null : String(raw.source_record_key),
-        rowStatus: String(raw.row_status),
-        errorMessage:
-          raw.error_message === null ? null : escapeForDisplay(String(raw.error_message)),
-        entityId: raw.entity_id === null ? null : String(raw.entity_id),
-      }));
+      additionalEventRows = Number(rowResult.rows[0]?.event_count ?? 0);
+      rows = rowResult.rows.map((raw) => {
+        const rowStatus = String(raw.row_status);
+        const errorMessage =
+          raw.error_message === null ? null : escapeForDisplay(String(raw.error_message));
+        const entityId = raw.entity_id === null ? null : String(raw.entity_id);
+        const display = importRowPresentation({
+          importType: batch?.importType ?? '',
+          rowStatus,
+          errorMessage,
+          entityId,
+        });
+        return {
+          importRowId: String(raw.import_row_id),
+          sourceRowNumber: Number(raw.source_row_number),
+          sourceRecordKey: raw.source_record_key === null ? null : String(raw.source_record_key),
+          rowStatus,
+          errorMessage,
+          entityId,
+          displayStatus: display.statusLabel,
+          recordState: display.recordLabel,
+        };
+      });
       const auditResult = await db.execute({
         sql: `SELECT event_type, action, event_at, after_json FROM audit_events
               WHERE entity_type = 'IMPORT_BATCH' AND entity_id = ? ORDER BY event_at`,
@@ -321,10 +348,20 @@ const action = dominantAction(batch?.status ?? '', batchId);
                 <dt>Changed rows</dt>
                 <dd class="text-cms-ink tabular-nums">{batch.rowsChanged}</dd>
               </div>
-              <div class="flex justify-between border-b border-cms-line py-1.5">
-                <dt>Exact duplicate rows</dt>
-                <dd class="text-cms-ink tabular-nums">{batch.rowsDuplicate}</dd>
-              </div>
+              {additionalEventRows > 0 && (
+                <div class="flex justify-between border-b border-cms-line py-1.5">
+                  <dt>Additional event rows</dt>
+                  <dd class="text-cms-ink tabular-nums">{additionalEventRows}</dd>
+                </div>
+              )}
+              {batch.rowsDuplicate - additionalEventRows > 0 && (
+                <div class="flex justify-between border-b border-cms-line py-1.5">
+                  <dt>Exact duplicate rows</dt>
+                  <dd class="text-cms-ink tabular-nums">
+                    {batch.rowsDuplicate - additionalEventRows}
+                  </dd>
+                </div>
+              )}
               <div class="flex justify-between py-1.5">
                 <dt>Rejected rows</dt>
                 <dd class="text-cms-ink tabular-nums">{batch.rowsRejected}</dd>
@@ -375,6 +412,11 @@ const action = dominantAction(batch?.status ?? '', batchId);
         </div>
 
         <div class="mt-6">
+          <p class="mb-3 text-cms-body-sm text-cms-muted">
+            Every source row is retained. Additional-event rows carry another invoice or loading
+            timestamp for an existing order line; they remain available for drill-down but do not
+            multiply the same user approval. After commit, each accepted row links to its order.
+          </p>
           <CmsDataTable
             caption="Rows"
             columns={[
@@ -394,10 +436,21 @@ const action = dominantAction(batch?.status ?? '', batchId);
                 </td>
                 <td class="px-4 py-2.5 text-cms-muted">{row.sourceRecordKey ?? 'Not available'}</td>
                 <td class="px-4 py-2.5">
-                  <CmsBadge tone={rowTone(row.rowStatus)} label={row.rowStatus.toLowerCase()} />
+                  <CmsBadge tone={rowTone(row.rowStatus)} label={row.displayStatus} />
                 </td>
                 <td class="px-4 py-2.5 text-cms-muted">{row.errorMessage ?? ''}</td>
-                <td class="px-4 py-2.5 text-cms-muted">{row.entityId ?? 'Not imported'}</td>
+                <td class="px-4 py-2.5 text-cms-muted">
+                  {row.entityId === null ? (
+                    row.recordState
+                  ) : (
+                    <a
+                      class="text-cms-royal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                      href={`${batch.importType === 'SALES_ORDER' ? '/app/orders/sales' : '/app/orders/purchases'}/${encodeURIComponent(row.entityId)}`}
+                    >
+                      Open record
+                    </a>
+                  )}
+                </td>
                 <td class="px-4 py-2.5">
                   <button
                     type="button"
@@ -517,10 +570,10 @@ const action = dominantAction(batch?.status ?? '', batchId);
     body.innerHTML =
       pair('Source row', String(row.sourceRowNumber ?? '')) +
       pair('Source key', String(row.sourceRecordKey ?? 'Not available')) +
-      pair('Status', String(row.rowStatus ?? '')) +
+      pair('Status', String(row.displayStatus ?? row.rowStatus ?? '')) +
       pair('Message', String(row.errorMessage ?? '')) +
       pair('Row hash', String(row.rowHash ?? '')) +
-      pair('Record', String(row.entityId ?? 'Not imported')) +
+      pair('Record', String(row.entityId ?? row.recordState ?? 'Not imported')) +
       pair(
         'Snapshot version',
         row.snapshotVersion === null ? 'Not available' : String(row.snapshotVersion),

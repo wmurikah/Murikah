@@ -36,6 +36,10 @@ import {
 } from '../../src/lib/cms/import/uploadCentre.ts';
 import { createAndMapUnresolvedActor } from '../../src/lib/cms/import/unresolvedUsers.ts';
 import {
+  importRowPresentation,
+  SO_ADDITIONAL_EVENT_MESSAGE,
+} from '../../src/lib/cms/import/rowSemantics.ts';
+import {
   canUploadImportType,
   IMPORTS_UPLOAD,
   SALES_ORDER_UPLOAD,
@@ -132,6 +136,31 @@ const poUpload = (bytes: Uint8Array, filename = 'PO-Ver1.xls') => ({
   reportingPeriodFrom: null,
   reportingPeriodTo: null,
   bytes,
+});
+
+test('additional sales events are retained without presenting them as duplicate approvals', () => {
+  assert.deepEqual(
+    importRowPresentation({
+      importType: 'SALES_ORDER',
+      rowStatus: 'DUPLICATE',
+      errorMessage: SO_ADDITIONAL_EVENT_MESSAGE,
+      entityId: null,
+    }),
+    {
+      statusLabel: 'additional event',
+      recordLabel: 'Awaiting commit',
+      additionalEvent: true,
+    },
+  );
+  assert.equal(
+    importRowPresentation({
+      importType: 'PURCHASE_ORDER',
+      rowStatus: 'DUPLICATE',
+      errorMessage: null,
+      entityId: null,
+    }).statusLabel,
+    'duplicate',
+  );
 });
 
 /** Map one real sales order document's master data, as an administrator would. */
@@ -285,6 +314,41 @@ test('the sales order file goes upload, validate, review, commit, and the record
   assert.equal(committed.documentsSkipped, 0);
   assert.equal(committed.accountsCreated, 227);
   assert.ok(committed.productsCreated > 0);
+
+  // Every source row, including a further loading/invoice event for a line,
+  // is linked back to the canonical order. Those repeats must not manufacture
+  // another finance or credit approval for the same user.
+  const provenance = await c.execute({
+    sql: `SELECT COUNT(*) AS source_rows,
+                 SUM(CASE WHEN entity_id IS NOT NULL AND imported_at IS NOT NULL THEN 1 ELSE 0 END) AS linked_rows,
+                 SUM(CASE WHEN error_message = ? THEN 1 ELSE 0 END) AS additional_events
+          FROM import_rows WHERE import_batch_id = ?`,
+    args: [SO_ADDITIONAL_EVENT_MESSAGE, batchId],
+  });
+  assert.equal(Number(provenance.rows[0]?.source_rows), 1386);
+  assert.equal(Number(provenance.rows[0]?.linked_rows), 1386, 'a source row was omitted');
+  assert.ok(Number(provenance.rows[0]?.additional_events) > 0, 'the fixture has no event repeats');
+
+  const repeated = await c.execute({
+    sql: `SELECT entity_id, COUNT(*) AS source_rows
+          FROM import_rows
+          WHERE import_batch_id = ? AND error_message = ? AND entity_id IS NOT NULL
+          GROUP BY entity_id ORDER BY source_rows DESC LIMIT 1`,
+    args: [batchId, SO_ADDITIONAL_EVENT_MESSAGE],
+  });
+  const repeatedOrderId = String(repeated.rows[0]?.entity_id ?? '');
+  const approvalStages = await c.execute({
+    sql: `SELECT COUNT(*) AS approvals
+          FROM workflow_stage_instances wsi
+          JOIN workflow_instances wi ON wi.workflow_instance_id = wsi.workflow_instance_id
+          WHERE wi.entity_type = 'SALES_ORDER' AND wi.entity_id = ?`,
+    args: [repeatedOrderId],
+  });
+  assert.ok(Number(repeated.rows[0]?.source_rows) > 1);
+  assert.ok(
+    Number(approvalStages.rows[0]?.approvals) <= 2,
+    'repeated line events multiplied the finance/credit approval stages',
+  );
 
   const order = await c.execute({
     sql: `SELECT sales_order_id, status, currency_code, order_value FROM sales_orders WHERE document_number = ?`,
