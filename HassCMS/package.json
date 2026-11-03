@@ -28,7 +28,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "astro": "astro",
-    "test": "node --experimental-strip-types --test test/cms/*.test.ts test/hosts/*.test.ts test/isolation.test.ts",
+    "test": "node --experimental-strip-types --test test/cms/*.test.ts test/cms/*.test.mjs test/hosts/*.test.ts test/isolation.test.ts",
     "db:bootstrap-admin": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/bootstrap-admin.ts"
   },
   "dependencies": {
