@@ -48,8 +48,7 @@ export async function listInquiryMessages(
     sql: `SELECT cm.channel_message_id, cc.channel, cm.direction, cc.display_name,
                  cm.from_address, cm.to_address, cm.subject, cm.body, cm.received_at,
                  cm.status, cm.account_id, a.account_name,
-                 CASE WHEN c.contact_id IS NULL THEN NULL
-                      ELSE trim(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) END AS contact_name,
+                 c.full_name AS contact_name,
                  cm.case_id, sc.case_number, sc.subject AS case_subject
             FROM channel_messages cm
             JOIN channel_connections cc ON cc.channel_connection_id = cm.channel_connection_id
