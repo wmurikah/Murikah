@@ -347,9 +347,9 @@ test('a breach is attributed from the breach row, not to whoever closed the case
             '2026-08-23 08:00:00','2026-08-23 12:00:00','2026-08-23 11:00:00','2026-08-23 18:00:00',
             0,'BREACHED','2026-08-23 12:00:00')`);
   await c.execute(`INSERT INTO sla_breaches
-      (sla_breach_id, sla_instance_id, entity_type, entity_id, breached_at, target_at,
+      (sla_breach_id, sla_instance_id, breached_at,
        breach_minutes, accountable_user_id, accountable_team_id, workflow_stage_instance_id)
-    VALUES ('SLAB-BR','SLAI-BR','CASE','CASE-BR','2026-08-23 12:00:00','2026-08-23 12:00:00',
+    VALUES ('SLAB-BR','SLAI-BR','2026-08-23 12:00:00',
             360,'USR-VIC','TEAM-CRD-GRP',NULL)`);
   await c.execute(`UPDATE case_status_history SET changed_by_user_id = 'USR-CATH'
     WHERE case_id = 'CASE-BR' AND to_status = 'RESOLVED'`);

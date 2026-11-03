@@ -637,15 +637,11 @@ CREATE TABLE IF NOT EXISTS mfa_methods (
 -- loudly where they do not hold, because NULL versus zero is the point of
 -- that script: the real extracts carry no commercial values at all.
 --
--- sla_breaches and sla_escalation_events below MIRROR THE OPERATOR'S SLA
--- RUNTIME SCRIPT, which Build Prompt 15's instructions state has been run
--- against the live database (the batch document describes testing against
--- the real tables). Their shapes come from those instructions: one primary
--- breach row per instance enforced by UNIQUE(sla_instance_id), one
--- escalation per level enforced by UNIQUE(sla_instance_id, escalation_level),
--- and four indexes. Neither is a migration in the product: the operator runs
--- the scripts by hand, and the runtime verifies both tables exist before the
--- engine starts rather than assuming.
+-- SLA breach/escalation table definitions below now use the operator's
+-- 2 November 2026 schema export rather than the earlier instruction-derived
+-- shapes. Foreign keys are enforced, including the escalation-to-notification
+-- reference. Historical test helper indexes below are not evidence that those
+-- indexes exist in production.
 -- ============================================================================
 
 
@@ -1293,35 +1289,41 @@ CREATE INDEX IF NOT EXISTS idx_sla_entity ON sla_instances(entity_type, entity_i
 CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(import_batch_id, row_status);
 CREATE INDEX IF NOT EXISTS idx_snapshots_entity ON record_snapshots(entity_type, entity_id, version_no);
 
--- The operator's SLA runtime script, mirrored. See the note above.
+-- SLA tables from the operator's 2 November 2026 schema export.
+-- Entity/target stay on sla_instances; escalation notifications are immediate FKs.
 CREATE TABLE IF NOT EXISTS sla_breaches (
     sla_breach_id TEXT PRIMARY KEY,
-    sla_instance_id TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
+    sla_instance_id TEXT NOT NULL UNIQUE,
     breached_at TEXT NOT NULL,
-    target_at TEXT NOT NULL,
     breach_minutes INTEGER CHECK(breach_minutes IS NULL OR breach_minutes >= 0),
     accountable_user_id TEXT,
     accountable_team_id TEXT,
     workflow_stage_instance_id TEXT,
+    resolved_at TEXT,
+    resolution_notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sla_instance_id) REFERENCES sla_instances(sla_instance_id) ON DELETE CASCADE,
     FOREIGN KEY (accountable_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (accountable_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
-    UNIQUE(sla_instance_id)
+    FOREIGN KEY (workflow_stage_instance_id) REFERENCES workflow_stage_instances(workflow_stage_instance_id) ON DELETE SET NULL,
+    CHECK(resolved_at IS NULL OR resolved_at >= breached_at)
 );
 
 CREATE TABLE IF NOT EXISTS sla_escalation_events (
     sla_escalation_event_id TEXT PRIMARY KEY,
     sla_instance_id TEXT NOT NULL,
     escalation_level INTEGER NOT NULL CHECK(escalation_level > 0),
-    escalated_at TEXT NOT NULL,
+    triggered_at TEXT NOT NULL,
     recipient_user_id TEXT,
+    recipient_team_id TEXT,
     notification_id TEXT,
+    status TEXT NOT NULL CHECK(status IN ('PENDING','SENT','FAILED','ACKNOWLEDGED','CANCELLED')),
     details_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sla_instance_id) REFERENCES sla_instances(sla_instance_id) ON DELETE CASCADE,
     FOREIGN KEY (recipient_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (recipient_team_id) REFERENCES teams(team_id) ON DELETE SET NULL,
+    FOREIGN KEY (notification_id) REFERENCES notifications(notification_id) ON DELETE SET NULL,
     UNIQUE(sla_instance_id, escalation_level)
 );
 
