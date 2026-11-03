@@ -344,26 +344,21 @@ INSERT OR IGNORE INTO sla_profiles VALUES
 INSERT OR IGNORE INTO sla_rules VALUES
 ('SLAR-001','SLAP-002','Customer case first response','CASE','FIRST_RESPONSE','HIGH',60,45,'CAL-KE',1,0,60,1),
 ('SLAR-002','SLAP-001','Lead first contact','LEAD','FIRST_CONTACT',NULL,120,90,'CAL-KE',1,0,120,1),
--- THE OPERATOR'S TARGETS SCRIPT, MIRRORED (Build Prompt 45 prerequisite): all
--- three active SALES_ORDER rules now sit at 30 minutes with a 25-minute
--- warning, business hours only against the Kenya calendar's 08:00-17:00 day.
--- Loading authority came down from 90 in Build Prompt 45, so every approval
--- function in the system carries the same number.
---
--- THEY SHARE A VALUE AND ARE STILL READ SEPARATELY, which is the one thing
--- three equal numbers make impossible to see: code that reads one target and
--- draws it three times looks identical to code that reads three. Moving one
--- rule must move one line, and a test holds that.
-('SLAR-003','SLAP-004','SO finance approval','SALES_ORDER','FINANCE_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
-('SLAR-004','SLAP-004','SO credit approval','SALES_ORDER','CREDIT_APPROVAL',NULL,30,25,'CAL-KE',1,0,30,1),
-('SLAR-SO-LA','SLAP-004','SO loading authority','SALES_ORDER','LOADING_AUTHORITY',NULL,30,25,'CAL-KE',1,0,30,1),
+-- Signed interdepartmental SLA: Finance and Credit each have a 15-minute
+-- approval target. The internal warning is five minutes before the target.
+('SLAR-003','SLAP-004','SO finance approval — signed SLA','SALES_ORDER','FINANCE_APPROVAL',NULL,15,10,'CAL-KE',1,0,15,1),
+('SLAR-004','SLAP-004','SO credit approval — signed SLA','SALES_ORDER','CREDIT_APPROVAL',NULL,15,10,'CAL-KE',1,0,15,1),
+-- LA generation is contractually 10 minutes from receipt of funds/LPO. The
+-- extract lacks that start timestamp, so this rule records the term but stays
+-- inactive rather than judging the order-created-to-LA operational measure.
+('SLAR-SO-LA','SLAP-004','LA generation — awaiting funds or LPO receipt timestamp','SALES_ORDER','LOADING_AUTHORITY',NULL,10,5,'CAL-KE',1,0,10,0),
 -- THE OPERATOR'S SLA SCRIPT, MIRRORED (Build Prompt 43 prerequisite): the old
 -- 180-minute stage rule is deactivated and the one active PURCHASE_ORDER rule
 -- is SLAR-PO-30 — 30-minute target, 25-minute warning, business hours only,
 -- against the Kenya calendar's 08:00–17:00 day. The row stays because
 -- workflow_stages references it; only its active flag changed.
 ('SLAR-005','SLAP-004','PO approval stage','PURCHASE_ORDER','PO_APPROVAL',NULL,180,150,'CAL-KE',1,0,180,0),
-('SLAR-PO-30','SLAP-004','PO approval target','PURCHASE_ORDER',NULL,NULL,30,25,'CAL-KE',1,0,30,1),
+('SLAR-PO-30','SLAP-004','PO approval target — signed SLA','PURCHASE_ORDER',NULL,NULL,30,25,'CAL-KE',1,0,30,1),
 ('SLAR-006','SLAP-005','BluePeak complaint response','CASE','FIRST_RESPONSE','HIGH',30,20,'CAL-KE',1,0,30,1);
 
 INSERT OR IGNORE INTO workflow_roles VALUES

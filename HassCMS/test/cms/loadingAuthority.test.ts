@@ -108,23 +108,24 @@ const fnOf = (rows: LaStat[], key: string): LaStat => {
 
 // ---------------------------------------------------------------------------
 
-test('the prerequisite: three active sales order rules, all at 30', async () => {
+test('the signed SLA activates 15-minute approval rules and withholds the unsupported LA clock', async () => {
   const c = createTestDb();
   await seedHass(c);
   const rows = (
     await c.execute(
       `SELECT sla_rule_id, stage_code, target_minutes, warning_minutes, active FROM sla_rules
-        WHERE entity_type = 'SALES_ORDER' AND active = 1 ORDER BY stage_code`,
+        WHERE entity_type = 'SALES_ORDER' ORDER BY stage_code`,
     )
   ).rows as Record<string, unknown>[];
   assert.deepEqual(
     rows.map((row) => [row.sla_rule_id, row.stage_code, row.target_minutes, row.warning_minutes]),
     [
-      ['SLAR-004', 'CREDIT_APPROVAL', 30, 25],
-      ['SLAR-003', 'FINANCE_APPROVAL', 30, 25],
-      ['SLAR-SO-LA', 'LOADING_AUTHORITY', 30, 25],
+      ['SLAR-004', 'CREDIT_APPROVAL', 15, 10],
+      ['SLAR-003', 'FINANCE_APPROVAL', 15, 10],
+      ['SLAR-SO-LA', 'LOADING_AUTHORITY', 10, 5],
     ],
   );
+  assert.equal(rows.find((row) => row.sla_rule_id === 'SLAR-SO-LA')?.active, 0);
   // AND THE EIGHT AFFILIATE CODES, which are what the country tabs draw.
   const codes = (await c.execute(`SELECT affiliate_code FROM affiliates ORDER BY affiliate_code`))
     .rows as Record<string, unknown>[];
@@ -137,7 +138,8 @@ test('the prerequisite: three active sales order rules, all at 30', async () => 
 
 test('criterion 9: each function carries its own target, and its people with it', async () => {
   const c = await imported();
-  const board = kenya(await loadingAuthorityBoard(asClient(c), allTime));
+  const completeBoard = await loadingAuthorityBoard(asClient(c), allTime);
+  const board = kenya(completeBoard);
 
   // Three functions, in the journey's own order, each with its own rule.
   assert.deepEqual(
@@ -151,13 +153,14 @@ test('criterion 9: each function carries its own target, and its people with it'
     `[targets] finance ${finance.targetMinutes} credit ${credit.targetMinutes} ` +
       `loading ${loading.targetMinutes}`,
   );
-  // READ, NEVER HARD-CODED, and read SEPARATELY: finance and credit share a
-  // value today, and the next test proves that is configuration rather than
-  // one target standing in for the other.
-  assert.equal(finance.targetMinutes, 30);
-  assert.equal(credit.targetMinutes, 30);
-  assert.equal(loading.targetMinutes, 30);
-  assert.equal(loading.warningMinutes, 25);
+  // Finance and Credit are contractual, measurable approval clocks. Loading
+  // authority keeps its operational duration but has no active SLA rule until
+  // the extract records receipt of funds/LPO, where the signed clock begins.
+  assert.equal(finance.targetMinutes, 15);
+  assert.equal(credit.targetMinutes, 15);
+  assert.equal(loading.targetMinutes, null);
+  assert.equal(loading.warningMinutes, null);
+  assert.deepEqual(completeBoard.missingTargets, ['Loading authority']);
 
   // A person is judged against THEIR function's target, not the panel's
   // loudest one: every approver row carries the target of the function it
@@ -214,31 +217,31 @@ test('criteria 10 and 11: no rule means grey, unjudged, and only that function',
     assert.equal(person.overTarget, 0);
   }
   // And the page is told, so it can offer to set the missing one.
-  assert.deepEqual(board.missingTargets, ['Finance approval']);
+  assert.deepEqual(board.missingTargets, ['Finance approval', 'Loading authority']);
 
   // WITHOUT TOUCHING THE OTHERS. Deactivating one rule must not move another,
   // which is the whole reason each is read separately.
-  assert.equal(credit.targetMinutes, 30);
+  assert.equal(credit.targetMinutes, 15);
   assert.equal(credit.overTarget, creditBefore.overTarget);
-  assert.equal(loading.targetMinutes, 30);
+  assert.equal(loading.targetMinutes, null);
   c.close();
 });
 
 /**
  * THE ONE THING THREE EQUAL NUMBERS MAKE INVISIBLE.
  *
- * Every function now sits at 30, so code that reads ONE target and draws it
- * three times renders exactly the same panel as code that reads three. The
- * only way to tell them apart is to move one rule and watch which lines
- * follow. Finance and credit must not move; loading authority must.
+ * Temporarily activating the LA rule proves all three functions read their
+ * own configuration. Production keeps that rule inactive until its signed
+ * start event is captured.
  */
 test('the three targets are read separately, not one read three times', async () => {
   const c = await imported();
+  await c.execute(`UPDATE sla_rules SET active = 1 WHERE sla_rule_id = 'SLAR-SO-LA'`);
   const at30 = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   assert.deepEqual(
     at30.functions.map((f) => f.targetMinutes),
-    [30, 30, 30],
-    'the panel does not open with one target everywhere',
+    [15, 15, 10],
+    'the panel did not read the signed values independently',
   );
 
   await c.execute(
@@ -248,12 +251,12 @@ test('the three targets are read separately, not one read three times', async ()
   const moved = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   assert.deepEqual(
     moved.functions.map((f) => f.targetMinutes),
-    [30, 30, 90],
+    [15, 15, 90],
     'moving the loading rule moved a line it should not have',
   );
   assert.deepEqual(
     moved.functions.map((f) => f.warningMinutes),
-    [25, 25, 75],
+    [10, 10, 75],
     'the warning levels did not follow their own rules',
   );
   // The approvers under each function follow their own function, not the
@@ -279,13 +282,13 @@ test('the three targets are read separately, not one read three times', async ()
   );
 
   await c.execute(
-    `UPDATE sla_rules SET target_minutes = 30, warning_minutes = 25
+    `UPDATE sla_rules SET target_minutes = 10, warning_minutes = 5
       WHERE sla_rule_id = 'SLAR-SO-LA'`,
   );
   const back = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   assert.deepEqual(
     back.functions.map((f) => f.targetMinutes),
-    [30, 30, 30],
+    [15, 15, 10],
   );
   c.close();
 });
@@ -301,6 +304,7 @@ test('the three targets are read separately, not one read three times', async ()
  */
 test('a function that ran nothing keeps its target and counts zero', async () => {
   const c = await imported();
+  await c.execute(`UPDATE sla_rules SET active = 1 WHERE sla_rule_id = 'SLAR-SO-LA'`);
   await c.execute(`UPDATE sales_orders SET loading_authority_at = NULL`);
   const board = await loadingAuthorityBoard(asClient(c), allTime);
   const loading = fnOf(kenya(board).functions, 'Loading authority');
@@ -309,7 +313,7 @@ test('a function that ran nothing keeps its target and counts zero', async () =>
   assert.equal(loading.medianMinutes, null, 'a median over nothing is not a number');
   // ZERO, NOT UNKNOWN: the rule is still active, so the target is still known
   // and the panel still draws its line.
-  assert.equal(loading.targetMinutes, 30, 'an empty month lost its configured target');
+  assert.equal(loading.targetMinutes, 10, 'an empty month lost its configured target');
   assert.deepEqual(board.missingTargets, [], 'an empty month was reported as unconfigured');
 
   // UNKNOWN: deactivate the rule and the target really is missing.
@@ -536,7 +540,7 @@ test('the tabs: every country, one selectable, none hidden', async () => {
   c.close();
 });
 
-test('loading authority records no person, and still carries its target', async () => {
+test('loading authority records no person and is not judged on the wrong clock', async () => {
   const c = await imported();
   const board = kenya(await loadingAuthorityBoard(asClient(c), allTime));
   const loading = fnOf(board.functions, 'Loading authority');
@@ -546,9 +550,9 @@ test('loading authority records no person, and still carries its target', async 
   // attributed to whoever last touched the order.
   assert.equal(rows[0]!.person, null);
   assert.equal(rows[0]!.userId, null);
-  // The duration is real even though the person is not, so the row keeps its
-  // own target and its own colour.
-  assert.equal(rows[0]!.targetMinutes, 30);
+  // The operational duration is real even though the signed receipt-to-LA
+  // start is unavailable. It stays visible but unjudged.
+  assert.equal(rows[0]!.targetMinutes, null);
   assert.ok((rows[0]!.medianMinutes ?? 0) > 0);
   assert.equal(rows[0]!.volume, loading.volume);
   // And the panel prints it as "Not recorded" rather than as a blank.
@@ -560,7 +564,7 @@ test('loading authority records no person, and still carries its target', async 
   c.close();
 });
 
-test('the rename is presentation only, and the panel carries no narration', () => {
+test('the rename is presentation only, and the panel explains only unavailable SLA evidence', () => {
   const panel = readFileSync(
     join(here, '..', '..', 'src/components/cms/CmsLoadingAuthorityChart.astro'),
     'utf8',
@@ -583,11 +587,8 @@ test('the rename is presentation only, and the panel carries no narration', () =
     !/loading_authority_orders|FROM loading_authority/i.test(repo),
     'a table was invented for the new name',
   );
-  // THE ONLY SENTENCE THE PANEL IS ALLOWED is the offer to set a missing
-  // target, and it lives on the page rather than in the panel — so every
-  // paragraph inside the panel is either the screen-reader alternative, the
-  // empty state, or the axis naming what its lines are. Nothing explains a
-  // figure to a reader who can see it.
+  // Visible prose is limited to the missing-evidence disclosure and the
+  // configurable-target offer. It does not narrate figures the chart shows.
   const template = panel.slice(panel.indexOf('---', 3) + 3);
   // The offer to set a missing target is the one sentence permitted, and it
   // renders only when a function has no rule.
@@ -595,7 +596,8 @@ test('the rename is presentation only, and the panel carries no narration', () =
     /class="sr-only"/,
     /No countries are configured/,
     /target per function/,
-    /No target for \{missingTargets/,
+    /signed 10-minute LA-generation target/,
+    /No target for/,
   ];
   for (const match of template.matchAll(/<p\b[\s\S]*?<\/p>/g)) {
     assert.ok(
@@ -603,7 +605,11 @@ test('the rename is presentation only, and the panel carries no narration', () =
       `the panel carries prose: ${match[0].slice(0, 80)}`,
     );
   }
-  assert.match(panel, /missingTargets\.length > 0/, 'the offer is not conditional');
+  assert.match(
+    panel,
+    /configurableMissingTargets\.length > 0/,
+    'the configurable-target offer is not conditional',
+  );
   assert.match(home, /missingTargets=\{laMissingTargets\}/, 'the page never names what is missing');
 });
 

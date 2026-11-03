@@ -63,6 +63,9 @@ const {
   maySetTargets,
 } = Astro.props;
 
+const loadingAuthorityUnmeasurable = missingTargets.includes('Loading authority');
+const configurableMissingTargets = missingTargets.filter((fn) => fn !== 'Loading authority');
+
 const functions = board?.functions ?? [];
 /**
  * COLLAPSED ON LOAD, LIKE THE PANEL BESIDE IT. Three function rows open the
@@ -370,17 +373,25 @@ const everyRow = functions.flatMap((f) => [f, ...(board?.people.get(f.fn) ?? [])
 
   {
     /*
-      THE ONE SENTENCE THIS PANEL IS ALLOWED, and it appears only where a
-      function has no rule to be judged by — the case a reader cannot see,
-      because unjudged and met look identical once the colour is gone. It sits
-      inside the card rather than under it so both panels stay the same height
-      whether or not it is showing.
+      Missing evidence cannot be inferred from an uncoloured bar. The signed
+      LA term gets its specific data-availability disclosure; other missing
+      rules retain the configurable-target offer.
     */
   }
   {
-    missingTargets.length > 0 && (
+    loadingAuthorityUnmeasurable && (
       <p class="mt-2 text-cms-caption text-cms-muted">
-        No target for {missingTargets.map((fn) => labelOf(fn).toLowerCase()).join(' and ')}.{' '}
+        The signed 10-minute LA-generation target starts when funds or an LPO are received. That
+        start timestamp is absent from the extract, so this operational duration is not judged
+        against the signed target.
+      </p>
+    )
+  }
+  {
+    configurableMissingTargets.length > 0 && (
+      <p class="mt-2 text-cms-caption text-cms-muted">
+        No target for{' '}
+        {configurableMissingTargets.map((fn) => labelOf(fn).toLowerCase()).join(' and ')}.{' '}
         {maySetTargets && (
           <a
             class="rounded-cms font-medium text-cms-royal underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
