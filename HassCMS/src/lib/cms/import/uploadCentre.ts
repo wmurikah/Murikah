@@ -34,6 +34,7 @@ import {
   validateSoWorkbook,
   commitSoBatch,
   revalidateSoRows,
+  soActorBackfillStatement,
   SO_AFFILIATE_MAP,
   type SoValidation,
 } from './soImport.ts';
@@ -1265,9 +1266,11 @@ export async function mapUnresolvedActor(
   ctx: WriteContext,
 ): Promise<MapActorResult> {
   const found = await db.execute({
-    sql: `SELECT unresolved_actor_id, import_batch_id, source_system_id, external_username,
-            affiliate_id, status
-          FROM unresolved_actors WHERE unresolved_actor_id = ?`,
+    sql: `SELECT ua.unresolved_actor_id, ua.import_batch_id, ua.source_system_id,
+                 ua.external_username, ua.affiliate_id, ua.status, b.import_type
+            FROM unresolved_actors ua
+            JOIN import_batches b ON b.import_batch_id = ua.import_batch_id
+           WHERE ua.unresolved_actor_id = ?`,
     args: [input.unresolvedActorId],
   });
   const actor = found.rows[0];
@@ -1297,48 +1300,57 @@ export async function mapUnresolvedActor(
   const sourceIdentityId =
     existing.rows[0] === undefined ? newId('SID') : text(existing.rows[0].source_identity_id);
 
-  await db.batch(
-    [
-      existing.rows[0] === undefined
-        ? {
-            sql: `INSERT INTO source_identities
+  const writes: Stmt[] = [
+    existing.rows[0] === undefined
+      ? {
+          sql: `INSERT INTO source_identities
                     (source_identity_id, source_system_id, user_id, external_username,
                      affiliate_id, active, created_at)
                   VALUES (?, ?, ?, ?, ?, 1, ?)`,
-            args: [sourceIdentityId, sourceSystemId, input.userId, username, affiliateId, now],
-          }
-        : {
-            sql: `UPDATE source_identities SET user_id = ?, affiliate_id = ?, active = 1
+          args: [sourceIdentityId, sourceSystemId, input.userId, username, affiliateId, now],
+        }
+      : {
+          sql: `UPDATE source_identities SET user_id = ?, affiliate_id = ?, active = 1
                   WHERE source_identity_id = ?`,
-            args: [input.userId, affiliateId, sourceIdentityId],
-          },
-      {
-        sql: `UPDATE unresolved_actors SET status = 'MAPPED', mapped_user_id = ?,
+          args: [input.userId, affiliateId, sourceIdentityId],
+        },
+    {
+      sql: `UPDATE unresolved_actors SET status = 'MAPPED', mapped_user_id = ?,
                 resolved_by_user_id = ?, resolved_at = ?
               WHERE unresolved_actor_id = ?`,
-        args: [input.userId, ctx.actorUserId, now, input.unresolvedActorId],
-      },
-      auditEventStmt({
-        actorUserId: ctx.actorUserId,
-        eventType: 'UNRESOLVED_ACTOR_MAPPED',
-        entityType: 'SOURCE_IDENTITY',
-        entityId: sourceIdentityId,
-        action: 'MAP',
-        beforeJson: null,
-        afterJson: JSON.stringify({
-          externalUsername: username,
-          sourceSystemId,
-          affiliateId,
-          userId: input.userId,
-          fromBatchId: text(actor.import_batch_id),
-        }),
-        ip: ctx.ip,
-        userAgent: ctx.userAgent,
-        now: ctx.now,
-      }) as Stmt,
-    ],
-    'write',
-  );
+      args: [input.userId, ctx.actorUserId, now, input.unresolvedActorId],
+    },
+    auditEventStmt({
+      actorUserId: ctx.actorUserId,
+      eventType: 'UNRESOLVED_ACTOR_MAPPED',
+      entityType: 'SOURCE_IDENTITY',
+      entityId: sourceIdentityId,
+      action: 'MAP',
+      beforeJson: null,
+      afterJson: JSON.stringify({
+        externalUsername: username,
+        sourceSystemId,
+        affiliateId,
+        userId: input.userId,
+        fromBatchId: text(actor.import_batch_id),
+      }),
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+      now: ctx.now,
+    }) as Stmt,
+  ];
+  if (text(actor.import_type) === 'SALES_ORDER') {
+    // A completed import may already have reconstructed its workflow stages
+    // with null assignees. Repair those rows in the same atomic write as the
+    // source mapping so Finance/Credit stops saying "Not recorded" now, not
+    // only on the next upload.
+    writes.splice(
+      writes.length - 1,
+      0,
+      soActorBackfillStatement(text(actor.import_batch_id), username, input.userId) as Stmt,
+    );
+  }
+  await db.batch(writes, 'write');
 
   const revalidated = input.revalidate
     ? await revalidateBatch(db, text(actor.import_batch_id), ctx)

@@ -41,11 +41,9 @@
  *                       one. Clock: the latest preceding milestone that is
  *                       known — credit release, else finance approval, else
  *                       the order's creation — to the invoice.
- *   Supply              sales_orders.loading_authority_at. The extract has
- *                       no actor column, so accountability is resolved from
- *                       the active SO_SUPPLY_OWNER workflow-role assignment
- *                       for the order's affiliate. Clock: order creation to
- *                       the authority timestamp.
+ *   Loading authority   sales_orders.loading_authority_at. NO ACTOR either.
+ *                       Clock: the invoice, else the same fallback chain, to
+ *                       the authority.
  *
  * The chain is stated because a per-function duration needs a start, and the
  * extract only dates the ends. Measuring every function from the order's
@@ -498,51 +496,6 @@ const soOrder = (
      AND (:to IS NULL OR so.${endColumn} <= :to)`;
 
 /**
- * The extract records when the Loading Authority was produced, but not who
- * produced it. Supply accountability therefore comes from reviewed workflow
- * configuration, scoped to the order's affiliate/country (with Group as the
- * final fallback). This names the accountable owner without claiming that the
- * spreadsheet recorded a performer.
- */
-const soSupply = (scoped = true): string => `
-  SELECT 'Loading authority' AS fn, 4 AS ord,
-         so.sales_order_id AS entity_id,
-         so.document_number AS document_number,
-         so.affiliate_id AS affiliate_id,
-         supply_owner.user_id AS user_id,
-         COALESCE(supply_owner.display_name, supply_owner.email) AS person,
-         ${LOADING_AUTHORITY_START} AS started_at,
-         so.loading_authority_at AS completed_at,
-         ${MINUTES(LOADING_AUTHORITY_START, 'so.loading_authority_at')} AS minutes,
-         NULL AS target_minutes
-    FROM sales_orders so
-    LEFT JOIN users supply_owner
-      ON supply_owner.user_id = (
-        SELECT wra.user_id
-          FROM workflow_role_assignments wra
-          JOIN workflow_roles wr ON wr.workflow_role_id = wra.workflow_role_id
-          JOIN affiliates own_affiliate ON own_affiliate.affiliate_id = so.affiliate_id
-          JOIN users active_owner ON active_owner.user_id = wra.user_id
-         WHERE wr.role_code = 'SO_SUPPLY_OWNER' AND wr.active = 1
-           AND wra.active = 1 AND active_owner.status = 'ACTIVE'
-           AND wra.effective_from <= date(so.loading_authority_at)
-           AND (wra.effective_to IS NULL OR wra.effective_to >= date(so.loading_authority_at))
-           AND (
-             (wra.scope_type = 'AFFILIATE' AND wra.affiliate_id = so.affiliate_id)
-             OR (wra.scope_type = 'COUNTRY' AND wra.country_id = own_affiliate.country_id)
-             OR wra.scope_type = 'GROUP'
-           )
-         ORDER BY CASE wra.scope_type
-                    WHEN 'AFFILIATE' THEN 1 WHEN 'COUNTRY' THEN 2 ELSE 3 END,
-                  wra.priority, wra.workflow_role_assignment_id
-         LIMIT 1
-      )
-   WHERE so.loading_authority_at IS NOT NULL
-     AND ${scoped ? AFFILIATE('so.affiliate_id') : '1 = 1'}
-     AND (:from IS NULL OR so.loading_authority_at >= :from)
-     AND (:to IS NULL OR so.loading_authority_at <= :to)`;
-
-/**
  * WHERE THE LOADING AUTHORITY CLOCK STARTS, AND WHY IT IS NOT THE INVOICE.
  *
  * It used to be the invoice, falling back to the order — the chain every other
@@ -570,7 +523,7 @@ const SO_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL'),
   soStage('Credit release', 2, 'CREDIT_CHECK'),
   soOrder('Invoicing', 3, 'invoice_created_at', 'so.order_created_at'),
-  soSupply(),
+  soOrder('Loading authority', 4, 'loading_authority_at', LOADING_AUTHORITY_START),
 ].join('\n\n  UNION ALL\n');
 
 /**
@@ -1452,13 +1405,11 @@ export async function approverBoard(db: Client, scope: ApprovalScope): Promise<A
 export { TARGET_SQL };
 
 /* -------------------------------------------------------------------------
- * THE LOADING AUTHORITY PANEL: THREE FUNCTIONS, EACH WITH ITS OWN RULE
+ * THE LOADING AUTHORITY PANEL: FINANCE AND CREDIT, EACH WITH ITS OWN RULE
  * ------------------------------------------------------------------------- */
 
 /**
- * The three functions on the panel, and the rule each can be judged by. An
- * inactive rule yields no target, which is how the signed LA-generation term
- * remains visible without being applied to the wrong start event.
+ * The two approval functions on the panel, and the rule each is judged by.
  *
  * THE MAPPING LIVES HERE AND NOWHERE ELSE. A function's workflow stage and
  * its SLA rule's stage code are NOT the same string — credit release runs on
@@ -1473,7 +1424,6 @@ export { TARGET_SQL };
 export const LOADING_AUTHORITY_FUNCTIONS = [
   { key: 'Finance approval', label: 'Finance', stage: 'FINANCE_APPROVAL' },
   { key: 'Credit release', label: 'Credit', stage: 'CREDIT_APPROVAL' },
-  { key: 'Loading authority', label: 'Supply', stage: 'LOADING_AUTHORITY' },
 ] as const;
 
 export type LoadingAuthorityFunction = (typeof LOADING_AUTHORITY_FUNCTIONS)[number];
@@ -1484,7 +1434,7 @@ export interface LaStat {
   readonly fn: string;
   /** Null on a function row; the approver on a person row. */
   readonly userId: string | null;
-  /** Null where neither the extract nor accountable-owner configuration names a user. */
+  /** Null where the extract records no actor — loading authority, today. */
   readonly person: string | null;
   /** True on a person row, so a null person is "Not recorded" and not a total. */
   readonly isPerson: boolean;
@@ -1514,7 +1464,7 @@ export interface LaCountry {
   readonly volume: number;
 }
 
-/** One country's panel: the three functions and the approvers behind them. */
+/** One country's panel: Finance, Credit and their approvers. */
 export interface LaCountryBoard {
   readonly functions: LaStat[];
   /** The approvers behind each function, keyed by the function's own name. */
@@ -1526,7 +1476,7 @@ export interface LoadingAuthorityBoard {
    * EVERY COUNTRY'S PANEL, FROM ONE STATEMENT. The tabs cannot be chosen
    * before the query runs — which country to select depends on which have
    * data — so the query answers for all of them and the page picks. Eight
-   * countries times three functions is a handful of rows, and it costs the
+   * countries times two functions is a handful of rows, and it costs the
    * page nothing: switching tabs is a link, not a request for more data.
    */
   readonly byCountry: ReadonlyMap<string, LaCountryBoard>;
@@ -1545,12 +1495,20 @@ export interface LoadingAuthorityTrendPoint {
   readonly targetMinutes: number | null;
 }
 
-/** The three functions, unscoped by affiliate: the tabs need every country. */
+/** The two approval functions, unscoped by affiliate: the tabs need every country. */
 const LA_SOURCE = [
   soStage('Finance approval', 1, 'FINANCE_APPROVAL', false),
   soStage('Credit release', 2, 'CREDIT_CHECK', false),
-  soSupply(false),
 ].join('\n\n  UNION ALL\n');
+
+/** The operational LA trend remains order-level and carries no actor. */
+const LA_TREND_SOURCE = soOrder(
+  'Loading authority',
+  4,
+  'loading_authority_at',
+  LOADING_AUTHORITY_START,
+  false,
+);
 
 /** Which rule judges which function, as a CASE over the source's own names. */
 const LA_STAGE_OF = `CASE src.fn ${LOADING_AUTHORITY_FUNCTIONS.map(
@@ -1559,7 +1517,7 @@ const LA_STAGE_OF = `CASE src.fn ${LOADING_AUTHORITY_FUNCTIONS.map(
 
 /**
  * The sales order working day, from the calendar its active rules are set
- * against — ONE window for the whole process, so three functions can be read
+ * against — ONE window for the whole process, so both functions can be read
  * on one scale. Null where no rule is active at all, which makes every
  * working-day figure null and sends the panel to the wall clock wholesale
  * rather than mixing two clocks on one axis.
@@ -1602,7 +1560,7 @@ const SO_RULES_CTE = `
  *
  * The working day comes from the CALENDAR the active rules are configured
  * against, so every figure on the panel is measured the same way and the
- * three functions can be read on one scale. The TARGET comes from each
+ * both functions can be read on one scale. The TARGET comes from each
  * function's own rule, so finance and credit sharing 30 minutes today is a
  * coincidence of configuration rather than a rule of the code: change one and
  * the other does not move.
@@ -1691,7 +1649,8 @@ const LA_BOARD_SQL = `
 
 /**
  * One monthly Loading Authority series per entity, from the exact order-level
- * source and business-time expression used by the existing panel.
+ * source and business-time expression used by the existing panel. There is no
+ * actor in the historical extract, so no person is selected or inferred.
  */
 export async function loadingAuthorityTrend(
   db: Client,
@@ -1704,7 +1663,7 @@ export async function loadingAuthorityTrend(
                   ELSE CAST(ROUND(julianday(date(src.completed_at))
                                   - julianday(date(src.started_at))) AS INTEGER) * cal.w
                        + ${clampSql('src.completed_at')} - ${clampSql('src.started_at')} END AS acc
-        FROM (${LA_SOURCE}) src
+        FROM (${LA_TREND_SOURCE}) src
         CROSS JOIN cal
         LEFT JOIN rules ru ON ru.stage = ${LA_STAGE_OF}
        WHERE src.fn = 'Loading authority' AND src.minutes IS NOT NULL
@@ -1733,7 +1692,7 @@ export async function loadingAuthorityTrend(
 }
 
 /**
- * The panel's data: three functions, their approvers, and every country's tab,
+ * The panel's data: Finance, Credit, their approvers and every country's tab,
  * in ONE statement — because Home's budget is counted in round trips and a
  * panel is not allowed to cost more of them than the chart it replaced.
  */

@@ -523,7 +523,7 @@ export async function validateSoWorkbook(
     const documents = new Set<string>();
     const unresolvedCustomers = new Map<string, { name: string | null; rows: number }>();
     const unresolvedProducts = new Map<string, number>();
-    const unresolvedUsers = new Set<string>();
+    const unresolvedUsers = new Map<string, Set<string>>();
     let rowsNew = 0;
     let rowsChanged = 0;
     let rowsDuplicate = 0;
@@ -673,7 +673,10 @@ export async function validateSoWorkbook(
         }
         for (const actor of [row.createdBy, row.approver, row.creditReleasedBy]) {
           if (actor !== null && !maps.identities.has(actor.toUpperCase())) {
-            unresolvedUsers.add(actor.toUpperCase());
+            const key = actor.toUpperCase();
+            const actorAffiliates = unresolvedUsers.get(key) ?? new Set<string>();
+            if (row.affiliateId !== null) actorAffiliates.add(row.affiliateId);
+            unresolvedUsers.set(key, actorAffiliates);
           }
         }
 
@@ -772,12 +775,17 @@ export async function validateSoWorkbook(
     }
 
     // Unresolved actors, once per username per batch, never a user created.
-    for (const username of unresolvedUsers) {
+    for (const [username, actorAffiliates] of unresolvedUsers) {
+      // A user seen under one affiliate carries that context into the queue
+      // and source mapping. Multiple affiliates are left unscoped for an
+      // administrator to decide rather than arbitrarily choosing one.
+      const actorAffiliate = actorAffiliates.size === 1 ? ([...actorAffiliates][0] ?? null) : null;
       statements.push({
         sql: `INSERT INTO unresolved_actors
-              (unresolved_actor_id, import_batch_id, source_system_id, external_username, status)
-            VALUES (?, ?, ?, ?, 'OPEN')`,
-        args: [newId('UACT'), batchId, input.sourceSystemId, username],
+              (unresolved_actor_id, import_batch_id, source_system_id, external_username,
+               affiliate_id, status)
+            VALUES (?, ?, ?, ?, ?, 'OPEN')`,
+        args: [newId('UACT'), batchId, input.sourceSystemId, username, actorAffiliate],
       });
     }
     statements.push({
@@ -847,7 +855,7 @@ export async function validateSoWorkbook(
         rows: v.rows,
       })),
       unresolvedProducts: [...unresolvedProducts.entries()].map(([item, rows]) => ({ item, rows })),
-      unresolvedUsers: [...unresolvedUsers],
+      unresolvedUsers: [...unresolvedUsers.keys()],
       report: mappingReport(sheet.headers, sheet.rows),
       dateRange: { from, to },
       affiliates: [...affiliates],
@@ -1805,6 +1813,41 @@ export interface RevalidationResult {
   rowsResolved: number;
   rowsStillUnresolved: number;
   actorsResolved: number;
+}
+
+/**
+ * Repair workflow attribution when a source username is mapped after its SO
+ * batch was committed. The raw row remains the evidence: APPROVER identifies
+ * Finance, HOLD_RELEASED_BY identifies Credit, and no other source field is
+ * treated as either actor.
+ */
+export function soActorBackfillStatement(
+  batchId: string,
+  username: string,
+  userId: string,
+): { sql: string; args: unknown[] } {
+  return {
+    sql: `UPDATE workflow_stage_instances
+             SET assigned_user_id = ?
+           WHERE workflow_stage_instance_id IN (
+             SELECT DISTINCT wsi.workflow_stage_instance_id
+               FROM workflow_stage_instances wsi
+               JOIN workflow_instances wi
+                 ON wi.workflow_instance_id = wsi.workflow_instance_id
+               JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
+               JOIN import_rows ir ON ir.entity_id = wi.entity_id
+              WHERE wi.entity_type = 'SALES_ORDER'
+                AND ir.import_batch_id = ? AND ir.imported_at IS NOT NULL
+                AND (
+                  (ws.stage_code = 'FINANCE_APPROVAL'
+                   AND UPPER(TRIM(CAST(json_extract(ir.raw_json, '$.APPROVER') AS TEXT))) = UPPER(?))
+                  OR
+                  (ws.stage_code = 'CREDIT_CHECK'
+                   AND UPPER(TRIM(CAST(json_extract(ir.raw_json, '$.HOLD_RELEASED_BY') AS TEXT))) = UPPER(?))
+                )
+           )`,
+    args: [userId, batchId, username, username],
+  };
 }
 
 /**

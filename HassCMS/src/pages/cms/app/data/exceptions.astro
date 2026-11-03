@@ -154,6 +154,7 @@ if (mayView) {
                     type="button"
                     data-cms-actor-map={actor.unresolvedActorId}
                     data-actor-name={actor.username}
+                    data-actor-affiliate={actor.affiliateId ?? ''}
                     class="rounded-cms px-2 py-1 text-cms-body-sm font-medium text-cms-royal outline-none hover:bg-cms-canvas focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     Map to a person
@@ -368,6 +369,13 @@ if (mayView) {
     if (nameLabel) nameLabel.textContent = target.getAttribute('data-actor-name') ?? '';
     if (errorBox) errorBox.hidden = true;
     form.reset();
+    const affiliateId = target.getAttribute('data-actor-affiliate') ?? '';
+    if (affiliateId !== '') {
+      const level = document.getElementById('actor-level') as HTMLSelectElement | null;
+      const affiliate = document.getElementById('actor-affiliateId') as HTMLSelectElement | null;
+      if (level) level.value = 'AFFILIATE';
+      if (affiliate) affiliate.value = affiliateId;
+    }
     updateResolution();
     drawer.showModal();
   });

@@ -547,6 +547,37 @@ test('a name mapped once is recognised on the next upload, with no re-upload of 
   assert.equal(Number(later.rows[0]?.n), 1);
 });
 
+test('mapping an SO approver repairs already imported Finance stages', async () => {
+  const c = await db();
+  const upload = await receiveUpload(asClient(c), soUpload(new Uint8Array(SO_FILE)), CTX);
+  await commitBatch(asClient(c), upload.batchId ?? '', CTX);
+
+  const actor = (await listUnresolvedActors(asClient(c))).find(
+    (candidate) => candidate.username === 'SULEKHA',
+  );
+  assert.ok(actor, 'the source Finance approver was not queued');
+  assert.equal(actor.affiliateId, 'AFF-KE');
+  const before = await c.execute(`
+    SELECT COUNT(*) AS n
+      FROM workflow_stage_instances wsi
+      JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
+     WHERE ws.stage_code = 'FINANCE_APPROVAL' AND wsi.assigned_user_id IS NULL`);
+  assert.ok(Number(before.rows[0]?.n) > 0, 'the unknown approver was already attributed');
+
+  const mapping = await mapUnresolvedActor(
+    asClient(c),
+    { unresolvedActorId: actor.unresolvedActorId, userId: 'USR-ZUL', revalidate: true },
+    CTX,
+  );
+  assert.equal(mapping.ok, true);
+  const after = await c.execute(`
+    SELECT COUNT(*) AS n
+      FROM workflow_stage_instances wsi
+      JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
+     WHERE ws.stage_code = 'FINANCE_APPROVAL' AND wsi.assigned_user_id = 'USR-ZUL'`);
+  assert.equal(Number(after.rows[0]?.n), Number(before.rows[0]?.n));
+});
+
 test('an administrator can create an invited internal user and map an unresolved name atomically', async () => {
   const c = await db();
   const first = await receiveUpload(asClient(c), poUpload(new Uint8Array(PO_FILE)), CTX);
