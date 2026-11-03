@@ -64,6 +64,6 @@ conflicts, revocation and lifecycle restrictions, and grant validation.
 
 The missing OIDC transaction table must still be created using the standalone
 003 repair if it has not already been applied. Provider credentials and
-callbacks must be configured independently. The separate sign-in resolver's
-identity-key/issuer/revocation findings are not fixed by this registration-only
-change, so this is not a claim that all SSO sign-in flows are reconciled.
+callbacks must be configured independently. Sign-in resolution is documented separately in
+[federated identity reconciliation](FEDERATED_IDENTITY_RECONCILIATION.md).
+Live provider credentials and redirect configuration still need verification.

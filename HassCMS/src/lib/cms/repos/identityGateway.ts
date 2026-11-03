@@ -1,11 +1,12 @@
 import type { Client } from '@libsql/client/web';
-import { newId, auditEventStmt } from './authRecords.ts';
+import { newId, auditEventStmt, createSessionStmt, touchLastLoginStmt } from './authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
 import {
   normalizeIdentityEmail,
   classifyIdentityEmail,
   emailDomain,
   isRegistrationIssuer,
+  isFederatedIssuer,
 } from '../auth/identityPolicy.ts';
 import type { IdentityProvider } from '../auth/oidc.ts';
 
@@ -282,88 +283,221 @@ export async function createCustomerAccessRequest(
   }
 }
 
-export async function resolveFederatedUser(
-  db: Client,
-  input: {
-    provider: IdentityProvider;
-    subject: string;
-    email: string;
-    emailVerified: boolean;
-    tenantId: string | null;
-    now: Date;
-  },
-) {
-  const linked = await db.execute({
-    sql: `SELECT f.user_id,u.user_type,u.status,u.email_verified_at FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id WHERE f.provider=? AND f.provider_subject=? LIMIT 1`,
-    args: [input.provider, input.subject],
-  });
-  if (linked.rows[0]) {
-    const row = linked.rows[0];
-    if (String(row.status) !== 'ACTIVE' || !row.email_verified_at)
-      return { kind: 'ineligible' as const };
-    await db.execute({
-      sql: `UPDATE auth_federated_identities SET provider_email=?,provider_email_verified=?,provider_tenant_id=?,last_login_at=?,updated_at=? WHERE provider=? AND provider_subject=?`,
-      args: [
-        input.email,
-        input.emailVerified ? 1 : 0,
-        input.tenantId,
-        toDbTimestamp(input.now),
-        toDbTimestamp(input.now),
-        input.provider,
-        input.subject,
-      ],
-    });
-    return { kind: 'user' as const, userId: String(row.user_id), userType: String(row.user_type) };
-  }
-  if (!input.emailVerified) return { kind: 'unverified' as const };
-  const matching = await db.execute({
-    sql: `SELECT user_id,user_type,status,email_verified_at FROM users WHERE email=? LIMIT 1`,
-    args: [input.email],
-  });
-  const row = matching.rows[0];
-  if (!row) return { kind: 'unknown' as const };
-  if (String(row.status) !== 'ACTIVE' || !row.email_verified_at)
+interface FederatedIdentityInput {
+  provider: IdentityProvider;
+  issuer: string;
+  subject: string;
+  email: string;
+  emailVerified: boolean;
+  tenantId: string | null;
+  now: Date;
+}
+
+export async function resolveFederatedUser(db: Client, input: FederatedIdentityInput) {
+  // Validate before either the linked or automatic-link path. An existing link
+  // must not bypass provider verification or issuer validation.
+  if (input.emailVerified !== true) return { kind: 'unverified' as const };
+  const email = normalizeIdentityEmail(input.email);
+  if (
+    !email ||
+    !isFederatedIssuer(input.provider, input.issuer) ||
+    typeof input.subject !== 'string' ||
+    !input.subject.trim() ||
+    input.subject.length > 255
+  )
     return { kind: 'ineligible' as const };
-  if (input.provider === 'APPLE') {
-    if (String(row.user_type) !== 'EXTERNAL') return { kind: 'link_required' as const };
-    const membership = await db.execute({
-      sql: `SELECT 1 FROM customer_portal_memberships WHERE user_id=? AND status='ACTIVE' LIMIT 1`,
-      args: [String(row.user_id)],
+
+  const tx = await db.transaction('write');
+  try {
+    const linked = await tx.execute({
+      // Read revoked links too: absence of an ACTIVE link is not authority to
+      // recreate a revoked identity through the email-based fallback.
+      sql: `SELECT f.federated_identity_id, f.status AS identity_status, f.revoked_at,
+                   u.user_id,u.user_type,u.status AS user_status,u.email_verified_at
+            FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id
+            WHERE f.provider=? AND f.issuer=? AND f.provider_subject=? LIMIT 1`,
+      args: [input.provider, input.issuer, input.subject],
     });
-    if (!membership.rows[0]) return { kind: 'link_required' as const };
-  }
-  const identityId = newId('FID');
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO auth_federated_identities(identity_id,user_id,provider,provider_subject,provider_email,provider_email_verified,provider_tenant_id,linked_at,last_login_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+    if (linked.rows[0]) {
+      const row = linked.rows[0];
+      if (
+        row.identity_status !== 'ACTIVE' ||
+        row.revoked_at !== null ||
+        row.user_status !== 'ACTIVE' ||
+        !row.email_verified_at
+      ) {
+        await tx.commit();
+        return { kind: 'ineligible' as const };
+      }
+      await tx.execute({
+        sql: `UPDATE auth_federated_identities
+              SET provider_email=?,provider_email_verified=1,provider_tenant_id=?,last_login_at=?,updated_at=?
+              WHERE federated_identity_id=? AND status='ACTIVE' AND revoked_at IS NULL`,
         args: [
-          identityId,
-          String(row.user_id),
-          input.provider,
-          input.subject,
-          input.email,
-          1,
+          email,
           input.tenantId,
           toDbTimestamp(input.now),
           toDbTimestamp(input.now),
-          toDbTimestamp(input.now),
-          toDbTimestamp(input.now),
+          String(row.federated_identity_id),
         ],
-      },
+      });
+      await tx.commit();
+      return {
+        kind: 'user' as const,
+        userId: String(row.user_id),
+        userType: String(row.user_type),
+        federatedIdentityId: String(row.federated_identity_id),
+      };
+    }
+
+    // Preserve the existing automatic-link policy: only provisioned, active,
+    // verified exact-email users. Never create a user or move a linked subject.
+    const matching = await tx.execute({
+      sql: 'SELECT user_id,user_type,status,email_verified_at FROM users WHERE email=? LIMIT 1',
+      args: [email],
+    });
+    const user = matching.rows[0];
+    if (!user) {
+      await tx.commit();
+      return { kind: 'unknown' as const };
+    }
+    if (user.status !== 'ACTIVE' || !user.email_verified_at) {
+      await tx.commit();
+      return { kind: 'ineligible' as const };
+    }
+    const previous = await tx.execute({
+      sql: 'SELECT federated_identity_id FROM auth_federated_identities WHERE user_id=? AND provider=? LIMIT 1',
+      args: [String(user.user_id), input.provider],
+    });
+    if (previous.rows.length) {
+      // A different issuer/subject or a revoked prior link needs explicit review,
+      // rather than attaching another identity on the strength of email alone.
+      await tx.commit();
+      return { kind: 'link_required' as const };
+    }
+    if (input.provider === 'APPLE') {
+      const membership =
+        user.user_type === 'EXTERNAL'
+          ? await tx.execute({
+              sql: "SELECT 1 FROM customer_portal_memberships WHERE user_id=? AND status='ACTIVE' LIMIT 1",
+              args: [String(user.user_id)],
+            })
+          : null;
+      if (!membership?.rows.length) {
+        await tx.commit();
+        return { kind: 'link_required' as const };
+      }
+    }
+    const identityId = newId('FID');
+    const stamp = toDbTimestamp(input.now);
+    await tx.execute({
+      sql: `INSERT INTO auth_federated_identities(
+              federated_identity_id,user_id,provider,issuer,provider_subject,provider_email,
+              provider_email_verified,provider_tenant_id,status,linked_at,last_login_at,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,1,?,'ACTIVE',?,?,?,?)`,
+      args: [
+        identityId,
+        String(user.user_id),
+        input.provider,
+        input.issuer,
+        input.subject,
+        email,
+        input.tenantId,
+        stamp,
+        stamp,
+        stamp,
+        stamp,
+      ],
+    });
+    await tx.execute(
       auditEventStmt({
-        actorUserId: String(row.user_id),
+        actorUserId: String(user.user_id),
         eventType: 'FEDERATED_IDENTITY_LINKED',
         entityType: 'auth_federated_identities',
         entityId: identityId,
         action: 'LINK',
-        afterJson: JSON.stringify({ provider: input.provider }),
+        afterJson: JSON.stringify({ provider: input.provider, issuer: input.issuer }),
         ip: null,
         userAgent: null,
         now: input.now,
       }),
-    ],
-    'write',
-  );
-  return { kind: 'user' as const, userId: String(row.user_id), userType: String(row.user_type) };
+    );
+    await tx.commit();
+    return {
+      kind: 'user' as const,
+      userId: String(user.user_id),
+      userType: String(user.user_type),
+      federatedIdentityId: identityId,
+    };
+  } catch (error) {
+    if (!tx.closed) await tx.rollback();
+    throw error;
+  } finally {
+    tx.close();
+  }
+}
+
+/** Recheck identity eligibility in the same write transaction that issues the session. */
+export async function createFederatedSession(
+  db: Client,
+  input: {
+    userId: string;
+    federatedIdentityId: string;
+    provider: IdentityProvider;
+    issuer: string;
+    subject: string;
+    tokenHash: string;
+    issuedAt: string;
+    expiresAt: string;
+    ip: string | null;
+    userAgent: string | null;
+    now: Date;
+  },
+): Promise<boolean> {
+  const tx = await db.transaction('write');
+  try {
+    const eligible = await tx.execute({
+      sql: `SELECT 1 FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id
+            WHERE f.federated_identity_id=? AND f.user_id=? AND f.provider=? AND f.issuer=? AND f.provider_subject=?
+              AND f.status='ACTIVE' AND f.revoked_at IS NULL
+              AND u.status='ACTIVE' AND u.email_verified_at IS NOT NULL LIMIT 1`,
+      args: [input.federatedIdentityId, input.userId, input.provider, input.issuer, input.subject],
+    });
+    if (!eligible.rows.length) {
+      await tx.commit();
+      return false;
+    }
+    await tx.execute(
+      createSessionStmt({
+        sessionId: newId('ASESS'),
+        userId: input.userId,
+        tokenHash: input.tokenHash,
+        issuedAt: input.issuedAt,
+        expiresAt: input.expiresAt,
+        ip: input.ip,
+        userAgent: input.userAgent,
+      }),
+    );
+    await tx.execute(touchLastLoginStmt(input.userId, input.now));
+    await tx.execute(
+      auditEventStmt({
+        actorUserId: input.userId,
+        eventType: 'FEDERATED_LOGIN_SUCCESS',
+        entityType: 'users',
+        entityId: input.userId,
+        action: 'LOGIN',
+        afterJson: JSON.stringify({ provider: input.provider }),
+        ip: input.ip,
+        userAgent: input.userAgent,
+        now: input.now,
+      }),
+    );
+    await tx.commit();
+    return true;
+  } catch (error) {
+    if (!tx.closed) await tx.rollback();
+    throw error;
+  } finally {
+    tx.close();
+  }
 }

@@ -32,9 +32,10 @@ columns are present. Missing or partial storage makes the overall status
 An existing incompatible table needs separate review; `IF NOT EXISTS` does
 not repair it.
 
-This focused repair resolves transaction creation/storage only. It does not
-reconcile federated identity keys, issuer/revocation handling or customer
-registration fields, nor configure provider credentials. Full external
+This focused SQL repair resolves transaction creation/storage only. The
+application reconciliations for [registration](REGISTRATION_SCHEMA_RECONCILIATION.md)
+and [federated sign-in](FEDERATED_IDENTITY_RECONCILIATION.md) are separate code
+changes; the SQL does not configure provider credentials. Full external
 sign-in remains subject to those separate requirements. Do not enable a new
 provider on the assumption that this table alone completes reconciliation.
 
