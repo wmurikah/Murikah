@@ -9,17 +9,14 @@ import {
 } from '@hasscms/lib/cms/auth/oidc';
 import { hashOneTimeToken } from '@hasscms/lib/cms/auth/tokens';
 import { consumeOidcTransaction } from '@hasscms/lib/cms/repos/oidcTransactions';
-import { resolveFederatedUser } from '@hasscms/lib/cms/repos/identityGateway';
+import {
+  resolveFederatedUser,
+  createFederatedSession,
+} from '@hasscms/lib/cms/repos/identityGateway';
 import {
   normalizeIdentityEmail,
   classifyIdentityEmail,
 } from '@hasscms/lib/cms/auth/identityPolicy';
-import {
-  createSessionStmt,
-  newId,
-  touchLastLoginStmt,
-  auditEventStmt,
-} from '@hasscms/lib/cms/repos/authRecords';
 import { newSessionToken, hashSessionToken, sessionWindow } from '@hasscms/lib/cms/auth/session';
 import { serialiseSessionCookie, isSecureRequest } from '@hasscms/lib/cms/auth/cookie';
 import { loadIdentity } from '@hasscms/lib/cms/repos/identity';
@@ -83,7 +80,8 @@ const callback: APIRoute = async ({ params, request, url }) => {
     }
     const resolved = await resolveFederatedUser(db, {
       provider,
-      subject: String(claims.sub),
+      issuer: typeof claims.iss === 'string' ? claims.iss : '',
+      subject: typeof claims.sub === 'string' ? claims.sub : '',
       email,
       emailVerified: verified,
       tenantId: claims.tid ? String(claims.tid) : null,
@@ -102,36 +100,27 @@ const callback: APIRoute = async ({ params, request, url }) => {
     const rawToken = newSessionToken(),
       window = sessionWindow(new Date()),
       tokenHash = await hashSessionToken(rawToken, cmsEnv.sessionSecret);
-    await db.batch(
-      [
-        createSessionStmt({
-          sessionId: newId('ASESS'),
-          userId: identity.userId,
-          tokenHash,
-          issuedAt: window.issuedAt,
-          expiresAt: window.expiresAt,
-          ip: request.headers.get('cf-connecting-ip'),
-          userAgent: request.headers.get('user-agent'),
-        }),
-        touchLastLoginStmt(identity.userId, new Date()),
-        auditEventStmt({
-          actorUserId: identity.userId,
-          eventType: 'FEDERATED_LOGIN_SUCCESS',
-          entityType: 'users',
-          entityId: identity.userId,
-          action: 'LOGIN',
-          afterJson: JSON.stringify({ provider }),
-          ip: request.headers.get('cf-connecting-ip'),
-          userAgent: request.headers.get('user-agent'),
-          now: new Date(),
-        }),
-      ],
-      'write',
-    );
-    const response = Response.redirect(
-      new URL(homeFor(identity.userType, identity.permissions), url),
-      303,
-    );
+    const created = await createFederatedSession(db, {
+      userId: identity.userId,
+      federatedIdentityId: resolved.federatedIdentityId,
+      provider,
+      issuer: typeof claims.iss === 'string' ? claims.iss : '',
+      subject: typeof claims.sub === 'string' ? claims.sub : '',
+      tokenHash,
+      issuedAt: window.issuedAt,
+      expiresAt: window.expiresAt,
+      ip: request.headers.get('cf-connecting-ip'),
+      userAgent: request.headers.get('user-agent'),
+      now: new Date(),
+    });
+    if (!created) throw new Error('identity_ineligible');
+    // Response.redirect() has immutable headers; use a mutable response for the session cookie.
+    const response = new Response(null, {
+      status: 303,
+      headers: {
+        location: new URL(homeFor(identity.userType, identity.permissions), url).toString(),
+      },
+    });
     response.headers.append(
       'set-cookie',
       serialiseSessionCookie(rawToken, { secure: isSecureRequest(request), maxAge: window.maxAge }),
