@@ -36,11 +36,18 @@ test('a registration grant is short-lived, provider verified, and tamper evident
     email: 'mary@acme.example',
     provider: 'GOOGLE',
     subject: 'google-subject-1',
+    providerIssuer: 'https://accounts.google.com',
+    tenantId: null,
   });
-  assert.deepEqual(await verifyRegistrationGrant('registration-secret-long-enough', grant), {
+  const verified = await verifyRegistrationGrant('registration-secret-long-enough', grant);
+  assert.ok(Number.isFinite(Date.parse(verified.verifiedAt)));
+  const { verifiedAt: _verifiedAt, ...identity } = verified;
+  assert.deepEqual(identity, {
     email: 'mary@acme.example',
     provider: 'GOOGLE',
     subject: 'google-subject-1',
+    providerIssuer: 'https://accounts.google.com',
+    tenantId: null,
   });
   const parts = grant.split('.');
   const signature = parts[2] ?? '';

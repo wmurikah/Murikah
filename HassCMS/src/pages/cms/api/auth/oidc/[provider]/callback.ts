@@ -2,11 +2,18 @@ import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getCmsEnv } from '@hasscms/lib/cms/env';
 import { getDb } from '@hasscms/lib/cms/db';
-import { providerConfig, exchangeAndVerify, type IdentityProvider } from '@hasscms/lib/cms/auth/oidc';
+import {
+  providerConfig,
+  exchangeAndVerify,
+  type IdentityProvider,
+} from '@hasscms/lib/cms/auth/oidc';
 import { hashOneTimeToken } from '@hasscms/lib/cms/auth/tokens';
 import { consumeOidcTransaction } from '@hasscms/lib/cms/repos/oidcTransactions';
 import { resolveFederatedUser } from '@hasscms/lib/cms/repos/identityGateway';
-import { normalizeIdentityEmail, classifyIdentityEmail } from '@hasscms/lib/cms/auth/identityPolicy';
+import {
+  normalizeIdentityEmail,
+  classifyIdentityEmail,
+} from '@hasscms/lib/cms/auth/identityPolicy';
 import {
   createSessionStmt,
   newId,
@@ -67,7 +74,9 @@ const callback: APIRoute = async ({ params, request, url }) => {
         await createRegistrationGrant(cmsEnv.sessionSecret, {
           email,
           provider: provider as 'GOOGLE' | 'MICROSOFT',
-          subject: String(claims.sub),
+          subject: typeof claims.sub === 'string' ? claims.sub : '',
+          providerIssuer: typeof claims.iss === 'string' ? claims.iss : '',
+          tenantId: typeof claims.tid === 'string' ? claims.tid : null,
         }),
       );
       return Response.redirect(next, 303);

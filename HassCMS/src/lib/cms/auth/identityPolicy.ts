@@ -44,3 +44,13 @@ export function classifyIdentityEmail(value: string): EmailPolicy | null {
 export function maySelfRegister(value: string): boolean {
   return classifyIdentityEmail(value) === 'CORPORATE';
 }
+
+/** Issuer comes from the verified provider token, never from registration form fields. */
+export function isRegistrationIssuer(provider: string, issuer: string): boolean {
+  if (provider === 'GOOGLE')
+    return issuer === 'https://accounts.google.com' || issuer === 'accounts.google.com';
+  return (
+    provider === 'MICROSOFT' &&
+    /^https:\/\/login\.microsoftonline\.com\/[0-9a-f-]+\/v2\.0$/.test(issuer)
+  );
+}
