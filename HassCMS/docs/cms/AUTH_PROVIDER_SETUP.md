@@ -38,6 +38,11 @@ registration fields, nor configure provider credentials. Full external
 sign-in remains subject to those separate requirements. Do not enable a new
 provider on the assumption that this table alone completes reconciliation.
 
+For customer registration on the observed existing schema, deploy the
+[registration reconciliation](REGISTRATION_SCHEMA_RECONCILIATION.md). No
+request-table rebuild is needed; applicants with an old registration grant
+must verify again with their provider after deployment.
+
 The older `001_phase4_identity.sql` assumes its original baseline; it is not
 an upgrade for existing tables with different column names.
 `002_phase4_live_schema_reconciliation.sql` rebuilds customer-request data

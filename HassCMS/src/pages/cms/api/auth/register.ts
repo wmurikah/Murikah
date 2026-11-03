@@ -7,9 +7,11 @@ import { rateLimit } from '@hasscms/lib/rate-limit';
 import {
   normalizeIdentityEmail,
   classifyIdentityEmail,
-  emailDomain,
 } from '@hasscms/lib/cms/auth/identityPolicy';
-import { createCustomerAccessRequest } from '@hasscms/lib/cms/repos/identityGateway';
+import {
+  createCustomerAccessRequest,
+  RegistrationConflictError,
+} from '@hasscms/lib/cms/repos/identityGateway';
 import { verifyRegistrationGrant } from '@hasscms/lib/cms/auth/registrationGrant';
 
 export const prerender = false;
@@ -57,9 +59,11 @@ export const POST: APIRoute = async ({ request }) => {
     const cmsEnv = getCmsEnv();
     await createCustomerAccessRequest(await getDb(cmsEnv), {
       email,
-      emailDomain: emailDomain(email),
       provider: verified.provider,
       providerSubject: verified.subject,
+      providerIssuer: verified.providerIssuer,
+      providerTenantId: verified.tenantId,
+      identityVerifiedAt: new Date(verified.verifiedAt),
       companyName,
       contactName,
       now: new Date(),
@@ -73,6 +77,14 @@ export const POST: APIRoute = async ({ request }) => {
     response.headers.set('cache-control', 'no-store');
     return response;
   } catch (error) {
+    if (error instanceof RegistrationConflictError)
+      return json(
+        {
+          ok: false,
+          message: 'This identity cannot request access. Sign in or contact your administrator.',
+        },
+        409,
+      );
     console.error('[cms.registration]', error);
     return json({ ok: false, message: 'Registration is temporarily unavailable.' }, 503);
   }

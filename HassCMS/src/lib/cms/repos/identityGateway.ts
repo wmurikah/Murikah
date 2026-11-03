@@ -1,6 +1,12 @@
 import type { Client } from '@libsql/client/web';
 import { newId, auditEventStmt } from './authRecords.ts';
 import { toDbTimestamp } from '../auth/session.ts';
+import {
+  normalizeIdentityEmail,
+  classifyIdentityEmail,
+  emailDomain,
+  isRegistrationIssuer,
+} from '../auth/identityPolicy.ts';
 import type { IdentityProvider } from '../auth/oidc.ts';
 
 export async function issuePasswordReset(
@@ -104,13 +110,22 @@ export async function completePasswordReset(
   return true;
 }
 
+/** A verified identity may request review; it may never adopt an account by email. */
+export class RegistrationConflictError extends Error {
+  constructor() {
+    super('registration_identity_conflict');
+  }
+}
+
 export async function createCustomerAccessRequest(
   db: Client,
   input: {
     email: string;
-    emailDomain: string;
-    provider: 'PASSWORD' | 'GOOGLE' | 'MICROSOFT';
-    providerSubject?: string | null;
+    provider: 'GOOGLE' | 'MICROSOFT';
+    providerSubject: string;
+    providerIssuer: string;
+    providerTenantId: string | null;
+    identityVerifiedAt: Date;
     companyName: string;
     contactName: string;
     now: Date;
@@ -118,45 +133,153 @@ export async function createCustomerAccessRequest(
     userAgent: string | null;
   },
 ): Promise<string> {
-  const existing = await db.execute({
-    sql: `SELECT request_id FROM customer_access_requests WHERE email=? AND status='PENDING' LIMIT 1`,
-    args: [input.email],
-  });
-  if (existing.rows[0]) return String(existing.rows[0].request_id);
-  const requestId = newId('CAR');
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO customer_access_requests(request_id,user_id,email,email_domain,provider,provider_subject,requested_account_id,company_name,contact_name,status,submitted_at,created_at,updated_at)
-            VALUES(?,NULL,?,?,?,?,NULL,?,?,'PENDING',?,?,?)`,
+  const email = normalizeIdentityEmail(input.email);
+  const verifiedAt = input.identityVerifiedAt.getTime();
+  if (
+    !email ||
+    classifyIdentityEmail(email) !== 'CORPORATE' ||
+    !isRegistrationIssuer(input.provider, input.providerIssuer) ||
+    !input.providerSubject?.trim() ||
+    input.providerSubject.length > 255 ||
+    !Number.isFinite(verifiedAt) ||
+    verifiedAt > input.now.getTime() ||
+    input.now.getTime() - verifiedAt >= 10 * 60_000
+  )
+    throw new RegistrationConflictError();
+  const companyName = input.companyName.trim().slice(0, 160);
+  const contactName = input.contactName.trim().replace(/\s+/g, ' ').slice(0, 160);
+  if (!companyName || !contactName) throw new RegistrationConflictError();
+  const stamp = toDbTimestamp(input.now);
+  const verificationStamp = toDbTimestamp(input.identityVerifiedAt);
+
+  // A write transaction serializes identity/email checks and request creation.
+  // A retry cannot race into duplicate users, provider links or pending requests.
+  const tx = await db.transaction('write');
+  try {
+    const linked = await tx.execute({
+      sql: `SELECT f.federated_identity_id, f.status AS identity_status, f.revoked_at,
+                   u.user_id, u.user_type, u.status AS user_status, u.email
+            FROM auth_federated_identities f JOIN users u ON u.user_id=f.user_id
+            WHERE f.provider=? AND f.issuer=? AND f.provider_subject=? LIMIT 1`,
+      args: [input.provider, input.providerIssuer, input.providerSubject],
+    });
+    const identity = linked.rows[0];
+    let userId: string;
+    let federatedIdentityId: string;
+    if (identity) {
+      if (
+        identity.identity_status !== 'ACTIVE' ||
+        identity.revoked_at !== null ||
+        identity.user_type !== 'EXTERNAL' ||
+        !['INVITED', 'ACTIVE'].includes(String(identity.user_status)) ||
+        String(identity.email).toLowerCase() !== email
+      )
+        throw new RegistrationConflictError();
+      userId = String(identity.user_id);
+      federatedIdentityId = String(identity.federated_identity_id);
+    } else {
+      // An existing email is never enough authority to link, activate, or
+      // repurpose a preprovisioned user (including an INTERNAL employee).
+      const existing = await tx.execute({
+        sql: 'SELECT user_id FROM users WHERE email=? LIMIT 1',
+        args: [email],
+      });
+      if (existing.rows.length) throw new RegistrationConflictError();
+      userId = newId('USR');
+      federatedIdentityId = newId('FID');
+      const [firstName, ...lastName] = contactName.split(' ');
+      await tx.execute({
+        sql: `INSERT INTO users(user_id,user_type,first_name,last_name,display_name,email,
+                               status,email_verified_at,created_at,updated_at)
+              VALUES(?,'EXTERNAL',?,?,?,?, 'INVITED',?,?,?)`,
         args: [
-          requestId,
-          input.email,
-          input.emailDomain,
-          input.provider,
-          input.providerSubject ?? null,
-          input.companyName,
-          input.contactName,
-          toDbTimestamp(input.now),
-          toDbTimestamp(input.now),
-          toDbTimestamp(input.now),
+          userId,
+          firstName,
+          lastName.join(' '),
+          contactName,
+          email,
+          verificationStamp,
+          stamp,
+          stamp,
         ],
-      },
+      });
+      await tx.execute({
+        sql: `INSERT INTO auth_federated_identities(
+                federated_identity_id,user_id,provider,issuer,provider_subject,
+                provider_tenant_id,provider_email,provider_email_verified,status,
+                linked_at,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,1,'ACTIVE',?,?,?)`,
+        args: [
+          federatedIdentityId,
+          userId,
+          input.provider,
+          input.providerIssuer,
+          input.providerSubject,
+          input.providerTenantId,
+          email,
+          stamp,
+          stamp,
+          stamp,
+        ],
+      });
+    }
+    const existingRequest = await tx.execute({
+      sql: `SELECT access_request_id FROM customer_access_requests
+            WHERE user_id=? AND status='PENDING'
+            ORDER BY submitted_at,access_request_id LIMIT 1`,
+      args: [userId],
+    });
+    if (existingRequest.rows[0]) {
+      await tx.commit();
+      return String(existingRequest.rows[0].access_request_id);
+    }
+    const requestId = newId('CAR');
+    await tx.execute({
+      sql: `INSERT INTO customer_access_requests(
+              access_request_id,user_id,identity_method,federated_identity_id,
+              email_at_request,email_domain,company_name,status,submitted_at,
+              identity_verified_at,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,'PENDING',?,?,?,?)`,
+      args: [
+        requestId,
+        userId,
+        input.provider,
+        federatedIdentityId,
+        email,
+        emailDomain(email),
+        companyName,
+        stamp,
+        verificationStamp,
+        stamp,
+        stamp,
+      ],
+    });
+    await tx.execute(
       auditEventStmt({
-        actorUserId: null,
+        actorUserId: userId,
         eventType: 'CUSTOMER_REGISTRATION_REQUESTED',
         entityType: 'customer_access_requests',
         entityId: requestId,
         action: 'CREATE',
-        afterJson: JSON.stringify({ domain: input.emailDomain, provider: input.provider }),
+        afterJson: JSON.stringify({
+          domain: emailDomain(email),
+          provider: input.provider,
+          companyName,
+          contactName,
+        }),
         ip: input.ip,
         userAgent: input.userAgent,
         now: input.now,
       }),
-    ],
-    'write',
-  );
-  return requestId;
+    );
+    await tx.commit();
+    return requestId;
+  } catch (error) {
+    if (!tx.closed) await tx.rollback();
+    throw error;
+  } finally {
+    tx.close();
+  }
 }
 
 export async function resolveFederatedUser(

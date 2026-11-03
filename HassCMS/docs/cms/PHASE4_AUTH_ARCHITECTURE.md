@@ -22,7 +22,7 @@ No existing table is dropped or rebuilt. Forward fix is the rollback strategy: i
 
 A `users` row remains the person. Provider identities sit below it. A provider subject is durable; provider email is metadata. A linked subject can never move users. A new verified Microsoft/Google identity may link only to an existing active, verified exact-email user. Apple signs in an already linked identity or an eligible existing external identity; it never starts customer registration. Conflicts stop rather than merge.
 
-The centralized policy classifies normalized ASCII email as protected internal, consumer, or corporate. `hasspetroleum.com` is protected: SSO may resolve an existing provisioned internal user, but registration cannot create one. Consumer domains cannot submit customer access requests. Corporate identity creates only a pending request; it creates neither a user nor a portal membership and grants no tenant data.
+The centralized policy classifies normalized ASCII email as protected internal, consumer, or corporate. `hasspetroleum.com` is protected: SSO may resolve an existing provisioned internal user, but registration cannot create one. Consumer domains cannot submit customer access requests. Corporate identity creates an INVITED external applicant, a verified provider link, and a pending request atomically. It creates no session, role or portal membership and grants no tenant data. See [registration reconciliation](REGISTRATION_SCHEMA_RECONCILIATION.md) for the observed-schema contract and conflict rules.
 
 ## OIDC security
 

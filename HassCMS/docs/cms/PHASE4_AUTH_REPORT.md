@@ -14,7 +14,7 @@ APIs: `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/regist
 
 ## Security and policy
 
-Hass internal identities are never self-created. Consumer email is refused server-side. A registration request creates no user, account or membership. Provider subject—not email—is the unique provider identity. OIDC validates state, nonce, PKCE, signature, issuer, audience and expiry. Password reset stores only a keyed token hash, is single-use, expires, audits completion and revokes active sessions.
+Hass internal identities are never self-created. Consumer email is refused server-side. A registration request creates only an INVITED external applicant and verified provider link with a pending request; it creates no session, role, account or membership. See [registration reconciliation](REGISTRATION_SCHEMA_RECONCILIATION.md). Provider subject—not email—is the unique provider identity. OIDC validates state, nonce, PKCE, signature, issuer, audience and expiry. Password reset stores only a keyed token hash, is single-use, expires, audits completion and revokes active sessions.
 
 ## Validation state
 
