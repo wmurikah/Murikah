@@ -149,6 +149,14 @@ this section.
   written since.
 - **The baseline.** Obviously.
 
+## Redundant explicit index cleanup
+
+The standalone transactional runner
+[`005_remove_redundant_indexes.mjs`](../../db/migrations/005_remove_redundant_indexes.mjs)
+previews/removes eight audited duplicates while retaining their UNIQUE constraints.
+It is manual and is not run by CMS deployment. See
+[rollout, checks and recovery](REDUNDANT_INDEX_CLEANUP.md).
+
 ## Applying to a new environment
 
 ```
