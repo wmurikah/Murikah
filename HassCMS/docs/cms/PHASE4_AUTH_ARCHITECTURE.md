@@ -8,15 +8,20 @@ The existing schema already provides `users` (one person, `INTERNAL`/`EXTERNAL`,
 
 `source_identities` maps source-system usernames and is not an authentication-provider identity model. No OAuth transaction, durable provider-subject link, or pending customer access-request model existed. Password-reset storage existed, but no CMS request/completion routes or delivery integration existed.
 
-## Additive delta
+## Current reviewed schema and rollout
 
-Migration `cms/db/migrations/001_phase4_identity.sql` adds only:
+The baseline above describes the historical start of Phase 4, not the current live schema.
+`db/schema/cms.sql` and the generated [schema contract](SCHEMA_CONTRACT.md) now define the reviewed target.
+The current application uses `federated_identity_id`, issuer-qualified identities, revocation status,
+and `access_request_id`/`email_at_request`/`identity_method` with an existing non-null applicant user.
+`EMAIL_PASSWORD` remains the stored password method; nullable request verification timestamps and
+existing Apple history are preserved. A pending request grants no membership, role or session.
 
-- `auth_federated_identities`, uniquely keyed by provider subject and by user/provider;
-- short-lived, single-use `auth_oidc_transactions` for state, nonce and PKCE continuity;
-- `customer_access_requests`, including one pending request per email.
-
-No existing table is dropped or rebuilt. Forward fix is the rollback strategy: identity and request rows are additive and existing password login is independent of them.
+Migrations 001 and 002 are retired read-only stop notices. Their original definitions are historical
+negative test fixtures, not rollout inputs. For the audited existing schema, use the preview-first
+[reviewed authentication rollout](AUTH_MIGRATION_ROLLOUT.md). Its only possible DDL is focused OIDC
+repair 003, after contract/data checks in one transaction. It never rebuilds or copies requests or
+identities, and it refuses incompatible legacy schemas or unfinished rebuilds for explicit review.
 
 ## Identity and linking policy
 

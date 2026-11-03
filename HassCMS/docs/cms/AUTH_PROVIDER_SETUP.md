@@ -17,8 +17,10 @@ Google and Microsoft registration applications must request only OpenID, email a
 
 ## Missing OIDC transaction storage on an existing database
 
-If the database already has identity/customer-request tables but lacks
-`auth_oidc_transactions`, run only
+Start with the preview-first [authentication rollout](AUTH_MIGRATION_ROLLOUT.md).
+It checks the reviewed identity/request model and existing data before any DDL.
+If that model is confirmed and only `auth_oidc_transactions` is absent, the focused
+SQL repair remains
 [`003_oidc_transactions_only.sql`](../../db/migrations/003_oidc_transactions_only.sql)
 in that database's Turso SQL console. It creates the missing table, preserves
 existing tables and rows, and is safe to rerun. Its final verification query
@@ -26,11 +28,11 @@ must return `required_columns = 10`. No credentials, session tokens or PKCE
 verifiers are returned by that query.
 
 After deploying this application's updated health check, `GET /api/health`
-reports **External sign-in storage** as applied only when all ten required
-columns are present. Missing or partial storage makes the overall status
-`degraded` (HTTP 200, preserving the health endpoint's existing convention).
-An existing incompatible table needs separate review; `IF NOT EXISTS` does
-not repair it.
+checks the full reviewed authentication table contracts, including columns and
+constraints. Missing or incompatible storage makes status `degraded` with HTTP 503.
+The ten-column SQL count alone does not establish full compatibility.
+An existing incompatible table needs separate review; `IF NOT EXISTS` does not
+repair it.
 
 This focused SQL repair resolves transaction creation/storage only. The
 application reconciliations for [registration](REGISTRATION_SCHEMA_RECONCILIATION.md)
@@ -44,9 +46,9 @@ For customer registration on the observed existing schema, deploy the
 request-table rebuild is needed; applicants with an old registration grant
 must verify again with their provider after deployment.
 
-The older `001_phase4_identity.sql` assumes its original baseline; it is not
-an upgrade for existing tables with different column names.
-`002_phase4_live_schema_reconciliation.sql` rebuilds customer-request data
-and is not a prerequisite for this focused repair. Neither should be run
-blindly against an existing database. Merging/deploying application code does
-not execute any of these manual SQL files.
+`001_phase4_identity.sql` and `002_phase4_live_schema_reconciliation.sql` are retired.
+Their files now return `BLOCKED_RETIRED_MIGRATION` and make no schema/data changes.
+Do not retrieve their historical DDL for a live repair: 001 cannot reconcile the
+observed request columns, and 002 can reject `EMAIL_PASSWORD`/NULL verification
+history or leave an incompatible rebuilt table. Follow the reviewed rollout for
+partial applications. Merging/deploying code does not execute manual migrations.

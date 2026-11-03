@@ -56,6 +56,12 @@ explicit status, with notification/event creation in one foreign-key-safe batch.
 
 ## Standalone OIDC storage repair
 
+Migrations 001 and 002 are retired read-only stop notices. The coordinated,
+preview-first replacement is `db/migrations/006_reviewed_auth_reconciliation.ts`;
+see [authentication rollout and preservation mapping](AUTH_MIGRATION_ROLLOUT.md).
+It checks existing contracts/data in a transaction and only uses repair 003 if
+OIDC storage is missing. It never rebuilds requests/identities or creates grants.
+
 `db/migrations/003_oidc_transactions_only.sql` is a focused, rerunnable repair
 for the missing `auth_oidc_transactions` table. It adds only that table and
 its PRIMARY KEY/UNIQUE constraints, without modifying identities, users,
