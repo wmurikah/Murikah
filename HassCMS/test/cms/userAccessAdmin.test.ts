@@ -207,6 +207,23 @@ test('a title cannot be set on somebody with no assignment, and says which tab c
   c.close();
 });
 
+test('an existing imported user can be given a department and posting from User Access', () => {
+  const page = readFileSync('src/pages/cms/app/administration/users/[id].astro', 'utf8');
+  const drawer = readFileSync('src/components/cms/CmsUserAssignmentDrawer.astro', 'utf8');
+
+  assert.match(page, /data-cms-assignment-create/);
+  assert.match(page, /Approval roles/);
+  assert.match(drawer, /name="departmentId"/);
+  assert.match(drawer, /name="jobTitleId"/);
+  assert.match(drawer, /name="level"/);
+  assert.match(drawer, /\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/assignments/);
+  assert.match(
+    drawer,
+    /Approval authority is assigned\s+separately/,
+    'department and workflow authority must remain distinct controls',
+  );
+});
+
 test('a deactivated or unknown title is refused', async () => {
   const c = await db();
   await c.execute({

@@ -41,10 +41,15 @@ import CmsUserRoleDrawer from '@hasscms/components/cms/CmsUserRoleDrawer.astro';
 import CmsUserAccessPanel from '@hasscms/components/cms/CmsUserAccessPanel.astro';
 import CmsUserAuthorityDrawer from '@hasscms/components/cms/CmsUserAuthorityDrawer.astro';
 import CmsApplyDefaultsDrawer from '@hasscms/components/cms/CmsApplyDefaultsDrawer.astro';
+import CmsUserAssignmentDrawer from '@hasscms/components/cms/CmsUserAssignmentDrawer.astro';
 
 import { userActivity, type AuditRow as AuditTrailRow } from '@hasscms/lib/cms/repos/auditTrail';
 import { requestDb } from '@hasscms/lib/cms/db';
-import { canManageRoles, canManageUsers, canManageWorkflowRoles } from '@hasscms/lib/cms/permissions';
+import {
+  canManageRoles,
+  canManageUsers,
+  canManageWorkflowRoles,
+} from '@hasscms/lib/cms/permissions';
 import { userSectionCounts, type UserSectionCounts } from '@hasscms/lib/cms/repos/userAdmin';
 import {
   resolveUserTab,
@@ -58,7 +63,14 @@ import {
   listAffiliates,
   listBusinessUnits,
   listCountries,
+  listDepartments,
   listTeams,
+} from '@hasscms/lib/cms/repos/organisationAdmin';
+import type {
+  AffiliateRow,
+  BusinessUnitRow,
+  CountryRow,
+  DepartmentRow,
 } from '@hasscms/lib/cms/repos/organisationAdmin';
 import {
   getSecurity,
@@ -132,6 +144,12 @@ let scopeTargets = {
   units: [] as { value: string; label: string }[],
   teams: [] as { value: string; label: string }[],
 };
+let assignmentTargets = {
+  countries: [] as CountryRow[],
+  affiliates: [] as AffiliateRow[],
+  units: [] as BusinessUnitRow[],
+  departments: [] as DepartmentRow[],
+};
 // The Audit tab is what this person CHANGED, read through the audit
 // repository so it carries the same scope, the same security gate and the
 // same masking as the workspace. The previous query here selected events
@@ -152,7 +170,8 @@ let loadFailed = false;
     edit          the Position & Access editor's catalogue: titles, roles,
                   authority, the permission map, the title's defaults and the
                   scope choices its drawers offer
-    organisation  teams (assignments are already common)
+    organisation  teams, or the catalogues needed to add an assignment
+                  (assignments themselves are already common)
     access        roles, authority, the permission map and the title defaults
                   that mark a role Mapped
     security      source identities and the security view
@@ -177,7 +196,19 @@ if (mayManage) {
     if (user) {
       const endSection = trace?.begin('user.section');
       if (tab === 'organisation') {
-        teams = await listUserTeams(db, userId);
+        if (view === 'assignments') {
+          const [titles, countries, affiliates, units, departments] = await Promise.all([
+            listJobTitles(db),
+            listCountries(db),
+            listAffiliates(db),
+            listBusinessUnits(db),
+            listDepartments(db),
+          ]);
+          jobTitles = titles;
+          assignmentTargets = { countries, affiliates, units, departments };
+        } else {
+          teams = await listUserTeams(db, userId);
+        }
       } else if (tab === 'access' || tab === 'edit') {
         [roles, authority, permissionMap] = await Promise.all([
           listUserRoles(db, userId),
@@ -481,51 +512,83 @@ const portalLine = user?.userType === 'EXTERNAL' ? 'Customer portal account' : n
         )}
 
         {tab === 'organisation' && view === 'assignments' && (
-          <CmsDataTable
-            caption="Assignments"
-            columns={[
-              { key: 'title', label: 'Job title' },
-              { key: 'department', label: 'Department' },
-              { key: 'level', label: 'Level' },
-              { key: 'where', label: 'Where' },
-              { key: 'from', label: 'From' },
-              { key: 'to', label: 'To' },
-              { key: 'primary', label: 'Primary' },
-              { key: 'status', label: 'Status' },
-            ]}
-            empty={assignments.length === 0}
-          >
-            {assignments.map((row) => (
-              <tr class="border-b border-cms-line last:border-0">
-                <td class="px-4 py-2.5 font-medium text-cms-ink">{row.jobTitle}</td>
-                <td class="px-4 py-2.5 text-cms-muted">{row.department}</td>
-                <td class="px-4 py-2.5 text-cms-muted">{label(row.level)}</td>
-                <td class="px-4 py-2.5 text-cms-muted">
-                  {row.level === 'GROUP'
-                    ? 'Hass Petroleum Group'
-                    : (row.businessUnitName ?? row.affiliateName ?? row.countryName ?? '—')}
-                </td>
-                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
-                <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveTo ?? 'Open'}</td>
-                <td class="px-4 py-2.5">
-                  {row.isPrimary && <CmsBadge tone="info" label="Primary" />}
-                </td>
-                <td class="px-4 py-2.5">
-                  <CmsBadge
-                    tone={row.current ? 'success' : 'neutral'}
-                    label={row.current ? 'Current' : row.active ? 'Not yet current' : 'Ended'}
-                  />
-                </td>
-              </tr>
-            ))}
-            <Fragment slot="empty">
-              <CmsEmptyState
-                icon="customers"
-                title="No assignment"
-                description="An external portal user holds no organisational assignment, which is why this is empty rather than broken."
+          <Fragment>
+            {user.userType === 'INTERNAL' && mayManage && (
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-cms-body-sm text-cms-muted">
+                  Department and scope determine where this user sits in the directory.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  <CmsButton
+                    variant="secondary"
+                    href={`/app/administration/users/${userId}?tab=access&view=authority`}
+                  >
+                    Approval roles
+                  </CmsButton>
+                  <CmsButton variant="primary" icon="plus" data-cms-assignment-create>
+                    Add assignment
+                  </CmsButton>
+                </div>
+              </div>
+            )}
+            <CmsDataTable
+              caption="Assignments"
+              columns={[
+                { key: 'title', label: 'Job title' },
+                { key: 'department', label: 'Department' },
+                { key: 'level', label: 'Level' },
+                { key: 'where', label: 'Where' },
+                { key: 'from', label: 'From' },
+                { key: 'to', label: 'To' },
+                { key: 'primary', label: 'Primary' },
+                { key: 'status', label: 'Status' },
+              ]}
+              empty={assignments.length === 0}
+            >
+              {assignments.map((row) => (
+                <tr class="border-b border-cms-line last:border-0">
+                  <td class="px-4 py-2.5 font-medium text-cms-ink">{row.jobTitle}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{row.department}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">{label(row.level)}</td>
+                  <td class="px-4 py-2.5 text-cms-muted">
+                    {row.level === 'GROUP'
+                      ? 'Hass Petroleum Group'
+                      : (row.businessUnitName ?? row.affiliateName ?? row.countryName ?? '—')}
+                  </td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">{row.effectiveFrom}</td>
+                  <td class="px-4 py-2.5 text-cms-muted tabular-nums">
+                    {row.effectiveTo ?? 'Open'}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    {row.isPrimary && <CmsBadge tone="info" label="Primary" />}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <CmsBadge
+                      tone={row.current ? 'success' : 'neutral'}
+                      label={row.current ? 'Current' : row.active ? 'Not yet current' : 'Ended'}
+                    />
+                  </td>
+                </tr>
+              ))}
+              <Fragment slot="empty">
+                <CmsEmptyState
+                  icon="customers"
+                  title="No assignment"
+                  description="An external portal user holds no organisational assignment, which is why this is empty rather than broken."
+                />
+              </Fragment>
+            </CmsDataTable>
+            {user.userType === 'INTERNAL' && mayManage && (
+              <CmsUserAssignmentDrawer
+                userId={userId}
+                countries={assignmentTargets.countries}
+                affiliates={assignmentTargets.affiliates}
+                businessUnits={assignmentTargets.units}
+                departments={assignmentTargets.departments}
+                titles={jobTitles}
               />
-            </Fragment>
-          </CmsDataTable>
+            )}
+          </Fragment>
         )}
 
         {tab === 'organisation' && view === 'teams' && (
