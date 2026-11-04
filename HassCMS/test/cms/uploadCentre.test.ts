@@ -35,6 +35,7 @@ import {
   affiliateForExtractToken,
 } from '../../src/lib/cms/import/uploadCentre.ts';
 import { createAndMapUnresolvedActor } from '../../src/lib/cms/import/unresolvedUsers.ts';
+import { loadingAuthorityBoard } from '../../src/lib/cms/repos/approvalSla.ts';
 import {
   importRowPresentation,
   SO_ADDITIONAL_EVENT_MESSAGE,
@@ -547,7 +548,7 @@ test('a name mapped once is recognised on the next upload, with no re-upload of 
   assert.equal(Number(later.rows[0]?.n), 1);
 });
 
-test('mapping an SO approver repairs already imported Finance stages', async () => {
+test('mapping an inactive SO approver keeps their name on historical Finance stages', async () => {
   const c = await db();
   const upload = await receiveUpload(asClient(c), soUpload(new Uint8Array(SO_FILE)), CTX);
   await commitBatch(asClient(c), upload.batchId ?? '', CTX);
@@ -564,6 +565,10 @@ test('mapping an SO approver repairs already imported Finance stages', async () 
      WHERE ws.stage_code = 'FINANCE_APPROVAL' AND wsi.assigned_user_id IS NULL`);
   assert.ok(Number(before.rows[0]?.n) > 0, 'the unknown approver was already attributed');
 
+  // Account status controls sign-in and future workflow eligibility. It must
+  // not erase who performed an approval already present in the source file.
+  await c.execute(`UPDATE users SET status = 'INACTIVE' WHERE user_id = 'USR-ZUL'`);
+
   const mapping = await mapUnresolvedActor(
     asClient(c),
     { unresolvedActorId: actor.unresolvedActorId, userId: 'USR-ZUL', revalidate: true },
@@ -576,6 +581,17 @@ test('mapping an SO approver repairs already imported Finance stages', async () 
       JOIN workflow_stages ws ON ws.workflow_stage_id = wsi.workflow_stage_id
      WHERE ws.stage_code = 'FINANCE_APPROVAL' AND wsi.assigned_user_id = 'USR-ZUL'`);
   assert.equal(Number(after.rows[0]?.n), Number(before.rows[0]?.n));
+
+  const board = await loadingAuthorityBoard(asClient(c), {
+    from: null,
+    to: null,
+    affiliateId: null,
+  });
+  const financePeople = board.byCountry.get('AFF-KE')?.people.get('Finance approval') ?? [];
+  assert.ok(
+    financePeople.some((person) => person.userId === 'USR-ZUL' && person.person === 'Zuleika Omar'),
+    'the inactive approver disappeared from the historical dashboard',
+  );
 });
 
 test('an administrator can create an invited internal user and map an unresolved name atomically', async () => {

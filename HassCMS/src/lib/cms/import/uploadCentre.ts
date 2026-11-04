@@ -1246,12 +1246,15 @@ export type MapActorResult =
   | { ok: false; reason: string };
 
 /**
- * Map a source username to an existing or invited user.
+ * Map a source username to an existing user, whatever their login status.
  *
  * NOBODY IS CREATED HERE. The explicit create-and-map operation first requires
  * an administrator to supply an email and creates an INVITED account. This
  * lower-level mapping accepts that invited account so its source work can be
- * attributed while email verification is still pending.
+ * attributed while email verification is still pending. It also accepts an
+ * inactive or suspended account: login eligibility is a current security
+ * decision, while attribution answers who performed a historical approval.
+ * Conflating the two would erase a former employee from every dashboard.
  *
  * The mapping is stored on source_identities, so the next upload resolves
  * the same name with nobody touching it again.
@@ -1278,14 +1281,11 @@ export async function mapUnresolvedActor(
   if (text(actor.status) !== 'OPEN') return { ok: false, reason: 'already_resolved' };
 
   const user = await db.execute({
-    sql: `SELECT user_id, status FROM users WHERE user_id = ?`,
+    sql: `SELECT user_id FROM users WHERE user_id = ?`,
     args: [input.userId],
   });
   const target = user.rows[0];
   if (target === undefined) return { ok: false, reason: 'unknown_user' };
-  if (!['ACTIVE', 'INVITED'].includes(text(target.status))) {
-    return { ok: false, reason: 'inactive_user' };
-  }
 
   const username = text(actor.external_username);
   const sourceSystemId = text(actor.source_system_id);

@@ -54,7 +54,7 @@ if (mayView) {
         await Promise.all([
           db.execute(
             `SELECT user_id, display_name, email, employee_no, status FROM users
-         WHERE status IN ('ACTIVE', 'INVITED') AND user_type = 'INTERNAL'
+         WHERE user_type = 'INTERNAL'
          ORDER BY display_name`,
           ),
           listJobTitles(db),
@@ -65,7 +65,7 @@ if (mayView) {
         ]);
       people = users.rows.map((row) => ({
         value: String(row.user_id),
-        label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})${String(row.status) === 'INVITED' ? ' — invited' : ''}`,
+        label: `${String(row.display_name)} (${String(row.email)}${row.employee_no === null ? '' : `, ${String(row.employee_no)}`})${String(row.status) === 'ACTIVE' ? '' : ` — ${String(row.status).toLowerCase()}`}`,
       }));
       jobTitles = titles
         .filter((row) => row.active)
