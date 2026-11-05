@@ -1,6 +1,6 @@
 # Engineering schema migration rollout
 
-The numbered files in `db/migrations` are the Engineering database source of truth. `db/schema.sql` is generated from those migrations for review and tooling; do not edit it directly.
+The numbered files in `db/migrations` are the Engineering database source of truth. `db/schema.sql` is a clean-install snapshot generated for review and tooling. **Never paste `db/schema.sql` into an existing Turso database:** its exact `CREATE` statements will correctly report that existing tables, indexes, views, and triggers already exist. Existing databases must use `pnpm db:apply`, which conditionally reconciles their current shape and records checksummed migration history.
 
 ## What migration 002 reconciles
 
