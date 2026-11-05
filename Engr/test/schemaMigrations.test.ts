@@ -46,7 +46,7 @@ test('blank install reaches the canonical contract and is idempotent', async () 
   const db = database();
   try {
     const first = await runMigrations(db.client);
-    assert.deepEqual(first.applied, ['001', '002']);
+    assert.deepEqual(first.applied, ['001', '002', '003']);
     await verifySchemaContract(db.client);
 
     const tables = await db.client.execute(
@@ -56,12 +56,12 @@ test('blank install reaches the canonical contract and is idempotent', async () 
     const history = await db.client.execute('SELECT id FROM schema_migrations ORDER BY id');
     assert.deepEqual(
       history.rows.map((row) => String(row.id)),
-      ['001', '002'],
+      ['001', '002', '003'],
     );
 
     const second = await runMigrations(db.client);
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.alreadyApplied, ['001', '002']);
+    assert.deepEqual(second.alreadyApplied, ['001', '002', '003']);
   } finally {
     db.close();
   }
@@ -98,7 +98,7 @@ test('legacy schema upgrades without losing representative LPO data', async () =
     );
 
     const upgraded = await runMigrations(legacy.client);
-    assert.deepEqual(upgraded.applied, ['001', '002']);
+    assert.deepEqual(upgraded.applied, ['001', '002', '003']);
     const row = (
       await legacy.client.execute(
         `SELECT lpo_no, total_minor, subtotal_minor, mileage_minor, version FROM lpos WHERE id = 'lpo1'`,
@@ -109,6 +109,10 @@ test('legacy schema upgrades without losing representative LPO data', async () =
     assert.equal(Number(row.subtotal_minor), 0);
     assert.equal(Number(row.mileage_minor), 0);
     assert.equal(Number(row.version), 1);
+    const user = (
+      await legacy.client.execute(`SELECT session_version FROM users WHERE id = 'user1'`)
+    ).rows[0];
+    assert.equal(Number(user.session_version), 0);
     assert.deepEqual(await objectSignature(legacy.client), await objectSignature(blank.client));
   } finally {
     blank.close();

@@ -4,9 +4,9 @@ export const prerender = false;
 /**
  * User create and edit. The path segment is "new" to create, otherwise a user id
  * to edit. Gate: users.manage. The roles checklist is only shown, and only
- * applied, when the viewer also holds roles.manage. A password is optional: leave
- * it blank to keep the current one, or invite a new user to set their own. The
- * stored password hash is never rendered.
+ * applied, when the viewer also holds roles.manage. New users require a
+ * temporary password. Entering one on an existing user resets their password,
+ * revokes their sessions and forces replacement at the next login.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
@@ -58,7 +58,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
   {
     errorCode === 'invalid' && (
       <p class="engr-error" role="alert">
-        Check the name, email and status, then try again.
+        Check the user details and use a temporary password of at least 12 characters.
       </p>
     )
   }
@@ -122,10 +122,10 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
         <div class="engr-field">
           <label for="status">Status</label>
           <select id="status" class="engr-select" name="status">
-            <option value="INVITED" selected={(u?.status ?? 'INVITED') === 'INVITED'}>
+            <option value="INVITED" selected={u?.status === 'INVITED'}>
               Invited
             </option>
-            <option value="ACTIVE" selected={u?.status === 'ACTIVE'}>
+            <option value="ACTIVE" selected={(u?.status ?? 'ACTIVE') === 'ACTIVE'}>
               Active
             </option>
             <option value="SUSPENDED" selected={u?.status === 'SUSPENDED'}>
@@ -137,20 +137,29 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
           </select>
         </div>
         <div class="engr-field engr-formgrid__full">
-          <label for="password">Set a password (optional)</label>
+          <label for="password">
+            {isNew ? 'Temporary password' : 'Reset with a temporary password (optional)'}
+          </label>
           <input
             type="password"
             id="password"
             class="engr-input"
             name="password"
-            maxlength="200"
+            minlength="12"
+            maxlength="128"
+            required={isNew}
             autocomplete="new-password"
           />
           <span class="engr-field__hint">
-            Leave blank to keep the current password. A new user with no password is invited to set
-            one.
+            Pasting is allowed. The user must replace this password immediately after signing in.
+            {!isNew && ' Leave blank to keep the current password.'}
           </span>
         </div>
+        {!isNew && u?.mustChangePassword && (
+          <p class="engr-field__hint engr-formgrid__full" role="status">
+            This user must change their temporary password at the next sign-in.
+          </p>
+        )}
         {canAssignRoles && (
           <fieldset class="engr-field engr-formgrid__full">
             <legend>Roles</legend>

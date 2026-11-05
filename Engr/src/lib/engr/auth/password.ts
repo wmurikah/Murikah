@@ -15,6 +15,23 @@ const ITERATIONS = 60_000;
 const KEY_LEN_BITS = 256; // SHA-256 output width
 const SALT_BYTES = 16;
 
+export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MAX_LENGTH = 128;
+
+/** Validate a newly chosen or administrator-issued password. Long passphrases
+ * are accepted without composition rules; spaces and paste are deliberately
+ * supported. */
+export function validateNewPassword(plain: string): string | null {
+  if (plain.length < PASSWORD_MIN_LENGTH) {
+    return `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
+  }
+  if (plain.length > PASSWORD_MAX_LENGTH) {
+    return `Use no more than ${PASSWORD_MAX_LENGTH} characters.`;
+  }
+  if (!plain.trim()) return 'The password cannot contain only spaces.';
+  return null;
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);

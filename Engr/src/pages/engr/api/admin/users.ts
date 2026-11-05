@@ -42,9 +42,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const id = str(scalar.id).trim();
-  const password = str(scalar.password).trim() || null;
-  // A new account with no password is invited to set one; otherwise active.
-  const defaultStatus = !id && !password ? 'INVITED' : 'ACTIVE';
+  // Preserve intentional spaces in passphrases. The repository validates length
+  // and rejects an all-space value.
+  const passwordValue = str(scalar.password);
+  const password = passwordValue.length ? passwordValue : null;
+  const defaultStatus = 'ACTIVE';
   const input: UserInput = {
     fullName: str(scalar.full_name).trim(),
     email: str(scalar.email).trim().toLowerCase(),

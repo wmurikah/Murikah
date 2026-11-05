@@ -15,6 +15,7 @@ import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 
 export const SESSION_COOKIE = 'engr_session';
 const MAX_AGE_SECONDS = 12 * 60 * 60; // 12 hours
+const PASSWORD_CHANGE_MAX_AGE_SECONDS = 10 * 60;
 
 export interface SessionPayload {
   sub: string; // user id
@@ -32,6 +33,11 @@ export interface SessionPayload {
   // may switch the acting organisation; every other user is scoped to their home
   // organisation. Optional and defaults to false on an older token.
   isPlatformOwner?: boolean;
+  /** Incremented on every password reset/change. Older tokens stop matching the
+   * database immediately, which revokes sessions on every device. */
+  sessionVersion?: number;
+  /** Restricted authentication after a temporary password is accepted. */
+  passwordChangeOnly?: boolean;
 }
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -62,11 +68,17 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
     userName: optional(claims.userName),
     userEmail: optional(claims.userEmail),
     isPlatformOwner: claims.isPlatformOwner === true,
+    sessionVersion:
+      typeof claims.sessionVersion === 'number' && Number.isInteger(claims.sessionVersion)
+        ? claims.sessionVersion
+        : 0,
+    passwordChangeOnly: claims.passwordChangeOnly === true,
   };
 }
 
 // Sign the payload and return the token string.
 async function sign(payload: SessionPayload, secret: string): Promise<string> {
+  const maxAge = payload.passwordChangeOnly ? PASSWORD_CHANGE_MAX_AGE_SECONDS : MAX_AGE_SECONDS;
   return new SignJWT({
     org: payload.org,
     orgSlug: payload.orgSlug,
@@ -78,11 +90,13 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
     userEmail: payload.userEmail,
     // Only carried when true, so an ordinary token stays compact.
     isPlatformOwner: payload.isPlatformOwner ? true : undefined,
+    sessionVersion: payload.sessionVersion ?? 0,
+    passwordChangeOnly: payload.passwordChangeOnly ? true : undefined,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
     .setIssuedAt()
-    .setExpirationTime(`${MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${maxAge}s`)
     .sign(keyFromSecret(secret));
 }
 
@@ -119,7 +133,8 @@ export async function createSession(
   secure: boolean,
 ): Promise<string> {
   const token = await sign(payload, secret);
-  return cookie(token, MAX_AGE_SECONDS, secure);
+  const maxAge = payload.passwordChangeOnly ? PASSWORD_CHANGE_MAX_AGE_SECONDS : MAX_AGE_SECONDS;
+  return cookie(token, maxAge, secure);
 }
 
 /** Read and verify the session cookie, returning the payload or null. */
