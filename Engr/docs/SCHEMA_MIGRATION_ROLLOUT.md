@@ -53,6 +53,10 @@ An already-expanded live database still records both migrations after checking/r
 
 The Turso web SQL console cannot provide the conditional, checksum-verified migration behavior safely. Run the repository command rather than pasting only part of migration 002 into the console.
 
+### Turso Web adoption for the already-audited live database
+
+If command-line access is unavailable, run `db/turso-web/01_verify_live_reconciliation.sql` in Turso Web. If it returns any rows, stop and add only the reported objects with a reviewed repair; SQLite does not support `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. If it returns no rows, run `db/turso-web/02_adopt_verified_live_schema.sql` to record the checksummed migration history for the schema that is already present. Never use this adoption script to conceal missing objects.
+
 ## Verify
 
 ```sql
