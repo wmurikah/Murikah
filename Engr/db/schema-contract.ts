@@ -56,7 +56,7 @@ export const DOMAIN_TABLES = [
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
   organisations: ['parent_org_id'],
   regions: ['currency'],
-  users: ['is_platform_owner'],
+  users: ['is_platform_owner', 'session_version'],
   lpos: [
     'region_id',
     'notes',
@@ -110,6 +110,7 @@ const REQUIRED_COLUMN_SHAPES: Record<string, Record<string, ColumnShape>> = {
   },
   users: {
     is_platform_owner: { type: 'INTEGER', notNull: true, defaultValue: '0' },
+    session_version: { type: 'INTEGER', notNull: true, defaultValue: '0' },
   },
   lpos: {
     region_id: { type: 'TEXT', notNull: false, defaultValue: null },

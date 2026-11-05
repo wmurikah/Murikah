@@ -45,7 +45,7 @@ pnpm db:apply
 Expected output on the first managed run:
 
 ```text
-✓ Applied migrations: 001, 002
+✓ Applied migrations: 001, 002, 003
 ✓ Engineering schema contract verified at libsql://…
 ```
 
@@ -64,7 +64,7 @@ SELECT COUNT(*) AS foreign_key_violations
 FROM pragma_foreign_key_check;
 ```
 
-The history must contain `001` and `002`, and `foreign_key_violations` must be `0`. The migration command also runs the complete table/column/index/view/trigger contract check before reporting success.
+The history must contain `001`, `002`, and `003`, and `foreign_key_violations` must be `0`. The migration command also runs the complete table/column/index/view/trigger contract check before reporting success.
 
 ## Future schema changes
 

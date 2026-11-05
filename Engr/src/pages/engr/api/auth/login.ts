@@ -5,8 +5,9 @@ export const prerender = false;
  * across the whole system and then placed in their home organisation
  * (users.org_id); there is no organisation slug. Any failure returns the same
  * generic error, so it never reveals whether the email or the password was
- * wrong. On success it sets the session cookie and redirects to the dashboard,
- * and stamps last_login_at without blocking the response.
+ * wrong. A user holding a temporary password receives a restricted ten-minute
+ * session which can only change that password or log out. Every other user is
+ * sent to the dashboard with a full session.
  */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
@@ -54,6 +55,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // affiliates may share a domain, so the full email is the identity.
   const res = await db.execute({
     sql: `SELECT u.id AS user_id, u.full_name, u.password_hash, u.status AS user_status,
+                 u.must_change_password, u.session_version, u.is_platform_owner,
                  o.id AS org_id, o.slug AS org_slug, o.name AS org_name, o.status AS org_status
             FROM users u
             JOIN organisations o ON o.id = u.org_id
@@ -77,21 +79,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ok = await verifyPassword(password, storedHash);
   if (!ok) return invalid();
 
-  // Platform ownership decides whether the switcher appears. The column is
-  // applied by an operator migration, so read it defensively: an environment
-  // without it simply yields an ordinary (non-platform) user.
-  let isPlatformOwner = false;
-  try {
-    const flag = await db.execute({
-      sql: `SELECT is_platform_owner FROM users WHERE id = ? LIMIT 1`,
-      args: [userId],
-    });
-    isPlatformOwner = Number(flag.rows[0]?.is_platform_owner ?? 0) === 1;
-  } catch {
-    isPlatformOwner = false;
-  }
-
-  const { roles, perms } = await loadUserAuth(db, orgId, userId);
+  const isPlatformOwner = Number(row.is_platform_owner ?? 0) === 1;
+  const sessionVersion = Number(row.session_version ?? 0);
+  const passwordChangeOnly = Number(row.must_change_password ?? 0) === 1;
+  const auth = passwordChangeOnly
+    ? { roles: [], perms: [] }
+    : await loadUserAuth(db, orgId, userId);
   // Secure in production (https); off for http development on engr.localhost.
   const secure = new URL(request.url).protocol === 'https:';
   const cookie = await createSession(
@@ -102,9 +95,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       orgName,
       userName,
       userEmail: emailNorm,
-      roles,
-      perms,
+      roles: auth.roles,
+      perms: auth.perms,
       isPlatformOwner,
+      sessionVersion,
+      passwordChangeOnly,
     },
     env.sessionSecret,
     secure,
@@ -124,6 +119,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   return new Response(null, {
     status: 303,
-    headers: { location: '/', 'set-cookie': cookie },
+    headers: { location: passwordChangeOnly ? '/change-password' : '/', 'set-cookie': cookie },
   });
 };

@@ -6,7 +6,7 @@
  * back or rendered. Soft-deleted users (deleted_at) are excluded from every read.
  */
 import type { Client } from '@libsql/client/web';
-import { hashPassword } from '@engr/auth/password';
+import { hashPassword, validateNewPassword } from '@engr/auth/password';
 import { effectiveRoleIds } from '@engr/repos/adminRoles';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
@@ -35,6 +35,7 @@ export interface UserDetail {
   phone: string | null;
   status: string;
   roleIds: string[];
+  mustChangePassword: boolean;
 }
 
 export interface UserInput {
@@ -70,7 +71,7 @@ export async function listUsersAdmin(db: Client, orgId: string): Promise<UserRow
 
 export async function getUser(db: Client, orgId: string, id: string): Promise<UserDetail | null> {
   const res = await db.execute({
-    sql: `SELECT id, full_name, email, phone, status
+    sql: `SELECT id, full_name, email, phone, status, must_change_password
             FROM users WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
     args: [id, orgId],
   });
@@ -90,6 +91,7 @@ export async function getUser(db: Client, orgId: string, id: string): Promise<Us
     phone: row.phone === null ? null : String(row.phone),
     status: String(row.status),
     roleIds: roleRes.rows.map((r) => String(r.role_id)),
+    mustChangePassword: Number(row.must_change_password ?? 0) === 1,
   };
 }
 
@@ -99,6 +101,10 @@ function validate(input: UserInput): string | null {
   if (!input.fullName) return 'A name is required.';
   if (!input.email) return 'An email is required.';
   if (!STATUSES.has(input.status)) return 'Choose a valid status.';
+  if (input.password) {
+    const passwordError = validateNewPassword(input.password);
+    if (passwordError) return passwordError;
+  }
   return null;
 }
 
@@ -118,9 +124,12 @@ export async function createUser(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!input.password) {
+    return { ok: false, code: 'invalid', message: 'A temporary password is required.' };
+  }
   const roleIds = input.assignRoles ? await filterRoleIds(db, ctx.orgId, input.roleIds) : [];
   const passwordHash = input.password ? await hashPassword(input.password) : null;
-  const mustChange = input.password ? 0 : 1;
+  const mustChange = 1;
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -188,9 +197,21 @@ export async function updateUser(
     }
     if (passwordHash) {
       await tx.execute({
-        sql: `UPDATE users SET password_hash = ?, must_change_password = 0
+        sql: `UPDATE users
+                 SET password_hash = ?, must_change_password = 1,
+                     session_version = session_version + 1
                WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
         args: [passwordHash, id, ctx.orgId],
+      });
+      await tx.execute({
+        sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+              VALUES (?, ?, 'users.password.reset', 'user', ?, ?)`,
+        args: [
+          ctx.orgId,
+          ctx.userId,
+          id,
+          JSON.stringify({ temporary_password: true, sessions_revoked: true }),
+        ],
       });
     }
     if (input.assignRoles) {
