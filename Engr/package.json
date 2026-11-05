@@ -30,6 +30,8 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "db:bootstrap-tenant": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/bootstrap-tenant.ts",
     "db:apply": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/apply.ts",
+    "db:schema:generate": "node --experimental-strip-types db/generate-schema.ts",
+    "db:schema:check": "node --experimental-strip-types db/generate-schema.ts --check",
     "db:seed": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed.ts",
     "db:seed-demo": "node --env-file-if-exists=.dev.vars --experimental-strip-types db/seed-demo.ts"
   },
