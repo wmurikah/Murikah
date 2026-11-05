@@ -120,9 +120,9 @@ declare namespace Cloudflare {
     GDRIVE_REFRESH_TOKEN?: string;
 
     // Engineering Rhythm notification dispatcher. All optional: absent or a
-    // non-production ENGR_ENV keeps the dispatcher in dry-run and never contacts
+    // non-production ENGR_ENV keeps external messages queued and never contacts
     // a provider. Secrets are set as Worker secrets or in .dev.vars.
-    ENGR_ENV?: string; // 'production' enables real sends; anything else is dry-run
+    ENGR_ENV?: string; // 'production' enables configured external providers
     AT_USERNAME?: string; // Africa's Talking
     AT_API_KEY?: string;
     AT_SENDER_ID?: string;
@@ -176,6 +176,5 @@ declare namespace App {
      */
     engrHost?: string;
     engrPath?: string;
-
   }
 }

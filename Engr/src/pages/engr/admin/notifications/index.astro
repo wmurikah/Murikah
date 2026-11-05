@@ -1,0 +1,171 @@
+---
+export const prerender = false;
+
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { can } from '@engr/auth/rbac';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { getNotificationSettings } from '@engr/repos/notificationSettings';
+import { deliveryReadiness, getDeliveryEnv } from '@engr/notify/env';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'settings.manage');
+const saved = Astro.url.searchParams.get('saved') === '1';
+const error = Astro.url.searchParams.get('error');
+const settings = allowed
+  ? await getNotificationSettings(await getDb(getEngrEnv()), engr.orgId)
+  : { emailEnabled: false, smsEnabled: false, quietStart: '', quietEnd: '', smsMonthlyCap: null };
+const readiness = deliveryReadiness(getDeliveryEnv());
+---
+
+<EngrLayout title="Notification settings">
+  <div class="engr-page-head">
+    <div>
+      <h1>Notification settings</h1>
+      <p class="engr-lead">Choose how this organisation receives workflow alerts.</p>
+    </div>
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        Notification settings saved.
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="engr-error" role="alert">
+        The settings could not be saved. Check the values and try again.
+      </p>
+    )
+  }
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have permission to manage notification settings.
+      </p>
+    ) : (
+      <>
+        <section class="engr-panel" aria-labelledby="delivery-readiness">
+          <h2 id="delivery-readiness">Delivery readiness</h2>
+          <p class="engr-field__hint">
+            Provider credentials are encrypted Cloudflare secrets. Their values are never displayed
+            here.
+          </p>
+          <dl class="engr-detailgrid">
+            <dt>Production delivery</dt>
+            <dd>
+              <span class="engr-status">{readiness.production ? 'Ready' : 'Not enabled'}</span>
+            </dd>
+            <dt>Email provider</dt>
+            <dd>
+              <span class="engr-status">{readiness.email.ready ? 'Ready' : 'Needs setup'}</span>
+              {!readiness.email.ready && (
+                <span class="engr-field__hint"> {readiness.email.reason}</span>
+              )}
+            </dd>
+            <dt>SMS provider</dt>
+            <dd>
+              <span class="engr-status">{readiness.sms.ready ? 'Ready' : 'Needs setup'}</span>
+              {!readiness.sms.ready && (
+                <span class="engr-field__hint"> {readiness.sms.reason}</span>
+              )}
+            </dd>
+          </dl>
+          {(!readiness.email.ready || !readiness.sms.ready) && (
+            <p class="engr-notice" role="status">
+              Alerts for an enabled but unconfigured external channel remain queued. They are not
+              marked as sent.
+            </p>
+          )}
+        </section>
+
+        <form
+          method="post"
+          action="/api/admin/notification-settings"
+          class="engr-formgrid engr-formgrid--two"
+        >
+          <fieldset class="engr-field engr-formgrid__full">
+            <legend>Channels</legend>
+            <ul class="engr-checklist">
+              <li>
+                <input type="checkbox" id="channel_in_app" checked disabled />
+                <label for="channel_in_app">In-app notifications (always enabled)</label>
+              </li>
+              <li>
+                <input
+                  type="checkbox"
+                  id="email_enabled"
+                  name="email_enabled"
+                  value="1"
+                  checked={settings.emailEnabled}
+                />
+                <label for="email_enabled">Email</label>
+              </li>
+              <li>
+                <input
+                  type="checkbox"
+                  id="sms_enabled"
+                  name="sms_enabled"
+                  value="1"
+                  checked={settings.smsEnabled}
+                />
+                <label for="sms_enabled">SMS</label>
+              </li>
+            </ul>
+          </fieldset>
+
+          <div class="engr-field">
+            <label for="quiet_start">
+              Quiet hours start <span class="engr-field__hint">(EAT)</span>
+            </label>
+            <input
+              class="engr-input"
+              id="quiet_start"
+              name="quiet_start"
+              type="time"
+              value={settings.quietStart}
+            />
+          </div>
+          <div class="engr-field">
+            <label for="quiet_end">
+              Quiet hours end <span class="engr-field__hint">(EAT)</span>
+            </label>
+            <input
+              class="engr-input"
+              id="quiet_end"
+              name="quiet_end"
+              type="time"
+              value={settings.quietEnd}
+            />
+          </div>
+          <div class="engr-field engr-formgrid__full">
+            <label for="sms_monthly_cap">
+              Monthly SMS cap <span class="engr-field__hint">(optional)</span>
+            </label>
+            <input
+              class="engr-input"
+              id="sms_monthly_cap"
+              name="sms_monthly_cap"
+              type="number"
+              min="0"
+              step="1"
+              value={settings.smsMonthlyCap ?? ''}
+            />
+            <span class="engr-field__hint">
+              When the cap is reached, delivery falls back to email or in-app.
+            </span>
+          </div>
+          <div class="engr-actionbar engr-formgrid__full">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Save notification settings
+            </button>
+          </div>
+        </form>
+      </>
+    )
+  }
+</EngrLayout>

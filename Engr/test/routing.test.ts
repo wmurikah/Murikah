@@ -76,6 +76,7 @@ test('isPassthroughAsset spots infra and file paths, not app routes', () => {
 test('public app paths cover login and machine endpoints only', () => {
   assert.equal(isPublicAppPath('/login'), true);
   assert.equal(isPublicAppPath('/api/auth/login'), true);
+  assert.equal(isPublicAppPath('/api/health'), true);
   assert.equal(isPublicAppPath('/api/cron/dispatch'), true);
   assert.equal(isPublicAppPath('/api/webhooks/delivery'), true);
   assert.equal(isPublicAppPath('/'), false);

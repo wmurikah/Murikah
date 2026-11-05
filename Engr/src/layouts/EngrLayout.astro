@@ -184,6 +184,9 @@ const rawGroups: NavGroup[] = [
       has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
       has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
       has('roles.manage') ? { href: '/admin/roles', label: 'Roles', icon: 'roles' } : null,
+      has('settings.manage')
+        ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
+        : null,
     ].filter((i): i is NavItem => i !== null),
   },
 ];

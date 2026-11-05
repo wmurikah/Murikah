@@ -14,15 +14,16 @@
  *    reconciles it, which is acceptable for reminders.
  *  - Rows are read oldest-first across all orgs, so one org's backlog cannot
  *    starve another within a bounded batch.
- *  - The production gate lives in the adapters: outside production nothing
- *    reaches a provider, yet the queue still drains as a dry-run.
+ *  - The production gate lives in the adapters. Outside production, or when a
+ *    provider is unconfigured, the claimed row is restored to QUEUED.
+ *  - Rows incorrectly marked SENT by the old dry-run behavior are recovered.
  *  - Quiet hours hold SMS and EMAIL (left QUEUED) and deliver only IN_APP.
  *  - SMS metering falls back to EMAIL then IN_APP when an org is over its cap.
  */
 import type { Client } from '@libsql/client/web';
 import type { Clock } from '../time';
 import { eatMinutesOfDay, eatYearMonth } from '../time';
-import type { DeliveryEnv } from './env';
+import { deliveryReadiness, type DeliveryEnv } from './env';
 import { channelFor } from './channels/registry';
 import type { DeliveryRecipient, OutboundNotification } from './channels/types';
 
@@ -36,6 +37,7 @@ export interface DispatchSummary {
   failed: number;
   held: number;
   skipped: number;
+  recovered: number;
 }
 
 interface OrgPolicy {
@@ -122,8 +124,38 @@ export async function runDispatch(
   const nowIso = now.toISOString();
   const nowMin = eatMinutesOfDay(now);
   const usageKey = `sms_usage_${eatYearMonth(now)}`;
-  const summary: DispatchSummary = { scanned: 0, sent: 0, failed: 0, held: 0, skipped: 0 };
+  const summary: DispatchSummary = {
+    scanned: 0,
+    sent: 0,
+    failed: 0,
+    held: 0,
+    skipped: 0,
+    recovered: 0,
+  };
   const policies = new Map<string, OrgPolicy>();
+
+  // Repair rows consumed by the former dry-run behavior. Once requeued, the
+  // normal fail-closed path below holds them until delivery is configured.
+  const recovered = await db.execute({
+    sql: `UPDATE notifications
+             SET status = 'QUEUED', sent_at = NULL, error = NULL
+           WHERE status = 'SENT' AND error LIKE '%dry-run: non-production, not sent%'`,
+    args: [],
+  });
+  summary.recovered = recovered.rowsAffected;
+
+  // Do not repeatedly claim rows for unavailable external channels. Filtering
+  // here also prevents a large held backlog from starving deliverable in-app
+  // notifications behind the batch limit. Adapters retain their own deferred
+  // guard as defence in depth.
+  const readiness = deliveryReadiness(env);
+  const unavailable = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM notifications
+           WHERE status = 'QUEUED'
+             AND ((channel = 'EMAIL' AND ? = 0) OR (channel = 'SMS' AND ? = 0))`,
+    args: [readiness.email.ready ? 1 : 0, readiness.sms.ready ? 1 : 0],
+  });
+  summary.held += Number(unavailable.rows[0]?.n ?? 0);
 
   async function policyFor(orgId: string): Promise<OrgPolicy> {
     const cached = policies.get(orgId);
@@ -175,9 +207,16 @@ export async function runDispatch(
                  recipient_user_id, recipient_contractor_id, recipient_technician_id
             FROM notifications
            WHERE status = 'QUEUED'
+             AND (channel = 'IN_APP'
+                  OR (channel = 'EMAIL' AND ? = 1)
+                  OR (channel = 'SMS' AND ? = 1))
         ORDER BY created_at ASC
            LIMIT ?`,
-    args: [Math.max(1, Math.min(options.limit, 500))],
+    args: [
+      readiness.email.ready ? 1 : 0,
+      readiness.sms.ready ? 1 : 0,
+      Math.max(1, Math.min(options.limit, 500)),
+    ],
   });
 
   for (const raw of batch.rows) {
@@ -255,24 +294,33 @@ export async function runDispatch(
     }
 
     const result = await adapter.send(notification, recipient, env);
-    if (result.ok) {
+    if (result.outcome === 'sent') {
       summary.sent += 1;
-      const errorNote = [note, result.error].filter(Boolean).join('; ') || null;
+      const errorNote = note || null;
       if (errorNote) {
         await db.execute({
           sql: `UPDATE notifications SET error = ? WHERE id = ?`,
           args: [errorNote, id],
         });
       }
-      // Count a real SMS send against the monthly meter (not a dry-run).
-      if (meteredSms && effectiveKey === 'SMS' && env.mode === 'production' && !result.error) {
+      if (meteredSms && effectiveKey === 'SMS') {
         await bumpSmsUsage(orgId, policy);
       }
+    } else if (result.outcome === 'deferred') {
+      summary.held += 1;
+      await db.execute({
+        sql: `UPDATE notifications SET status = 'QUEUED', sent_at = NULL, error = ?
+               WHERE id = ? AND status = 'SENT'`,
+        args: [
+          [note, result.message].filter(Boolean).join('; ') || 'delivery is not configured',
+          id,
+        ],
+      });
     } else {
       summary.failed += 1;
       await db.execute({
         sql: `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ?`,
-        args: [[note, result.error].filter(Boolean).join('; ') || 'send failed', id],
+        args: [[note, result.message].filter(Boolean).join('; ') || 'send failed', id],
       });
     }
   }
