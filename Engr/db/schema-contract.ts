@@ -51,6 +51,9 @@ export const DOMAIN_TABLES = [
   'audit_logs',
   'org_settings',
   'lpo_lines',
+  'auth_tokens',
+  'user_mfa',
+  'mfa_recovery_codes',
 ] as const;
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -93,6 +96,16 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'currency',
     'created_at',
   ],
+  auth_tokens: ['id', 'org_id', 'user_id', 'purpose', 'token_hash', 'expires_at', 'used_at'],
+  user_mfa: [
+    'user_id',
+    'secret_ciphertext',
+    'secret_iv',
+    'pending_expires_at',
+    'enabled_at',
+    'last_totp_step',
+  ],
+  mfa_recovery_codes: ['id', 'user_id', 'code_hash', 'used_at'],
 };
 
 interface ColumnShape {
@@ -141,6 +154,8 @@ export const REQUIRED_INDEXES = [
   'ix_org_parent',
   'ux_roles_system',
   'ux_users_email',
+  'ix_auth_tokens_user_purpose',
+  'ix_mfa_recovery_user',
 ] as const;
 
 const INDEX_CONTRACTS = [
@@ -161,6 +176,20 @@ const INDEX_CONTRACTS = [
   },
   { table: 'roles', name: 'ux_roles_system', unique: true, partial: true, columns: ['code'] },
   { table: 'users', name: 'ux_users_email', unique: true, partial: false, columns: ['email'] },
+  {
+    table: 'auth_tokens',
+    name: 'ix_auth_tokens_user_purpose',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'purpose', 'used_at'],
+  },
+  {
+    table: 'mfa_recovery_codes',
+    name: 'ix_mfa_recovery_user',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'used_at'],
+  },
 ] as const;
 
 const FOREIGN_KEY_CONTRACTS = [
@@ -177,6 +206,10 @@ const FOREIGN_KEY_CONTRACTS = [
   { table: 'lpo_lines', from: 'asset_id', target: 'assets' },
   { table: 'lpo_lines', from: 'category_id', target: 'asset_categories' },
   { table: 'lpo_lines', from: 'sla_id', target: 'slas' },
+  { table: 'auth_tokens', from: 'org_id', target: 'organisations' },
+  { table: 'auth_tokens', from: 'user_id', target: 'users' },
+  { table: 'user_mfa', from: 'user_id', target: 'users' },
+  { table: 'mfa_recovery_codes', from: 'user_id', target: 'users' },
 ] as const;
 
 export const REQUIRED_VIEWS = [

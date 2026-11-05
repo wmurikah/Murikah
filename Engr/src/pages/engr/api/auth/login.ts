@@ -13,8 +13,8 @@ import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { verifyPassword } from '@engr/auth/password';
-import { loadUserAuth } from '@engr/auth/rbac';
 import { createSession } from '@engr/auth/session';
+import { sessionAfterPrimaryAuth } from '@engr/auth/loginSession';
 
 interface Credentials {
   email: string;
@@ -82,28 +82,40 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const isPlatformOwner = Number(row.is_platform_owner ?? 0) === 1;
   const sessionVersion = Number(row.session_version ?? 0);
   const passwordChangeOnly = Number(row.must_change_password ?? 0) === 1;
-  const auth = passwordChangeOnly
-    ? { roles: [], perms: [] }
-    : await loadUserAuth(db, orgId, userId);
   // Secure in production (https); off for http development on engr.localhost.
   const secure = new URL(request.url).protocol === 'https:';
-  const cookie = await createSession(
-    {
-      sub: userId,
-      org: orgId,
-      orgSlug,
-      orgName,
-      userName,
-      userEmail: emailNorm,
-      roles: auth.roles,
-      perms: auth.perms,
-      isPlatformOwner,
-      sessionVersion,
-      passwordChangeOnly,
-    },
-    env.sessionSecret,
-    secure,
-  );
+  const identity = {
+    userId,
+    orgId,
+    orgSlug,
+    orgName,
+    userName,
+    userEmail: emailNorm,
+    isPlatformOwner,
+    sessionVersion,
+  };
+  const next = passwordChangeOnly
+    ? {
+        cookie: await createSession(
+          {
+            sub: userId,
+            org: orgId,
+            orgSlug,
+            orgName,
+            userName,
+            userEmail: emailNorm,
+            roles: [],
+            perms: [],
+            isPlatformOwner,
+            sessionVersion,
+            authStage: 'password-change',
+          },
+          env.sessionSecret,
+          secure,
+        ),
+        location: '/change-password',
+      }
+    : await sessionAfterPrimaryAuth(db, identity, env.sessionSecret, secure);
 
   // Stamp last_login_at without blocking the redirect. waitUntil keeps the
   // write alive after the response in the Worker; if it is unavailable the
@@ -119,6 +131,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   return new Response(null, {
     status: 303,
-    headers: { location: passwordChangeOnly ? '/change-password' : '/', 'set-cookie': cookie },
+    headers: { location: next.location, 'set-cookie': next.cookie },
   });
 };

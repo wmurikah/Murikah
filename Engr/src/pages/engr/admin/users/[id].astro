@@ -5,7 +5,7 @@ export const prerender = false;
  * User create and edit. The path segment is "new" to create, otherwise a user id
  * to edit. Gate: users.manage. The roles checklist is only shown, and only
  * applied, when the viewer also holds roles.manage. New users require a
- * temporary password. Entering one on an existing user resets their password,
+ * temporary password or send a single-use invitation. Entering a password on an existing user resets their password,
  * revokes their sessions and forces replacement at the next login.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
@@ -147,12 +147,13 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
             name="password"
             minlength="12"
             maxlength="128"
-            required={isNew}
             autocomplete="new-password"
           />
           <span class="engr-field__hint">
-            Pasting is allowed. The user must replace this password immediately after signing in.
-            {!isNew && ' Leave blank to keep the current password.'}
+            Pasting is allowed.{' '}
+            {isNew
+              ? 'Leave blank to email a single-use invitation, or enter a temporary password that must be replaced at first sign-in.'
+              : 'The user must replace a reset password immediately after signing in. Leave blank to keep the current password.'}
           </span>
         </div>
         {!isNew && u?.mustChangePassword && (

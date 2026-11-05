@@ -64,6 +64,18 @@ CREATE TABLE audit_logs (
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+CREATE TABLE auth_tokens (
+  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  org_id      TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose     TEXT NOT NULL CHECK (purpose IN ('INVITE','RESET')),
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT,
+  created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE bill_approvals (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   org_id      TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
@@ -240,6 +252,14 @@ CREATE TABLE lpos (
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), region_id TEXT REFERENCES regions(id), notes TEXT, subtotal_minor INTEGER NOT NULL DEFAULT 0, mileage_minor INTEGER NOT NULL DEFAULT 0, approved_by TEXT REFERENCES users(id), approved_at TEXT, issued_by TEXT REFERENCES users(id), issued_at TEXT, sealed_hash TEXT, sealed_at TEXT, version INTEGER NOT NULL DEFAULT 1, supersedes_id TEXT REFERENCES lpos(id), superseded_by_id TEXT REFERENCES lpos(id), cancelled_at TEXT, cancel_reason TEXT,
   UNIQUE (org_id, lpo_no)
+);
+
+CREATE TABLE mfa_recovery_codes (
+  id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL UNIQUE,
+  used_at    TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE mileage_claims (
@@ -650,6 +670,17 @@ CREATE TABLE technicians (
   deleted_at     TEXT
 );
 
+CREATE TABLE user_mfa (
+  user_id             TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  secret_ciphertext   TEXT NOT NULL,
+  secret_iv           TEXT NOT NULL,
+  pending_expires_at  TEXT,
+  enabled_at          TEXT,
+  last_totp_step      INTEGER,
+  created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE user_roles (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role_id    TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -844,9 +875,13 @@ CREATE INDEX idx_wo_request              ON work_orders(request_id);
 
 CREATE INDEX idx_wo_technician            ON work_orders(technician_id);
 
+CREATE INDEX ix_auth_tokens_user_purpose ON auth_tokens(user_id, purpose, used_at);
+
 CREATE INDEX ix_lpo_lines_lpo ON lpo_lines(lpo_id);
 
 CREATE INDEX ix_lpos_region ON lpos(region_id);
+
+CREATE INDEX ix_mfa_recovery_user ON mfa_recovery_codes(user_id, used_at);
 
 CREATE INDEX ix_org_parent ON organisations(parent_org_id);
 

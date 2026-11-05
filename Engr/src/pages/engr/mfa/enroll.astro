@@ -1,0 +1,127 @@
+---
+export const prerender = false;
+
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
+import { renderSVG } from 'uqr';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { readSession } from '@engr/auth/session';
+import { decryptMfaSecret, totpUri } from '@engr/auth/mfa';
+
+const env = getEngrEnv();
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+const session = await readSession(Astro.request, env.sessionSecret);
+if (!session) return Astro.redirect('/login');
+const db = await getDb(env);
+const result = await db.execute({
+  sql: `SELECT secret_ciphertext, secret_iv, pending_expires_at, enabled_at
+          FROM user_mfa WHERE user_id = ? LIMIT 1`,
+  args: [session.sub],
+});
+const row = result.rows[0];
+const enabled = row?.enabled_at != null;
+const pending =
+  !enabled &&
+  row?.pending_expires_at != null &&
+  String(row.pending_expires_at) > new Date().toISOString();
+let secret = '';
+let qr = '';
+if (pending) {
+  secret = await decryptMfaSecret(
+    String(row.secret_ciphertext),
+    String(row.secret_iv),
+    env.mfaEncryptionKey,
+  );
+  qr = renderSVG(totpUri(secret, session.userEmail ?? session.sub), {
+    ecc: 'M',
+    border: 2,
+    pixelSize: 5,
+  });
+}
+const error = Astro.url.searchParams.get('error');
+---
+
+<EngrAuthLayout title="Authenticator setup">
+  <div class="engr-authcard__head">
+    <h1 class="engr-authcard__title">Secure your account</h1>
+    <p class="engr-authcard__sub">
+      Use an authenticator app such as Microsoft Authenticator, Google Authenticator or 1Password.
+    </p>
+  </div>
+
+  {
+    error === 'code' && (
+      <p class="engr-error" role="alert">
+        That code was not accepted. Try the current code.
+      </p>
+    )
+  }
+  {
+    error === 'password' && (
+      <p class="engr-error" role="alert">
+        The current password is incorrect.
+      </p>
+    )
+  }
+
+  {
+    enabled ? (
+      <>
+        <p>Your authenticator is already enabled.</p>
+        <a class="engr-btn engr-btn--primary" href="/">
+          Continue
+        </a>
+      </>
+    ) : pending ? (
+      <>
+        <div class="engr-mfa-qr" set:html={qr} />
+        <p class="engr-field__hint">
+          Cannot scan? Enter this setup key: <strong>{secret}</strong>
+        </p>
+        <form method="post" action="/api/auth/mfa/enroll/confirm" class="engr-authform">
+          <div class="engr-field">
+            <label for="code">Six-digit authenticator code</label>
+            <input
+              id="code"
+              class="engr-input"
+              name="code"
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              autocomplete="one-time-code"
+              required
+              autofocus
+            />
+          </div>
+          <button class="engr-btn engr-btn--primary engr-authform__submit" type="submit">
+            Confirm and enable
+          </button>
+        </form>
+      </>
+    ) : (
+      <form method="post" action="/api/auth/mfa/enroll/start" class="engr-authform">
+        <p>You will scan a QR code and confirm one code before MFA is enabled.</p>
+        {session.authStage !== 'mfa-enroll' && (
+          <div class="engr-field">
+            <label for="current_password">Current password</label>
+            <input
+              id="current_password"
+              class="engr-input"
+              name="current_password"
+              type="password"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+        )}
+        <button class="engr-btn engr-btn--primary engr-authform__submit" type="submit">
+          Start authenticator setup
+        </button>
+      </form>
+    )
+  }
+  <form method="post" action="/api/auth/logout" class="engr-authmeta">
+    <button type="submit" class="engr-authmeta__link engr-authmeta__link--muted">Sign out</button>
+  </form>
+</EngrAuthLayout>

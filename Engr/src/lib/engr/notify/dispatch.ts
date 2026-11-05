@@ -296,6 +296,13 @@ export async function runDispatch(
     const result = await adapter.send(notification, recipient, env);
     if (result.outcome === 'sent') {
       summary.sent += 1;
+      if (notification.templateKey?.startsWith('auth.')) {
+        await db.execute({
+          sql: `UPDATE notifications SET body = '[redacted after authentication email delivery]'
+                 WHERE id = ?`,
+          args: [id],
+        });
+      }
       const errorNote = note || null;
       if (errorNote) {
         await db.execute({

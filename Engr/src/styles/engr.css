@@ -1282,6 +1282,19 @@ input.engr-switch:hover {
   font-weight: 500;
 }
 
+.engr-mfa-qr {
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: var(--radius-md);
+}
+
+.engr-mfa-qr svg {
+  width: min(100%, 18rem);
+  height: auto;
+}
+
 /* Stack below desktop: the brand sits above the form, still carrying its full
    copy; the form then fills the rest of the height. */
 @media (max-width: 63.99rem) {

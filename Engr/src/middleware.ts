@@ -3,6 +3,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb as getEngrDb } from '@engr/db';
 import { clearSession, readSession } from '@engr/auth/session';
 import { passwordGateDecision } from '@engr/auth/passwordGate';
+import { isPrivilegedAuthPath, mfaPathAllowed, requiredMfaStage } from '@engr/auth/mfaGate';
 import { readActingOrg } from '@engr/auth/actingOrg';
 import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
@@ -41,7 +42,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const secure = context.url.protocol === 'https:';
   const db = await getEngrDb(env);
   const current = await db.execute({
-    sql: `SELECT status, deleted_at, must_change_password, session_version
+    sql: `SELECT status, deleted_at, must_change_password, session_version, is_platform_owner,
+                 EXISTS(SELECT 1 FROM user_mfa m WHERE m.user_id = users.id AND m.enabled_at IS NOT NULL) AS mfa_enabled
             FROM users WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [session.sub, session.org],
   });
@@ -64,7 +66,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const passwordChangeRequired = Number(account.must_change_password ?? 0) === 1;
   const gate = passwordGateDecision(
     passwordChangeRequired,
-    session.passwordChangeOnly === true,
+    session.passwordChangeOnly === true || session.authStage === 'password-change',
     appPath,
     isApi,
   );
@@ -73,10 +75,47 @@ export const onRequest = defineMiddleware(async (context, next) => {
       ? jsonResponse({ error: 'password_change_required' }, 403)
       : context.redirect('/change-password');
   }
-  if (passwordChangeRequired || session.passwordChangeOnly) {
+  if (
+    passwordChangeRequired ||
+    session.passwordChangeOnly ||
+    session.authStage === 'password-change'
+  ) {
     // Restricted sessions never receive application locals, roles, tenant
     // switching, or permission-bearing repository access.
-    if (session.passwordChangeOnly) return next();
+    return next();
+  }
+
+  const platformOwner = Number(account.is_platform_owner ?? 0) === 1;
+  const administrator = session.roles.includes('OWNER') || session.roles.includes('ADMIN');
+  const mandatoryMfa = platformOwner || administrator;
+  const mfaEnabled = Number(account.mfa_enabled ?? 0) === 1;
+  const mfaVerifiedAt = session.mfaVerifiedAt ?? 0;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const privilegedPath = isPrivilegedAuthPath(appPath);
+  const mfaRequirement = requiredMfaStage({
+    authStage: session.authStage,
+    mandatory: mandatoryMfa,
+    enabled: mfaEnabled,
+    verifiedAt: mfaVerifiedAt,
+    now: nowSeconds,
+    privilegedPath,
+  });
+  if (mfaRequirement) {
+    if (!mfaPathAllowed(mfaRequirement, appPath)) {
+      if (isApi) {
+        return jsonResponse(
+          { error: mfaRequirement === 'enroll' ? 'mfa_enrollment_required' : 'mfa_required' },
+          403,
+        );
+      }
+      const destination = mfaRequirement === 'enroll' ? '/mfa/enroll' : '/mfa/challenge';
+      const location =
+        mfaRequirement === 'challenge' && privilegedPath
+          ? `${destination}?next=${encodeURIComponent(appPath)}`
+          : destination;
+      return context.redirect(location);
+    }
+    return next();
   }
 
   const homeOrgId = session.org;
@@ -87,7 +126,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   let actingName: string = homeName;
   let actingSlug = homeSlug;
   let switchable: SwitchOrg[] = [];
-  const isPlatformOwner = session.isPlatformOwner === true;
+  const isPlatformOwner = platformOwner;
   if (isPlatformOwner) {
     try {
       const requested = await readActingOrg(context.request, env.sessionSecret);

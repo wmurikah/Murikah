@@ -8,6 +8,7 @@
 import type { Client } from '@libsql/client/web';
 import { hashPassword, validateNewPassword } from '@engr/auth/password';
 import { effectiveRoleIds } from '@engr/repos/adminRoles';
+import { authLink, issueAuthToken } from '@engr/auth/tokens';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -46,6 +47,7 @@ export interface UserInput {
   password: string | null;
   roleIds: string[];
   assignRoles: boolean;
+  appOrigin: string;
 }
 
 export async function listUsersAdmin(db: Client, orgId: string): Promise<UserRow[]> {
@@ -124,12 +126,10 @@ export async function createUser(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
-  if (!input.password) {
-    return { ok: false, code: 'invalid', message: 'A temporary password is required.' };
-  }
   const roleIds = input.assignRoles ? await filterRoleIds(db, ctx.orgId, input.roleIds) : [];
   const passwordHash = input.password ? await hashPassword(input.password) : null;
-  const mustChange = 1;
+  const mustChange = input.password ? 1 : 0;
+  const status = input.password ? input.status : 'INVITED';
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -143,7 +143,7 @@ export async function createUser(
         input.email,
         input.phone,
         passwordHash,
-        input.status,
+        status,
         mustChange,
       ],
     });
@@ -151,6 +151,30 @@ export async function createUser(
       await tx.execute({
         sql: `INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)`,
         args: [id, roleId],
+      });
+    }
+    if (!input.password) {
+      const token = await issueAuthToken(tx, {
+        orgId: ctx.orgId,
+        userId: id,
+        purpose: 'INVITE',
+        createdBy: ctx.userId,
+        lifetimeMinutes: 48 * 60,
+      });
+      const link = authLink(input.appOrigin, token);
+      await tx.execute({
+        sql: `INSERT INTO notifications
+                (org_id, channel, recipient_user_id, to_address, template_key, subject, body,
+                 entity_type, entity_id, status)
+              VALUES (?, 'EMAIL', ?, ?, 'auth.invitation', 'Your Engineering Rhythm invitation', ?,
+                      'user', ?, 'QUEUED')`,
+        args: [
+          ctx.orgId,
+          id,
+          input.email,
+          `You have been invited to Engineering Rhythm. Set your password within 48 hours: ${link}`,
+          id,
+        ],
       });
     }
     await tx.execute({
@@ -223,6 +247,13 @@ export async function updateUser(
         await tx.execute({
           sql: `INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)`,
           args: [id, roleId],
+        });
+      }
+      if (!passwordHash) {
+        await tx.execute({
+          sql: `UPDATE users SET session_version = session_version + 1
+                 WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
+          args: [id, ctx.orgId],
         });
       }
     }

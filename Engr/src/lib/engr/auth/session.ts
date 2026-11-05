@@ -38,6 +38,9 @@ export interface SessionPayload {
   sessionVersion?: number;
   /** Restricted authentication after a temporary password is accepted. */
   passwordChangeOnly?: boolean;
+  authStage?: 'password-change' | 'mfa-enroll' | 'mfa-challenge';
+  /** Unix seconds of the latest successful TOTP/recovery challenge. */
+  mfaVerifiedAt?: number;
 }
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -73,12 +76,25 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
         ? claims.sessionVersion
         : 0,
     passwordChangeOnly: claims.passwordChangeOnly === true,
+    authStage:
+      claims.authStage === 'password-change' ||
+      claims.authStage === 'mfa-enroll' ||
+      claims.authStage === 'mfa-challenge'
+        ? claims.authStage
+        : undefined,
+    mfaVerifiedAt:
+      typeof claims.mfaVerifiedAt === 'number' && Number.isInteger(claims.mfaVerifiedAt)
+        ? claims.mfaVerifiedAt
+        : undefined,
   };
 }
 
 // Sign the payload and return the token string.
 async function sign(payload: SessionPayload, secret: string): Promise<string> {
-  const maxAge = payload.passwordChangeOnly ? PASSWORD_CHANGE_MAX_AGE_SECONDS : MAX_AGE_SECONDS;
+  const maxAge =
+    payload.passwordChangeOnly || payload.authStage
+      ? PASSWORD_CHANGE_MAX_AGE_SECONDS
+      : MAX_AGE_SECONDS;
   return new SignJWT({
     org: payload.org,
     orgSlug: payload.orgSlug,
@@ -92,6 +108,8 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
     isPlatformOwner: payload.isPlatformOwner ? true : undefined,
     sessionVersion: payload.sessionVersion ?? 0,
     passwordChangeOnly: payload.passwordChangeOnly ? true : undefined,
+    authStage: payload.authStage,
+    mfaVerifiedAt: payload.mfaVerifiedAt,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
@@ -133,7 +151,10 @@ export async function createSession(
   secure: boolean,
 ): Promise<string> {
   const token = await sign(payload, secret);
-  const maxAge = payload.passwordChangeOnly ? PASSWORD_CHANGE_MAX_AGE_SECONDS : MAX_AGE_SECONDS;
+  const maxAge =
+    payload.passwordChangeOnly || payload.authStage
+      ? PASSWORD_CHANGE_MAX_AGE_SECONDS
+      : MAX_AGE_SECONDS;
   return cookie(token, maxAge, secure);
 }
 

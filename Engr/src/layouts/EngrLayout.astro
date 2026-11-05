@@ -325,6 +325,9 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                 <span class="engr-account__name">{accountName}</span>
                 {accountEmail && <span class="engr-account__email">{accountEmail}</span>}
               </div>
+              <a href="/mfa/enroll" class="engr-btn engr-btn--ghost engr-account__signout">
+                Security
+              </a>
               <form method="post" action="/api/auth/logout">
                 <button type="submit" class="engr-btn engr-btn--ghost engr-account__signout">
                   Sign out
