@@ -1,8 +1,8 @@
 /**
  * Channel adapter contract. Each adapter delivers one notification to one
- * recipient and reports the outcome. The production gate lives inside every
- * adapter: outside production it returns ok without contacting the provider, so
- * a dry-run cannot leak to a real customer regardless of caller.
+ * recipient and reports the outcome. External adapters fail closed: when their
+ * production configuration is absent they return `deferred`, which tells the
+ * dispatcher to put the claimed row back in the queue.
  */
 import type { DeliveryEnv } from '../env';
 
@@ -24,9 +24,9 @@ export interface DeliveryRecipient {
 }
 
 export interface SendResult {
-  ok: boolean;
+  outcome: 'sent' | 'failed' | 'deferred';
   providerId?: string;
-  error?: string;
+  message?: string;
 }
 
 export interface Channel {
@@ -37,5 +37,3 @@ export interface Channel {
     env: DeliveryEnv,
   ): Promise<SendResult>;
 }
-
-export const DRY_RUN_NOTE = 'dry-run: non-production, not sent';

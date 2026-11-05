@@ -1,10 +1,9 @@
 /**
  * SMS via Africa's Talking. Sends the notification body to the recipient's
  * phone. Outside production, or without credentials, it does not call the
- * provider and reports a dry-run.
+ * provider and defers the row so it remains retryable.
  */
 import type { Channel, SendResult } from './types';
-import { DRY_RUN_NOTE } from './types';
 
 interface AtRecipient {
   status?: string;
@@ -18,10 +17,10 @@ interface AtResponse {
 export const smsChannel: Channel = {
   key: 'SMS',
   async send(notification, recipient, env): Promise<SendResult> {
-    if (!recipient.phone) return { ok: false, error: 'no phone number on file' };
+    if (!recipient.phone) return { outcome: 'failed', message: 'no phone number on file' };
     const message = notification.body ?? notification.subject ?? '';
     if (env.mode !== 'production' || !env.at) {
-      return { ok: true, error: DRY_RUN_NOTE };
+      return { outcome: 'deferred', message: 'SMS delivery is not configured' };
     }
     try {
       const res = await fetch('https://api.africastalking.com/version1/messaging', {
@@ -38,18 +37,18 @@ export const smsChannel: Channel = {
           from: env.at.senderId,
         }),
       });
-      if (!res.ok) return { ok: false, error: `africastalking http ${res.status}` };
+      if (!res.ok) return { outcome: 'failed', message: `africastalking http ${res.status}` };
       const data = (await res.json()) as AtResponse;
       const first = data.SMSMessageData?.Recipients?.[0];
       const status = first?.status ?? '';
       if (first && status !== 'Success') {
-        return { ok: false, error: `africastalking status ${status}` };
+        return { outcome: 'failed', message: `africastalking status ${status}` };
       }
-      return { ok: true, providerId: first?.messageId };
+      return { outcome: 'sent', providerId: first?.messageId };
     } catch (err) {
       return {
-        ok: false,
-        error: `africastalking error ${err instanceof Error ? err.message : String(err)}`,
+        outcome: 'failed',
+        message: `africastalking error ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   },

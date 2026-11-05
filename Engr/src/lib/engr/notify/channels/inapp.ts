@@ -8,6 +8,6 @@ import type { Channel, SendResult } from './types';
 export const inAppChannel: Channel = {
   key: 'IN_APP',
   async send(): Promise<SendResult> {
-    return { ok: true };
+    return { outcome: 'sent' };
   },
 };
