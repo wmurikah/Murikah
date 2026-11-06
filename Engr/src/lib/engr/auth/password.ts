@@ -7,14 +7,13 @@
  * Stored format, written to the users.password_hash column as one value:
  *   pbkdf2$<iterations>$<saltBase64>$<hashBase64>
  *
- * Cloudflare's PBKDF2 APIs reject iteration counts above 100,000 in production.
- * Computing PBKDF2 from HMAC-SHA256 avoids that cap and preserves existing
- * 600,000-iteration hashes without resetting users' passwords.
+ * Cloudflare rejects PBKDF2 iteration counts above 100,000, while performing
+ * hundreds of thousands of HMAC operations in JavaScript exceeds the free
+ * Worker's CPU limit. Use the native API at the previously working cost.
  */
-import { createHmac } from 'node:crypto';
-
-export const PASSWORD_ITERATIONS = 600_000;
-const KEY_LEN_BYTES = 32; // SHA-256 output width
+export const PASSWORD_ITERATIONS = 60_000;
+const MAX_VERIFY_ITERATIONS = 100_000;
+const KEY_LEN_BITS = 256; // SHA-256 output width
 const SALT_BYTES = 16;
 
 export const PASSWORD_MIN_LENGTH = 12;
@@ -87,20 +86,19 @@ async function derive(
   salt: Uint8Array<ArrayBuffer>,
   iterations: number,
 ): Promise<Uint8Array> {
-  // PBKDF2 block 1 is enough for a 32-byte SHA-256 output. U1 = HMAC(P,
-  // salt || INT_32_BE(1)); subsequent U values hash the preceding U, and the
-  // final block is their XOR. Both Node and Workers provide HMAC-SHA256.
-  const block = new Uint8Array(salt.length + 4);
-  block.set(salt);
-  block[block.length - 1] = 1;
-  const key = new TextEncoder().encode(plain);
-  let u: Uint8Array = createHmac('sha256', key).update(block).digest();
-  const output = new Uint8Array(u);
-  for (let i = 1; i < iterations; i++) {
-    u = createHmac('sha256', key).update(u).digest();
-    for (let j = 0; j < KEY_LEN_BYTES; j++) output[j] ^= u[j];
-  }
-  return output;
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(plain),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    keyMaterial,
+    KEY_LEN_BITS,
+  );
+  return new Uint8Array(bits);
 }
 
 export async function hashPassword(plain: string): Promise<string> {
@@ -113,11 +111,15 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   const parts = stored.split('$');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
   const iterations = Number(parts[1]);
-  if (!Number.isInteger(iterations) || iterations < 1 || iterations > 1_000_000) return false;
+  // A 600,000-round hash from a previous deployment cannot be checked within
+  // this Worker plan. Reject before doing any CPU work; the account can use
+  // the existing password-recovery flow to create a compatible new hash.
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > MAX_VERIFY_ITERATIONS)
+    return false;
   try {
     const salt = fromBase64(parts[2]);
     const expected = fromBase64(parts[3]);
-    if (salt.length !== SALT_BYTES || expected.length !== KEY_LEN_BYTES) return false;
+    if (salt.length !== SALT_BYTES || expected.length !== KEY_LEN_BITS / 8) return false;
     const actual = await derive(plain, salt, iterations);
     return timingSafeEqual(actual, expected);
   } catch {
