@@ -1,18 +1,17 @@
 /**
- * Password hashing and verification with PBKDF2 (the Workers node:crypto
- * compatibility API), SHA-256 and a per-user random salt. The iteration count
+ * Password hashing and verification with PBKDF2-HMAC-SHA256 and a per-user
+ * random salt. The iteration count
  * is embedded in the stored string, so it can be raised later without breaking
  * existing hashes.
  *
  * Stored format, written to the users.password_hash column as one value:
  *   pbkdf2$<iterations>$<saltBase64>$<hashBase64>
  *
- * Cloudflare's WebCrypto PBKDF2 implementation rejects iteration counts above
- * 100,000. The node:crypto compatibility API supports the reviewed 600,000
- * iteration cost in both workerd and Node, including hashes already written by
- * the earlier WebCrypto implementation.
+ * Cloudflare's PBKDF2 APIs reject iteration counts above 100,000 in production.
+ * Computing PBKDF2 from HMAC-SHA256 avoids that cap and preserves existing
+ * 600,000-iteration hashes without resetting users' passwords.
  */
-import { pbkdf2 } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 export const PASSWORD_ITERATIONS = 600_000;
 const KEY_LEN_BYTES = 32; // SHA-256 output width
@@ -88,15 +87,20 @@ async function derive(
   salt: Uint8Array<ArrayBuffer>,
   iterations: number,
 ): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    pbkdf2(plain, salt, iterations, KEY_LEN_BYTES, 'sha256', (error, derived) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(new Uint8Array(derived.buffer, derived.byteOffset, derived.byteLength));
-    });
-  });
+  // PBKDF2 block 1 is enough for a 32-byte SHA-256 output. U1 = HMAC(P,
+  // salt || INT_32_BE(1)); subsequent U values hash the preceding U, and the
+  // final block is their XOR. Both Node and Workers provide HMAC-SHA256.
+  const block = new Uint8Array(salt.length + 4);
+  block.set(salt);
+  block[block.length - 1] = 1;
+  const key = new TextEncoder().encode(plain);
+  let u: Uint8Array = createHmac('sha256', key).update(block).digest();
+  const output = new Uint8Array(u);
+  for (let i = 1; i < iterations; i++) {
+    u = createHmac('sha256', key).update(u).digest();
+    for (let j = 0; j < KEY_LEN_BYTES; j++) output[j] ^= u[j];
+  }
+  return output;
 }
 
 export async function hashPassword(plain: string): Promise<string> {
@@ -109,10 +113,11 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   const parts = stored.split('$');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
   const iterations = Number(parts[1]);
-  if (!Number.isInteger(iterations) || iterations < 1) return false;
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > 1_000_000) return false;
   try {
     const salt = fromBase64(parts[2]);
     const expected = fromBase64(parts[3]);
+    if (salt.length !== SALT_BYTES || expected.length !== KEY_LEN_BYTES) return false;
     const actual = await derive(plain, salt, iterations);
     return timingSafeEqual(actual, expected);
   } catch {
