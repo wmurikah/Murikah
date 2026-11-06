@@ -12,20 +12,22 @@ import {
   type WorkOrderListRow,
 } from '@engr/repos/workOrders';
 import { jsonResponse } from '@engr/workflow/respond';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 export const GET: APIRoute = async ({ locals, url }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   if (!engr.perms.includes('workorder.view')) return jsonResponse({ error: 'forbidden' }, 403);
 
-  const view = url.searchParams.get('view') ?? 'engineer';
+  const view = actorDataScope(engr.roles);
   const status = url.searchParams.get('status') ?? undefined;
   const db = await getDb(getEngrEnv());
 
   let rows: WorkOrderListRow[];
   if (view === 'contractor') rows = await listForContractor(db, engr.orgId, engr.userId);
   else if (view === 'technician') rows = await listForTechnician(db, engr.orgId, engr.userId);
-  else if (view === 'station') rows = await listForStationManager(db, engr.orgId, engr.userId);
+  else if (view === 'station')
+    rows = await listForStationManager(db, engr.orgId, engr.userId, false);
   else rows = await listForEngineer(db, engr.orgId, status);
 
   return jsonResponse({ ok: true, view, workOrders: rows }, 200);

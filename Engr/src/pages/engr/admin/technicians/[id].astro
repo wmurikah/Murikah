@@ -10,7 +10,11 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getTechnician, type TechnicianDetail } from '@engr/repos/adminTechnicians';
-import { listContractorOptions, type Option } from '@engr/repos/adminOptions';
+import {
+  listContractorOptions,
+  listUserOptionsByRole,
+  type Option,
+} from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
 import { requiresContractorTechnicianScope } from '@engr/auth/adminPolicy';
 import { contractorForUser } from '@engr/repos/techniciansPick';
@@ -26,6 +30,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let technician: TechnicianDetail | null = null;
 let contractors: Option[] = [];
 let contractorScope: string | undefined;
+let portalUsers: Option[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv());
@@ -35,6 +40,12 @@ if (canManage) {
   if (!requiresContractorTechnicianScope(engr.roles) || contractorScope) {
     contractors = await listContractorOptions(db, engr.orgId, contractorScope);
     if (!isNew && id) technician = await getTechnician(db, engr.orgId, id, contractorScope);
+    portalUsers = await listUserOptionsByRole(
+      db,
+      engr.orgId,
+      ['TECHNICIAN'],
+      technician?.portalUserId,
+    );
   }
 }
 const contractorUnlinked = requiresContractorTechnicianScope(engr.roles) && !contractorScope;
@@ -90,6 +101,20 @@ const t = technician;
               </option>
             ))}
           </select>
+        </div>
+        <div class="engr-field">
+          <label for="portal_user_id">
+            Portal account <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="portal_user_id" class="engr-select" name="portal_user_id">
+            <option value="">Not linked</option>
+            {portalUsers.map((u) => (
+              <option value={u.id} selected={t?.portalUserId === u.id}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+          <p class="engr-field__hint">Only active users with the Technician role are listed.</p>
         </div>
         <div class="engr-field">
           <label for="full_name">Name</label>

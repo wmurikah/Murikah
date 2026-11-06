@@ -9,6 +9,18 @@ export const OPERATIONAL_ROLE_CODES = [
   'VIEWER',
 ] as const;
 
+export const STANDARD_ROLE_CODES = [
+  'OWNER',
+  'ADMIN',
+  'ENGINEERING_MANAGER',
+  'ENGINEER',
+  'STATION_MANAGER',
+  'FINANCIAL_CONTROLLER',
+  'CONTRACTOR',
+  'TECHNICIAN',
+  'VIEWER',
+] as const;
+
 const OPERATIONAL = new Set<string>(OPERATIONAL_ROLE_CODES);
 const ORG_WIDE_TECHNICIAN_ROLES = new Set(['OWNER', 'ADMIN', 'ENGINEERING_MANAGER']);
 
@@ -26,6 +38,13 @@ export function mayAssignRoleCode(scope: UserManagementScope, code: string): boo
   if (scope === 'all') return true;
   if (scope === 'admin') return code !== 'OWNER';
   if (scope === 'operational') return OPERATIONAL.has(code);
+  return false;
+}
+
+/** Only an Owner/platform owner may alter the Owner role contract. */
+export function mayManageRoleCode(scope: UserManagementScope, code: string): boolean {
+  if (scope === 'all') return true;
+  if (scope === 'admin') return code !== 'OWNER';
   return false;
 }
 

@@ -1,7 +1,7 @@
 export const prerender = false;
 
 /**
- * Edit a PM schedule, or change its status. Gate: pm.allocate. An `action` of
+ * Edit a PM schedule, or change its status. An `action` of
  * pause, resume or archive changes status; otherwise the body is a full edit,
  * which also applies the reschedule rule when the due date moves.
  */
@@ -23,16 +23,22 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = `/pm/schedules/${id}`;
 
-  if (!engr.perms.includes('pm.allocate')) {
-    return wantsJson(request)
-      ? jsonResponse({ error: 'forbidden' }, 403)
-      : redirectResponse(request, back, 'error=forbidden');
-  }
-
   const body = await readBody(request);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
   const db = await getDb(getEngrEnv());
   const action = str(body.action).trim();
+
+  const permission =
+    action === 'archive'
+      ? 'pm.archive'
+      : action === 'pause' || action === 'resume'
+        ? 'pm.activate'
+        : 'pm.edit';
+  if (!engr.perms.includes(permission)) {
+    return wantsJson(request)
+      ? jsonResponse({ error: 'forbidden' }, 403)
+      : redirectResponse(request, back, 'error=forbidden');
+  }
 
   if (action === 'pause' || action === 'resume' || action === 'archive') {
     const status = action === 'resume' ? 'ACTIVE' : action === 'pause' ? 'PAUSED' : 'ARCHIVED';

@@ -23,7 +23,7 @@ export interface CreateWorkOrderInput {
 
 export type CreateWorkOrderResult =
   | { ok: true; workOrderId: string; woNo: string }
-  | { ok: false; code: 'not_found' | 'invalid' | 'conflict'; message: string };
+  | { ok: false; code: 'not_found' | 'invalid' | 'conflict' | 'forbidden'; message: string };
 
 async function countWoForYear(db: Client, orgId: string, year: number): Promise<number> {
   const res = await db.execute({
@@ -101,26 +101,23 @@ export async function createWorkOrderFromRequest(
 
   const year = new Date().getUTCFullYear();
   const base = await countWoForYear(db, orgId, year);
-  const now = new Date().toISOString();
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const woNo = `WO-${year}-${String(base + 1 + attempt).padStart(4, '0')}`;
     const id = newId();
     const tx = await db.transaction('write');
     try {
-      // Move the request from ACCEPTED to ASSIGNED under an optimistic guard, so
-      // two engineers cannot both assign the same request.
-      const moved = await tx.execute({
-        sql: `UPDATE service_requests SET status = 'ASSIGNED', updated_at = ?
-               WHERE id = ? AND org_id = ? AND status = 'ACCEPTED'`,
-        args: [now, input.requestId, orgId],
+      const existing = await tx.execute({
+        sql: `SELECT 1 FROM work_orders
+               WHERE request_id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+        args: [input.requestId, orgId],
       });
-      if (moved.rowsAffected === 0) {
+      if (existing.rows.length) {
         await tx.rollback();
         return {
           ok: false,
           code: 'conflict',
-          message: 'The request is no longer available to assign.',
+          message: 'A work order already exists for this request.',
         };
       }
 
@@ -128,7 +125,7 @@ export async function createWorkOrderFromRequest(
         sql: `INSERT INTO work_orders
                 (id, org_id, wo_no, request_id, station_id, category_id, contractor_id, sla_id,
                  source, assignment_basis, status, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUEST', 'PREDEFINED_RATE', 'CONTRACTOR_NOTIFIED', ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUEST', 'PREDEFINED_RATE', 'CREATED', ?)`,
         args: [
           id,
           orgId,
@@ -146,22 +143,7 @@ export async function createWorkOrderFromRequest(
         sql: `INSERT INTO audit_logs
                 (org_id, actor_user_id, action, entity_type, entity_id, after_json)
               VALUES (?, ?, 'workorder.create', 'work_order', ?, ?)`,
-        args: [
-          orgId,
-          ctx.userId,
-          id,
-          JSON.stringify({ wo_no: woNo, status: 'CONTRACTOR_NOTIFIED' }),
-        ],
-      });
-
-      await enqueue(tx, orgId, {
-        recipientType: 'contractor',
-        recipientId: input.contractorId,
-        templateKey: 'workorder.assigned',
-        subject: `New work order ${woNo}`,
-        body: `Work order ${woNo} has been assigned to you. Please accept or reject it.`,
-        entityType: 'work_order',
-        entityId: id,
+        args: [orgId, ctx.userId, id, JSON.stringify({ wo_no: woNo, status: 'CREATED' })],
       });
 
       await tx.commit();
@@ -173,6 +155,94 @@ export async function createWorkOrderFromRequest(
     }
   }
   return { ok: false, code: 'conflict', message: 'Could not allocate a work order number.' };
+}
+
+/** Manager release of an engineer-created draft. Maker/checker is enforced by
+ * requiring a different actor from work_orders.created_by. */
+export async function assignWorkOrderDraft(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  requestId: string,
+  workOrderId: string,
+): Promise<CreateWorkOrderResult> {
+  const rowResult = await db.execute({
+    sql: `SELECT wo.id, wo.wo_no, wo.created_by, wo.contractor_id, wo.status, sr.status AS request_status
+            FROM work_orders wo
+            JOIN service_requests sr ON sr.id = wo.request_id AND sr.org_id = wo.org_id
+           WHERE wo.id = ? AND wo.request_id = ? AND wo.org_id = ? AND wo.deleted_at IS NULL
+           LIMIT 1`,
+    args: [workOrderId, requestId, ctx.orgId],
+  });
+  const row = rowResult.rows[0];
+  if (!row) return { ok: false, code: 'not_found', message: 'Work order draft not found.' };
+  if (String(row.created_by) === ctx.userId) {
+    return { ok: false, code: 'forbidden', message: 'The work order maker cannot assign it.' };
+  }
+  if (String(row.status) !== 'CREATED' || String(row.request_status) !== 'ACCEPTED') {
+    return { ok: false, code: 'conflict', message: 'This work order is not ready for assignment.' };
+  }
+  const contractorId = row.contractor_id == null ? null : String(row.contractor_id);
+  if (!contractorId) {
+    return { ok: false, code: 'invalid', message: 'Choose a contractor before assignment.' };
+  }
+  const contractor = await db.execute({
+    sql: `SELECT 1 FROM contractors
+           WHERE id = ? AND org_id = ? AND status = 'ACTIVE' AND is_prequalified = 1
+             AND deleted_at IS NULL LIMIT 1`,
+    args: [contractorId, ctx.orgId],
+  });
+  if (!contractor.rows.length) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'The selected contractor is no longer eligible.',
+    };
+  }
+
+  const now = new Date().toISOString();
+  const tx = await db.transaction('write');
+  try {
+    const assigned = await tx.execute({
+      sql: `UPDATE work_orders SET status = 'CONTRACTOR_NOTIFIED', updated_at = ?
+             WHERE id = ? AND org_id = ? AND status = 'CREATED' AND created_by <> ?`,
+      args: [now, workOrderId, ctx.orgId, ctx.userId],
+    });
+    const moved = await tx.execute({
+      sql: `UPDATE service_requests SET status = 'ASSIGNED', updated_at = ?
+             WHERE id = ? AND org_id = ? AND status = 'ACCEPTED'`,
+      args: [now, requestId, ctx.orgId],
+    });
+    if (!assigned.rowsAffected || !moved.rowsAffected) {
+      await tx.rollback();
+      return { ok: false, code: 'conflict', message: 'The request changed before assignment.' };
+    }
+    await tx.execute({
+      sql: `INSERT INTO audit_logs
+              (org_id, actor_user_id, action, entity_type, entity_id, before_json, after_json)
+            VALUES (?, ?, 'workorder.assign', 'work_order', ?, ?, ?)`,
+      args: [
+        ctx.orgId,
+        ctx.userId,
+        workOrderId,
+        JSON.stringify({ status: 'CREATED' }),
+        JSON.stringify({ status: 'CONTRACTOR_NOTIFIED', contractor_id: contractorId }),
+      ],
+    });
+    await enqueue(tx, ctx.orgId, {
+      recipientType: 'contractor',
+      recipientId: contractorId,
+      templateKey: 'workorder.assigned',
+      subject: `New work order ${String(row.wo_no)}`,
+      body: `Work order ${String(row.wo_no)} has been assigned to you. Please accept or reject it.`,
+      entityType: 'work_order',
+      entityId: workOrderId,
+    });
+    await tx.commit();
+    return { ok: true, workOrderId, woNo: String(row.wo_no) };
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
 }
 
 // ---- reads ------------------------------------------------------------------
@@ -285,11 +355,15 @@ export async function listForStationManager(
   db: Client,
   orgId: string,
   userId: string,
+  pendingOnly = true,
 ): Promise<WorkOrderListRow[]> {
+  const pending = pendingOnly
+    ? `AND wo.status IN ('TECH_ACCEPTED','WORK_DONE_PENDING_CONFIRM')`
+    : '';
   const res = await db.execute({
     sql: `${LIST_SELECT}
             AND s.station_manager_id = ?
-            AND wo.status IN ('TECH_ACCEPTED','WORK_DONE_PENDING_CONFIRM')
+            ${pending}
        ORDER BY wo.created_at DESC LIMIT 200`,
     args: [orgId, userId],
   });
@@ -345,4 +419,26 @@ export async function getWorkOrderDetail(
     onsiteAt: row.onsite_at == null ? null : String(row.onsite_at),
     closedAt: row.closed_at == null ? null : String(row.closed_at),
   };
+}
+
+export type WorkOrderReadScope = 'org' | 'station' | 'contractor' | 'technician';
+
+/**
+ * Load a work order only when it belongs to the current portal actor. The
+ * organisation condition is always applied by getWorkOrderDetail; these
+ * relationship checks prevent same-tenant users from opening another portal
+ * actor's record by copying its URL or calling the JSON endpoint directly.
+ */
+export async function getWorkOrderForActor(
+  db: Client,
+  orgId: string,
+  id: string,
+  scope: WorkOrderReadScope,
+  userId: string,
+): Promise<WorkOrderDetail | null> {
+  const detail = await getWorkOrderDetail(db, orgId, id);
+  if (!detail || scope === 'org') return detail;
+  if (scope === 'station') return detail.stationManagerId === userId ? detail : null;
+  if (scope === 'contractor') return detail.contractorPortalUserId === userId ? detail : null;
+  return detail.technicianPortalUserId === userId ? detail : null;
 }

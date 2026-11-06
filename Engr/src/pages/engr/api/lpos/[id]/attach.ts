@@ -3,7 +3,7 @@ export const prerender = false;
 /**
  * Attach a work order to the LPO. With work_order_id, attach an existing work
  * order for the same contractor; otherwise create a new one at the given station
- * under the LPO. Gate: workorder.create and workorder.assign. Attaching never
+ * under the LPO. Gates: lpo.edit and workorder.create. Attaching never
  * changes a work order's state-machine status; it only sets lpo_id.
  */
 import type { APIRoute } from 'astro';
@@ -23,7 +23,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = `/lpos/${id}`;
 
-  if (!(engr.perms.includes('workorder.create') && engr.perms.includes('workorder.assign'))) {
+  if (!(engr.perms.includes('lpo.edit') && engr.perms.includes('workorder.create'))) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

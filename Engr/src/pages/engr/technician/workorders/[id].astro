@@ -10,7 +10,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import WorkOrderDetailView from '@/components/engr/WorkOrderDetail.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getWorkOrderDetail, type WorkOrderDetail } from '@engr/repos/workOrders';
+import { getWorkOrderForActor, type WorkOrderDetail } from '@engr/repos/workOrders';
 import {
   getJobCard,
   listSpares,
@@ -41,13 +41,14 @@ let spares: SpareRow[] = [];
 
 if (allowed && id) {
   const db = await getDb(getEngrEnv());
-  wo = await getWorkOrderDetail(db, engr.orgId, id);
+  wo = await getWorkOrderForActor(db, engr.orgId, id, 'technician', engr.userId);
   if (wo) {
     actions = availableActions(
       { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },
       {
         status: wo.status as WoStatus,
         stationManagerId: wo.stationManagerId,
+        contractorPortalUserId: wo.contractorPortalUserId,
         technicianPortalUserId: wo.technicianPortalUserId,
       },
     );

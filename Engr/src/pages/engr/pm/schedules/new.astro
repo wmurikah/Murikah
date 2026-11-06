@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Create a PM schedule. Gate: pm.allocate. */
+/** Create a PM schedule. Gate: pm.create. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import PmScheduleForm from '@/components/engr/PmScheduleForm.astro';
 import { getEngrEnv } from '@engr/env';
@@ -19,7 +19,7 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'pm.allocate');
+const allowed = can(Astro.locals, 'pm.create');
 const errorCode = Astro.url.searchParams.get('error');
 
 let stations: Option[] = [];

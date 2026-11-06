@@ -43,6 +43,7 @@ if (allowed && !rfq) Astro.response.status = 404;
 const isOpen = rfq?.status === 'OPEN' && rfq.releasedAt != null;
 const dueDate = rfq?.dueDate ? rfq.dueDate.slice(0, 10) : null;
 const isDraft = rfq != null && rfq.submittedAt == null && rfq.releasedAt == null;
+const isMaker = rfq?.createdBy === engr.userId;
 const awaitingRelease = rfq != null && rfq.submittedAt != null && rfq.releasedAt == null;
 const canMakerRelease = awaitingRelease && rfq?.submittedBy !== engr.userId;
 const submittedQuotes = rfq ? rfq.quotes.filter((q) => q.status !== 'REJECTED') : [];
@@ -108,7 +109,7 @@ const rfqId = rfq?.id ?? '';
           </dd>
         </dl>
 
-        {isDraft && canEdit && (
+        {isDraft && canEdit && isMaker && (
           <section class="engr-panel" aria-labelledby="rfq-draft-settings">
             <h2 id="rfq-draft-settings">Draft settings</h2>
             <form method="post" action={`/api/rfqs/${rfqId}`} class="engr-form">
@@ -141,7 +142,7 @@ const rfqId = rfq?.id ?? '';
           </section>
         )}
 
-        {isDraft && canSubmit && (
+        {isDraft && canSubmit && isMaker && (
           <form method="post" action={`/api/rfqs/${rfqId}/submit`} class="engr-actionbar">
             <button type="submit" class="engr-btn engr-btn--primary">
               Submit for release

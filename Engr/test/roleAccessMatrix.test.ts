@@ -118,15 +118,13 @@ test('owner and administrator receive the complete permission registry', async (
   }
 });
 
-test('engineer is a maker and verifier without approval or administration powers', async () => {
+test('engineer is a maker without approval or administration powers', async () => {
   const db = await seededDatabase();
   try {
     const p = await permissionsFor(db.client, 'ENGINEER');
     requires('ENGINEER', p, [
       'requests.view',
       'requests.create',
-      'requests.edit',
-      'requests.submit',
       'rfq.view',
       'rfq.create',
       'rfq.edit',
@@ -140,19 +138,12 @@ test('engineer is a maker and verifier without approval or administration powers
       'lpo.submit',
       'workorder.view',
       'workorder.create',
-      'workorder.edit',
-      'cost.view',
-      'cost.verify',
-      'bill.view',
-      'bill.verify',
       'engineer_assignments.view',
-      'attachments.upload',
       'reports.view',
     ]);
     forbids('ENGINEER', p, [
       'requests.accept',
       'requests.reject',
-      'requests.route',
       'rfq.release',
       'rfq.award',
       'quotes.select',
@@ -161,13 +152,14 @@ test('engineer is a maker and verifier without approval or administration powers
       'lpo.approve',
       'lpo.issue',
       'workorder.assign',
-      'workorder.reassign',
       'workorder.cancel',
       'cost.approve',
       'bill.approve.engineering',
       'bill.approve.finance',
       'payment.record',
-      'users.manage',
+      'cost.view',
+      'bill.view',
+      'payment.view',
       'users.assign_roles',
       'roles.manage',
       'org.manage',
@@ -184,8 +176,6 @@ test('engineering manager controls its organisation without security or finance 
     requires('ENGINEERING_MANAGER', p, [
       'requests.accept',
       'requests.reject',
-      'requests.route',
-      'requests.cancel',
       'rfq.release',
       'rfq.award',
       'quotes.select',
@@ -197,9 +187,7 @@ test('engineering manager controls its organisation without security or finance 
       'lpo.cancel',
       'lpo.close',
       'workorder.assign',
-      'workorder.reassign',
       'workorder.cancel',
-      'jobcard.confirm',
       'cost.approve',
       'bill.approve.engineering',
       'stations.manage',
@@ -219,7 +207,6 @@ test('engineering manager controls its organisation without security or finance 
       'notifications.configure',
       'reports.export',
       'audit.view',
-      'attachments.manage',
     ]);
     forbids('ENGINEERING_MANAGER', p, [
       'roles.manage',
@@ -229,8 +216,11 @@ test('engineering manager controls its organisation without security or finance 
       'payment.reverse',
       'quotes.submit',
       'workorder.execute',
+      'workorder.close',
       'workorder.assign_technician',
       'jsa.submit',
+      'arrival.confirm',
+      'jobcard.confirm',
     ]);
   } finally {
     db.close();
@@ -244,8 +234,6 @@ test('external, station and finance roles stay within their workflow lanes', asy
     requires('STATION_MANAGER', station, [
       'requests.view',
       'requests.create',
-      'requests.edit',
-      'requests.submit',
       'workorder.view',
       'arrival.confirm',
       'jobcard.view',
@@ -255,7 +243,11 @@ test('external, station and finance roles stay within their workflow lanes', asy
       'requests.accept',
       'workorder.assign',
       'cost.approve',
-      'users.manage',
+      'reports.view',
+      'stations.view',
+      'assets.view',
+      'slas.view',
+      'pm.view',
     ]);
 
     const finance = await permissionsFor(db.client, 'FINANCIAL_CONTROLLER');
@@ -264,6 +256,7 @@ test('external, station and finance roles stay within their workflow lanes', asy
       'bill.approve.finance',
       'payment.view',
       'payment.record',
+      'rates.view',
       'payment.reverse',
       'reports.view',
       'audit.view',
@@ -272,7 +265,6 @@ test('external, station and finance roles stay within their workflow lanes', asy
       'bill.approve.engineering',
       'workorder.assign',
       'roles.manage',
-      'users.manage',
     ]);
 
     const contractor = await permissionsFor(db.client, 'CONTRACTOR');
@@ -284,7 +276,6 @@ test('external, station and finance roles stay within their workflow lanes', asy
       'technicians.view',
       'technicians.manage',
       'workorder.assign_technician',
-      'attachments.upload',
       'cost.view',
       'cost.create',
       'cost.submit',
@@ -298,25 +289,23 @@ test('external, station and finance roles stay within their workflow lanes', asy
       'cost.approve',
       'bill.approve.engineering',
       'payment.record',
+      'rates.view',
     ]);
 
     const technician = await permissionsFor(db.client, 'TECHNICIAN');
     requires('TECHNICIAN', technician, [
       'workorder.view',
-      'workorder.accept',
       'workorder.execute',
       'jsa.submit',
       'jobcard.view',
       'jobcard.create',
       'jobcard.submit',
-      'attachments.upload',
     ]);
     forbids('TECHNICIAN', technician, [
       'workorder.assign',
       'workorder.close',
       'cost.create',
       'bill.create',
-      'users.manage',
     ]);
   } finally {
     db.close();
@@ -339,7 +328,6 @@ test('viewer is read-only and excludes identity, security, audit and finance dat
     forbids('VIEWER', viewer, [
       'users.view',
       'roles.view',
-      'settings.view',
       'audit.view',
       'contractors.view',
       'technicians.view',
@@ -357,6 +345,16 @@ test('viewer is read-only and excludes identity, security, audit and finance dat
     for (const key of viewer) {
       assert.match(key, /\.view$/, `VIEWER contains mutating permission ${key}`);
     }
+
+    const retired = await db.client.execute(
+      `SELECT key FROM permissions
+        WHERE key IN ('users.manage','requests.edit','requests.submit','requests.route',
+          'requests.cancel','pm.manage','workorder.edit','workorder.reassign','jsa.review',
+          'cost.verify','cost.approve.l1','cost.approve.l2','bill.verify',
+          'bill.approve.l1','bill.approve.l2','bill.approve.l3',
+          'attachments.upload','attachments.manage','settings.view','settings.manage')`,
+    );
+    assert.deepEqual(retired.rows, [], 'retired prototype permissions must not be grantable');
   } finally {
     db.close();
   }

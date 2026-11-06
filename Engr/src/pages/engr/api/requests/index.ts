@@ -21,6 +21,7 @@ import { createRequest, listQueue, PRIORITIES, type Priority } from '@engr/repos
 import { resolveEngineerInCharge } from '@engr/repos/engineerAssignments';
 import { usersWithPermission } from '@engr/repos/approvers';
 import { enqueue } from '@engr/notify';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 interface Intake {
   stationId: string;
@@ -119,9 +120,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const db = await getDb(getEngrEnv());
 
     // The station must belong to this org, so a forged id cannot cross tenants.
+    const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : null;
     const station = await db.execute({
-      sql: `SELECT id FROM stations WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
-      args: [input.stationId, engr.orgId],
+      sql: `SELECT id FROM stations
+             WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+               AND (? IS NULL OR station_manager_id = ?)
+             LIMIT 1`,
+      args: [input.stationId, engr.orgId, stationManagerId, stationManagerId],
     });
     if (station.rows.length === 0) {
       return json
@@ -227,10 +232,16 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
   try {
     requirePermission(locals, 'requests.view');
+    const dataScope = actorDataScope(engr.roles);
     const scope = url.searchParams.get('scope') === 'all' ? 'all' : 'mine';
     const db = await getDb(getEngrEnv());
-    const requests = await listQueue(db, engr.orgId, engr.userId, scope);
-    return jsonResponse({ ok: true, scope, requests }, 200);
+    const requests = await listQueue(db, engr.orgId, engr.userId, scope, 100, {
+      stationManagerId: dataScope === 'station' ? engr.userId : undefined,
+    });
+    return jsonResponse(
+      { ok: true, scope: dataScope === 'station' ? 'stations' : scope, requests },
+      200,
+    );
   } catch (err) {
     if (err instanceof Response) return err;
     console.error('engr requests GET failed', err);

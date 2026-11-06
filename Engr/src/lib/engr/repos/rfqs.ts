@@ -5,9 +5,9 @@
  * procurement paths in workflow/rfqAward.ts, never here.
  */
 import type { Client } from '@libsql/client/web';
-import { enqueue } from '../notify';
-import { listEligibleContractors } from './contractorsPick';
-import { makerMayRelease } from '../workflow/releasePolicy';
+import { enqueue } from '../notify.ts';
+import { listEligibleContractors } from './contractorsPick.ts';
+import { makerMayRelease } from '../workflow/releasePolicy.ts';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -161,8 +161,8 @@ export async function updateRfqDraft(
   const moved = await db.execute({
     sql: `UPDATE rfqs SET due_date = ?, approval_threshold_minor = ?, updated_at = ?
            WHERE id = ? AND org_id = ? AND status = 'OPEN'
-             AND submitted_at IS NULL AND released_at IS NULL`,
-    args: [input.dueDate, input.thresholdMinor, now, rfqId, ctx.orgId],
+             AND created_by = ? AND submitted_at IS NULL AND released_at IS NULL`,
+    args: [input.dueDate, input.thresholdMinor, now, rfqId, ctx.orgId, ctx.userId],
   });
   if (moved.rowsAffected === 0) {
     return { ok: false, code: 'conflict', message: 'This RFQ can no longer be edited.' };
@@ -185,9 +185,9 @@ export async function submitRfq(
   const moved = await db.execute({
     sql: `UPDATE rfqs SET submitted_at = ?, submitted_by = ?, updated_at = ?
            WHERE id = ? AND org_id = ? AND status = 'OPEN'
-             AND submitted_at IS NULL AND released_at IS NULL
+             AND created_by = ? AND submitted_at IS NULL AND released_at IS NULL
              AND EXISTS (SELECT 1 FROM rfq_invitations i WHERE i.rfq_id = rfqs.id AND i.org_id = rfqs.org_id)`,
-    args: [now, ctx.userId, now, rfqId, ctx.orgId],
+    args: [now, ctx.userId, now, rfqId, ctx.orgId, ctx.userId],
   });
   if (moved.rowsAffected === 0) {
     return { ok: false, code: 'conflict', message: 'This RFQ is incomplete or already submitted.' };

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   mayAssignRoleCode,
+  mayManageRoleCode,
   mayManageTargetUser,
   requiresContractorTechnicianScope,
   userManagementScope,
@@ -29,6 +30,8 @@ test('administrators cannot grant or manage owner authority', () => {
   assert.equal(mayManageTargetUser(scope, ['OWNER'], false), false);
   assert.equal(mayManageTargetUser(scope, ['ENGINEERING_MANAGER'], false), true);
   assert.equal(mayManageTargetUser(scope, ['ENGINEER'], true), false);
+  assert.equal(mayManageRoleCode(scope, 'OWNER'), false);
+  assert.equal(mayManageRoleCode(scope, 'ENGINEER'), true);
 });
 
 test('owner and platform owner retain the full organisation administration scope', () => {
@@ -37,6 +40,7 @@ test('owner and platform owner retain the full organisation administration scope
     assert.equal(mayAssignRoleCode(scope, 'OWNER'), true);
     assert.equal(mayManageTargetUser(scope, ['OWNER'], false), true);
     assert.equal(mayManageTargetUser(scope, ['ADMIN'], true), true);
+    assert.equal(mayManageRoleCode(scope, 'OWNER'), true);
   }
 });
 

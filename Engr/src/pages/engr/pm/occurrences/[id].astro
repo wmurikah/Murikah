@@ -3,7 +3,8 @@ export const prerender = false;
 
 /**
  * PM occurrence detail: the schedule, the checklist template, the notification
- * history, and an Allocate action that creates the work order. Gate: pm.allocate.
+ * history, and an Allocate action that creates the work order. Gate: pm.view;
+ * allocation requires pm.allocate.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
@@ -15,7 +16,8 @@ import { relativeAge } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'pm.allocate');
+const allowed = can(Astro.locals, 'pm.view');
+const hasAllocatePermission = can(Astro.locals, 'pm.allocate');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -52,7 +54,7 @@ if (allowed && id) {
   }
 }
 if (allowed && !occ) Astro.response.status = 404;
-const canAllocate = occ != null && ALLOCATABLE.includes(occ.status);
+const canAllocate = hasAllocatePermission && occ != null && ALLOCATABLE.includes(occ.status);
 ---
 
 <EngrLayout title="PM occurrence">

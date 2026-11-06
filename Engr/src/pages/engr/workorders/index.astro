@@ -6,8 +6,15 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import WorkOrderList from '@/components/engr/WorkOrderList.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { listForEngineer, type WorkOrderListRow } from '@engr/repos/workOrders';
+import {
+  listForEngineer,
+  listForContractor,
+  listForTechnician,
+  listForStationManager,
+  type WorkOrderListRow,
+} from '@engr/repos/workOrders';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -23,7 +30,16 @@ const statusLabel = status
 let rows: WorkOrderListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listForEngineer(db, engr.orgId, status, station);
+  const dataScope = actorDataScope(engr.roles);
+  if (dataScope === 'station') {
+    rows = await listForStationManager(db, engr.orgId, engr.userId, false);
+  } else if (dataScope === 'contractor') {
+    rows = await listForContractor(db, engr.orgId, engr.userId);
+  } else if (dataScope === 'technician') {
+    rows = await listForTechnician(db, engr.orgId, engr.userId);
+  } else {
+    rows = await listForEngineer(db, engr.orgId, status, station);
+  }
 }
 ---
 

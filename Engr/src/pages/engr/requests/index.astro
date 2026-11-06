@@ -12,6 +12,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listQueue, type QueueRow } from '@engr/repos/requests';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 import { relativeAge } from '@engr/format';
 
 const engr = Astro.locals.engr;
@@ -37,7 +38,13 @@ const periodLabel = from ? `${MONTHS[Number(from.slice(5, 7)) - 1]} ${from.slice
 let rows: QueueRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, { priority, from, to });
+  const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : undefined;
+  rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, {
+    priority,
+    from,
+    to,
+    stationManagerId,
+  });
 }
 
 const badgeClass = (priority: string) => `engr-badge engr-badge--${priority.toLowerCase()}`;
@@ -62,7 +69,7 @@ const now = new Date();
   }
 
   {
-    allowed && (
+    allowed && actorDataScope(engr.roles) !== 'station' && (
       <div class="engr-toggle" role="group" aria-label="Filter requests">
         <a href="/requests?scope=mine" aria-current={scope === 'mine' ? 'page' : undefined}>
           Assigned to me

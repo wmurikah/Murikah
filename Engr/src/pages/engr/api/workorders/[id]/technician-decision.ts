@@ -1,8 +1,8 @@
 export const prerender = false;
 
 /**
- * Assigned technician accepts or rejects the work order. No dedicated permission
- * key; gated on workorder.view plus the ownership rule in the state machine (the
+ * Assigned technician accepts or rejects the work order. Gate: workorder.execute
+ * plus the ownership rule in the state machine (the
  * acting user must be the assigned technician's portal account).
  */
 import type { APIRoute } from 'astro';

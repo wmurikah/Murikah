@@ -1,0 +1,66 @@
+---
+export const prerender = false;
+
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { can } from '@engr/auth/rbac';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import { listAuditRows, type AuditRow } from '@engr/repos/audit';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'audit.view');
+let rows: AuditRow[] = [];
+if (allowed) rows = await listAuditRows(await getDb(getEngrEnv()), engr.orgId);
+---
+
+<EngrLayout title="Audit history">
+  <div class="engr-page-head">
+    <div>
+      <h1>Audit history</h1>
+      <p class="engr-lead">Recent recorded actions in this organisation.</p>
+    </div>
+  </div>
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to audit history.
+      </p>
+    ) : rows.length === 0 ? (
+      <p class="engr-empty">No audit activity has been recorded.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table">
+          <thead>
+            <tr>
+              <>
+                <th>Time</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Record</th>
+              </>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr>
+                <td>
+                  <time datetime={row.createdAt}>
+                    {new Date(row.createdAt).toLocaleString('en-KE')}
+                  </time>
+                </td>
+                <td>{row.actorName}</td>
+                <td>{row.action}</td>
+                <td>
+                  {row.entityType
+                    ? `${row.entityType}${row.entityId ? ` · ${row.entityId}` : ''}`
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

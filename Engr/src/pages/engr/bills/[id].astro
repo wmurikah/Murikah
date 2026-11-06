@@ -16,15 +16,14 @@ import { listBillableCosts, type CostListRow } from '@engr/repos/workCosts';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'bill.view');
-const canL1 = can(Astro.locals, 'bill.approve.l1');
-const canL2 = can(Astro.locals, 'bill.approve.l2');
-const canL3 = can(Astro.locals, 'bill.approve.l3');
-const canPay = can(Astro.locals, 'payment.record') || can(Astro.locals, 'payment.view');
+const canEngineering = can(Astro.locals, 'bill.approve.engineering');
+const canFinance = can(Astro.locals, 'bill.approve.finance');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 const done =
@@ -46,8 +45,8 @@ if (allowed && id) {
       billable = await listBillableCosts(db, engr.orgId, contractorId!);
   }
 }
-const isApprover = canL1 || canL2 || canL3 || canPay;
-const canSee = bill != null && (isOwner || isApprover);
+const isContractor = actorDataScope(engr.roles) === 'contractor';
+const canSee = bill != null && (!isContractor || isOwner);
 if (allowed && (!bill || !canSee)) Astro.response.status = 404;
 
 const billId = bill?.id ?? '';
@@ -55,11 +54,11 @@ const canAttach = bill != null && isOwner && bill.status === 'DRAFT';
 const canSubmit =
   canAttach && bill != null && bill.costs.length > 0 && can(Astro.locals, 'bill.submit');
 const decideLevel =
-  bill?.status === 'PENDING_L1_ENG' && canL1
+  bill?.status === 'PENDING_L1_ENG' && canEngineering
     ? 1
-    : bill?.status === 'PENDING_L2_ENG_MGR' && canL2
+    : bill?.status === 'PENDING_L2_ENG_MGR' && canEngineering
       ? 2
-      : bill?.status === 'PENDING_L3_FC' && canL3
+      : bill?.status === 'PENDING_L3_FC' && canFinance
         ? 3
         : 0;
 ---
@@ -182,7 +181,9 @@ const decideLevel =
 
         {decideLevel > 0 && (
           <section class="engr-panel" aria-labelledby="bill-decide">
-            <h2 id="bill-decide">Level {decideLevel} decision</h2>
+            <h2 id="bill-decide">
+              {decideLevel === 3 ? 'Finance decision' : 'Engineering decision'}
+            </h2>
             <form method="post" action={`/api/bills/${billId}/decision`} class="engr-form">
               <input type="hidden" name="level" value={decideLevel} />
               <div class="engr-field">

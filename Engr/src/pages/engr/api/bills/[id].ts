@@ -7,8 +7,7 @@ import { getDb } from '@engr/db';
 import { getBillDetail } from '@engr/repos/bills';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { jsonResponse } from '@engr/workflow/respond';
-
-const APPROVER_KEYS = ['bill.approve.l1', 'bill.approve.l2', 'bill.approve.l3', 'payment.record'];
+import { actorDataScope } from '@engr/auth/dataScope';
 
 export const GET: APIRoute = async ({ locals, params }) => {
   const engr = locals.engr;
@@ -20,8 +19,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   const bill = await getBillDetail(db, engr.orgId, id);
   if (!bill) return jsonResponse({ ok: false, error: 'not_found' }, 404);
 
-  const isApprover = APPROVER_KEYS.some((k) => engr.perms.includes(k));
-  if (!isApprover) {
+  if (actorDataScope(engr.roles) === 'contractor') {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
     if (!contractorId || contractorId !== bill.contractorId) {
       return jsonResponse({ error: 'forbidden' }, 403);

@@ -11,7 +11,7 @@ const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
 export type AssignResult =
   | { ok: true; id: string }
-  | { ok: false; code: 'invalid' | 'not_found'; message: string };
+  | { ok: false; code: 'invalid' | 'not_found' | 'conflict'; message: string };
 
 export interface AssignmentRow {
   id: string;
@@ -75,12 +75,17 @@ export async function listAssignments(db: Client, orgId: string): Promise<Assign
   });
 }
 
-// Active users of the organisation, offered as the engineer in charge.
+// Active engineering users of the organisation, offered as the engineer in charge.
 export async function listEngineerCandidates(db: Client, orgId: string): Promise<EngineerOption[]> {
   const res = await db.execute({
-    sql: `SELECT id, full_name FROM users
-           WHERE org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE'
-        ORDER BY full_name`,
+    sql: `SELECT DISTINCT u.id, u.full_name
+            FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id
+            JOIN roles r ON r.id = ur.role_id
+           WHERE u.org_id = ? AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+             AND r.code IN ('ENGINEER','ENGINEERING_MANAGER')
+             AND (r.org_id IS NULL OR r.org_id = u.org_id)
+        ORDER BY u.full_name`,
     args: [orgId],
   });
   return res.rows.map((r) => ({ id: String(r.id), name: String(r.full_name) }));
@@ -107,7 +112,13 @@ export async function createAssignment(
 
   // The engineer, and the station or category, must all belong to this org.
   const eng = await db.execute({
-    sql: `SELECT id FROM users WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+    sql: `SELECT u.id FROM users u
+          JOIN user_roles ur ON ur.user_id = u.id
+          JOIN roles r ON r.id = ur.role_id
+           WHERE u.id = ? AND u.org_id = ? AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+             AND r.code IN ('ENGINEER','ENGINEERING_MANAGER')
+             AND (r.org_id IS NULL OR r.org_id = u.org_id)
+           LIMIT 1`,
     args: [input.engineerUserId, ctx.orgId],
   });
   if (eng.rows.length === 0) return { ok: false, code: 'invalid', message: 'Unknown engineer.' };
@@ -143,6 +154,14 @@ export async function createAssignment(
     return { ok: true, id };
   } catch (err) {
     await tx.rollback();
+    const text = String(err instanceof Error ? err.message : err);
+    if (text.includes('UNIQUE') || text.includes('SQLITE_CONSTRAINT')) {
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'That station or category already has an engineer in charge.',
+      };
+    }
     throw err;
   }
 }

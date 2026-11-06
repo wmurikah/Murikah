@@ -26,6 +26,7 @@ if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'payment.view') || can(Astro.locals, 'payment.record');
 const canRecord = can(Astro.locals, 'payment.record');
+const canReverse = can(Astro.locals, 'payment.reverse');
 const errorCode = Astro.url.searchParams.get('error');
 const recorded = Astro.url.searchParams.get('recorded');
 const reversed = Astro.url.searchParams.get('reversed');
@@ -212,7 +213,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                       Paid on
                     </th>
                     <th scope="col">Status</th>
-                    {canRecord && <th scope="col">Action</th>}
+                    {canReverse && <th scope="col">Action</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -227,7 +228,7 @@ const outstanding = (b: ReadyBillRow) => b.totalMinor - b.paidMinor;
                       <td>
                         <span class="engr-status">{p.status}</span>
                       </td>
-                      {canRecord && (
+                      {canReverse && (
                         <td>
                           {p.status !== 'REVERSED' && (
                             <form method="post" action={`/api/payments/${p.id}/reverse`}>

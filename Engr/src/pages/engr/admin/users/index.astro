@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Users list. Gate: users.view; create/edit gates on users.manage. */
+/** Users list. View, invitation and profile changes use separate permissions. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';

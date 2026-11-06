@@ -1,0 +1,392 @@
+-- Run before 14_apply_comprehensive_rbac.sql and again afterwards.
+-- Before applying, all nine columns and migration 006 should be missing.
+-- After applying, missing/duplicate/unexpected/retired queries return zero rows.
+WITH required(table_name, column_name) AS (
+  VALUES ('lpos','submitted_at'),('lpos','submitted_by'),
+         ('rfqs','submitted_at'),('rfqs','submitted_by'),('rfqs','released_at'),('rfqs','released_by'),
+         ('pm_schedules','created_by'),('pm_schedules','activated_by'),('pm_schedules','activated_at')
+)
+SELECT required.table_name, required.column_name AS missing_column
+FROM required
+WHERE NOT EXISTS (
+  SELECT 1 FROM pragma_table_info(required.table_name) columns
+  WHERE columns.name = required.column_name
+);
+
+SELECT id, description, checksum, applied_at FROM schema_migrations WHERE id = '006';
+SELECT id, checksum AS wrong_checksum FROM schema_migrations
+ WHERE id = '006' AND checksum <> '417efbd7cd3489fc852a9aa9e079479abf5eb3fa9b65188df40b1b612fcf3bab';
+
+SELECT 'contractor portal user' AS duplicate_type, portal_user_id AS duplicate_key, COUNT(*) AS row_count
+  FROM contractors WHERE portal_user_id IS NOT NULL GROUP BY portal_user_id HAVING COUNT(*) > 1;
+SELECT 'technician portal user' AS duplicate_type, portal_user_id AS duplicate_key, COUNT(*) AS row_count
+  FROM technicians WHERE portal_user_id IS NOT NULL GROUP BY portal_user_id HAVING COUNT(*) > 1;
+SELECT 'station engineer routing' AS duplicate_type, org_id || ':' || station_id AS duplicate_key, COUNT(*) AS row_count
+  FROM engineer_assignments WHERE scope_type = 'STATION' AND station_id IS NOT NULL
+ GROUP BY org_id, station_id HAVING COUNT(*) > 1;
+SELECT 'category engineer routing' AS duplicate_type, org_id || ':' || category_id AS duplicate_key, COUNT(*) AS row_count
+  FROM engineer_assignments WHERE scope_type = 'CATEGORY' AND category_id IS NOT NULL
+ GROUP BY org_id, category_id HAVING COUNT(*) > 1;
+
+WITH required(name) AS (
+  VALUES ('ux_contractors_portal_user'),('ux_technicians_portal_user'),
+         ('ux_engineer_assignments_station'),('ux_engineer_assignments_category')
+)
+SELECT required.name AS missing_unique_index FROM required
+LEFT JOIN sqlite_schema ON sqlite_schema.type = 'index' AND sqlite_schema.name = required.name
+WHERE sqlite_schema.name IS NULL;
+
+SELECT key AS retired_permission_still_present FROM permissions
+ WHERE key IN ('users.manage','requests.edit','requests.submit','requests.route','requests.cancel','pm.manage','workorder.edit','workorder.reassign','jsa.review','cost.verify','cost.approve.l1','cost.approve.l2','bill.verify','bill.approve.l1','bill.approve.l2','bill.approve.l3','attachments.upload','attachments.manage','settings.view','settings.manage') ORDER BY key;
+
+DROP TABLE IF EXISTS temp._expected_rbac;
+CREATE TEMP TABLE _expected_rbac (role_code TEXT NOT NULL, permission_key TEXT NOT NULL, PRIMARY KEY (role_code, permission_key));
+INSERT INTO _expected_rbac (role_code, permission_key) VALUES
+  ('OWNER','org.view'),
+  ('OWNER','org.manage'),
+  ('OWNER','users.view'),
+  ('OWNER','users.invite'),
+  ('OWNER','users.update'),
+  ('OWNER','users.suspend'),
+  ('OWNER','users.reset_password'),
+  ('OWNER','users.assign_roles'),
+  ('OWNER','roles.view'),
+  ('OWNER','roles.manage'),
+  ('OWNER','stations.view'),
+  ('OWNER','stations.manage'),
+  ('OWNER','assets.view'),
+  ('OWNER','assets.manage'),
+  ('OWNER','contractors.view'),
+  ('OWNER','contractors.manage'),
+  ('OWNER','technicians.view'),
+  ('OWNER','technicians.manage'),
+  ('OWNER','engineer_assignments.view'),
+  ('OWNER','engineer_assignments.manage'),
+  ('OWNER','slas.view'),
+  ('OWNER','slas.manage'),
+  ('OWNER','rates.view'),
+  ('OWNER','rates.manage'),
+  ('OWNER','requests.view'),
+  ('OWNER','requests.create'),
+  ('OWNER','requests.accept'),
+  ('OWNER','requests.reject'),
+  ('OWNER','rfq.view'),
+  ('OWNER','rfq.create'),
+  ('OWNER','rfq.edit'),
+  ('OWNER','rfq.submit'),
+  ('OWNER','rfq.release'),
+  ('OWNER','rfq.award'),
+  ('OWNER','quotes.view'),
+  ('OWNER','quotes.submit'),
+  ('OWNER','quotes.select'),
+  ('OWNER','pm.view'),
+  ('OWNER','pm.create'),
+  ('OWNER','pm.edit'),
+  ('OWNER','pm.activate'),
+  ('OWNER','pm.allocate'),
+  ('OWNER','pm.archive'),
+  ('OWNER','lpo.view'),
+  ('OWNER','lpo.create'),
+  ('OWNER','lpo.edit'),
+  ('OWNER','lpo.submit'),
+  ('OWNER','lpo.approve'),
+  ('OWNER','lpo.issue'),
+  ('OWNER','lpo.cancel'),
+  ('OWNER','lpo.close'),
+  ('OWNER','workorder.view'),
+  ('OWNER','workorder.create'),
+  ('OWNER','workorder.assign'),
+  ('OWNER','workorder.assign_technician'),
+  ('OWNER','workorder.accept'),
+  ('OWNER','workorder.execute'),
+  ('OWNER','workorder.close'),
+  ('OWNER','workorder.cancel'),
+  ('OWNER','jsa.view'),
+  ('OWNER','jsa.submit'),
+  ('OWNER','arrival.confirm'),
+  ('OWNER','jobcard.view'),
+  ('OWNER','jobcard.create'),
+  ('OWNER','jobcard.submit'),
+  ('OWNER','jobcard.confirm'),
+  ('OWNER','cost.view'),
+  ('OWNER','cost.create'),
+  ('OWNER','cost.submit'),
+  ('OWNER','cost.approve'),
+  ('OWNER','bill.view'),
+  ('OWNER','bill.create'),
+  ('OWNER','bill.submit'),
+  ('OWNER','bill.approve.engineering'),
+  ('OWNER','bill.approve.finance'),
+  ('OWNER','payment.view'),
+  ('OWNER','payment.record'),
+  ('OWNER','payment.reverse'),
+  ('OWNER','notifications.monitor'),
+  ('OWNER','notifications.retry'),
+  ('OWNER','notifications.configure'),
+  ('OWNER','reports.view'),
+  ('OWNER','reports.export'),
+  ('OWNER','audit.view'),
+  ('ADMIN','org.view'),
+  ('ADMIN','org.manage'),
+  ('ADMIN','users.view'),
+  ('ADMIN','users.invite'),
+  ('ADMIN','users.update'),
+  ('ADMIN','users.suspend'),
+  ('ADMIN','users.reset_password'),
+  ('ADMIN','users.assign_roles'),
+  ('ADMIN','roles.view'),
+  ('ADMIN','roles.manage'),
+  ('ADMIN','stations.view'),
+  ('ADMIN','stations.manage'),
+  ('ADMIN','assets.view'),
+  ('ADMIN','assets.manage'),
+  ('ADMIN','contractors.view'),
+  ('ADMIN','contractors.manage'),
+  ('ADMIN','technicians.view'),
+  ('ADMIN','technicians.manage'),
+  ('ADMIN','engineer_assignments.view'),
+  ('ADMIN','engineer_assignments.manage'),
+  ('ADMIN','slas.view'),
+  ('ADMIN','slas.manage'),
+  ('ADMIN','rates.view'),
+  ('ADMIN','rates.manage'),
+  ('ADMIN','requests.view'),
+  ('ADMIN','requests.create'),
+  ('ADMIN','requests.accept'),
+  ('ADMIN','requests.reject'),
+  ('ADMIN','rfq.view'),
+  ('ADMIN','rfq.create'),
+  ('ADMIN','rfq.edit'),
+  ('ADMIN','rfq.submit'),
+  ('ADMIN','rfq.release'),
+  ('ADMIN','rfq.award'),
+  ('ADMIN','quotes.view'),
+  ('ADMIN','quotes.submit'),
+  ('ADMIN','quotes.select'),
+  ('ADMIN','pm.view'),
+  ('ADMIN','pm.create'),
+  ('ADMIN','pm.edit'),
+  ('ADMIN','pm.activate'),
+  ('ADMIN','pm.allocate'),
+  ('ADMIN','pm.archive'),
+  ('ADMIN','lpo.view'),
+  ('ADMIN','lpo.create'),
+  ('ADMIN','lpo.edit'),
+  ('ADMIN','lpo.submit'),
+  ('ADMIN','lpo.approve'),
+  ('ADMIN','lpo.issue'),
+  ('ADMIN','lpo.cancel'),
+  ('ADMIN','lpo.close'),
+  ('ADMIN','workorder.view'),
+  ('ADMIN','workorder.create'),
+  ('ADMIN','workorder.assign'),
+  ('ADMIN','workorder.assign_technician'),
+  ('ADMIN','workorder.accept'),
+  ('ADMIN','workorder.execute'),
+  ('ADMIN','workorder.close'),
+  ('ADMIN','workorder.cancel'),
+  ('ADMIN','jsa.view'),
+  ('ADMIN','jsa.submit'),
+  ('ADMIN','arrival.confirm'),
+  ('ADMIN','jobcard.view'),
+  ('ADMIN','jobcard.create'),
+  ('ADMIN','jobcard.submit'),
+  ('ADMIN','jobcard.confirm'),
+  ('ADMIN','cost.view'),
+  ('ADMIN','cost.create'),
+  ('ADMIN','cost.submit'),
+  ('ADMIN','cost.approve'),
+  ('ADMIN','bill.view'),
+  ('ADMIN','bill.create'),
+  ('ADMIN','bill.submit'),
+  ('ADMIN','bill.approve.engineering'),
+  ('ADMIN','bill.approve.finance'),
+  ('ADMIN','payment.view'),
+  ('ADMIN','payment.record'),
+  ('ADMIN','payment.reverse'),
+  ('ADMIN','notifications.monitor'),
+  ('ADMIN','notifications.retry'),
+  ('ADMIN','notifications.configure'),
+  ('ADMIN','reports.view'),
+  ('ADMIN','reports.export'),
+  ('ADMIN','audit.view'),
+  ('ENGINEERING_MANAGER','org.view'),
+  ('ENGINEERING_MANAGER','users.view'),
+  ('ENGINEERING_MANAGER','users.invite'),
+  ('ENGINEERING_MANAGER','users.update'),
+  ('ENGINEERING_MANAGER','users.suspend'),
+  ('ENGINEERING_MANAGER','users.reset_password'),
+  ('ENGINEERING_MANAGER','users.assign_roles'),
+  ('ENGINEERING_MANAGER','roles.view'),
+  ('ENGINEERING_MANAGER','stations.view'),
+  ('ENGINEERING_MANAGER','stations.manage'),
+  ('ENGINEERING_MANAGER','assets.view'),
+  ('ENGINEERING_MANAGER','assets.manage'),
+  ('ENGINEERING_MANAGER','contractors.view'),
+  ('ENGINEERING_MANAGER','contractors.manage'),
+  ('ENGINEERING_MANAGER','technicians.view'),
+  ('ENGINEERING_MANAGER','technicians.manage'),
+  ('ENGINEERING_MANAGER','engineer_assignments.view'),
+  ('ENGINEERING_MANAGER','engineer_assignments.manage'),
+  ('ENGINEERING_MANAGER','slas.view'),
+  ('ENGINEERING_MANAGER','slas.manage'),
+  ('ENGINEERING_MANAGER','rates.view'),
+  ('ENGINEERING_MANAGER','rates.manage'),
+  ('ENGINEERING_MANAGER','requests.view'),
+  ('ENGINEERING_MANAGER','requests.create'),
+  ('ENGINEERING_MANAGER','requests.accept'),
+  ('ENGINEERING_MANAGER','requests.reject'),
+  ('ENGINEERING_MANAGER','rfq.view'),
+  ('ENGINEERING_MANAGER','rfq.create'),
+  ('ENGINEERING_MANAGER','rfq.edit'),
+  ('ENGINEERING_MANAGER','rfq.submit'),
+  ('ENGINEERING_MANAGER','rfq.release'),
+  ('ENGINEERING_MANAGER','rfq.award'),
+  ('ENGINEERING_MANAGER','quotes.view'),
+  ('ENGINEERING_MANAGER','quotes.select'),
+  ('ENGINEERING_MANAGER','pm.view'),
+  ('ENGINEERING_MANAGER','pm.create'),
+  ('ENGINEERING_MANAGER','pm.edit'),
+  ('ENGINEERING_MANAGER','pm.activate'),
+  ('ENGINEERING_MANAGER','pm.allocate'),
+  ('ENGINEERING_MANAGER','pm.archive'),
+  ('ENGINEERING_MANAGER','lpo.view'),
+  ('ENGINEERING_MANAGER','lpo.create'),
+  ('ENGINEERING_MANAGER','lpo.edit'),
+  ('ENGINEERING_MANAGER','lpo.submit'),
+  ('ENGINEERING_MANAGER','lpo.approve'),
+  ('ENGINEERING_MANAGER','lpo.issue'),
+  ('ENGINEERING_MANAGER','lpo.cancel'),
+  ('ENGINEERING_MANAGER','lpo.close'),
+  ('ENGINEERING_MANAGER','workorder.view'),
+  ('ENGINEERING_MANAGER','workorder.create'),
+  ('ENGINEERING_MANAGER','workorder.assign'),
+  ('ENGINEERING_MANAGER','workorder.cancel'),
+  ('ENGINEERING_MANAGER','jsa.view'),
+  ('ENGINEERING_MANAGER','jobcard.view'),
+  ('ENGINEERING_MANAGER','cost.view'),
+  ('ENGINEERING_MANAGER','cost.approve'),
+  ('ENGINEERING_MANAGER','bill.view'),
+  ('ENGINEERING_MANAGER','bill.approve.engineering'),
+  ('ENGINEERING_MANAGER','payment.view'),
+  ('ENGINEERING_MANAGER','notifications.monitor'),
+  ('ENGINEERING_MANAGER','notifications.retry'),
+  ('ENGINEERING_MANAGER','notifications.configure'),
+  ('ENGINEERING_MANAGER','reports.view'),
+  ('ENGINEERING_MANAGER','reports.export'),
+  ('ENGINEERING_MANAGER','audit.view'),
+  ('ENGINEER','org.view'),
+  ('ENGINEER','stations.view'),
+  ('ENGINEER','assets.view'),
+  ('ENGINEER','contractors.view'),
+  ('ENGINEER','technicians.view'),
+  ('ENGINEER','engineer_assignments.view'),
+  ('ENGINEER','slas.view'),
+  ('ENGINEER','rates.view'),
+  ('ENGINEER','requests.view'),
+  ('ENGINEER','requests.create'),
+  ('ENGINEER','rfq.view'),
+  ('ENGINEER','rfq.create'),
+  ('ENGINEER','rfq.edit'),
+  ('ENGINEER','rfq.submit'),
+  ('ENGINEER','quotes.view'),
+  ('ENGINEER','pm.view'),
+  ('ENGINEER','pm.create'),
+  ('ENGINEER','pm.edit'),
+  ('ENGINEER','lpo.view'),
+  ('ENGINEER','lpo.create'),
+  ('ENGINEER','lpo.edit'),
+  ('ENGINEER','lpo.submit'),
+  ('ENGINEER','workorder.view'),
+  ('ENGINEER','workorder.create'),
+  ('ENGINEER','jsa.view'),
+  ('ENGINEER','jobcard.view'),
+  ('ENGINEER','reports.view'),
+  ('STATION_MANAGER','org.view'),
+  ('STATION_MANAGER','requests.view'),
+  ('STATION_MANAGER','requests.create'),
+  ('STATION_MANAGER','workorder.view'),
+  ('STATION_MANAGER','arrival.confirm'),
+  ('STATION_MANAGER','jobcard.view'),
+  ('STATION_MANAGER','jobcard.confirm'),
+  ('FINANCIAL_CONTROLLER','org.view'),
+  ('FINANCIAL_CONTROLLER','contractors.view'),
+  ('FINANCIAL_CONTROLLER','rates.view'),
+  ('FINANCIAL_CONTROLLER','cost.view'),
+  ('FINANCIAL_CONTROLLER','bill.view'),
+  ('FINANCIAL_CONTROLLER','bill.approve.finance'),
+  ('FINANCIAL_CONTROLLER','payment.view'),
+  ('FINANCIAL_CONTROLLER','payment.record'),
+  ('FINANCIAL_CONTROLLER','payment.reverse'),
+  ('FINANCIAL_CONTROLLER','reports.view'),
+  ('FINANCIAL_CONTROLLER','reports.export'),
+  ('FINANCIAL_CONTROLLER','audit.view'),
+  ('CONTRACTOR','org.view'),
+  ('CONTRACTOR','technicians.view'),
+  ('CONTRACTOR','technicians.manage'),
+  ('CONTRACTOR','quotes.view'),
+  ('CONTRACTOR','quotes.submit'),
+  ('CONTRACTOR','lpo.view'),
+  ('CONTRACTOR','workorder.view'),
+  ('CONTRACTOR','workorder.accept'),
+  ('CONTRACTOR','workorder.assign_technician'),
+  ('CONTRACTOR','jsa.view'),
+  ('CONTRACTOR','jobcard.view'),
+  ('CONTRACTOR','cost.view'),
+  ('CONTRACTOR','cost.create'),
+  ('CONTRACTOR','cost.submit'),
+  ('CONTRACTOR','bill.view'),
+  ('CONTRACTOR','bill.create'),
+  ('CONTRACTOR','bill.submit'),
+  ('TECHNICIAN','workorder.view'),
+  ('TECHNICIAN','workorder.execute'),
+  ('TECHNICIAN','jsa.view'),
+  ('TECHNICIAN','jsa.submit'),
+  ('TECHNICIAN','jobcard.view'),
+  ('TECHNICIAN','jobcard.create'),
+  ('TECHNICIAN','jobcard.submit'),
+  ('VIEWER','org.view'),
+  ('VIEWER','stations.view'),
+  ('VIEWER','assets.view'),
+  ('VIEWER','slas.view'),
+  ('VIEWER','requests.view'),
+  ('VIEWER','pm.view'),
+  ('VIEWER','workorder.view'),
+  ('VIEWER','jsa.view'),
+  ('VIEWER','jobcard.view'),
+  ('VIEWER','reports.view');
+
+SELECT e.permission_key AS missing_permission
+FROM (SELECT DISTINCT permission_key FROM _expected_rbac) e
+LEFT JOIN permissions p ON p.key = e.permission_key
+WHERE p.id IS NULL ORDER BY e.permission_key;
+
+WITH standard(code) AS (VALUES ('OWNER'),('ADMIN'),('ENGINEERING_MANAGER'),('ENGINEER'),('STATION_MANAGER'),('FINANCIAL_CONTROLLER'),('CONTRACTOR'),('TECHNICIAN'),('VIEWER'))
+SELECT standard.code AS missing_standard_role FROM standard
+LEFT JOIN roles r ON r.org_id IS NULL AND r.code = standard.code
+WHERE r.id IS NULL ORDER BY standard.code;
+
+SELECT r.org_id, r.code, r.name, e.permission_key AS missing_grant
+FROM roles r JOIN _expected_rbac e ON e.role_code = r.code
+JOIN permissions p ON p.key = e.permission_key
+LEFT JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission_id = p.id
+WHERE rp.role_id IS NULL ORDER BY r.code, r.org_id, e.permission_key;
+
+SELECT r.org_id, r.code, r.name, p.key AS unexpected_grant
+FROM roles r JOIN role_permissions rp ON rp.role_id = r.id
+JOIN permissions p ON p.id = rp.permission_id
+LEFT JOIN _expected_rbac e ON e.role_code = r.code AND e.permission_key = p.key
+WHERE r.code IN ('OWNER','ADMIN','ENGINEERING_MANAGER','ENGINEER','STATION_MANAGER','FINANCIAL_CONTROLLER','CONTRACTOR','TECHNICIAN','VIEWER') AND e.permission_key IS NULL
+ORDER BY r.code, r.org_id, p.key;
+
+SELECT r.org_id, r.code, r.name, COUNT(rp.permission_id) AS grant_count
+FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id
+WHERE r.code IN ('OWNER','ADMIN','ENGINEERING_MANAGER','ENGINEER','STATION_MANAGER','FINANCIAL_CONTROLLER','CONTRACTOR','TECHNICIAN','VIEWER') GROUP BY r.id, r.org_id, r.code, r.name
+ORDER BY r.code, r.org_id;
+
+SELECT r.org_id, r.code, r.name, COUNT(rp.permission_id) AS custom_grant_count
+FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id
+WHERE r.code NOT IN ('OWNER','ADMIN','ENGINEERING_MANAGER','ENGINEER','STATION_MANAGER','FINANCIAL_CONTROLLER','CONTRACTOR','TECHNICIAN','VIEWER') GROUP BY r.id, r.org_id, r.code, r.name
+ORDER BY r.org_id, r.code;
+
+DROP TABLE temp._expected_rbac;

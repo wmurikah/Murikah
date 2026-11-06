@@ -19,7 +19,7 @@ export interface SlaOption {
 
 export type RequestActionResult =
   | { ok: true }
-  | { ok: false; code: 'not_found' | 'conflict'; message: string };
+  | { ok: false; code: 'not_found' | 'conflict' | 'forbidden'; message: string };
 
 export async function getRequestAssignmentInfo(
   db: Client,
@@ -60,13 +60,20 @@ export async function acceptRequest(
   try {
     const upd = await tx.execute({
       sql: `UPDATE service_requests
-               SET status = 'ACCEPTED', assigned_engineer_id = ?, accepted_at = ?, updated_at = ?
-             WHERE id = ? AND org_id = ? AND status = 'OPEN'`,
-      args: [userId, now, now, requestId, orgId],
+               SET status = 'ACCEPTED', accepted_at = ?, updated_at = ?
+             WHERE id = ? AND org_id = ? AND status = 'OPEN' AND raised_by <> ?`,
+      args: [now, now, requestId, orgId, userId],
     });
     if (upd.rowsAffected === 0) {
       await tx.rollback();
-      return { ok: false, code: 'conflict', message: 'The request is not open.' };
+      const own = await db.execute({
+        sql: `SELECT 1 FROM service_requests
+               WHERE id = ? AND org_id = ? AND raised_by = ? LIMIT 1`,
+        args: [requestId, orgId, userId],
+      });
+      return own.rows.length
+        ? { ok: false, code: 'forbidden', message: 'A request maker cannot approve it.' }
+        : { ok: false, code: 'conflict', message: 'The request is not open.' };
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
@@ -94,12 +101,19 @@ export async function rejectRequest(
     const upd = await tx.execute({
       sql: `UPDATE service_requests
                SET status = 'REJECTED', rejection_reason = ?, updated_at = ?
-             WHERE id = ? AND org_id = ? AND status = 'OPEN'`,
-      args: [reason || null, now, requestId, orgId],
+             WHERE id = ? AND org_id = ? AND status = 'OPEN' AND raised_by <> ?`,
+      args: [reason || null, now, requestId, orgId, userId],
     });
     if (upd.rowsAffected === 0) {
       await tx.rollback();
-      return { ok: false, code: 'conflict', message: 'The request is not open.' };
+      const own = await db.execute({
+        sql: `SELECT 1 FROM service_requests
+               WHERE id = ? AND org_id = ? AND raised_by = ? LIMIT 1`,
+        args: [requestId, orgId, userId],
+      });
+      return own.rows.length
+        ? { ok: false, code: 'forbidden', message: 'A request maker cannot reject it.' }
+        : { ok: false, code: 'conflict', message: 'The request is not open.' };
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)

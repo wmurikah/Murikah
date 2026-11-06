@@ -3,6 +3,7 @@ import { liveSchemaReconciliation } from './002_live_schema_reconciliation.ts';
 import { passwordSessionVersion } from './003_password_session_version.ts';
 import { authRecoveryAndMfa } from './004_auth_recovery_and_mfa.ts';
 import { sessionAndLoginSecurity } from './005_session_and_login_security.ts';
+import { comprehensiveRbac } from './006_comprehensive_rbac.ts';
 
 export const migrations = [
   initialSchema,
@@ -10,4 +11,5 @@ export const migrations = [
   passwordSessionVersion,
   authRecoveryAndMfa,
   sessionAndLoginSecurity,
+  comprehensiveRbac,
 ];

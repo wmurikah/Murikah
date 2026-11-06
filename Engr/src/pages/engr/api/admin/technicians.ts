@@ -45,6 +45,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     phone: str(body.phone).trim() || null,
     email: str(body.email).trim() || null,
     status: str(body.status).trim() || 'ACTIVE',
+    portalUserId: str(body.portal_user_id).trim() || null,
   };
 
   const ctx = { orgId: engr.orgId, userId: engr.userId, contractorId: contractorScope };

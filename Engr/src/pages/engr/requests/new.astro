@@ -22,6 +22,7 @@ import {
   type AssetOption,
 } from '@engr/repos/requests';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -43,10 +44,11 @@ let categories: CategoryOption[] = [];
 let assets: AssetOption[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
+  const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : undefined;
   [stations, categories, assets] = await Promise.all([
-    listStations(db, engr.orgId),
+    listStations(db, engr.orgId, stationManagerId),
     listAssetCategories(db, engr.orgId),
-    listAssetOptions(db, engr.orgId),
+    listAssetOptions(db, engr.orgId, stationManagerId),
   ]);
 }
 ---

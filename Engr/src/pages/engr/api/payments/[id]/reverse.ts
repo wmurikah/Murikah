@@ -13,7 +13,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/payments';
-  if (!engr.perms.includes('payment.record')) {
+  if (!engr.perms.includes('payment.reverse')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

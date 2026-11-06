@@ -6,10 +6,11 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import WorkOrderDetailView from '@/components/engr/WorkOrderDetail.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getWorkOrderDetail, type WorkOrderDetail } from '@engr/repos/workOrders';
+import { getWorkOrderForActor, type WorkOrderDetail } from '@engr/repos/workOrders';
 import { getJobCard, listSpares, type JobCardRecord, type SpareRow } from '@engr/repos/jobCards';
 import { availableActions, type WoAction, type WoStatus } from '@engr/workflow/workOrderState';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -25,13 +26,14 @@ let spares: SpareRow[] = [];
 
 if (allowed && id) {
   const db = await getDb(getEngrEnv());
-  wo = await getWorkOrderDetail(db, engr.orgId, id);
+  wo = await getWorkOrderForActor(db, engr.orgId, id, actorDataScope(engr.roles), engr.userId);
   if (wo) {
     actions = availableActions(
       { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },
       {
         status: wo.status as WoStatus,
         stationManagerId: wo.stationManagerId,
+        contractorPortalUserId: wo.contractorPortalUserId,
         technicianPortalUserId: wo.technicianPortalUserId,
       },
     );

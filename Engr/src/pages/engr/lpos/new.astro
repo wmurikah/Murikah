@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Create an LPO for a contractor with a base station. Gate: workorder.create and workorder.assign. */
+/** Create an LPO draft for a contractor with a base station. Gate: lpo.create. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -12,7 +12,7 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
+const allowed = can(Astro.locals, 'lpo.create');
 const errorCode = Astro.url.searchParams.get('error');
 
 let contractors: Option[] = [];

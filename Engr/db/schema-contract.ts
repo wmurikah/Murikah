@@ -66,6 +66,8 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   lpos: [
     'region_id',
     'notes',
+    'submitted_at',
+    'submitted_by',
     'subtotal_minor',
     'mileage_minor',
     'approved_by',
@@ -99,6 +101,8 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'currency',
     'created_at',
   ],
+  rfqs: ['submitted_at', 'submitted_by', 'released_at', 'released_by'],
+  pm_schedules: ['created_by', 'activated_by', 'activated_at'],
   auth_tokens: ['id', 'org_id', 'user_id', 'purpose', 'token_hash', 'expires_at', 'used_at'],
   user_mfa: [
     'user_id',
@@ -193,6 +197,10 @@ export const REQUIRED_INDEXES = [
   'ix_auth_sessions_user_active',
   'ix_auth_login_events_account',
   'ix_auth_login_events_ip',
+  'ux_contractors_portal_user',
+  'ux_technicians_portal_user',
+  'ux_engineer_assignments_station',
+  'ux_engineer_assignments_category',
 ] as const;
 
 const INDEX_CONTRACTS = [
@@ -247,6 +255,34 @@ const INDEX_CONTRACTS = [
     unique: false,
     partial: false,
     columns: ['user_id', 'used_at'],
+  },
+  {
+    table: 'contractors',
+    name: 'ux_contractors_portal_user',
+    unique: true,
+    partial: true,
+    columns: ['portal_user_id'],
+  },
+  {
+    table: 'technicians',
+    name: 'ux_technicians_portal_user',
+    unique: true,
+    partial: true,
+    columns: ['portal_user_id'],
+  },
+  {
+    table: 'engineer_assignments',
+    name: 'ux_engineer_assignments_station',
+    unique: true,
+    partial: true,
+    columns: ['org_id', 'station_id'],
+  },
+  {
+    table: 'engineer_assignments',
+    name: 'ux_engineer_assignments_category',
+    unique: true,
+    partial: true,
+    columns: ['org_id', 'category_id'],
   },
 ] as const;
 

@@ -28,6 +28,18 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'reports.view');
+const canWorkOrders = can(Astro.locals, 'workorder.view');
+const canRequests = can(Astro.locals, 'requests.view');
+const canPm = can(Astro.locals, 'pm.view');
+const canCosts = can(Astro.locals, 'cost.view');
+const canBills = can(Astro.locals, 'bill.view');
+
+if (!allowed) {
+  if (engr.roles.includes('TECHNICIAN')) return Astro.redirect('/technician/workorders');
+  if (engr.roles.includes('CONTRACTOR')) return Astro.redirect('/contractor/workorders');
+  if (engr.roles.includes('STATION_MANAGER')) return Astro.redirect('/workorders');
+  return Astro.redirect('/notifications');
+}
 
 const db = await getDb(getEngrEnv());
 
@@ -75,10 +87,19 @@ const spendByContractor = charts
       <p class="engr-lead">A view of open work across your organisation.</p>
     </div>
     {
-      can(Astro.locals, 'requests.create') && (
-        <a href="/requests/new" class="engr-btn engr-btn--primary">
-          Raise a request
-        </a>
+      (
+        <div class="engr-actionbar">
+          {can(Astro.locals, 'reports.export') && (
+            <a href="/api/reports/export" class="engr-btn engr-btn--secondary">
+              Export work orders
+            </a>
+          )}
+          {can(Astro.locals, 'requests.create') && (
+            <a href="/requests/new" class="engr-btn engr-btn--primary">
+              Raise a request
+            </a>
+          )}
+        </div>
       )
     }
   </div>
@@ -86,15 +107,17 @@ const spendByContractor = charts
   {
     (can(Astro.locals, 'arrival.confirm') ||
       can(Astro.locals, 'rfq.award') ||
-      can(Astro.locals, 'cost.approve.l1') ||
-      can(Astro.locals, 'reports.view')) && (
+      can(Astro.locals, 'cost.approve') ||
+      can(Astro.locals, 'notifications.monitor')) && (
       <nav class="engr-toggle" aria-label="Queues" style="margin:0 0 1.25rem;flex-wrap:wrap">
         {can(Astro.locals, 'arrival.confirm') && <a href="/station/confirmations">Confirmations</a>}
         {can(Astro.locals, 'rfq.award') && (
           <a href="/procurement/approvals">Procurement approvals</a>
         )}
-        {can(Astro.locals, 'cost.approve.l1') && <a href="/mileage/approvals">Mileage approvals</a>}
-        {can(Astro.locals, 'reports.view') && <a href="/ops/notifications">Notifications ops</a>}
+        {can(Astro.locals, 'cost.approve') && <a href="/mileage/approvals">Mileage approvals</a>}
+        {can(Astro.locals, 'notifications.monitor') && (
+          <a href="/ops/notifications">Notifications ops</a>
+        )}
       </nav>
     )
   }
@@ -108,93 +131,117 @@ const spendByContractor = charts
       data && (
         <>
           <div class="engr-cards">
-            <a class="engr-card" href="/workorders" aria-labelledby="card-wo">
-              <h2 class="engr-card__label" id="card-wo">
-                Open work orders
-              </h2>
-              <p class="engr-card__count">{data.openWorkOrders.count}</p>
-              <p class="engr-card__trend">{data.openWorkOrders.recent} new this week</p>
-              <p class="engr-card__cue">View all work orders &rarr;</p>
-            </a>
+            {canWorkOrders && (
+              <a class="engr-card" href="/workorders" aria-labelledby="card-wo">
+                <h2 class="engr-card__label" id="card-wo">
+                  Open work orders
+                </h2>
+                <p class="engr-card__count">{data.openWorkOrders.count}</p>
+                <p class="engr-card__trend">{data.openWorkOrders.recent} new this week</p>
+                <p class="engr-card__cue">View all work orders &rarr;</p>
+              </a>
+            )}
 
-            <a class="engr-card" href="/costs/approvals" aria-labelledby="card-cost">
-              <h2 class="engr-card__label" id="card-cost">
-                Pending cost approvals
-              </h2>
-              <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
-              <p class="engr-card__trend">{data.pendingCostApprovals.recent} new this week</p>
-              <p class="engr-card__cue">Go to cost approvals &rarr;</p>
-            </a>
+            {canCosts && (
+              <a class="engr-card" href="/costs/approvals" aria-labelledby="card-cost">
+                <h2 class="engr-card__label" id="card-cost">
+                  Pending cost approvals
+                </h2>
+                <p class="engr-card__count">{data.pendingCostApprovals.count}</p>
+                <p class="engr-card__trend">{data.pendingCostApprovals.recent} new this week</p>
+                <p class="engr-card__cue">Go to cost approvals &rarr;</p>
+              </a>
+            )}
 
-            <a class="engr-card" href="/bills/approvals" aria-labelledby="card-bill">
-              <h2 class="engr-card__label" id="card-bill">
-                Pending bill approvals
-              </h2>
-              <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
-              <p class="engr-card__trend">{data.pendingBillApprovals.recent} new this week</p>
-              <p class="engr-card__cue">Go to bill approvals &rarr;</p>
-            </a>
+            {canBills && (
+              <a class="engr-card" href="/bills/approvals" aria-labelledby="card-bill">
+                <h2 class="engr-card__label" id="card-bill">
+                  Pending bill approvals
+                </h2>
+                <p class="engr-card__count">{data.pendingBillApprovals.count}</p>
+                <p class="engr-card__trend">{data.pendingBillApprovals.recent} new this week</p>
+                <p class="engr-card__cue">Go to bill approvals &rarr;</p>
+              </a>
+            )}
 
-            <a class="engr-card" href="/pm/calendar" aria-labelledby="card-pm">
-              <h2 class="engr-card__label" id="card-pm">
-                Upcoming maintenance
-              </h2>
-              <p class="engr-card__count">{data.upcomingPm.count}</p>
-              <p class="engr-card__trend">{data.upcomingPm.recent} due this week</p>
-              <p class="engr-card__cue">Open the maintenance calendar &rarr;</p>
-            </a>
+            {canPm && (
+              <a class="engr-card" href="/pm/calendar" aria-labelledby="card-pm">
+                <h2 class="engr-card__label" id="card-pm">
+                  Upcoming maintenance
+                </h2>
+                <p class="engr-card__count">{data.upcomingPm.count}</p>
+                <p class="engr-card__trend">{data.upcomingPm.recent} due this week</p>
+                <p class="engr-card__cue">Open the maintenance calendar &rarr;</p>
+              </a>
+            )}
           </div>
 
           {charts && (
             <section aria-labelledby="charts-heading" style="margin-top:1.75rem">
               <h2 id="charts-heading">Analytics</h2>
               <div class="engr-charts">
-                <EngrDonut
-                  title="Work orders by status"
-                  description="Every work order by status. Select a slice to open that list."
-                  valueHeading="Work orders"
-                  data={woByStatus}
-                />
-                <EngrDonut
-                  title="Requests by priority"
-                  description="Every request by priority. Select a slice to open that list."
-                  valueHeading="Requests"
-                  data={reqByPriority}
-                />
-                <EngrPipeline
-                  title="Cost approval pipeline"
-                  description="Work costs waiting at each approval stage."
-                  data={costPipeline}
-                />
-                <EngrPipeline
-                  title="Bill approval pipeline"
-                  description="Bills through the three levels to paid."
-                  data={billPipeline}
-                />
-                <EngrLine
-                  title="Requests over time"
-                  description="Service requests raised each month, last six months. Select a month to open its list."
-                  valueHeading="Requests"
-                  data={charts.requestsByMonth}
-                />
-                <EngrLine
-                  title="Upcoming maintenance"
-                  description="Occurrences due per week for the next eight weeks. Select a week to open its list."
-                  valueHeading="Due"
-                  data={charts.pmByWeek}
-                />
-                <EngrBarChart
-                  title="Approved cost by contractor"
-                  description="Top ten contractors by approved cost value."
-                  valueHeading="Approved cost"
-                  data={spendByContractor}
-                />
-                <EngrBarChart
-                  title="Open work by station"
-                  description="Open work orders at each station, top ten. Select a station to open its list."
-                  valueHeading="Open work orders"
-                  data={openByStation}
-                />
+                {canWorkOrders && (
+                  <EngrDonut
+                    title="Work orders by status"
+                    description="Every work order by status. Select a slice to open that list."
+                    valueHeading="Work orders"
+                    data={woByStatus}
+                  />
+                )}
+                {canRequests && (
+                  <EngrDonut
+                    title="Requests by priority"
+                    description="Every request by priority. Select a slice to open that list."
+                    valueHeading="Requests"
+                    data={reqByPriority}
+                  />
+                )}
+                {canCosts && (
+                  <EngrPipeline
+                    title="Cost approval pipeline"
+                    description="Work costs waiting at each approval stage."
+                    data={costPipeline}
+                  />
+                )}
+                {canBills && (
+                  <EngrPipeline
+                    title="Bill approval pipeline"
+                    description="Bills through the three levels to paid."
+                    data={billPipeline}
+                  />
+                )}
+                {canRequests && (
+                  <EngrLine
+                    title="Requests over time"
+                    description="Service requests raised each month, last six months. Select a month to open its list."
+                    valueHeading="Requests"
+                    data={charts.requestsByMonth}
+                  />
+                )}
+                {canPm && (
+                  <EngrLine
+                    title="Upcoming maintenance"
+                    description="Occurrences due per week for the next eight weeks. Select a week to open its list."
+                    valueHeading="Due"
+                    data={charts.pmByWeek}
+                  />
+                )}
+                {canCosts && (
+                  <EngrBarChart
+                    title="Approved cost by contractor"
+                    description="Top ten contractors by approved cost value."
+                    valueHeading="Approved cost"
+                    data={spendByContractor}
+                  />
+                )}
+                {canWorkOrders && (
+                  <EngrBarChart
+                    title="Open work by station"
+                    description="Open work orders at each station, top ten. Select a station to open its list."
+                    valueHeading="Open work orders"
+                    data={openByStation}
+                  />
+                )}
               </div>
             </section>
           )}

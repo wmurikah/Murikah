@@ -1,7 +1,7 @@
 export const prerender = false;
 
 /**
- * Close the LPO. Gate: workorder.create and workorder.assign. Guarded in the
+ * Close the LPO. Gate: lpo.close. Guarded in the
  * repository: it closes only when every attached work order is closed or
  * cancelled, else a clean 409.
  */
@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = `/lpos/${id}`;
 
-  if (!(engr.perms.includes('workorder.create') && engr.perms.includes('workorder.assign'))) {
+  if (!engr.perms.includes('lpo.close')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

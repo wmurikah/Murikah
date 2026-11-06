@@ -44,7 +44,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? jsonResponse({ ok: true, id: result.id }, deleteId ? 200 : 201)
       : seeOther('/admin/engineers?saved=1');
   }
-  const status = result.code === 'not_found' ? 404 : 422;
+  const status = result.code === 'not_found' ? 404 : result.code === 'conflict' ? 409 : 422;
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, status)
     : seeOther(`/admin/engineers?error=${result.code}`);

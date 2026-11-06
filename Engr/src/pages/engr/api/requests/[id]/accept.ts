@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (result.ok) {
     return wantsJson(request) ? jsonResponse({ ok: true }, 200) : redirectResponse(request, back);
   }
-  const status = result.code === 'conflict' ? 409 : 404;
+  const status = result.code === 'forbidden' ? 403 : result.code === 'conflict' ? 409 : 404;
   return wantsJson(request)
     ? jsonResponse({ ok: false, error: result.code, message: result.message }, status)
     : redirectResponse(request, back, `error=${result.code}`);

@@ -4,8 +4,9 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getWorkOrderDetail } from '@engr/repos/workOrders';
+import { getWorkOrderForActor } from '@engr/repos/workOrders';
 import { jsonResponse } from '@engr/workflow/respond';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 export const GET: APIRoute = async ({ locals, params }) => {
   const engr = locals.engr;
@@ -15,7 +16,13 @@ export const GET: APIRoute = async ({ locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
 
   const db = await getDb(getEngrEnv());
-  const workOrder = await getWorkOrderDetail(db, engr.orgId, id);
+  const workOrder = await getWorkOrderForActor(
+    db,
+    engr.orgId,
+    id,
+    actorDataScope(engr.roles),
+    engr.userId,
+  );
   if (!workOrder) return jsonResponse({ error: 'not_found' }, 404);
   return jsonResponse({ ok: true, workOrder }, 200);
 };

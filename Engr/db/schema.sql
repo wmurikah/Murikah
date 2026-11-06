@@ -285,7 +285,7 @@ CREATE TABLE lpos (
   status          TEXT NOT NULL DEFAULT 'OPEN'
                     CHECK (status IN ('OPEN','IN_PROGRESS','CLOSED','CANCELLED')),
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), region_id TEXT REFERENCES regions(id), notes TEXT, subtotal_minor INTEGER NOT NULL DEFAULT 0, mileage_minor INTEGER NOT NULL DEFAULT 0, approved_by TEXT REFERENCES users(id), approved_at TEXT, issued_by TEXT REFERENCES users(id), issued_at TEXT, sealed_hash TEXT, sealed_at TEXT, version INTEGER NOT NULL DEFAULT 1, supersedes_id TEXT REFERENCES lpos(id), superseded_by_id TEXT REFERENCES lpos(id), cancelled_at TEXT, cancel_reason TEXT,
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), region_id TEXT REFERENCES regions(id), notes TEXT, subtotal_minor INTEGER NOT NULL DEFAULT 0, mileage_minor INTEGER NOT NULL DEFAULT 0, approved_by TEXT REFERENCES users(id), approved_at TEXT, issued_by TEXT REFERENCES users(id), issued_at TEXT, sealed_hash TEXT, sealed_at TEXT, version INTEGER NOT NULL DEFAULT 1, supersedes_id TEXT REFERENCES lpos(id), superseded_by_id TEXT REFERENCES lpos(id), cancelled_at TEXT, cancel_reason TEXT, submitted_at TEXT, submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   UNIQUE (org_id, lpo_no)
 );
 
@@ -464,7 +464,7 @@ CREATE TABLE pm_schedules (
                           CHECK (status IN ('ACTIVE','PAUSED','ARCHIVED')),
   created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
+, created_by TEXT REFERENCES users(id) ON DELETE SET NULL, activated_by TEXT REFERENCES users(id) ON DELETE SET NULL, activated_at TEXT);
 
 CREATE TABLE quote_items (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -559,7 +559,7 @@ CREATE TABLE rfqs (
                            CHECK (status IN ('OPEN','CLOSED','AWARDED',
                                              'SENT_TO_PROCUREMENT','CANCELLED')),
   created_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), submitted_at TEXT, submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL, released_at TEXT, released_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   UNIQUE (org_id, rfq_no)
 );
 
@@ -926,7 +926,19 @@ CREATE INDEX ix_mfa_recovery_user ON mfa_recovery_codes(user_id, used_at);
 
 CREATE INDEX ix_org_parent ON organisations(parent_org_id);
 
+CREATE UNIQUE INDEX ux_contractors_portal_user
+       ON contractors(portal_user_id) WHERE portal_user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX ux_engineer_assignments_category
+       ON engineer_assignments(org_id, category_id) WHERE scope_type = 'CATEGORY';
+
+CREATE UNIQUE INDEX ux_engineer_assignments_station
+       ON engineer_assignments(org_id, station_id) WHERE scope_type = 'STATION';
+
 CREATE UNIQUE INDEX ux_roles_system ON roles(code) WHERE org_id IS NULL;
+
+CREATE UNIQUE INDEX ux_technicians_portal_user
+       ON technicians(portal_user_id) WHERE portal_user_id IS NOT NULL;
 
 CREATE UNIQUE INDEX ux_users_email ON users(email);
 
