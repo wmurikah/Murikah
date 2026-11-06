@@ -7,6 +7,7 @@ import { getDb } from '@engr/db';
 import { getCostDetail } from '@engr/repos/workCosts';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { jsonResponse } from '@engr/workflow/respond';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 export const GET: APIRoute = async ({ locals, params }) => {
   const engr = locals.engr;
@@ -18,9 +19,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   const cost = await getCostDetail(db, engr.orgId, id);
   if (!cost) return jsonResponse({ ok: false, error: 'not_found' }, 404);
 
-  const isApprover =
-    engr.perms.includes('cost.approve.l1') || engr.perms.includes('cost.approve.l2');
-  if (!isApprover) {
+  if (actorDataScope(engr.roles) === 'contractor') {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
     if (!contractorId || contractorId !== cost.contractorId) {
       return jsonResponse({ error: 'forbidden' }, 403);

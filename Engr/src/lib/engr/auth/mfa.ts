@@ -1,5 +1,24 @@
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
+export type MfaKeyResolution = { ok: true; key: string } | { ok: false; response: Response };
+
+/** Resolve the optional Worker secret at the point MFA is used. A partial
+ * deployment returns the user to a useful screen instead of throwing a raw
+ * Worker 500, while no MFA operation is allowed without the key. */
+export function resolveMfaEncryptionKey(
+  configured: string | undefined,
+  errorLocation: string,
+): MfaKeyResolution {
+  if (configured) return { ok: true, key: configured };
+  return {
+    ok: false,
+    response: new Response(null, {
+      status: 303,
+      headers: { location: errorLocation, 'cache-control': 'no-store' },
+    }),
+  };
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);

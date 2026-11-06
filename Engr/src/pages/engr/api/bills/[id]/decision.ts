@@ -1,8 +1,8 @@
 export const prerender = false;
 
 /**
- * Level-aware bill decision. Level 1 gates on bill.approve.l1, level 2 on
- * bill.approve.l2, level 3 on bill.approve.l3. The ladder enforces segregation
+ * Bill decision. Engineering approval uses level 1 (or legacy level 2); final
+ * finance approval uses level 3. The ladder enforces segregation
  * of duties and the status guard: a stale or out-of-sequence action is a 409, an
  * SoD failure a 403.
  */
@@ -13,9 +13,9 @@ import { decideBill } from '@engr/workflow/billState';
 import { jsonResponse, wantsJson, redirectResponse, readBody, str } from '@engr/workflow/respond';
 
 const LEVEL_KEY: Record<number, string> = {
-  1: 'bill.approve.l1',
-  2: 'bill.approve.l2',
-  3: 'bill.approve.l3',
+  1: 'bill.approve.engineering',
+  2: 'bill.approve.engineering',
+  3: 'bill.approve.finance',
 };
 
 export const POST: APIRoute = async ({ request, locals, params }) => {

@@ -5,7 +5,8 @@
  * never written here. Every query is org-scoped.
  */
 import type { Client } from '@libsql/client/web';
-import { enqueue } from '../notify';
+import { enqueue } from '../notify.ts';
+import { independentActor } from '../workflow/makerChecker.ts';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -58,6 +59,17 @@ export async function createLpo(
     return { ok: false, code: 'invalid', message: 'Choose an active contractor.' };
   }
 
+  if (input.baseStationId) {
+    const station = await db.execute({
+      sql: `SELECT 1 FROM stations
+             WHERE id = ? AND org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE' LIMIT 1`,
+      args: [input.baseStationId, orgId],
+    });
+    if (!station.rows[0]) {
+      return { ok: false, code: 'invalid', message: 'Choose an active base station.' };
+    }
+  }
+
   const year = new Date().getUTCFullYear();
   const base = await countLpoForYear(db, orgId, year);
 
@@ -76,15 +88,6 @@ export async function createLpo(
               VALUES (?, ?, 'lpo.create', 'lpo', ?, ?)`,
         args: [orgId, ctx.userId, id, JSON.stringify({ lpo_no: lpoNo })],
       });
-      await enqueue(tx, orgId, {
-        recipientType: 'contractor',
-        recipientId: input.contractorId,
-        templateKey: 'lpo.issued',
-        subject: `New LPO ${lpoNo}`,
-        body: `LPO ${lpoNo} has been issued to you. Work orders for the trip will appear under it.`,
-        entityType: 'lpo',
-        entityId: id,
-      });
       await tx.commit();
       return { ok: true, lpoId: id, lpoNo };
     } catch (err) {
@@ -101,11 +104,15 @@ interface LpoCore {
   contractorId: string;
   baseStationId: string | null;
   status: string;
+  submittedAt: string | null;
+  submittedBy: string | null;
+  createdBy: string;
 }
 
 async function loadLpo(db: Client, orgId: string, lpoId: string): Promise<LpoCore | null> {
   const res = await db.execute({
-    sql: `SELECT id, contractor_id, base_station_id, status FROM lpos WHERE id = ? AND org_id = ? LIMIT 1`,
+    sql: `SELECT id, contractor_id, base_station_id, status, submitted_at, submitted_by, created_by
+            FROM lpos WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [lpoId, orgId],
   });
   const row = res.rows[0];
@@ -115,25 +122,16 @@ async function loadLpo(db: Client, orgId: string, lpoId: string): Promise<LpoCor
     contractorId: String(row.contractor_id),
     baseStationId: row.base_station_id == null ? null : String(row.base_station_id),
     status: String(row.status),
+    submittedAt: row.submitted_at == null ? null : String(row.submitted_at),
+    submittedBy: row.submitted_by == null ? null : String(row.submitted_by),
+    createdBy: String(row.created_by),
   };
-}
-
-async function markInProgress(
-  tx: Awaited<ReturnType<Client['transaction']>>,
-  orgId: string,
-  lpoId: string,
-  now: string,
-): Promise<void> {
-  await tx.execute({
-    sql: `UPDATE lpos SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ? AND org_id = ? AND status = 'OPEN'`,
-    args: [now, lpoId, orgId],
-  });
 }
 
 /**
  * Create a new work order inside the LPO on predefined rates, at its own station,
- * entering the flow at CONTRACTOR_NOTIFIED. Creation sets the initial status; the
- * state machine owns every later change.
+ * as a CREATED draft. Issuing the LPO moves every attached draft work order to
+ * CONTRACTOR_NOTIFIED atomically; the state machine owns every later change.
  */
 export async function createWorkOrderInLpo(
   db: Client,
@@ -149,19 +147,58 @@ export async function createWorkOrderInLpo(
   const { orgId } = ctx;
   const lpo = await loadLpo(db, orgId, input.lpoId);
   if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
-  if (lpo.status !== 'OPEN' && lpo.status !== 'IN_PROGRESS') {
+  if (lpo.createdBy !== ctx.userId) {
+    return { ok: false, code: 'conflict', message: 'Only the LPO maker can edit this draft.' };
+  }
+  if (lpo.status !== 'OPEN' || lpo.submittedAt) {
     return { ok: false, code: 'conflict', message: 'This LPO is not open for new work orders.' };
   }
   const station = await db.execute({
-    sql: `SELECT id FROM stations WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+    sql: `SELECT id FROM stations
+           WHERE id = ? AND org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE' LIMIT 1`,
     args: [input.stationId, orgId],
   });
   if (!station.rows[0]) return { ok: false, code: 'invalid', message: 'Choose a valid station.' };
 
+  const references = await db.execute({
+    sql: `SELECT
+            CASE WHEN ? IS NULL THEN 1 ELSE EXISTS(
+              SELECT 1 FROM asset_categories WHERE id = ? AND org_id = ?
+            ) END AS valid_category,
+            CASE WHEN ? IS NULL THEN 1 ELSE EXISTS(
+              SELECT 1 FROM slas WHERE id = ? AND org_id = ?
+            ) END AS valid_sla,
+            CASE WHEN ? IS NULL THEN 1 ELSE EXISTS(
+              SELECT 1 FROM stations
+               WHERE id = ? AND org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE'
+            ) END AS valid_mileage_station`,
+    args: [
+      input.categoryId,
+      input.categoryId,
+      orgId,
+      input.slaId,
+      input.slaId,
+      orgId,
+      input.mileageReferenceStationId,
+      input.mileageReferenceStationId,
+      orgId,
+    ],
+  });
+  const reference = references.rows[0];
+  if (
+    Number(reference?.valid_category ?? 0) !== 1 ||
+    Number(reference?.valid_sla ?? 0) !== 1 ||
+    Number(reference?.valid_mileage_station ?? 0) !== 1
+  ) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'One of the selected work-order options is not available in this organisation.',
+    };
+  }
+
   const year = new Date().getUTCFullYear();
   const base = await countWoForYear(db, orgId, year);
-  const now = new Date().toISOString();
-
   for (let attempt = 0; attempt < 5; attempt++) {
     const woNo = `WO-${year}-${String(base + 1 + attempt).padStart(4, '0')}`;
     const id = newId();
@@ -171,7 +208,7 @@ export async function createWorkOrderInLpo(
         sql: `INSERT INTO work_orders
                 (id, org_id, wo_no, lpo_id, station_id, base_station_id, mileage_reference_station_id,
                  category_id, contractor_id, sla_id, source, assignment_basis, status, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LPO', 'PREDEFINED_RATE', 'CONTRACTOR_NOTIFIED', ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LPO', 'PREDEFINED_RATE', 'CREATED', ?)`,
         args: [
           id,
           orgId,
@@ -195,22 +232,12 @@ export async function createWorkOrderInLpo(
           id,
           JSON.stringify({
             wo_no: woNo,
-            status: 'CONTRACTOR_NOTIFIED',
+            status: 'CREATED',
             source: 'LPO',
             lpo_id: input.lpoId,
           }),
         ],
       });
-      await enqueue(tx, orgId, {
-        recipientType: 'contractor',
-        recipientId: lpo.contractorId,
-        templateKey: 'workorder.assigned',
-        subject: `New work order ${woNo}`,
-        body: `Work order ${woNo} has been added to your LPO. Please accept or reject it.`,
-        entityType: 'work_order',
-        entityId: id,
-      });
-      await markInProgress(tx, orgId, input.lpoId, now);
       await tx.commit();
       return { ok: true, workOrderId: id, woNo };
     } catch (err) {
@@ -232,7 +259,10 @@ export async function attachWorkOrder(
   const { orgId } = ctx;
   const lpo = await loadLpo(db, orgId, lpoId);
   if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
-  if (lpo.status !== 'OPEN' && lpo.status !== 'IN_PROGRESS') {
+  if (lpo.createdBy !== ctx.userId) {
+    return { ok: false, code: 'conflict', message: 'Only the LPO maker can edit this draft.' };
+  }
+  if (lpo.status !== 'OPEN' || lpo.submittedAt) {
     return { ok: false, code: 'conflict', message: 'This LPO is not open for changes.' };
   }
   const now = new Date().toISOString();
@@ -256,7 +286,164 @@ export async function attachWorkOrder(
             VALUES (?, ?, 'lpo.attach', 'work_order', ?, ?)`,
       args: [orgId, ctx.userId, workOrderId, JSON.stringify({ lpo_id: lpoId })],
     });
-    await markInProgress(tx, orgId, lpoId, now);
+    await tx.commit();
+    return { ok: true };
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
+/** Submit an open draft for manager approval. Further editing is then locked. */
+export async function submitLpo(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  lpoId: string,
+): Promise<SimpleResult> {
+  const now = new Date().toISOString();
+  const moved = await db.execute({
+    sql: `UPDATE lpos SET submitted_at = ?, submitted_by = ?, updated_at = ?
+           WHERE id = ? AND org_id = ? AND status = 'OPEN'
+             AND created_by = ? AND submitted_at IS NULL AND issued_at IS NULL
+             AND EXISTS (SELECT 1 FROM work_orders wo WHERE wo.lpo_id = lpos.id AND wo.org_id = lpos.org_id)`,
+    args: [now, ctx.userId, now, lpoId, ctx.orgId, ctx.userId],
+  });
+  if (moved.rowsAffected === 0) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'Add at least one work order, or this LPO was already submitted.',
+    };
+  }
+  await db.execute({
+    sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+          VALUES (?, ?, 'lpo.submit', 'lpo', ?, ?)`,
+    args: [ctx.orgId, ctx.userId, lpoId, JSON.stringify({ submitted_at: now })],
+  });
+  return { ok: true };
+}
+
+/** Approve a submitted LPO. The maker may not approve their own draft. */
+export async function approveLpo(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  lpoId: string,
+): Promise<SimpleResult> {
+  const lpo = await loadLpo(db, ctx.orgId, lpoId);
+  if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
+  if (!independentActor(ctx.userId, lpo.submittedBy, lpo.createdBy)) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'The LPO maker cannot approve their own submission.',
+    };
+  }
+  const now = new Date().toISOString();
+  const moved = await db.execute({
+    sql: `UPDATE lpos SET approved_by = ?, approved_at = ?, updated_at = ?
+           WHERE id = ? AND org_id = ? AND status = 'OPEN'
+             AND submitted_at IS NOT NULL AND approved_at IS NULL`,
+    args: [ctx.userId, now, now, lpoId, ctx.orgId],
+  });
+  if (moved.rowsAffected === 0) {
+    return { ok: false, code: 'conflict', message: 'This LPO is not awaiting approval.' };
+  }
+  await db.execute({
+    sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+          VALUES (?, ?, 'lpo.approve', 'lpo', ?, ?)`,
+    args: [ctx.orgId, ctx.userId, lpoId, JSON.stringify({ approved_at: now })],
+  });
+  return { ok: true };
+}
+
+/** Issue an approved LPO, releasing its draft work orders to the contractor. */
+export async function issueLpo(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  lpoId: string,
+): Promise<SimpleResult> {
+  const lpo = await loadLpo(db, ctx.orgId, lpoId);
+  if (!lpo) return { ok: false, code: 'not_found', message: 'LPO not found.' };
+  const now = new Date().toISOString();
+  const tx = await db.transaction('write');
+  try {
+    const moved = await tx.execute({
+      sql: `UPDATE lpos
+               SET status = 'IN_PROGRESS', issued_by = ?, issued_at = ?, updated_at = ?
+             WHERE id = ? AND org_id = ? AND status = 'OPEN'
+               AND approved_at IS NOT NULL AND issued_at IS NULL`,
+      args: [ctx.userId, now, now, lpoId, ctx.orgId],
+    });
+    if (moved.rowsAffected === 0) {
+      await tx.rollback();
+      return { ok: false, code: 'conflict', message: 'This LPO is not awaiting approval.' };
+    }
+    await tx.execute({
+      sql: `UPDATE work_orders SET status = 'CONTRACTOR_NOTIFIED', updated_at = ?
+             WHERE lpo_id = ? AND org_id = ? AND status = 'CREATED' AND deleted_at IS NULL`,
+      args: [now, lpoId, ctx.orgId],
+    });
+    await tx.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+            VALUES (?, ?, 'lpo.issue', 'lpo', ?, ?)`,
+      args: [ctx.orgId, ctx.userId, lpoId, JSON.stringify({ status: 'IN_PROGRESS' })],
+    });
+    await enqueue(tx, ctx.orgId, {
+      recipientType: 'contractor',
+      recipientId: lpo.contractorId,
+      templateKey: 'lpo.issued',
+      subject: 'A new LPO has been issued',
+      body: 'An LPO and its work orders have been approved and issued to you.',
+      entityType: 'lpo',
+      entityId: lpoId,
+    });
+    await tx.commit();
+    return { ok: true };
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
+/** Cancel an LPO and any attached work orders that have not begun execution. */
+export async function cancelLpo(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  lpoId: string,
+  reason: string,
+): Promise<SimpleResult> {
+  if (!reason.trim())
+    return { ok: false, code: 'invalid', message: 'A cancellation reason is required.' };
+  const now = new Date().toISOString();
+  const tx = await db.transaction('write');
+  try {
+    const moved = await tx.execute({
+      sql: `UPDATE lpos SET status = 'CANCELLED', cancelled_at = ?, cancel_reason = ?, updated_at = ?
+             WHERE id = ? AND org_id = ? AND status IN ('OPEN','IN_PROGRESS')
+               AND NOT EXISTS (
+                 SELECT 1 FROM work_orders wo WHERE wo.lpo_id = lpos.id AND wo.org_id = lpos.org_id
+                   AND wo.status NOT IN ('CREATED','CONTRACTOR_NOTIFIED','CONTRACTOR_REJECTED','CANCELLED')
+               )`,
+      args: [now, reason.trim().slice(0, 500), now, lpoId, ctx.orgId],
+    });
+    if (moved.rowsAffected === 0) {
+      await tx.rollback();
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'This LPO has active work and cannot be cancelled.',
+      };
+    }
+    await tx.execute({
+      sql: `UPDATE work_orders SET status = 'CANCELLED', updated_at = ?
+             WHERE lpo_id = ? AND org_id = ? AND status IN ('CREATED','CONTRACTOR_NOTIFIED','CONTRACTOR_REJECTED')`,
+      args: [now, lpoId, ctx.orgId],
+    });
+    await tx.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+            VALUES (?, ?, 'lpo.cancel', 'lpo', ?, ?)`,
+      args: [ctx.orgId, ctx.userId, lpoId, JSON.stringify({ reason: reason.trim().slice(0, 500) })],
+    });
     await tx.commit();
     return { ok: true };
   } catch (err) {
@@ -374,7 +561,7 @@ export async function listLposForContractor(
   contractorId: string,
 ): Promise<LpoListRow[]> {
   const res = await db.execute({
-    sql: `${LPO_LIST_SELECT} AND l.contractor_id = ? ORDER BY l.created_at DESC LIMIT 200`,
+    sql: `${LPO_LIST_SELECT} AND l.contractor_id = ? AND l.issued_at IS NOT NULL ORDER BY l.created_at DESC LIMIT 200`,
     args: [orgId, contractorId],
   });
   return res.rows.map((r) => mapLpoRow(r as Record<string, unknown>));
@@ -409,6 +596,12 @@ export interface LpoDetail {
   totalMinor: number;
   currency: string;
   createdAt: string;
+  createdBy: string;
+  submittedAt: string | null;
+  submittedBy: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  issuedAt: string | null;
   workOrders: LpoWorkOrder[];
   claim: LpoClaim | null;
 }
@@ -420,7 +613,9 @@ export async function getLpoDetail(
 ): Promise<LpoDetail | null> {
   const head = await db.execute({
     sql: `SELECT l.id, l.lpo_no, l.status, l.contractor_id, l.base_station_id, l.total_minor,
-                 l.currency, l.created_at, c.name AS contractor_name, s.name AS base_station_name
+                 l.currency, l.created_at, l.created_by, l.submitted_at, l.submitted_by,
+                 l.approved_at, l.approved_by, l.issued_at,
+                 c.name AS contractor_name, s.name AS base_station_name
             FROM lpos l
             JOIN contractors c ON c.id = l.contractor_id
             LEFT JOIN stations s ON s.id = l.base_station_id
@@ -462,6 +657,12 @@ export async function getLpoDetail(
     totalMinor: Number(row.total_minor ?? 0),
     currency: String(row.currency),
     createdAt: String(row.created_at),
+    createdBy: String(row.created_by),
+    submittedAt: row.submitted_at == null ? null : String(row.submitted_at),
+    submittedBy: row.submitted_by == null ? null : String(row.submitted_by),
+    approvedAt: row.approved_at == null ? null : String(row.approved_at),
+    approvedBy: row.approved_by == null ? null : String(row.approved_by),
+    issuedAt: row.issued_at == null ? null : String(row.issued_at),
     workOrders: wos.rows.map((w) => ({
       id: String(w.id),
       woNo: String(w.wo_no),

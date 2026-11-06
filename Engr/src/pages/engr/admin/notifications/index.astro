@@ -10,7 +10,7 @@ import { deliveryReadiness, getDeliveryEnv } from '@engr/notify/env';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
-const allowed = can(Astro.locals, 'settings.manage');
+const allowed = can(Astro.locals, 'notifications.configure');
 const saved = Astro.url.searchParams.get('saved') === '1';
 const error = Astro.url.searchParams.get('error');
 const settings = allowed

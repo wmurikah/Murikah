@@ -10,6 +10,8 @@ import {
   type TechnicianInput,
 } from '@engr/repos/adminTechnicians';
 import { jsonResponse, wantsJson, readBody, str } from '@engr/workflow/respond';
+import { requiresContractorTechnicianScope } from '@engr/auth/adminPolicy';
+import { contractorForUser } from '@engr/repos/techniciansPick';
 
 function seeOther(location: string): Response {
   return new Response(null, { status: 303, headers: { location } });
@@ -24,18 +26,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : seeOther('/admin/technicians?error=forbidden');
   }
 
+  const db = await getDb(getEngrEnv());
+  let contractorScope: string | undefined;
+  if (requiresContractorTechnicianScope(engr.roles)) {
+    contractorScope = (await contractorForUser(db, engr.orgId, engr.userId)) ?? undefined;
+    if (!contractorScope) {
+      return wantsJson(request)
+        ? jsonResponse({ error: 'forbidden' }, 403)
+        : seeOther('/admin/technicians?error=forbidden');
+    }
+  }
+
   const body = await readBody(request);
   const id = str(body.id).trim();
   const input: TechnicianInput = {
-    contractorId: str(body.contractor_id).trim(),
+    contractorId: contractorScope ?? str(body.contractor_id).trim(),
     fullName: str(body.full_name).trim(),
     phone: str(body.phone).trim() || null,
     email: str(body.email).trim() || null,
     status: str(body.status).trim() || 'ACTIVE',
+    portalUserId: str(body.portal_user_id).trim() || null,
   };
 
-  const db = await getDb(getEngrEnv());
-  const ctx = { orgId: engr.orgId, userId: engr.userId };
+  const ctx = { orgId: engr.orgId, userId: engr.userId, contractorId: contractorScope };
   const result = id
     ? await updateTechnician(db, ctx, id, input)
     : await createTechnician(db, ctx, input);
@@ -45,7 +58,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? jsonResponse({ ok: true, id: result.id }, id ? 200 : 201)
       : seeOther('/admin/technicians?saved=1');
   }
-  const status = result.code === 'conflict' ? 409 : result.code === 'not_found' ? 404 : 422;
+  const status =
+    result.code === 'conflict'
+      ? 409
+      : result.code === 'not_found'
+        ? 404
+        : result.code === 'forbidden'
+          ? 403
+          : 422;
   if (wantsJson(request)) {
     return jsonResponse({ ok: false, error: result.code, message: result.message }, status);
   }

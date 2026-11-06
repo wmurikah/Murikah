@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Cost approvals: level 1 (cost.approve.l1) and level 2 (cost.approve.l2) queues. Each links to the cost detail where the decision is made. */
+/** Engineering-manager cost approvals, including any in-flight legacy level 2 rows. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -12,22 +12,20 @@ import { formatMoneyMinor } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const canL1 = can(Astro.locals, 'cost.approve.l1');
-const canL2 = can(Astro.locals, 'cost.approve.l2');
-const allowed = canL1 || canL2;
+const allowed = can(Astro.locals, 'cost.approve');
 
 let l1: CostListRow[] = [];
 let l2: CostListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  if (canL1) l1 = await listPendingCosts(db, engr.orgId, 1);
-  if (canL2) l2 = await listPendingCosts(db, engr.orgId, 2);
+  l1 = await listPendingCosts(db, engr.orgId, 1);
+  l2 = await listPendingCosts(db, engr.orgId, 2);
 }
 
 const section = (title: string, rows: CostListRow[]) => ({ title, rows });
 const sections = [
-  canL1 ? section('Level 1', l1) : null,
-  canL2 ? section('Level 2', l2) : null,
+  section('Engineering approval', l1),
+  l2.length > 0 ? section('Legacy level 2', l2) : null,
 ].filter((s): s is { title: string; rows: CostListRow[] } => s !== null);
 ---
 

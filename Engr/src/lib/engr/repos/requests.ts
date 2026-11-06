@@ -37,6 +37,7 @@ export interface RequestDetail {
   assetName: string | null;
   categoryName: string | null;
   assignedEngineerName: string | null;
+  raisedBy: string;
   issue: string;
   natureOfBreakdown: string | null;
   priority: string;
@@ -85,9 +86,16 @@ export async function listQueue(
   engineerId: string,
   scope: 'mine' | 'all',
   limit = 100,
-  filters: { priority?: string; station?: string; from?: string; to?: string } = {},
+  filters: {
+    priority?: string;
+    station?: string;
+    from?: string;
+    to?: string;
+    stationManagerId?: string;
+  } = {},
 ): Promise<QueueRow[]> {
-  const mine = scope === 'mine';
+  const stationManagerId = filters.stationManagerId;
+  const mine = scope === 'mine' && !stationManagerId;
   const dated = Boolean(filters.from || filters.to);
   const args: (string | number)[] = [orgId];
   // A dated window is a historical view (a drill from the trend chart), so it
@@ -98,6 +106,10 @@ export async function listQueue(
   if (mine) {
     where += ' AND sr.assigned_engineer_id = ?';
     args.push(engineerId);
+  }
+  if (stationManagerId) {
+    where += ' AND s.station_manager_id = ?';
+    args.push(stationManagerId);
   }
   if (filters.priority) {
     where += ' AND sr.priority = ?';
@@ -141,12 +153,17 @@ export async function listQueue(
   }));
 }
 
-export async function listStations(db: Client, orgId: string): Promise<StationOption[]> {
+export async function listStations(
+  db: Client,
+  orgId: string,
+  stationManagerId?: string,
+): Promise<StationOption[]> {
   const res = await db.execute({
     sql: `SELECT id, code, name FROM stations
            WHERE org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE'
+             AND (? IS NULL OR station_manager_id = ?)
         ORDER BY name`,
-    args: [orgId],
+    args: [orgId, stationManagerId ?? null, stationManagerId ?? null],
   });
   return res.rows.map((row) => ({
     id: String(row.id),
@@ -168,14 +185,19 @@ export async function listAssetCategories(db: Client, orgId: string): Promise<Ca
 }
 
 // Assets an intake can point at, labelled with tag, name and station.
-export async function listAssetOptions(db: Client, orgId: string): Promise<AssetOption[]> {
+export async function listAssetOptions(
+  db: Client,
+  orgId: string,
+  stationManagerId?: string,
+): Promise<AssetOption[]> {
   const res = await db.execute({
     sql: `SELECT a.id AS id, a.tag AS tag, a.name AS name, s.name AS station_name
             FROM assets a
             JOIN stations s ON s.id = a.station_id
            WHERE a.org_id = ? AND a.deleted_at IS NULL
+             AND (? IS NULL OR s.station_manager_id = ?)
         ORDER BY s.name, a.name`,
-    args: [orgId],
+    args: [orgId, stationManagerId ?? null, stationManagerId ?? null],
   });
   return res.rows.map((r) => ({
     id: String(r.id),
@@ -207,11 +229,12 @@ export async function getRequestById(
   db: Client,
   orgId: string,
   id: string,
+  stationManagerId?: string,
 ): Promise<RequestDetail | null> {
   const res = await db.execute({
     sql: `SELECT sr.id AS id, sr.request_no AS request_no, sr.issue AS issue,
                  sr.nature_of_breakdown AS nature_of_breakdown, sr.priority AS priority,
-                 sr.status AS status, sr.is_repeat_call AS is_repeat_call,
+                 sr.status AS status, sr.is_repeat_call AS is_repeat_call, sr.raised_by,
                  sr.created_at AS created_at, s.name AS station_name,
                  a.tag AS asset_tag, a.name AS asset_name,
                  c.name AS category_name, e.full_name AS engineer_name
@@ -221,8 +244,9 @@ export async function getRequestById(
             LEFT JOIN asset_categories c ON c.id = sr.category_id
             LEFT JOIN users e ON e.id = sr.assigned_engineer_id
            WHERE sr.org_id = ? AND sr.id = ? AND sr.deleted_at IS NULL
+             AND (? IS NULL OR s.station_manager_id = ?)
            LIMIT 1`,
-    args: [orgId, id],
+    args: [orgId, id, stationManagerId ?? null, stationManagerId ?? null],
   });
   const row = res.rows[0];
   if (!row) return null;
@@ -239,6 +263,7 @@ export async function getRequestById(
     assetName,
     categoryName: row.category_name == null ? null : String(row.category_name),
     assignedEngineerName: row.engineer_name == null ? null : String(row.engineer_name),
+    raisedBy: String(row.raised_by),
     issue: String(row.issue),
     natureOfBreakdown: row.nature_of_breakdown === null ? null : String(row.nature_of_breakdown),
     priority: String(row.priority),

@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Edit a PM schedule. Gate: pm.allocate. */
+/** View a PM schedule; editing requires pm.edit and a paused schedule. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import PmScheduleForm from '@/components/engr/PmScheduleForm.astro';
 import { getEngrEnv } from '@engr/env';
@@ -21,7 +21,8 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'pm.allocate');
+const allowed = can(Astro.locals, 'pm.view');
+const canEdit = can(Astro.locals, 'pm.edit');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 const saved = Astro.url.searchParams.get('saved') === '1';
@@ -37,7 +38,7 @@ let automationEnabled = false;
 if (allowed && id) {
   const db = await getDb(getEngrEnv());
   schedule = await getSchedule(db, engr.orgId, id);
-  if (schedule) {
+  if (schedule && canEdit && schedule.status === 'PAUSED') {
     const [st, cat, con, tpl, sl, auto] = await Promise.all([
       listStations(db, engr.orgId),
       listAssetCategories(db, engr.orgId),
@@ -88,7 +89,7 @@ if (allowed && !schedule) Astro.response.status = 404;
       </p>
     ) : !schedule ? (
       <p class="engr-empty">That schedule was not found in your organisation.</p>
-    ) : (
+    ) : canEdit && schedule.status === 'PAUSED' ? (
       <PmScheduleForm
         action={`/api/pm/schedules/${schedule.id}`}
         schedule={schedule}
@@ -100,6 +101,21 @@ if (allowed && !schedule) Astro.response.status = 404;
         automationEnabled={automationEnabled}
         submitLabel="Save changes"
       />
+    ) : (
+      <dl class="engr-detail">
+        <dt>Status</dt>
+        <dd>
+          <span class="engr-pill">{schedule.status}</span>
+        </dd>
+        <dt>Frequency</dt>
+        <dd>{schedule.frequency}</dd>
+        <dt>Station</dt>
+        <dd>{schedule.stationName ?? 'Any'}</dd>
+        <dt>Contractor</dt>
+        <dd>{schedule.contractorName ?? 'Not assigned'}</dd>
+        <dt>Next due</dt>
+        <dd>{schedule.nextDueDate ?? 'Not set'}</dd>
+      </dl>
     )
   }
 </EngrLayout>

@@ -4,7 +4,7 @@ export const prerender = false;
 /**
  * Work cost detail with the approval trail. Gate: cost.view. The contractor owner
  * edits items and submits or recalls while the cost is a draft or pending level
- * 1; a level 1 or level 2 approver sees the decision form for the current level.
+ * 1; an engineering manager sees the decision form for the current level.
  * Segregation of duties is enforced server-side; the trail below is the record.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
@@ -14,13 +14,13 @@ import { getCostDetail, type CostDetail } from '@engr/repos/workCosts';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { can } from '@engr/auth/rbac';
 import { formatMoneyMinor } from '@engr/format';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'cost.view');
-const canL1 = can(Astro.locals, 'cost.approve.l1');
-const canL2 = can(Astro.locals, 'cost.approve.l2');
+const canApprove = can(Astro.locals, 'cost.approve');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 const done =
@@ -40,8 +40,8 @@ if (allowed && id) {
     isOwner = contractorId != null && contractorId === cost.contractorId;
   }
 }
-const isApprover = canL1 || canL2;
-const canSee = cost != null && (isOwner || isApprover);
+const isContractor = actorDataScope(engr.roles) === 'contractor';
+const canSee = cost != null && (!isContractor || isOwner);
 if (allowed && (!cost || !canSee)) Astro.response.status = 404;
 
 const editable = cost != null && isOwner && (cost.status === 'DRAFT' || cost.status === 'RECALLED');
@@ -53,7 +53,11 @@ const canRecall =
   (cost.status === 'SUBMITTED' || cost.status === 'PENDING_L1') &&
   cost.recallable;
 const decideLevel =
-  cost?.status === 'PENDING_L1' && canL1 ? 1 : cost?.status === 'PENDING_L2' && canL2 ? 2 : 0;
+  cost?.status === 'PENDING_L1' && canApprove
+    ? 1
+    : cost?.status === 'PENDING_L2' && canApprove
+      ? 2
+      : 0;
 const costId = cost?.id ?? '';
 // Item rows to render for the editor: existing items plus spare blanks.
 const rows = cost
@@ -219,7 +223,7 @@ const rows = cost
 
         {decideLevel > 0 && (
           <section class="engr-panel" aria-labelledby="cost-decide">
-            <h2 id="cost-decide">Level {decideLevel} decision</h2>
+            <h2 id="cost-decide">Engineering decision</h2>
             <form method="post" action={`/api/costs/${costId}/decision`} class="engr-form">
               <input type="hidden" name="level" value={decideLevel} />
               <div class="engr-field">

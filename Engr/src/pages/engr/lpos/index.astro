@@ -2,7 +2,7 @@
 export const prerender = false;
 
 /**
- * LPO list. Gate: workorder.view. Engineers (workorder.create) see the org's
+ * LPO list. Gate: lpo.view. Internal users see the org's
  * LPOs and can create one; other viewers see only their own contractor's.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
@@ -11,18 +11,19 @@ import { getDb } from '@engr/db';
 import { listLpos, listLposForContractor, type LpoListRow } from '@engr/repos/lpos';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 import { formatMoneyMinor } from '@engr/format';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'workorder.view');
-const canBuild = can(Astro.locals, 'workorder.create') && can(Astro.locals, 'workorder.assign');
+const allowed = can(Astro.locals, 'lpo.view');
+const canBuild = can(Astro.locals, 'lpo.create');
 
 let rows: LpoListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  if (can(Astro.locals, 'workorder.create')) {
+  if (actorDataScope(engr.roles) !== 'contractor') {
     rows = await listLpos(db, engr.orgId);
   } else {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);

@@ -1,6 +1,6 @@
 export const prerender = false;
 
-/** Engineer cancels a non-terminal work order with a reason. Gate: workorder.close. */
+/** Engineering manager cancels a non-terminal work order. Gate: workorder.cancel. */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';

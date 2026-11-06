@@ -1,12 +1,13 @@
 /**
- * RFQ repository: raise an RFQ from an accepted request and invite pre-qualified
- * contractors, read an RFQ for the engineer comparison, and list RFQs by role.
+ * RFQ repository: prepare an RFQ from an accepted request, submit it for
+ * independent release, then invite pre-qualified contractors.
  * Every query is scoped by org_id. The RFQ status is only moved by the award and
  * procurement paths in workflow/rfqAward.ts, never here.
  */
 import type { Client } from '@libsql/client/web';
-import { enqueue } from '../notify';
-import { listEligibleContractors } from './contractorsPick';
+import { enqueue } from '../notify.ts';
+import { listEligibleContractors } from './contractorsPick.ts';
+import { makerMayRelease } from '../workflow/releasePolicy.ts';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -134,17 +135,6 @@ export async function createRfqWithInvitations(
           }),
         ],
       });
-      for (const contractorId of chosen) {
-        await enqueue(tx, orgId, {
-          recipientType: 'contractor',
-          recipientId: contractorId,
-          templateKey: 'rfq.invited',
-          subject: `Invitation to quote, ${rfqNo}`,
-          body: `You are invited to quote on ${rfqNo}. Please submit a priced quote or decline.`,
-          entityType: 'rfq',
-          entityId: rfqId,
-        });
-      }
       await tx.commit();
       return { ok: true, rfqId, rfqNo };
     } catch (err) {
@@ -154,6 +144,122 @@ export async function createRfqWithInvitations(
     }
   }
   return { ok: false, code: 'conflict', message: 'Could not allocate an RFQ number.' };
+}
+
+export type RfqDraftResult =
+  | { ok: true }
+  | { ok: false; code: 'not_found' | 'invalid' | 'conflict'; message: string };
+
+/** Edit the mutable fields of an unsubmitted draft. */
+export async function updateRfqDraft(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  rfqId: string,
+  input: { dueDate: string | null; thresholdMinor: number | null },
+): Promise<RfqDraftResult> {
+  const now = new Date().toISOString();
+  const moved = await db.execute({
+    sql: `UPDATE rfqs SET due_date = ?, approval_threshold_minor = ?, updated_at = ?
+           WHERE id = ? AND org_id = ? AND status = 'OPEN'
+             AND created_by = ? AND submitted_at IS NULL AND released_at IS NULL`,
+    args: [input.dueDate, input.thresholdMinor, now, rfqId, ctx.orgId, ctx.userId],
+  });
+  if (moved.rowsAffected === 0) {
+    return { ok: false, code: 'conflict', message: 'This RFQ can no longer be edited.' };
+  }
+  await db.execute({
+    sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+          VALUES (?, ?, 'rfq.edit', 'rfq', ?, ?)`,
+    args: [ctx.orgId, ctx.userId, rfqId, JSON.stringify(input)],
+  });
+  return { ok: true };
+}
+
+/** Submit a completed draft for manager release. */
+export async function submitRfq(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  rfqId: string,
+): Promise<RfqDraftResult> {
+  const now = new Date().toISOString();
+  const moved = await db.execute({
+    sql: `UPDATE rfqs SET submitted_at = ?, submitted_by = ?, updated_at = ?
+           WHERE id = ? AND org_id = ? AND status = 'OPEN'
+             AND created_by = ? AND submitted_at IS NULL AND released_at IS NULL
+             AND EXISTS (SELECT 1 FROM rfq_invitations i WHERE i.rfq_id = rfqs.id AND i.org_id = rfqs.org_id)`,
+    args: [now, ctx.userId, now, rfqId, ctx.orgId, ctx.userId],
+  });
+  if (moved.rowsAffected === 0) {
+    return { ok: false, code: 'conflict', message: 'This RFQ is incomplete or already submitted.' };
+  }
+  await db.execute({
+    sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+          VALUES (?, ?, 'rfq.submit', 'rfq', ?, ?)`,
+    args: [ctx.orgId, ctx.userId, rfqId, JSON.stringify({ submitted_at: now })],
+  });
+  return { ok: true };
+}
+
+/** Release a submitted RFQ and notify contractors. Maker/checker is mandatory. */
+export async function releaseRfq(
+  db: Client,
+  ctx: { orgId: string; userId: string },
+  rfqId: string,
+): Promise<RfqDraftResult> {
+  const head = await db.execute({
+    sql: `SELECT rfq_no, created_by, submitted_by FROM rfqs
+           WHERE id = ? AND org_id = ? LIMIT 1`,
+    args: [rfqId, ctx.orgId],
+  });
+  const row = head.rows[0];
+  if (!row) return { ok: false, code: 'not_found', message: 'RFQ not found.' };
+  const maker = row.submitted_by == null ? String(row.created_by) : String(row.submitted_by);
+  if (!makerMayRelease(maker, ctx.userId)) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'The RFQ maker cannot release their own submission.',
+    };
+  }
+  const now = new Date().toISOString();
+  const tx = await db.transaction('write');
+  try {
+    const moved = await tx.execute({
+      sql: `UPDATE rfqs SET released_at = ?, released_by = ?, updated_at = ?
+             WHERE id = ? AND org_id = ? AND status = 'OPEN'
+               AND submitted_at IS NOT NULL AND released_at IS NULL`,
+      args: [now, ctx.userId, now, rfqId, ctx.orgId],
+    });
+    if (moved.rowsAffected === 0) {
+      await tx.rollback();
+      return { ok: false, code: 'conflict', message: 'This RFQ is not awaiting release.' };
+    }
+    const invited = await tx.execute({
+      sql: `SELECT contractor_id FROM rfq_invitations WHERE org_id = ? AND rfq_id = ?`,
+      args: [ctx.orgId, rfqId],
+    });
+    for (const invitation of invited.rows) {
+      await enqueue(tx, ctx.orgId, {
+        recipientType: 'contractor',
+        recipientId: String(invitation.contractor_id),
+        templateKey: 'rfq.invited',
+        subject: `Invitation to quote, ${String(row.rfq_no)}`,
+        body: `You are invited to quote on ${String(row.rfq_no)}. Please submit a priced quote or decline.`,
+        entityType: 'rfq',
+        entityId: rfqId,
+      });
+    }
+    await tx.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+            VALUES (?, ?, 'rfq.release', 'rfq', ?, ?)`,
+      args: [ctx.orgId, ctx.userId, rfqId, JSON.stringify({ released_at: now })],
+    });
+    await tx.commit();
+    return { ok: true };
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
 }
 
 // ---- reads ------------------------------------------------------------------
@@ -223,7 +329,7 @@ export async function listRfqsForContractor(
             JOIN rfqs rq ON rq.id = i.rfq_id
             JOIN service_requests sr ON sr.id = rq.request_id
             JOIN stations s ON s.id = sr.station_id
-           WHERE i.org_id = ? AND i.contractor_id = ?
+           WHERE i.org_id = ? AND i.contractor_id = ? AND rq.released_at IS NOT NULL
         ORDER BY rq.created_at DESC LIMIT 200`,
     args: [contractorId, orgId, contractorId],
   });
@@ -278,6 +384,9 @@ export interface RfqDetail {
   rfqNo: string;
   status: string;
   createdBy: string;
+  submittedAt: string | null;
+  submittedBy: string | null;
+  releasedAt: string | null;
   dueDate: string | null;
   thresholdMinor: number | null;
   currency: string;
@@ -295,7 +404,8 @@ export async function getRfqDetail(
   rfqId: string,
 ): Promise<RfqDetail | null> {
   const head = await db.execute({
-    sql: `SELECT rq.id, rq.rfq_no, rq.status, rq.created_by, rq.due_date,
+    sql: `SELECT rq.id, rq.rfq_no, rq.status, rq.created_by, rq.submitted_at,
+                 rq.submitted_by, rq.released_at, rq.due_date,
                  rq.approval_threshold_minor, rq.currency, rq.request_id,
                  sr.request_no, s.name AS station_name, ac.name AS category_name
             FROM rfqs rq
@@ -358,6 +468,9 @@ export async function getRfqDetail(
     rfqNo: String(row.rfq_no),
     status: String(row.status),
     createdBy: String(row.created_by),
+    submittedAt: row.submitted_at == null ? null : String(row.submitted_at),
+    submittedBy: row.submitted_by == null ? null : String(row.submitted_by),
+    releasedAt: row.released_at == null ? null : String(row.released_at),
     dueDate: row.due_date == null ? null : String(row.due_date),
     thresholdMinor:
       row.approval_threshold_minor == null ? null : Number(row.approval_threshold_minor),

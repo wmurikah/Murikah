@@ -2,9 +2,8 @@ export const prerender = false;
 
 /**
  * LPO collection.
- *  POST: create an LPO for a contractor. Gate: workorder.create and
- *        workorder.assign.
- *  GET:  role-aware list. Engineers (workorder.create) get the org's LPOs; a
+ *  POST: create an LPO draft for a contractor. Gate: lpo.create.
+ *  GET:  role-aware list. Internal users get the org's LPOs; a
  *        contractor gets their own.
  */
 import type { APIRoute } from 'astro';
@@ -13,15 +12,12 @@ import { getDb } from '@engr/db';
 import { createLpo, listLpos, listLposForContractor } from '@engr/repos/lpos';
 import { contractorForUser } from '@engr/repos/techniciansPick';
 import { jsonResponse, wantsJson, redirectResponse, readBody, str } from '@engr/workflow/respond';
-
-function canBuild(perms: string[]): boolean {
-  return perms.includes('workorder.create') && perms.includes('workorder.assign');
-}
+import { actorDataScope } from '@engr/auth/dataScope';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!canBuild(engr.perms)) {
+  if (!engr.perms.includes('lpo.create')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, '/lpos', 'error=forbidden');
@@ -54,9 +50,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.perms.includes('workorder.view')) return jsonResponse({ error: 'forbidden' }, 403);
+  if (!engr.perms.includes('lpo.view')) return jsonResponse({ error: 'forbidden' }, 403);
   const db = await getDb(getEngrEnv());
-  if (engr.perms.includes('workorder.create')) {
+  if (actorDataScope(engr.roles) !== 'contractor') {
     return jsonResponse({ ok: true, lpos: await listLpos(db, engr.orgId) }, 200);
   }
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);

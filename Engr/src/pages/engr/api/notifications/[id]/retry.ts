@@ -2,7 +2,7 @@ export const prerender = false;
 
 /**
  * Retry a failed notification: flip it back to QUEUED so the next dispatch run
- * picks it up. Gate: reports.view, the operations console permission.
+ * picks it up. Gate: notifications.retry.
  */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/ops/notifications';
 
-  if (!engr.perms.includes('reports.view')) {
+  if (!engr.perms.includes('notifications.retry')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

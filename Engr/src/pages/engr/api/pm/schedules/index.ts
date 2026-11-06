@@ -1,6 +1,6 @@
 export const prerender = false;
 
-/** Create a PM schedule. Gate: pm.allocate. */
+/** Create a PM schedule draft. Gate: pm.create. */
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -30,7 +30,7 @@ export function parseSchedule(body: Record<string, unknown>): ScheduleInput {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.perms.includes('pm.allocate')) {
+  if (!engr.perms.includes('pm.create')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, '/pm', 'error=forbidden');

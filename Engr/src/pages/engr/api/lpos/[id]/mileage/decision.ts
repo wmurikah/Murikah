@@ -1,7 +1,7 @@
 export const prerender = false;
 
 /**
- * Engineer approves or rejects the LPO's mileage claim. Gate: cost.approve.l1.
+ * Engineering manager approves or rejects the LPO's mileage claim. Gate: cost.approve.
  * The approver may override the distance and the rate (the only place the rate
  * changes); the amount is recomputed server-side. Guarded on SUBMITTED, so a
  * second approver is a clean 409. An approved claim stands as a cost line for the
@@ -31,7 +31,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/mileage/approvals';
 
-  if (!engr.perms.includes('cost.approve.l1')) {
+  if (!engr.perms.includes('cost.approve')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

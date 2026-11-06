@@ -342,13 +342,13 @@ export async function submitCost(
             VALUES (?, ?, 'cost.submit', 'work_cost', ?, ?)`,
       args: [orgId, ctx.userId, costId, JSON.stringify({ status: 'PENDING_L1' })],
     });
-    const l1 = await usersWithPermission(tx, orgId, 'cost.approve.l1');
+    const l1 = await usersWithPermission(tx, orgId, 'cost.approve');
     await notifyUsers(
       tx,
       orgId,
       l1,
       'cost.pending.l1',
-      'A work cost needs level 1 approval',
+      'A work cost needs engineering approval',
       'A contractor submitted a work cost for approval.',
       costId,
     );
@@ -426,19 +426,20 @@ export async function decideCost(
 
   const now = new Date().toISOString();
   const approve = decision === 'approve';
-  const nextStatus = approve ? (level === 1 ? 'PENDING_L2' : 'APPROVED') : 'REJECTED';
-  const nextLevel = approve ? (level === 1 ? 2 : 2) : cost.currentLevel;
+  // The live operating model has one accountable engineering-manager decision.
+  // Level 2 remains readable/decidable only so an in-flight legacy record can be
+  // completed after this rollout; newly submitted costs finish at level 1.
+  const nextStatus = approve ? 'APPROVED' : 'REJECTED';
+  const nextLevel = cost.currentLevel;
 
   const tx = await db.transaction('write');
   try {
-    const sets =
-      approve && level === 2
-        ? `status = ?, current_level = ?, approved_at = ?, updated_at = ?`
-        : `status = ?, current_level = ?, updated_at = ?`;
-    const args =
-      approve && level === 2
-        ? [nextStatus, nextLevel, now, now, costId, orgId, expected, level]
-        : [nextStatus, nextLevel, now, costId, orgId, expected, level];
+    const sets = approve
+      ? `status = ?, current_level = ?, approved_at = ?, updated_at = ?`
+      : `status = ?, current_level = ?, updated_at = ?`;
+    const args = approve
+      ? [nextStatus, nextLevel, now, now, costId, orgId, expected, level]
+      : [nextStatus, nextLevel, now, costId, orgId, expected, level];
     const moved = await tx.execute({
       sql: `UPDATE work_costs SET ${sets}
              WHERE id = ? AND org_id = ? AND status = ? AND current_level = ?`,
@@ -472,30 +473,17 @@ export async function decideCost(
       args: [orgId, ctx.userId, costId, JSON.stringify({ level, decision, status: nextStatus })],
     });
 
-    if (approve && level === 1) {
-      const l2 = await usersWithPermission(tx, orgId, 'cost.approve.l2');
-      await notifyUsers(
-        tx,
-        orgId,
-        l2,
-        'cost.pending.l2',
-        'A work cost needs level 2 approval',
-        'A work cost passed level 1 and needs level 2 approval.',
-        costId,
-      );
-    } else {
-      await enqueue(tx, orgId, {
-        recipientType: 'contractor',
-        recipientId: cost.contractorId,
-        templateKey: approve ? 'cost.approved' : 'cost.rejected',
-        subject: approve ? 'Your work cost was approved' : 'Your work cost was not approved',
-        body: approve
-          ? 'Your work cost has been approved.'
-          : `Your work cost was rejected. ${comment || ''}`.trim(),
-        entityType: 'work_cost',
-        entityId: costId,
-      });
-    }
+    await enqueue(tx, orgId, {
+      recipientType: 'contractor',
+      recipientId: cost.contractorId,
+      templateKey: approve ? 'cost.approved' : 'cost.rejected',
+      subject: approve ? 'Your work cost was approved' : 'Your work cost was not approved',
+      body: approve
+        ? 'Your work cost has been approved.'
+        : `Your work cost was rejected. ${comment || ''}`.trim(),
+      entityType: 'work_cost',
+      entityId: costId,
+    });
     await tx.commit();
     return { ok: true, costId };
   } catch (err) {

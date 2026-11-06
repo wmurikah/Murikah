@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * PM calendar: upcoming occurrences by due date, with their status and the
- * one-month and two-week reminder flags. Gate: pm.allocate.
+ * one-month and two-week reminder flags. Gate: pm.view.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
@@ -14,7 +14,7 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'pm.allocate');
+const allowed = can(Astro.locals, 'pm.view');
 
 // An optional week window, drilled from the "Upcoming maintenance" chart: from
 // inclusive, to exclusive, both YYYY-MM-DD against the due date.

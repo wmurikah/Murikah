@@ -1,8 +1,8 @@
 export const prerender = false;
 
 /**
- * Contractor assigns a technician from their team. Gate: technicians.manage (the
- * key the seeded CONTRACTOR role holds). The technician must be active and belong
+ * Contractor assigns a technician from their team. Gate: workorder.assign_technician.
+ * The technician must be active and belong
  * to the work order's contractor, so a forged id cannot cross teams.
  */
 import type { APIRoute } from 'astro';

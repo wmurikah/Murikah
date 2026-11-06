@@ -27,6 +27,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getUnreadCount } from '@engr/notify';
 import { orgDisplayName } from '@engr/format';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 interface Props {
   title: string;
@@ -43,8 +44,9 @@ const isActive = (href: string) => path === href || path.startsWith(href + '/');
 
 const has = (key: string) => engr?.perms.includes(key) ?? false;
 const roles = engr?.roles ?? [];
-const isContractor = roles.includes('CONTRACTOR');
-const isTechnician = roles.includes('TECHNICIAN');
+const dataScope = actorDataScope(roles);
+const isContractor = dataScope === 'contractor';
+const isTechnician = dataScope === 'technician';
 
 const orgName = engr ? orgDisplayName(engr.orgName, engr.orgSlug) : 'Engineering Rhythm';
 const accountName = engr?.userName ?? engr?.userEmail ?? 'Account';
@@ -81,19 +83,20 @@ const workOrdersHref = has('workorder.create')
         ? '/workorders'
         : null;
 const rfqHref = has('rfq.view') ? '/rfqs' : has('quotes.view') ? '/contractor/rfqs' : null;
-const lpoHref = has('workorder.create')
+const lpoHref = has('lpo.create')
   ? '/lpos'
-  : isContractor && has('workorder.view')
+  : isContractor && has('lpo.view')
     ? '/contractor/lpos'
-    : null;
-const costsHref =
-  has('cost.approve.l1') || has('cost.approve.l2')
-    ? '/costs/approvals'
-    : has('cost.create')
-      ? '/contractor/costs'
+    : has('lpo.view')
+      ? '/lpos'
       : null;
+const costsHref = has('cost.approve')
+  ? '/costs/approvals'
+  : has('cost.create')
+    ? '/contractor/costs'
+    : null;
 const billsHref =
-  has('bill.approve.l1') || has('bill.approve.l2') || has('bill.approve.l3')
+  has('bill.approve.engineering') || has('bill.approve.finance')
     ? '/bills/approvals'
     : has('bill.create')
       ? '/contractor/bills'
@@ -116,9 +119,11 @@ const rawGroups: NavGroup[] = [
     label: 'Overview',
     icon: 'overview',
     items: [
-      { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] },
+      has('reports.view')
+        ? { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] }
+        : null,
       { href: '/notifications', label: 'Notifications', icon: 'bell' },
-    ],
+    ].filter((i): i is NavItem => i !== null),
   },
   {
     label: 'Operations',
@@ -152,7 +157,9 @@ const rawGroups: NavGroup[] = [
       billsHref
         ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'] }
         : null,
-      has('payment.record') ? { href: '/payments', label: 'Payments', icon: 'payments' } : null,
+      has('payment.view') || has('payment.record')
+        ? { href: '/payments', label: 'Payments', icon: 'payments' }
+        : null,
     ].filter((i): i is NavItem => i !== null),
   },
   {
@@ -177,16 +184,19 @@ const rawGroups: NavGroup[] = [
         ? { href: '/admin/technicians', label: 'Technicians', icon: 'technicians' }
         : null,
       // Engineer-in-charge routing config; an org settings concern.
-      has('settings.manage')
+      has('engineer_assignments.view')
         ? { href: '/admin/engineers', label: 'Engineers in charge', icon: 'engineers' }
         : null,
       has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
       has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
       has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
-      has('roles.manage') ? { href: '/admin/roles', label: 'Roles', icon: 'roles' } : null,
-      has('settings.manage')
+      has('roles.view') || has('roles.manage')
+        ? { href: '/admin/roles', label: 'Roles', icon: 'roles' }
+        : null,
+      has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
+      has('audit.view') ? { href: '/admin/audit', label: 'Audit history', icon: 'roles' } : null,
     ].filter((i): i is NavItem => i !== null),
   },
 ];

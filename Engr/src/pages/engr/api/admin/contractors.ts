@@ -52,6 +52,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     baseStationId: str(scalar.base_station_id).trim() || null,
     isPrequalified: str(scalar.is_prequalified) === 'on' || str(scalar.is_prequalified) === '1',
     status: str(scalar.status).trim() || 'ACTIVE',
+    portalUserId: str(scalar.portal_user_id).trim() || null,
     stationIds,
     categoryIds,
   };

@@ -11,7 +11,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { createCustomRole, saveRolePermissions } from '@engr/repos/adminRoles';
+import { createCustomRole, getRoleEdit, saveRolePermissions } from '@engr/repos/adminRoles';
+import { mayManageRoleCode, userManagementScope } from '@engr/auth/adminPolicy';
 import { jsonResponse, wantsJson, str } from '@engr/workflow/respond';
 
 function seeOther(location: string): Response {
@@ -57,6 +58,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : seeOther('/admin/roles?error=invalid');
   }
   const permissionKeys = form.getAll('perm').map((v) => String(v));
+  const target = await getRoleEdit(db, engr.orgId, roleId);
+  if (!target) {
+    return wantsJson(request)
+      ? jsonResponse({ error: 'not_found' }, 404)
+      : seeOther('/admin/roles?error=not_found');
+  }
+  const scope = userManagementScope(engr.roles, engr.isPlatformOwner);
+  if (!mayManageRoleCode(scope, target.code)) {
+    return wantsJson(request)
+      ? jsonResponse({ error: 'forbidden' }, 403)
+      : seeOther(`/admin/roles/${roleId}?error=forbidden`);
+  }
   const result = await saveRolePermissions(db, ctx, roleId, permissionKeys);
   if (result.ok) {
     // The id may differ from roleId when a shared role was cloned; land on the

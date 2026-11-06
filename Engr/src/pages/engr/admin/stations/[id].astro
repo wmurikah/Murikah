@@ -10,7 +10,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getStation, type StationDetail } from '@engr/repos/adminStations';
-import { listRegionOptions, listUserOptions, type Option } from '@engr/repos/adminOptions';
+import { listRegionOptions, listUserOptionsByRole, type Option } from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -29,7 +29,7 @@ if (canManage) {
   const db = await getDb(getEngrEnv());
   [regions, users] = await Promise.all([
     listRegionOptions(db, engr.orgId),
-    listUserOptions(db, engr.orgId),
+    listUserOptionsByRole(db, engr.orgId, ['STATION_MANAGER']),
   ]);
   if (!isNew && id) station = await getStation(db, engr.orgId, id);
 }

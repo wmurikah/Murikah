@@ -140,6 +140,33 @@ function validateCard(input: RateCardInput): string | null {
   return null;
 }
 
+async function contractorBelongsToOrg(
+  db: Client,
+  orgId: string,
+  contractorId: string | null,
+): Promise<boolean> {
+  if (!contractorId) return true;
+  const result = await db.execute({
+    sql: `SELECT 1 FROM contractors
+           WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+    args: [contractorId, orgId],
+  });
+  return result.rows.length === 1;
+}
+
+async function categoryBelongsToOrg(
+  db: Client,
+  orgId: string,
+  categoryId: string | null,
+): Promise<boolean> {
+  if (!categoryId) return true;
+  const result = await db.execute({
+    sql: `SELECT 1 FROM asset_categories WHERE id = ? AND org_id = ? LIMIT 1`,
+    args: [categoryId, orgId],
+  });
+  return result.rows.length === 1;
+}
+
 export async function createRateCard(
   db: Client,
   ctx: { orgId: string; userId: string },
@@ -147,6 +174,9 @@ export async function createRateCard(
 ): Promise<AdminResult> {
   const invalid = validateCard(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await contractorBelongsToOrg(db, ctx.orgId, input.contractorId))) {
+    return { ok: false, code: 'invalid', message: 'Choose a contractor from this organisation.' };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -192,6 +222,9 @@ export async function updateRateCard(
 ): Promise<AdminResult> {
   const invalid = validateCard(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await contractorBelongsToOrg(db, ctx.orgId, input.contractorId))) {
+    return { ok: false, code: 'invalid', message: 'Choose a contractor from this organisation.' };
+  }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({
@@ -246,6 +279,9 @@ export async function addRateItem(
 ): Promise<AdminResult> {
   const invalid = validateItem(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await categoryBelongsToOrg(db, ctx.orgId, input.categoryId))) {
+    return { ok: false, code: 'invalid', message: 'Choose a category from this organisation.' };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -301,6 +337,9 @@ export async function updateRateItem(
 ): Promise<AdminResult> {
   const invalid = validateItem(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await categoryBelongsToOrg(db, ctx.orgId, input.categoryId))) {
+    return { ok: false, code: 'invalid', message: 'Choose a category from this organisation.' };
+  }
   const tx = await db.transaction('write');
   try {
     // Scoped to the org and the card, so an item can only be edited in place.

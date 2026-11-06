@@ -186,7 +186,7 @@ export async function submitClaim(
             VALUES (?, ?, 'mileage.submit', 'mileage_claim', ?, ?)`,
       args: [orgId, ctx.userId, claimId, JSON.stringify({ lpo_id: lpoId })],
     });
-    // Notify the engineers who can approve a cost (cost.approve.l1).
+    // Notify engineering managers who can approve costs and mileage claims.
     const approvers = await tx.execute({
       sql: `SELECT DISTINCT u.id AS id
               FROM users u
@@ -195,7 +195,7 @@ export async function submitClaim(
               JOIN role_permissions rp ON rp.role_id = r.id
               JOIN permissions p ON p.id = rp.permission_id
              WHERE u.org_id = ? AND u.status = 'ACTIVE'
-               AND p.key = 'cost.approve.l1' AND (r.org_id IS NULL OR r.org_id = ?)`,
+               AND p.key = 'cost.approve' AND (r.org_id IS NULL OR r.org_id = ?)`,
       args: [orgId, orgId],
     });
     for (const row of approvers.rows) {

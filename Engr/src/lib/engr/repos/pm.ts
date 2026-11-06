@@ -14,6 +14,7 @@ import {
   type ScheduleRow,
   type OccurrenceRow,
 } from '../workflow/pmScan';
+import { scheduleMayActivate } from '../workflow/makerChecker';
 
 export { pmAutomationEnabled };
 
@@ -80,8 +81,8 @@ export async function createSchedule(
   await db.execute({
     sql: `INSERT INTO pm_schedules
             (id, org_id, name, asset_id, station_id, category_id, frequency, interval_days,
-             is_automated, assigned_contractor_id, checklist_template_id, sla_id, next_due_date, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+             is_automated, assigned_contractor_id, checklist_template_id, sla_id, next_due_date, status, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAUSED', ?)`,
     args: [
       id,
       ctx.orgId,
@@ -96,6 +97,7 @@ export async function createSchedule(
       input.checklistTemplateId,
       input.slaId,
       input.firstDueDate,
+      ctx.userId,
     ],
   });
   await db.execute({
@@ -119,6 +121,8 @@ interface CurrentSchedule {
   stationId: string | null;
   nextDueDate: string | null;
   frequency: string;
+  status: string;
+  createdBy: string | null;
 }
 
 async function loadSchedule(
@@ -127,7 +131,7 @@ async function loadSchedule(
   id: string,
 ): Promise<CurrentSchedule | null> {
   const res = await db.execute({
-    sql: `SELECT id, name, is_automated, assigned_contractor_id, station_id, next_due_date, frequency
+    sql: `SELECT id, name, is_automated, assigned_contractor_id, station_id, next_due_date, frequency, status, created_by
             FROM pm_schedules WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [id, orgId],
   });
@@ -142,6 +146,8 @@ async function loadSchedule(
     stationId: row.station_id == null ? null : String(row.station_id),
     nextDueDate: row.next_due_date == null ? null : String(row.next_due_date),
     frequency: String(row.frequency),
+    status: String(row.status),
+    createdBy: row.created_by == null ? null : String(row.created_by),
   };
 }
 
@@ -155,15 +161,18 @@ export async function updateSchedule(
   if (problem) return { ok: false, code: 'invalid', message: problem };
   const current = await loadSchedule(db, ctx.orgId, id);
   if (!current) return { ok: false, code: 'not_found', message: 'Schedule not found.' };
+  if (current.status !== 'PAUSED') {
+    return { ok: false, code: 'conflict', message: 'Pause the schedule before editing it.' };
+  }
   const entitled = await pmAutomationEnabled(db, ctx.orgId);
   const automated = input.isAutomated && entitled ? 1 : 0;
 
-  await db.execute({
+  const result = await db.execute({
     sql: `UPDATE pm_schedules
              SET name = ?, asset_id = ?, station_id = ?, category_id = ?, frequency = ?,
                  interval_days = ?, is_automated = ?, assigned_contractor_id = ?,
                  checklist_template_id = ?, sla_id = ?, next_due_date = ?, updated_at = ?
-           WHERE id = ? AND org_id = ?`,
+           WHERE id = ? AND org_id = ? AND status = 'PAUSED'`,
     args: [
       input.name.trim(),
       input.assetId,
@@ -181,6 +190,9 @@ export async function updateSchedule(
       ctx.orgId,
     ],
   });
+  if (result.rowsAffected === 0) {
+    return { ok: false, code: 'conflict', message: 'The schedule changed before it was saved.' };
+  }
 
   if (input.firstDueDate && input.firstDueDate !== current.nextDueDate) {
     await reschedule(db, ctx.orgId, id, current.nextDueDate, input.firstDueDate);
@@ -233,7 +245,6 @@ async function reschedule(
            WHERE id = ? AND org_id = ?`,
     args: [newDue, next1m, next2w, status, nowIso, occId, orgId],
   });
-
   const schedule = await loadSchedule(db, orgId, scheduleId);
   if (!schedule) return;
   const userIds = await allocatorUserIds(db, orgId);
@@ -289,12 +300,28 @@ export async function setScheduleStatus(
   id: string,
   status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
 ): Promise<ScheduleResult> {
+  const current = await loadSchedule(db, ctx.orgId, id);
+  if (!current) return { ok: false, code: 'not_found', message: 'Schedule not found.' };
+  if (status === 'ACTIVE' && !scheduleMayActivate(ctx.userId, current.createdBy)) {
+    return {
+      ok: false,
+      code: 'conflict',
+      message: 'The schedule maker cannot activate their own schedule.',
+    };
+  }
+  const allowedFrom =
+    status === 'ACTIVE' ? 'PAUSED' : status === 'PAUSED' ? 'ACTIVE' : current.status;
+  const now = new Date().toISOString();
   const res = await db.execute({
-    sql: `UPDATE pm_schedules SET status = ?, updated_at = ? WHERE id = ? AND org_id = ?`,
-    args: [status, new Date().toISOString(), id, ctx.orgId],
+    sql: `UPDATE pm_schedules
+             SET status = ?, updated_at = ?,
+                 activated_by = CASE WHEN ? = 'ACTIVE' THEN ? ELSE activated_by END,
+                 activated_at = CASE WHEN ? = 'ACTIVE' THEN ? ELSE activated_at END
+           WHERE id = ? AND org_id = ? AND status = ?`,
+    args: [status, now, status, ctx.userId, status, now, id, ctx.orgId, allowedFrom],
   });
   if (res.rowsAffected === 0)
-    return { ok: false, code: 'not_found', message: 'Schedule not found.' };
+    return { ok: false, code: 'conflict', message: 'The schedule is not in the expected state.' };
   await db.execute({
     sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
           VALUES (?, ?, 'pm.schedule.status', 'pm_schedule', ?, ?)`,

@@ -18,6 +18,7 @@ import {
   type PermissionRow,
 } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
+import { mayManageRoleCode, userManagementScope } from '@engr/auth/adminPolicy';
 import { titleCase } from '@engr/format';
 
 const engr = Astro.locals.engr;
@@ -36,6 +37,9 @@ if (canManage && !isNew && id) {
 }
 const notFound = !isNew && role === null;
 if (canManage && notFound) Astro.response.status = 404;
+const managementScope = userManagementScope(engr.roles, engr.isPlatformOwner);
+const canManageThisRole =
+  canManage && (isNew || (role != null && mayManageRoleCode(managementScope, role.code)));
 
 // Group the permissions by module for the matrix.
 const modules = new Map<string, PermissionRow[]>();
@@ -92,11 +96,15 @@ const moduleLabel = (m: string) => MODULE_LABELS[m] ?? titleCase(m);
   {
     !canManage ? (
       <p class="engr-error" role="alert">
-        Roles are managed by a super-admin with the roles permission.
+        Roles are managed by an administrator with the roles permission.
       </p>
     ) : notFound ? (
       <p class="engr-error" role="alert">
         That role was not found.
+      </p>
+    ) : !canManageThisRole ? (
+      <p class="engr-error" role="alert">
+        This role requires an Owner or a higher administrator.
       </p>
     ) : isNew ? (
       <form method="post" action="/api/admin/roles" class="engr-form">

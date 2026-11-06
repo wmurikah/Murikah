@@ -12,12 +12,9 @@
  *  - every successful transition writes an audit_logs row and enqueues its
  *    notification, all inside one transaction.
  *
- * Two gates differ from Build Prompt 2's text to match the seeded roles:
- *  - assign_technician is gated on technicians.manage (what the seeded CONTRACTOR
- *    role holds) rather than workorder.assign (which it does not).
- *  - confirm_closure and reopen are gated on jobcard.confirm with station-manager
- *    ownership; the seeded STATION_MANAGER role does not hold workorder.close, and
- *    station-manager ownership is the intended route to confirm closure.
+ * Actor actions use dedicated permissions and are also tied to the contractor,
+ * technician or station account attached to the work order. A permission by
+ * itself never lets one portal actor operate another actor's work order.
  */
 import type { Client } from '@libsql/client/web';
 import { enqueue } from '../notify';
@@ -72,7 +69,7 @@ interface Spec {
   from: WoStatus[];
   to: WoStatus;
   permission: string;
-  ownership: 'technician' | 'station' | null;
+  ownership: 'contractor' | 'technician' | 'station' | null;
 }
 
 const TRANSITIONS: Record<WoAction, Spec> = {
@@ -80,30 +77,30 @@ const TRANSITIONS: Record<WoAction, Spec> = {
     from: [WO_STATUS.CONTRACTOR_NOTIFIED],
     to: WO_STATUS.CONTRACTOR_ACCEPTED,
     permission: 'workorder.accept',
-    ownership: null,
+    ownership: 'contractor',
   },
   contractor_reject: {
     from: [WO_STATUS.CONTRACTOR_NOTIFIED],
     to: WO_STATUS.CONTRACTOR_REJECTED,
     permission: 'workorder.accept',
-    ownership: null,
+    ownership: 'contractor',
   },
   assign_technician: {
     from: [WO_STATUS.CONTRACTOR_ACCEPTED],
     to: WO_STATUS.TECH_ASSIGNED,
-    permission: 'technicians.manage',
-    ownership: null,
+    permission: 'workorder.assign_technician',
+    ownership: 'contractor',
   },
   technician_accept: {
     from: [WO_STATUS.TECH_ASSIGNED],
     to: WO_STATUS.TECH_ACCEPTED,
-    permission: 'workorder.view',
+    permission: 'workorder.execute',
     ownership: 'technician',
   },
   technician_reject: {
     from: [WO_STATUS.TECH_ASSIGNED],
     to: WO_STATUS.CONTRACTOR_ACCEPTED,
-    permission: 'workorder.view',
+    permission: 'workorder.execute',
     ownership: 'technician',
   },
   submit_jsa_request_arrival: {
@@ -121,7 +118,7 @@ const TRANSITIONS: Record<WoAction, Spec> = {
   start_work: {
     from: [WO_STATUS.TECH_ONSITE],
     to: WO_STATUS.IN_PROGRESS,
-    permission: 'workorder.view',
+    permission: 'workorder.execute',
     ownership: 'technician',
   },
   submit_jobcard_request_closure: {
@@ -145,7 +142,7 @@ const TRANSITIONS: Record<WoAction, Spec> = {
   cancel: {
     from: NON_TERMINAL,
     to: WO_STATUS.CANCELLED,
-    permission: 'workorder.close',
+    permission: 'workorder.cancel',
     ownership: null,
   },
 };
@@ -176,6 +173,7 @@ interface WoCore {
   stationId: string;
   stationManagerId: string | null;
   contractorId: string | null;
+  contractorPortalUserId: string | null;
   technicianId: string | null;
   technicianPortalUserId: string | null;
   requestId: string | null;
@@ -186,16 +184,21 @@ interface WoCore {
 /** Fields the ownership rules read; also used by availableActions for the UI. */
 export interface WoAuthzFields {
   stationManagerId: string | null;
+  contractorPortalUserId: string | null;
   technicianPortalUserId: string | null;
 }
 
 function isAuthorised(spec: Spec, ctx: WorkflowCtx, wo: WoAuthzFields): boolean {
+  if (spec.ownership === 'contractor') {
+    return ctx.perms.includes(spec.permission) && wo.contractorPortalUserId === ctx.userId;
+  }
   if (spec.ownership === 'technician') {
     return ctx.perms.includes(spec.permission) && wo.technicianPortalUserId === ctx.userId;
   }
   if (spec.ownership === 'station') {
     const isManager = wo.stationManagerId !== null && wo.stationManagerId === ctx.userId;
-    return isManager || ctx.perms.includes(spec.permission);
+    const canOverride = ctx.perms.includes('workorder.close');
+    return ctx.perms.includes(spec.permission) && (isManager || canOverride);
   }
   return ctx.perms.includes(spec.permission);
 }
@@ -216,9 +219,11 @@ async function loadCore(db: Client, orgId: string, id: string): Promise<WoCore |
     sql: `SELECT wo.id, wo.org_id, wo.wo_no, wo.status, wo.station_id, wo.contractor_id, wo.technician_id,
                  wo.request_id, wo.pm_occurrence_id, wo.created_by,
                  s.station_manager_id AS station_manager_id,
+                 c.portal_user_id AS contractor_portal_user_id,
                  t.portal_user_id AS technician_portal_user_id
             FROM work_orders wo
             JOIN stations s ON s.id = wo.station_id
+       LEFT JOIN contractors c ON c.id = wo.contractor_id
        LEFT JOIN technicians t ON t.id = wo.technician_id
            WHERE wo.id = ? AND wo.org_id = ? AND wo.deleted_at IS NULL
            LIMIT 1`,
@@ -234,6 +239,8 @@ async function loadCore(db: Client, orgId: string, id: string): Promise<WoCore |
     stationId: String(row.station_id),
     stationManagerId: row.station_manager_id === null ? null : String(row.station_manager_id),
     contractorId: row.contractor_id === null ? null : String(row.contractor_id),
+    contractorPortalUserId:
+      row.contractor_portal_user_id === null ? null : String(row.contractor_portal_user_id),
     technicianId: row.technician_id === null ? null : String(row.technician_id),
     technicianPortalUserId:
       row.technician_portal_user_id === null ? null : String(row.technician_portal_user_id),

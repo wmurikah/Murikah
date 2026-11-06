@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * Engineer mileage approvals: submitted claims with distance, reference station
- * and amount. Gate: cost.approve.l1. Approve (optionally overriding distance or
+ * and amount. Gate: cost.approve. Approve (optionally overriding distance or
  * rate) or reject. The state machine of the work order is untouched; this only
  * decides the cost.
  */
@@ -17,7 +17,7 @@ import { formatMoneyMinor } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'cost.approve.l1');
+const allowed = can(Astro.locals, 'cost.approve');
 const errorCode = Astro.url.searchParams.get('error');
 const done = Astro.url.searchParams.get('done');
 

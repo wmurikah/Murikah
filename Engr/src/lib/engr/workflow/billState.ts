@@ -1,7 +1,7 @@
 /**
  * Billing ladder: the only writer of bills.status.
  *
- * Three approval levels (engineer, engineering manager, financial controller),
+ * Two accountable approval stages (engineering manager, financial controller),
  * each guarded with optimistic concurrency and the segregation-of-duties rules.
  * A cost may sit on only one bill: the bill_costs primary key stops a repeat on
  * the same bill, and a guard here refuses a cost already on another non-rejected
@@ -32,9 +32,9 @@ const LEVEL_STATUS: Record<number, string> = {
   3: 'PENDING_L3_FC',
 };
 const LEVEL_KEY: Record<number, string> = {
-  1: 'bill.approve.l1',
-  2: 'bill.approve.l2',
-  3: 'bill.approve.l3',
+  1: 'bill.approve.engineering',
+  2: 'bill.approve.engineering', // compatibility for in-flight legacy records
+  3: 'bill.approve.finance',
 };
 
 async function vatBps(db: SqlExecutor, orgId: string): Promise<number> {
@@ -294,7 +294,7 @@ export async function submitBill(
         recipientType: 'user',
         recipientId: userId,
         templateKey: 'bill.pending.l1',
-        subject: 'A bill needs level 1 approval',
+        subject: 'A bill needs engineering approval',
         body: 'A contractor submitted a bill for approval.',
         entityType: 'bill',
         entityId: billId,
@@ -342,8 +342,10 @@ export async function decideBill(
     nextStatus = 'REJECTED';
     nextLevel = bill.currentLevel;
   } else if (level === 1) {
-    nextStatus = 'PENDING_L2_ENG_MGR';
-    nextLevel = 2;
+    // Skip the retired engineer-approval level. The engineering manager is the
+    // sole engineering approver and finance remains the final independent stage.
+    nextStatus = 'PENDING_L3_FC';
+    nextLevel = 3;
   } else if (level === 2) {
     nextStatus = 'PENDING_L3_FC';
     nextLevel = 3;
@@ -391,14 +393,18 @@ export async function decideBill(
     });
 
     if (approve && level < 3) {
-      const next = await usersWithPermission(tx, orgId, LEVEL_KEY[level + 1]);
+      const notifiedLevel = level === 1 ? 3 : level + 1;
+      const next = await usersWithPermission(tx, orgId, LEVEL_KEY[notifiedLevel]);
       for (const userId of next) {
         await enqueue(tx, orgId, {
           recipientType: 'user',
           recipientId: userId,
-          templateKey: `bill.pending.l${level + 1}`,
-          subject: `A bill needs level ${level + 1} approval`,
-          body: `A bill passed level ${level} and needs the next approval.`,
+          templateKey: `bill.pending.l${notifiedLevel}`,
+          subject:
+            notifiedLevel === 3
+              ? 'A bill needs finance approval'
+              : `A bill needs level ${notifiedLevel} approval`,
+          body: 'A bill passed engineering review and needs the next approval.',
           entityType: 'bill',
           entityId: billId,
         });

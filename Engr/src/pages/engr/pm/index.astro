@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** PM schedules admin: list, with pause, resume and archive. Gate: pm.allocate. */
+/** PM schedules list. Viewing and each mutating action have separate gates. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -12,7 +12,10 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'pm.allocate');
+const allowed = can(Astro.locals, 'pm.view');
+const canCreate = can(Astro.locals, 'pm.create');
+const canActivate = can(Astro.locals, 'pm.activate');
+const canArchive = can(Astro.locals, 'pm.archive');
 let rows: ScheduleListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
@@ -29,7 +32,7 @@ if (allowed) {
     <div class="engr-actionbar">
       <a href="/pm/calendar" class="engr-btn engr-btn--secondary">Calendar</a>
       {
-        allowed && (
+        canCreate && (
           <a href="/pm/schedules/new" class="engr-btn engr-btn--primary">
             New schedule
           </a>
@@ -83,42 +86,44 @@ if (allowed) {
                   <span class="engr-status">{r.status}</span>
                 </td>
                 <td>
-                  <form
-                    method="post"
-                    action={`/api/pm/schedules/${r.id}`}
-                    class="engr-actionbar"
-                    style="gap:0.4rem"
-                  >
-                    {r.status === 'ACTIVE' ? (
-                      <button
-                        type="submit"
-                        name="action"
-                        value="pause"
-                        class="engr-btn engr-btn--ghost"
-                      >
-                        Pause
-                      </button>
-                    ) : r.status === 'PAUSED' ? (
-                      <button
-                        type="submit"
-                        name="action"
-                        value="resume"
-                        class="engr-btn engr-btn--ghost"
-                      >
-                        Resume
-                      </button>
-                    ) : null}
-                    {r.status !== 'ARCHIVED' && (
-                      <button
-                        type="submit"
-                        name="action"
-                        value="archive"
-                        class="engr-btn engr-btn--ghost"
-                      >
-                        Archive
-                      </button>
-                    )}
-                  </form>
+                  {(canActivate || canArchive) && (
+                    <form
+                      method="post"
+                      action={`/api/pm/schedules/${r.id}`}
+                      class="engr-actionbar"
+                      style="gap:0.4rem"
+                    >
+                      {canActivate && r.status === 'ACTIVE' ? (
+                        <button
+                          type="submit"
+                          name="action"
+                          value="pause"
+                          class="engr-btn engr-btn--ghost"
+                        >
+                          Pause
+                        </button>
+                      ) : canActivate && r.status === 'PAUSED' ? (
+                        <button
+                          type="submit"
+                          name="action"
+                          value="resume"
+                          class="engr-btn engr-btn--ghost"
+                        >
+                          Resume
+                        </button>
+                      ) : null}
+                      {canArchive && r.status !== 'ARCHIVED' && (
+                        <button
+                          type="submit"
+                          name="action"
+                          value="archive"
+                          class="engr-btn engr-btn--ghost"
+                        >
+                          Archive
+                        </button>
+                      )}
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}

@@ -21,6 +21,9 @@ if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'rfq.view');
 const canSelect = can(Astro.locals, 'quotes.select');
 const canAward = can(Astro.locals, 'rfq.award');
+const canEdit = can(Astro.locals, 'rfq.edit');
+const canSubmit = can(Astro.locals, 'rfq.submit');
+const canRelease = can(Astro.locals, 'rfq.release');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
 const sentToProcurement = Astro.url.searchParams.get('sent') === 'procurement';
@@ -37,8 +40,12 @@ if (allowed && id) {
 }
 if (allowed && !rfq) Astro.response.status = 404;
 
-const isOpen = rfq?.status === 'OPEN';
+const isOpen = rfq?.status === 'OPEN' && rfq.releasedAt != null;
 const dueDate = rfq?.dueDate ? rfq.dueDate.slice(0, 10) : null;
+const isDraft = rfq != null && rfq.submittedAt == null && rfq.releasedAt == null;
+const isMaker = rfq?.createdBy === engr.userId;
+const awaitingRelease = rfq != null && rfq.submittedAt != null && rfq.releasedAt == null;
+const canMakerRelease = awaitingRelease && rfq?.submittedBy !== engr.userId;
 const submittedQuotes = rfq ? rfq.quotes.filter((q) => q.status !== 'REJECTED') : [];
 // Stable id for use inside map closures, where the nullable `rfq` loses its narrowing.
 const rfqId = rfq?.id ?? '';
@@ -101,6 +108,57 @@ const rfqId = rfq?.id ?? '';
               : formatMoneyMinor(rfq.thresholdMinor, rfq.currency)}
           </dd>
         </dl>
+
+        {isDraft && canEdit && isMaker && (
+          <section class="engr-panel" aria-labelledby="rfq-draft-settings">
+            <h2 id="rfq-draft-settings">Draft settings</h2>
+            <form method="post" action={`/api/rfqs/${rfqId}`} class="engr-form">
+              <div class="engr-field">
+                <label for="rfq-due-date">Quotes due by</label>
+                <input
+                  id="rfq-due-date"
+                  name="due_date"
+                  type="date"
+                  class="engr-input"
+                  value={dueDate ?? ''}
+                />
+              </div>
+              <div class="engr-field">
+                <label for="rfq-threshold">Approval threshold (KES)</label>
+                <input
+                  id="rfq-threshold"
+                  name="threshold"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="engr-input"
+                  value={rfq.thresholdMinor == null ? '' : rfq.thresholdMinor / 100}
+                />
+              </div>
+              <button type="submit" class="engr-btn engr-btn--secondary">
+                Save draft
+              </button>
+            </form>
+          </section>
+        )}
+
+        {isDraft && canSubmit && isMaker && (
+          <form method="post" action={`/api/rfqs/${rfqId}/submit`} class="engr-actionbar">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Submit for release
+            </button>
+          </form>
+        )}
+        {awaitingRelease && canRelease && canMakerRelease && (
+          <form method="post" action={`/api/rfqs/${rfqId}/release`} class="engr-actionbar">
+            <button type="submit" class="engr-btn engr-btn--primary">
+              Release to contractors
+            </button>
+          </form>
+        )}
+        {awaitingRelease && canRelease && !canMakerRelease && (
+          <p class="engr-notice">A different manager must release this RFQ.</p>
+        )}
 
         {awardedWo && (
           <p class="engr-notice">

@@ -11,7 +11,12 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getContractor, type ContractorDetail } from '@engr/repos/adminContractors';
-import { listStationOptions, listCategoryOptions, type Option } from '@engr/repos/adminOptions';
+import {
+  listStationOptions,
+  listCategoryOptions,
+  listUserOptionsByRole,
+  type Option,
+} from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -25,6 +30,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let contractor: ContractorDetail | null = null;
 let stations: Option[] = [];
 let categories: Option[] = [];
+let portalUsers: Option[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv());
@@ -33,6 +39,12 @@ if (canManage) {
     listCategoryOptions(db, engr.orgId),
   ]);
   if (!isNew && id) contractor = await getContractor(db, engr.orgId, id);
+  portalUsers = await listUserOptionsByRole(
+    db,
+    engr.orgId,
+    ['CONTRACTOR'],
+    contractor?.portalUserId,
+  );
 }
 const notFound = !isNew && contractor === null;
 if (canManage && notFound) Astro.response.status = 404;
@@ -91,6 +103,20 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
             required
             value={c?.name ?? ''}
           />
+        </div>
+        <div class="engr-field">
+          <label for="portal_user_id">
+            Portal account <span class="engr-field__hint">(optional)</span>
+          </label>
+          <select id="portal_user_id" class="engr-select" name="portal_user_id">
+            <option value="">Not linked</option>
+            {portalUsers.map((u) => (
+              <option value={u.id} selected={c?.portalUserId === u.id}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+          <p class="engr-field__hint">Only active users with the Contractor role are listed.</p>
         </div>
         <div class="engr-field">
           <label for="contact_person">

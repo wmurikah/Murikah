@@ -2,10 +2,8 @@
 export const prerender = false;
 
 /**
- * Bill approvals: level 1 (bill.approve.l1, engineer), level 2
- * (bill.approve.l2, engineering manager) and level 3 (bill.approve.l3,
- * financial controller) queues. Each links to the bill detail where the
- * decision is made.
+ * Bill approvals: engineering manager then financial controller. A legacy
+ * level 2 queue is retained until in-flight rows have drained.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
@@ -17,26 +15,27 @@ import { formatMoneyMinor } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const canL1 = can(Astro.locals, 'bill.approve.l1');
-const canL2 = can(Astro.locals, 'bill.approve.l2');
-const canL3 = can(Astro.locals, 'bill.approve.l3');
-const allowed = canL1 || canL2 || canL3;
+const canEngineering = can(Astro.locals, 'bill.approve.engineering');
+const canFinance = can(Astro.locals, 'bill.approve.finance');
+const allowed = canEngineering || canFinance;
 
 let l1: BillListRow[] = [];
 let l2: BillListRow[] = [];
 let l3: BillListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  if (canL1) l1 = await listPendingBills(db, engr.orgId, 1);
-  if (canL2) l2 = await listPendingBills(db, engr.orgId, 2);
-  if (canL3) l3 = await listPendingBills(db, engr.orgId, 3);
+  if (canEngineering) {
+    l1 = await listPendingBills(db, engr.orgId, 1);
+    l2 = await listPendingBills(db, engr.orgId, 2);
+  }
+  if (canFinance) l3 = await listPendingBills(db, engr.orgId, 3);
 }
 
 const section = (title: string, rows: BillListRow[]) => ({ title, rows });
 const sections = [
-  canL1 ? section('Level 1, engineer', l1) : null,
-  canL2 ? section('Level 2, engineering manager', l2) : null,
-  canL3 ? section('Level 3, financial controller', l3) : null,
+  canEngineering ? section('Engineering approval', l1) : null,
+  canEngineering && l2.length > 0 ? section('Legacy engineering approval', l2) : null,
+  canFinance ? section('Finance approval', l3) : null,
 ].filter((s): s is { title: string; rows: BillListRow[] } => s !== null);
 ---
 

@@ -9,6 +9,7 @@ import { readSession } from '@engr/auth/session';
 import { decryptMfaSecret, totpUri } from '@engr/auth/mfa';
 
 const env = getEngrEnv();
+const mfaConfigured = Boolean(env.mfaEncryptionKey);
 Astro.response.headers.set('Cache-Control', 'no-store');
 Astro.response.headers.set('Referrer-Policy', 'no-referrer');
 const session = await readSession(Astro.request, env.sessionSecret);
@@ -27,11 +28,11 @@ const pending =
   String(row.pending_expires_at) > new Date().toISOString();
 let secret = '';
 let qr = '';
-if (pending) {
+if (pending && mfaConfigured) {
   secret = await decryptMfaSecret(
     String(row.secret_ciphertext),
     String(row.secret_iv),
-    env.mfaEncryptionKey,
+    env.mfaEncryptionKey!,
   );
   qr = renderSVG(totpUri(secret, session.userEmail ?? session.sub), {
     ecc: 'M',
@@ -51,6 +52,14 @@ const error = Astro.url.searchParams.get('error');
   </div>
 
   {
+    (!mfaConfigured || error === 'config') && (
+      <p class="engr-error" role="alert">
+        Authenticator setup is temporarily unavailable. Ask the system administrator to complete the
+        security configuration.
+      </p>
+    )
+  }
+  {
     error === 'code' && (
       <p class="engr-error" role="alert">
         That code was not accepted. Try the current code.
@@ -66,7 +75,7 @@ const error = Astro.url.searchParams.get('error');
   }
 
   {
-    enabled ? (
+    !mfaConfigured ? null : enabled ? (
       <>
         <p>Your authenticator is already enabled.</p>
         <a class="engr-btn engr-btn--primary" href="/">

@@ -3,7 +3,7 @@ export const prerender = false;
 
 /**
  * Contractor LPO detail: the work orders across stations and the single mileage
- * claim for the trip. Gate: workorder.view to see (own LPO only); the claim form
+ * claim for the trip. Gate: lpo.view to see (own LPO only); the claim form
  * gates on cost.create and cost.submit. The amount preview is client-side only;
  * the server recomputes the authoritative amount from distance and the rate.
  */
@@ -20,7 +20,7 @@ import { formatMoneyMinor } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'workorder.view');
+const allowed = can(Astro.locals, 'lpo.view');
 const canClaim = can(Astro.locals, 'cost.create') && can(Astro.locals, 'cost.submit');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
@@ -35,7 +35,8 @@ if (allowed && id) {
   const db = await getDb(getEngrEnv());
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   lpo = await getLpoDetail(db, engr.orgId, id);
-  isOwner = lpo != null && contractorId != null && lpo.contractorId === contractorId;
+  isOwner =
+    lpo != null && contractorId != null && lpo.contractorId === contractorId && !!lpo.issuedAt;
   if (lpo && isOwner) {
     [rateMinor, stations] = await Promise.all([
       mileageRateMinor(db, engr.orgId),

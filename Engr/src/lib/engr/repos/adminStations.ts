@@ -103,6 +103,37 @@ function validate(input: StationInput): string | null {
   return null;
 }
 
+async function referencesBelongToOrg(
+  db: Client,
+  orgId: string,
+  input: StationInput,
+): Promise<boolean> {
+  const result = await db.execute({
+    sql: `SELECT
+            (? IS NULL OR EXISTS(
+              SELECT 1 FROM regions WHERE id = ? AND org_id = ?
+            )) AS region_ok,
+            (? IS NULL OR EXISTS(
+              SELECT 1 FROM users u
+              JOIN user_roles ur ON ur.user_id = u.id
+              JOIN roles r ON r.id = ur.role_id
+               WHERE u.id = ? AND u.org_id = ? AND u.deleted_at IS NULL
+                 AND u.status = 'ACTIVE' AND r.code = 'STATION_MANAGER'
+                 AND (r.org_id IS NULL OR r.org_id = u.org_id)
+            )) AS manager_ok`,
+    args: [
+      input.regionId,
+      input.regionId,
+      orgId,
+      input.stationManagerId,
+      input.stationManagerId,
+      orgId,
+    ],
+  });
+  const row = result.rows[0];
+  return Number(row?.region_ok ?? 0) === 1 && Number(row?.manager_ok ?? 0) === 1;
+}
+
 export async function createStation(
   db: Client,
   ctx: { orgId: string; userId: string },
@@ -110,6 +141,13 @@ export async function createStation(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose a region and manager from this organisation.',
+    };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -151,6 +189,13 @@ export async function updateStation(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose a region and manager from this organisation.',
+    };
+  }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({

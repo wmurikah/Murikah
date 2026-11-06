@@ -8,6 +8,8 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listTechniciansAdmin, type TechnicianRow } from '@engr/repos/adminTechnicians';
 import { can } from '@engr/auth/rbac';
+import { requiresContractorTechnicianScope } from '@engr/auth/adminPolicy';
+import { contractorForUser } from '@engr/repos/techniciansPick';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -20,7 +22,11 @@ const errorCode = Astro.url.searchParams.get('error');
 let rows: TechnicianRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  rows = await listTechniciansAdmin(db, engr.orgId);
+  const contractorScope = requiresContractorTechnicianScope(engr.roles)
+    ? await contractorForUser(db, engr.orgId, engr.userId)
+    : undefined;
+  rows =
+    contractorScope === null ? [] : await listTechniciansAdmin(db, engr.orgId, contractorScope);
 }
 ---
 

@@ -13,7 +13,14 @@ function isUniqueViolation(err: unknown): boolean {
 
 export type AdminResult =
   | { ok: true; id?: string }
-  | { ok: false; code: 'conflict' | 'invalid' | 'not_found'; message: string };
+  | { ok: false; code: 'conflict' | 'invalid' | 'not_found' | 'forbidden'; message: string };
+
+export interface TechnicianAdminCtx {
+  orgId: string;
+  userId: string;
+  /** Present for a contractor portal actor; absent for organisation staff. */
+  contractorId?: string;
+}
 
 export interface TechnicianRow {
   id: string;
@@ -30,6 +37,7 @@ export interface TechnicianDetail {
   phone: string | null;
   email: string | null;
   status: string;
+  portalUserId: string | null;
 }
 
 export interface TechnicianInput {
@@ -38,17 +46,23 @@ export interface TechnicianInput {
   phone: string | null;
   email: string | null;
   status: string;
+  portalUserId: string | null;
 }
 
-export async function listTechniciansAdmin(db: Client, orgId: string): Promise<TechnicianRow[]> {
+export async function listTechniciansAdmin(
+  db: Client,
+  orgId: string,
+  contractorId?: string,
+): Promise<TechnicianRow[]> {
   const res = await db.execute({
     sql: `SELECT t.id, t.full_name, t.phone, t.status,
                  c.name AS contractor_name
             FROM technicians t
             JOIN contractors c ON c.id = t.contractor_id
            WHERE t.org_id = ? AND t.deleted_at IS NULL
+             AND (? IS NULL OR t.contractor_id = ?)
         ORDER BY t.full_name`,
-    args: [orgId],
+    args: [orgId, contractorId ?? null, contractorId ?? null],
   });
   return res.rows.map((r) => ({
     id: String(r.id),
@@ -63,11 +77,15 @@ export async function getTechnician(
   db: Client,
   orgId: string,
   id: string,
+  contractorId?: string,
 ): Promise<TechnicianDetail | null> {
   const res = await db.execute({
-    sql: `SELECT id, contractor_id, full_name, phone, email, status
-            FROM technicians WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
-    args: [id, orgId],
+    sql: `SELECT id, contractor_id, full_name, phone, email, status, portal_user_id
+            FROM technicians
+           WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+             AND (? IS NULL OR contractor_id = ?)
+           LIMIT 1`,
+    args: [id, orgId, contractorId ?? null, contractorId ?? null],
   });
   const row = res.rows[0];
   if (!row) return null;
@@ -78,6 +96,7 @@ export async function getTechnician(
     phone: row.phone === null ? null : String(row.phone),
     email: row.email === null ? null : String(row.email),
     status: String(row.status),
+    portalUserId: row.portal_user_id === null ? null : String(row.portal_user_id),
   };
 }
 
@@ -90,19 +109,52 @@ function validate(input: TechnicianInput): string | null {
   return null;
 }
 
+async function referencesBelongToOrg(
+  db: Client,
+  orgId: string,
+  input: TechnicianInput,
+): Promise<boolean> {
+  const contractor = await db.execute({
+    sql: `SELECT 1 FROM contractors WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+    args: [input.contractorId, orgId],
+  });
+  if (!contractor.rows.length) return false;
+  if (!input.portalUserId) return true;
+  const portal = await db.execute({
+    sql: `SELECT 1 FROM users u
+          JOIN user_roles ur ON ur.user_id = u.id
+          JOIN roles r ON r.id = ur.role_id
+           WHERE u.id = ? AND u.org_id = ? AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+             AND r.code = 'TECHNICIAN' AND (r.org_id IS NULL OR r.org_id = u.org_id)
+           LIMIT 1`,
+    args: [input.portalUserId, orgId],
+  });
+  return portal.rows.length > 0;
+}
+
 export async function createTechnician(
   db: Client,
-  ctx: { orgId: string; userId: string },
+  ctx: TechnicianAdminCtx,
   input: TechnicianInput,
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (ctx.contractorId && input.contractorId !== ctx.contractorId) {
+    return { ok: false, code: 'forbidden', message: 'Technicians must belong to your contractor.' };
+  }
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose a contractor and technician account from this organisation.',
+    };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
     await tx.execute({
-      sql: `INSERT INTO technicians (id, org_id, contractor_id, full_name, phone, email, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO technicians (id, org_id, contractor_id, full_name, phone, email, status, portal_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         ctx.orgId,
@@ -111,6 +163,7 @@ export async function createTechnician(
         input.phone,
         input.email,
         input.status,
+        input.portalUserId ?? null,
       ],
     });
     await tx.execute({
@@ -120,7 +173,11 @@ export async function createTechnician(
         ctx.orgId,
         ctx.userId,
         id,
-        JSON.stringify({ full_name: input.fullName, status: input.status }),
+        JSON.stringify({
+          full_name: input.fullName,
+          status: input.status,
+          portal_user_id: input.portalUserId,
+        }),
       ],
     });
     await tx.commit();
@@ -135,26 +192,40 @@ export async function createTechnician(
 
 export async function updateTechnician(
   db: Client,
-  ctx: { orgId: string; userId: string },
+  ctx: TechnicianAdminCtx,
   id: string,
   input: TechnicianInput,
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (ctx.contractorId && input.contractorId !== ctx.contractorId) {
+    return { ok: false, code: 'forbidden', message: 'Technicians must belong to your contractor.' };
+  }
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose a contractor and technician account from this organisation.',
+    };
+  }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({
       sql: `UPDATE technicians
-               SET contractor_id = ?, full_name = ?, phone = ?, email = ?, status = ?
-             WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
+               SET contractor_id = ?, full_name = ?, phone = ?, email = ?, status = ?, portal_user_id = ?
+             WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+               AND (? IS NULL OR contractor_id = ?)`,
       args: [
         input.contractorId,
         input.fullName,
         input.phone,
         input.email,
         input.status,
+        input.portalUserId ?? null,
         id,
         ctx.orgId,
+        ctx.contractorId ?? null,
+        ctx.contractorId ?? null,
       ],
     });
     if (upd.rowsAffected === 0) {
@@ -168,7 +239,11 @@ export async function updateTechnician(
         ctx.orgId,
         ctx.userId,
         id,
-        JSON.stringify({ full_name: input.fullName, status: input.status }),
+        JSON.stringify({
+          full_name: input.fullName,
+          status: input.status,
+          portal_user_id: input.portalUserId,
+        }),
       ],
     });
     await tx.commit();
@@ -176,7 +251,11 @@ export async function updateTechnician(
   } catch (err) {
     await tx.rollback();
     if (isUniqueViolation(err))
-      return { ok: false, code: 'conflict', message: 'That technician already exists.' };
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'That technician or portal account is already linked.',
+      };
     throw err;
   }
 }

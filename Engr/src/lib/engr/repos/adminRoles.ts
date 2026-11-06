@@ -16,6 +16,7 @@
  * change is org-scoped and audited.
  */
 import type { Client } from '@libsql/client/web';
+import { STANDARD_ROLE_CODES } from '@engr/auth/adminPolicy';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -93,12 +94,15 @@ export async function effectiveRoleIds(db: Client, orgId: string): Promise<Set<s
 export async function listAssignableRoles(
   db: Client,
   orgId: string,
+  allowedCode?: (code: string) => boolean,
 ): Promise<{ id: string; name: string; code: string }[]> {
   const res = await db.execute({
     sql: `WITH eff AS (${EFFECTIVE}) SELECT id, name, code FROM eff ORDER BY name`,
     args: [orgId, orgId],
   });
-  return res.rows.map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }));
+  return res.rows
+    .map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }))
+    .filter((role) => allowedCode?.(role.code) ?? true);
 }
 
 export async function listPermissions(db: Client): Promise<PermissionRow[]> {
@@ -159,6 +163,13 @@ export async function createCustomRole(
       message: 'A code of letters, digits and underscores is required.',
     };
   if (!name) return { ok: false, code: 'invalid', message: 'A name is required.' };
+  if ((STANDARD_ROLE_CODES as readonly string[]).includes(code)) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Standard role codes are reserved. Edit the existing standard role instead.',
+    };
+  }
 
   const id = newId();
   const tx = await db.transaction('write');

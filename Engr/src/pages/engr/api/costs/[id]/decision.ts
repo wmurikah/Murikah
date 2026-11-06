@@ -1,8 +1,9 @@
 export const prerender = false;
 
 /**
- * Level-aware cost decision. Level 1 gates on cost.approve.l1, level 2 on
- * cost.approve.l2. The ladder enforces segregation of duties and the status
+ * Engineering-manager cost decision. New records use level 1; level 2 is
+ * accepted only to drain records that were already in the legacy two-level
+ * ladder. Both are gated by cost.approve. The workflow enforces segregation of duties and the status
  * guard: a stale or out-of-sequence action is a 409, an SoD failure a 403.
  */
 import type { APIRoute } from 'astro';
@@ -26,8 +27,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       ? jsonResponse({ error: 'validation' }, 422)
       : redirectResponse(request, back, 'error=validation');
   }
-  const key = level === 1 ? 'cost.approve.l1' : 'cost.approve.l2';
-  if (!engr.perms.includes(key)) {
+  if (!engr.perms.includes('cost.approve')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');

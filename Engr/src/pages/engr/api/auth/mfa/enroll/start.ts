@@ -3,11 +3,13 @@ import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { readSession } from '@engr/auth/session';
-import { encryptMfaSecret, generateTotpSecret } from '@engr/auth/mfa';
+import { encryptMfaSecret, generateTotpSecret, resolveMfaEncryptionKey } from '@engr/auth/mfa';
 import { verifyPassword } from '@engr/auth/password';
 
 export const POST: APIRoute = async ({ request }) => {
   const env = getEngrEnv();
+  const mfa = resolveMfaEncryptionKey(env.mfaEncryptionKey, '/mfa/enroll?error=config');
+  if (!mfa.ok) return mfa.response;
   const session = await readSession(request, env.sessionSecret);
   if (!session) return new Response(null, { status: 303, headers: { location: '/login' } });
   const db = await getDb(env);
@@ -34,7 +36,7 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(null, { status: 303, headers: { location: '/mfa/enroll' } });
   }
   const secret = generateTotpSecret();
-  const encrypted = await encryptMfaSecret(secret, env.mfaEncryptionKey);
+  const encrypted = await encryptMfaSecret(secret, mfa.key);
   const expiry = new Date(Date.now() + 10 * 60_000).toISOString();
   await db.batch(
     [

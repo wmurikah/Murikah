@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-/** Contractor LPO list: the LPOs issued to this contractor. Gate: workorder.view. */
+/** Contractor LPO list: the LPOs issued to this contractor. Gate: lpo.view. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -13,7 +13,7 @@ import { formatMoneyMinor } from '@engr/format';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'workorder.view');
+const allowed = can(Astro.locals, 'lpo.view');
 let rows: LpoListRow[] = [];
 let isContractor = false;
 if (allowed) {

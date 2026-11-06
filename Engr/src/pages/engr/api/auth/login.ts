@@ -57,7 +57,7 @@ export const GET: APIRoute = async () =>
     headers: { location: '/login', 'cache-control': 'no-store' },
   });
 
-export const POST: APIRoute = async ({ request, locals }) => {
+const handleLogin: APIRoute = async ({ request, locals }) => {
   const { email, password } = await readCredentials(request);
   const emailNorm = email.trim().toLowerCase();
   if (!emailNorm || !password) return invalid();
@@ -175,4 +175,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     status: 303,
     headers: { location: next.location, 'set-cookie': next.cookie },
   });
+};
+
+/** Keep infrastructure or rollout faults out of the browser's raw Worker 500
+ * page. The response remains deliberately generic; the detailed failure is
+ * available to operators in Worker logs. */
+export const POST: APIRoute = async (context) => {
+  try {
+    return await handleLogin(context);
+  } catch (error) {
+    console.error('[engr.auth.login] sign-in unavailable', error);
+    return new Response(null, {
+      status: 303,
+      headers: { location: '/login?error=unavailable', 'cache-control': 'no-store' },
+    });
+  }
 };

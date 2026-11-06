@@ -33,6 +33,7 @@ export interface ContractorDetail {
   baseStationId: string | null;
   isPrequalified: boolean;
   status: string;
+  portalUserId: string | null;
   stationIds: string[];
   categoryIds: string[];
 }
@@ -45,6 +46,7 @@ export interface ContractorInput {
   baseStationId: string | null;
   isPrequalified: boolean;
   status: string;
+  portalUserId: string | null;
   stationIds: string[];
   categoryIds: string[];
 }
@@ -74,7 +76,7 @@ export async function getContractor(
   id: string,
 ): Promise<ContractorDetail | null> {
   const res = await db.execute({
-    sql: `SELECT id, name, contact_person, email, phone, base_station_id, is_prequalified, status
+    sql: `SELECT id, name, contact_person, email, phone, base_station_id, is_prequalified, status, portal_user_id
             FROM contractors WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
     args: [id, orgId],
   });
@@ -97,6 +99,7 @@ export async function getContractor(
     baseStationId: row.base_station_id === null ? null : String(row.base_station_id),
     isPrequalified: Number(row.is_prequalified) === 1,
     status: String(row.status),
+    portalUserId: row.portal_user_id === null ? null : String(row.portal_user_id),
     stationIds: stationRes.rows.map((r) => String(r.station_id)),
     categoryIds: categoryRes.rows.map((r) => String(r.category_id)),
   };
@@ -110,6 +113,55 @@ function validate(input: ContractorInput): string | null {
   return null;
 }
 
+async function referencesBelongToOrg(
+  db: Client,
+  orgId: string,
+  input: ContractorInput,
+): Promise<boolean> {
+  const stationIds = [...new Set(input.stationIds)];
+  const categoryIds = [...new Set(input.categoryIds)];
+  if (
+    stationIds.length !== input.stationIds.length ||
+    categoryIds.length !== input.categoryIds.length
+  ) {
+    return false;
+  }
+  if (input.baseStationId && !stationIds.includes(input.baseStationId)) return false;
+
+  const stationCount = stationIds.length
+    ? await db.execute({
+        sql: `SELECT COUNT(*) AS n FROM stations
+               WHERE org_id = ? AND deleted_at IS NULL
+                 AND id IN (${stationIds.map(() => '?').join(',')})`,
+        args: [orgId, ...stationIds],
+      })
+    : null;
+  const categoryCount = categoryIds.length
+    ? await db.execute({
+        sql: `SELECT COUNT(*) AS n FROM asset_categories
+               WHERE org_id = ? AND id IN (${categoryIds.map(() => '?').join(',')})`,
+        args: [orgId, ...categoryIds],
+      })
+    : null;
+  const stationsOk = !stationCount || Number(stationCount.rows[0]?.n ?? 0) === stationIds.length;
+  const categoriesOk =
+    !categoryCount || Number(categoryCount.rows[0]?.n ?? 0) === categoryIds.length;
+  let portalOk = true;
+  if (input.portalUserId) {
+    const portal = await db.execute({
+      sql: `SELECT 1 FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id
+            JOIN roles r ON r.id = ur.role_id
+             WHERE u.id = ? AND u.org_id = ? AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+               AND r.code = 'CONTRACTOR' AND (r.org_id IS NULL OR r.org_id = u.org_id)
+             LIMIT 1`,
+      args: [input.portalUserId, orgId],
+    });
+    portalOk = portal.rows.length > 0;
+  }
+  return stationsOk && categoriesOk && portalOk;
+}
+
 export async function createContractor(
   db: Client,
   ctx: { orgId: string; userId: string },
@@ -117,12 +169,19 @@ export async function createContractor(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose stations and categories from this organisation.',
+    };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
     await tx.execute({
-      sql: `INSERT INTO contractors (id, org_id, name, contact_person, email, phone, base_station_id, is_prequalified, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO contractors (id, org_id, name, contact_person, email, phone, base_station_id, is_prequalified, status, portal_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         ctx.orgId,
@@ -133,6 +192,7 @@ export async function createContractor(
         input.baseStationId,
         input.isPrequalified ? 1 : 0,
         input.status,
+        input.portalUserId ?? null,
       ],
     });
     for (const stationId of input.stationIds) {
@@ -150,7 +210,16 @@ export async function createContractor(
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
             VALUES (?, ?, 'contractors.create', 'contractor', ?, ?)`,
-      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ name: input.name, status: input.status })],
+      args: [
+        ctx.orgId,
+        ctx.userId,
+        id,
+        JSON.stringify({
+          name: input.name,
+          status: input.status,
+          portal_user_id: input.portalUserId,
+        }),
+      ],
     });
     await tx.commit();
     return { ok: true, id };
@@ -170,11 +239,18 @@ export async function updateContractor(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Choose stations and categories from this organisation.',
+    };
+  }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({
       sql: `UPDATE contractors
-               SET name = ?, contact_person = ?, email = ?, phone = ?, base_station_id = ?, is_prequalified = ?, status = ?
+               SET name = ?, contact_person = ?, email = ?, phone = ?, base_station_id = ?, is_prequalified = ?, status = ?, portal_user_id = ?
              WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
       args: [
         input.name,
@@ -184,6 +260,7 @@ export async function updateContractor(
         input.baseStationId,
         input.isPrequalified ? 1 : 0,
         input.status,
+        input.portalUserId ?? null,
         id,
         ctx.orgId,
       ],
@@ -215,14 +292,27 @@ export async function updateContractor(
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
             VALUES (?, ?, 'contractors.update', 'contractor', ?, ?)`,
-      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ name: input.name, status: input.status })],
+      args: [
+        ctx.orgId,
+        ctx.userId,
+        id,
+        JSON.stringify({
+          name: input.name,
+          status: input.status,
+          portal_user_id: input.portalUserId,
+        }),
+      ],
     });
     await tx.commit();
     return { ok: true, id };
   } catch (err) {
     await tx.rollback();
     if (isUniqueViolation(err))
-      return { ok: false, code: 'conflict', message: 'That contractor already exists.' };
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'That contractor or portal account is already linked.',
+      };
     throw err;
   }
 }
