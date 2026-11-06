@@ -1,18 +1,21 @@
 /**
- * Password hashing and verification with PBKDF2 (WebCrypto crypto.subtle),
- * SHA-256 and a per-user random salt. The iteration count is embedded in the
- * stored string, so it can be raised later without breaking existing hashes.
+ * Password hashing and verification with PBKDF2 (the Workers node:crypto
+ * compatibility API), SHA-256 and a per-user random salt. The iteration count
+ * is embedded in the stored string, so it can be raised later without breaking
+ * existing hashes.
  *
  * Stored format, written to the users.password_hash column as one value:
  *   pbkdf2$<iterations>$<saltBase64>$<hashBase64>
  *
- * crypto.subtle is native in both the Cloudflare Worker and Node 22 (the
- * bootstrap script), so the same code hashes on the server and at bootstrap.
+ * Cloudflare's WebCrypto PBKDF2 implementation rejects iteration counts above
+ * 100,000. The node:crypto compatibility API supports the reviewed 600,000
+ * iteration cost in both workerd and Node, including hashes already written by
+ * the earlier WebCrypto implementation.
  */
+import { pbkdf2 } from 'node:crypto';
 
-// WebCrypto PBKDF2 is native, so this stays well within the Worker CPU budget.
 export const PASSWORD_ITERATIONS = 600_000;
-const KEY_LEN_BITS = 256; // SHA-256 output width
+const KEY_LEN_BYTES = 32; // SHA-256 output width
 const SALT_BYTES = 16;
 
 export const PASSWORD_MIN_LENGTH = 12;
@@ -85,19 +88,15 @@ async function derive(
   salt: Uint8Array<ArrayBuffer>,
   iterations: number,
 ): Promise<Uint8Array> {
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(plain),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveBits'],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
-    keyMaterial,
-    KEY_LEN_BITS,
-  );
-  return new Uint8Array(bits);
+  return new Promise((resolve, reject) => {
+    pbkdf2(plain, salt, iterations, KEY_LEN_BYTES, 'sha256', (error, derived) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(new Uint8Array(derived.buffer, derived.byteOffset, derived.byteLength));
+    });
+  });
 }
 
 export async function hashPassword(plain: string): Promise<string> {
@@ -111,10 +110,16 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
   const iterations = Number(parts[1]);
   if (!Number.isInteger(iterations) || iterations < 1) return false;
-  const salt = fromBase64(parts[2]);
-  const expected = fromBase64(parts[3]);
-  const actual = await derive(plain, salt, iterations);
-  return timingSafeEqual(actual, expected);
+  try {
+    const salt = fromBase64(parts[2]);
+    const expected = fromBase64(parts[3]);
+    const actual = await derive(plain, salt, iterations);
+    return timingSafeEqual(actual, expected);
+  } catch {
+    // A corrupt stored hash is an invalid credential, not an infrastructure
+    // failure that should strand every visitor on the unavailable screen.
+    return false;
+  }
 }
 
 // Constant-time compare, so verification does not leak the hash byte by byte.

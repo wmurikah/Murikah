@@ -62,9 +62,17 @@ test('breach check uses only the SHA-1 prefix and rejects a matching suffix', as
 
 test('password hashes verify the matching value and reject a different value', async () => {
   const hash = await hashPassword('correct horse battery staple');
+  assert.match(hash, /^pbkdf2\$600000\$/);
   assert.equal(await verifyPassword('correct horse battery staple', hash), true);
   assert.equal(await verifyPassword('incorrect horse battery staple', hash), false);
   assert.equal(hash.includes('correct horse'), false);
+});
+
+test('existing 600,000-iteration WebCrypto hashes remain valid on Workers', async () => {
+  const existing =
+    'pbkdf2$600000$AAECAwQFBgcICQoLDA0ODw==$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY=';
+  assert.equal(await verifyPassword('correct horse battery staple', existing), true);
+  assert.equal(await verifyPassword('incorrect horse battery staple', existing), false);
 });
 
 test('temporary-password sessions are restricted and expire after ten minutes', async () => {
