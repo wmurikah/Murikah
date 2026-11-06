@@ -48,6 +48,15 @@ function invalid(): Response {
   return new Response(null, { status: 303, headers: { location: '/login?error=1' } });
 }
 
+/** A form endpoint can be revisited with GET when a browser restores a tab,
+ * refreshes its last URL, or a password manager opens the saved action URL.
+ * Never strand that user on Astro's endpoint 404 page. */
+export const GET: APIRoute = async () =>
+  new Response(null, {
+    status: 303,
+    headers: { location: '/login', 'cache-control': 'no-store' },
+  });
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const { email, password } = await readCredentials(request);
   const emailNorm = email.trim().toLowerCase();
