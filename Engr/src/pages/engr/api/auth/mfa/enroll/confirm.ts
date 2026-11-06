@@ -7,6 +7,7 @@ import {
   decryptMfaSecret,
   generateRecoveryCodes,
   hashRecoveryCode,
+  resolveMfaEncryptionKey,
   verifyTotp,
 } from '@engr/auth/mfa';
 import { fullSession } from '@engr/auth/loginSession';
@@ -27,6 +28,8 @@ function escapeHtml(value: string): string {
 
 export const POST: APIRoute = async ({ request }) => {
   const env = getEngrEnv();
+  const mfa = resolveMfaEncryptionKey(env.mfaEncryptionKey, '/mfa/enroll?error=config');
+  if (!mfa.ok) return mfa.response;
   const secure = new URL(request.url).protocol === 'https:';
   const session = await readSession(request, env.sessionSecret);
   if (!session) return new Response(null, { status: 303, headers: { location: '/login' } });
@@ -54,7 +57,7 @@ export const POST: APIRoute = async ({ request }) => {
   const secret = await decryptMfaSecret(
     String(row.secret_ciphertext),
     String(row.secret_iv),
-    env.mfaEncryptionKey,
+    mfa.key,
   );
   const step = await verifyTotp(secret, code);
   if (step == null) {

@@ -2,4 +2,6 @@
 TURSO_ENGR_DATABASE_URL=""
 TURSO_ENGR_AUTH_TOKEN=""
 ENGR_SESSION_SECRET=""
+# Base64-encoded 32-byte AES-GCM key. Required for authenticator MFA.
+ENGR_MFA_ENCRYPTION_KEY=""
 # Optional delivery/storage bindings are described in src/env.d.ts and product docs.

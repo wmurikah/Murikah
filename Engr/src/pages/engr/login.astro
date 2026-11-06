@@ -17,6 +17,7 @@ import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
 
 const params = Astro.url.searchParams;
 const hasError = params.get('error') === '1';
+const unavailable = params.get('error') === 'unavailable';
 const passwordChanged = params.get('password') === 'changed';
 const errId = 'engr-login-error';
 ---
@@ -27,6 +28,14 @@ const errId = 'engr-login-error';
     <p class="engr-authcard__sub">Welcome back. Enter your details to continue.</p>
   </div>
 
+  {
+    unavailable && (
+      <p id={errId} class="engr-error" role="alert">
+        Sign-in is temporarily unavailable. Please try again shortly or contact the system
+        administrator.
+      </p>
+    )
+  }
   {
     passwordChanged && (
       <p class="engr-success" role="status">
@@ -55,8 +64,8 @@ const errId = 'engr-login-error';
         autocapitalize="none"
         spellcheck="false"
         autofocus
-        aria-invalid={hasError ? 'true' : undefined}
-        aria-describedby={hasError ? errId : undefined}
+        aria-invalid={hasError || unavailable ? 'true' : undefined}
+        aria-describedby={hasError || unavailable ? errId : undefined}
       />
     </div>
     <div class="engr-field">
@@ -68,8 +77,8 @@ const errId = 'engr-login-error';
         type="password"
         required
         autocomplete="current-password"
-        aria-invalid={hasError ? 'true' : undefined}
-        aria-describedby={hasError ? errId : undefined}
+        aria-invalid={hasError || unavailable ? 'true' : undefined}
+        aria-describedby={hasError || unavailable ? errId : undefined}
       />
     </div>
     <button type="submit" class="engr-btn engr-btn--primary engr-authform__submit">Sign in</button>

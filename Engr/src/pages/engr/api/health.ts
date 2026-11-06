@@ -16,7 +16,8 @@ const reply = (body: unknown, status: number): Response =>
 
 export const GET: APIRoute = async () => {
   try {
-    const db = await getDb(getEngrEnv());
+    const engrEnv = getEngrEnv();
+    const db = await getDb(engrEnv);
     const schema = await db.execute({
       sql: `SELECT COUNT(*) AS n FROM sqlite_schema
              WHERE type = 'table' AND name IN
@@ -39,20 +40,21 @@ export const GET: APIRoute = async () => {
       );
     }
     const delivery = deliveryReadiness(getDeliveryEnv());
+    const mfaReady = Boolean(engrEnv.mfaEncryptionKey);
     return reply(
       {
-        status: 'ok',
+        status: mfaReady ? 'ok' : 'error',
         checks: {
           application: 'ok',
           database: 'reachable',
           notificationSchema: 'ok',
           authenticationSchema: 'ok',
-          mfaEncryption: 'ready',
+          mfaEncryption: mfaReady ? 'ready' : 'missing',
           emailDelivery: delivery.email.ready ? 'ready' : 'held',
           smsDelivery: delivery.sms.ready ? 'ready' : 'held',
         },
       },
-      200,
+      mfaReady ? 200 : 503,
     );
   } catch {
     return reply(

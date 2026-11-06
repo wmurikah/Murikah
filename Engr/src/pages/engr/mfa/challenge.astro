@@ -12,6 +12,13 @@ const next = Astro.url.searchParams.get('next') ?? '/';
     <p class="engr-authcard__sub">Enter your authenticator code or a recovery code.</p>
   </div>
   {
+    error === 'config' && (
+      <p class="engr-error" role="alert">
+        Authenticator verification is temporarily unavailable. Contact the system administrator.
+      </p>
+    )
+  }
+  {
     error === 'code' && (
       <p class="engr-error" role="alert">
         That code is invalid or has already been used.
@@ -25,23 +32,29 @@ const next = Astro.url.searchParams.get('next') ?? '/';
       </p>
     )
   }
-  <form method="post" action="/api/auth/mfa/challenge" class="engr-authform">
-    <input type="hidden" name="next" value={next} />
-    <div class="engr-field">
-      <label for="code">Authenticator or recovery code</label>
-      <input
-        id="code"
-        class="engr-input"
-        name="code"
-        required
-        maxlength="20"
-        autocomplete="one-time-code"
-        autocapitalize="characters"
-        autofocus
-      />
-    </div>
-    <button class="engr-btn engr-btn--primary engr-authform__submit" type="submit">Verify</button>
-  </form>
+  {
+    error !== 'config' && (
+      <form method="post" action="/api/auth/mfa/challenge" class="engr-authform">
+        <input type="hidden" name="next" value={next} />
+        <div class="engr-field">
+          <label for="code">Authenticator or recovery code</label>
+          <input
+            id="code"
+            class="engr-input"
+            name="code"
+            required
+            maxlength="20"
+            autocomplete="one-time-code"
+            autocapitalize="characters"
+            autofocus
+          />
+        </div>
+        <button class="engr-btn engr-btn--primary engr-authform__submit" type="submit">
+          Verify
+        </button>
+      </form>
+    )
+  }
   <form method="post" action="/api/auth/logout" class="engr-authmeta">
     <button type="submit" class="engr-authmeta__link engr-authmeta__link--muted">Sign out</button>
   </form>

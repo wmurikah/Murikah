@@ -11,6 +11,7 @@ import {
   generateTotpSecret,
   hashRecoveryCode,
   normalizeRecoveryCode,
+  resolveMfaEncryptionKey,
   verifyTotp,
 } from '../src/lib/engr/auth/mfa.ts';
 import { hashOpaqueToken, issueAuthToken, newOpaqueToken } from '../src/lib/engr/auth/tokens.ts';
@@ -88,6 +89,20 @@ test('TOTP secrets encrypt with AES-GCM and decrypt only with the correct key', 
   assert.equal(encrypted.ciphertext.includes(secret), false);
   assert.equal(await decryptMfaSecret(encrypted.ciphertext, encrypted.iv, key), secret);
   await assert.rejects(() => decryptMfaSecret(encrypted.ciphertext, encrypted.iv, wrongKey));
+});
+
+test('missing MFA configuration fails closed with a useful redirect instead of a 500', () => {
+  const missing = resolveMfaEncryptionKey(undefined, '/mfa/enroll?error=config');
+  assert.equal(missing.ok, false);
+  if (!missing.ok) {
+    assert.equal(missing.response.status, 303);
+    assert.equal(missing.response.headers.get('location'), '/mfa/enroll?error=config');
+    assert.equal(missing.response.headers.get('cache-control'), 'no-store');
+  }
+  assert.deepEqual(resolveMfaEncryptionKey('configured-key', '/mfa/enroll?error=config'), {
+    ok: true,
+    key: 'configured-key',
+  });
 });
 
 test('TOTP verifier accepts the RFC SHA-1 vector and rejects malformed codes', async () => {
