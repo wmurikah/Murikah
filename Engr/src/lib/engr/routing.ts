@@ -120,6 +120,21 @@ export function isEngrApiPath(appPath: string): boolean {
   return appPath === '/api' || appPath.startsWith('/api/');
 }
 
+/** Keep a browser out of the form-processing endpoint. Browsers can restore or
+ * refresh the last form URL as GET/HEAD. A missing endpoint in a stale or
+ * partially rolled-out build is also recovered to the human login screen. */
+export function loginEndpointRedirect(
+  pathname: string,
+  method: string,
+  responseStatus?: number,
+): string | null {
+  if (toAppPath(pathname) !== '/api/auth/login') return null;
+  const verb = method.toUpperCase();
+  if (verb === 'GET' || verb === 'HEAD') return '/login';
+  if (responseStatus === 404) return '/login?error=1';
+  return null;
+}
+
 /** The branch the worker took, surfaced on every response as x-mrk-branch. */
 export type Branch = 'marketing' | 'app' | 'redirect-www' | 'redirect-engr-path' | 'not-found-host';
 

@@ -17,6 +17,7 @@ import {
   isPassthroughAsset,
   isPublicAppPath,
   isEngrApiPath,
+  loginEndpointRedirect,
   routeDecision,
 } from '../src/lib/engr/routing.ts';
 
@@ -87,6 +88,14 @@ test('public app paths cover login and machine endpoints only', () => {
   assert.equal(isPublicAppPath('/api/auth/logout'), false);
   assert.equal(isEngrApiPath('/api/requests'), true);
   assert.equal(isEngrApiPath('/requests'), false);
+});
+
+test('login API visits and route-level 404s recover to a human login page', () => {
+  assert.equal(loginEndpointRedirect('/api/auth/login', 'GET'), '/login');
+  assert.equal(loginEndpointRedirect('/engr/api/auth/login', 'HEAD'), '/login');
+  assert.equal(loginEndpointRedirect('/engr/api/auth/login', 'POST', 404), '/login?error=1');
+  assert.equal(loginEndpointRedirect('/engr/api/auth/login', 'POST', 303), null);
+  assert.equal(loginEndpointRedirect('/api/auth/forgot', 'GET'), null);
 });
 
 test('routeDecision: engr host serves the app, rewriting to the /engr route', () => {
