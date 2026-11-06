@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { join, relative, sep } from 'node:path';
 import { SmokeServer } from './smoke/harness.ts';
 import { SMOKE } from './smoke/seed.ts';
@@ -41,6 +41,11 @@ import { planNormalDigests } from '../src/lib/grc/notify/render.ts';
 import { digestLinks } from '../src/lib/grc/notify/links.ts';
 
 const DIGEST_LINKS = digestLinks();
+const differentPassword = randomBytes(24).toString('base64url');
+const adminPassword = randomBytes(24).toString('base64url');
+const changedPassword = randomBytes(24).toString('base64url');
+const resetPasswordCandidate = randomBytes(24).toString('base64url');
+const resetPasswordAfterUse = randomBytes(24).toString('base64url');
 
 /** The cells the role-save step ticks, and therefore expects stored as allowed. */
 const GRANTED_IN_SAVE: [string, string][] = [
@@ -128,7 +133,7 @@ const MUTATION_STEPS: MutationStep[] = [
     expect: 'refusal',
     method: 'POST',
     path: () => '/api/auth/login',
-    form: () => ({ email: SMOKE.email, password: 'not-the-password' }),
+    form: () => ({ email: SMOKE.email, password: differentPassword }),
   },
   {
     endpoint: 'sidebar-counts.ts',
@@ -1500,7 +1505,7 @@ const MUTATION_STEPS: MutationStep[] = [
       organization_name: 'Smoke Test Organisation',
       admin_email: 'admin@smoke-org.example',
       admin_name: 'Smoke Admin',
-      admin_password: 'Smoke-Admin-Password-1',
+      admin_password: adminPassword,
     }),
   },
   {
@@ -1566,8 +1571,8 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => '/api/auth/change-password',
     form: () => ({
       current_password: SMOKE.password,
-      new_password: 'Grc-Smoke-Harness-2026-B',
-      confirm_password: 'Grc-Smoke-Harness-2026-B',
+      new_password: changedPassword,
+      confirm_password: changedPassword,
     }),
   },
   {
@@ -1583,7 +1588,7 @@ const MUTATION_STEPS: MutationStep[] = [
     method: 'POST',
     path: () => '/api/auth/change-password',
     form: () => ({
-      current_password: 'Grc-Smoke-Harness-2026-B',
+      current_password: changedPassword,
       new_password: SMOKE.password,
       confirm_password: SMOKE.password,
     }),
@@ -1676,8 +1681,8 @@ const MUTATION_STEPS: MutationStep[] = [
     path: () => '/api/auth/reset-password',
     form: () => ({
       token: 'not-a-real-token',
-      new_password: 'Grc-Reset-Password-1',
-      confirm_password: 'Grc-Reset-Password-1',
+      new_password: resetPasswordCandidate,
+      confirm_password: resetPasswordCandidate,
     }),
   },
   {
@@ -2626,7 +2631,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         'Hass must see its own active provider named',
       );
       assert.ok(
-        !screen.body.includes('smoke-secret-key'),
+        !screen.body.includes(SMOKE.storageSecretAccessKey),
         'no stored credential may ever reach the screen',
       );
       assert.ok(
@@ -5334,7 +5339,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       for (let i = 0; i < 5; i++) {
         const res = await server.request('POST', '/api/auth/login', {
           email: 'lockout@hasspetroleum.com',
-          password: 'wrong-password',
+          password: differentPassword,
         });
         assert.equal(res.status, 303, `failure ${i + 1} answered ${res.status}`);
       }
@@ -5377,7 +5382,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
     // for the seeded auditor, pull the single-use token out of the queued
     // email, redeem it, sign in with the new password, and prove the token
     // died with its first use.
-    const resetPassword = 'Grc-Smoke-Reset-2026-A';
+    const resetPassword = randomBytes(24).toString('base64url');
     let resetToken = '';
 
     await t.test('a reset request queues an email carrying the link', async () => {
@@ -5432,8 +5437,8 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
       const again = await server.request('POST', '/api/auth/reset-password', {
         token: resetToken,
-        new_password: 'Grc-Smoke-Reset-2026-B',
-        confirm_password: 'Grc-Smoke-Reset-2026-B',
+        new_password: resetPasswordAfterUse,
+        confirm_password: resetPasswordAfterUse,
       });
       assert.ok(
         String(again.headers.location ?? '').includes('error='),

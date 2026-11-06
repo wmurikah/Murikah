@@ -34,3 +34,7 @@ Thumbs.db
 
 # Test / coverage
 coverage/
+
+# Generated database resources; each product tracks its own tools/db-assets.json.
+*.sql
+*.sql.txt

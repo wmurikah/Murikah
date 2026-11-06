@@ -21,9 +21,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { hashPassword, verifyPassword } from '../src/lib/shared/password.ts';
 
 const enc = new TextEncoder();
+const testPassword = randomBytes(24).toString('base64url');
+const otherPassword = randomBytes(24).toString('base64url');
 
 /** Standard base64 with padding, matching the seed and reset scripts. */
 function toBase64(bytes: Uint8Array): string {
@@ -60,33 +63,33 @@ async function makeStoredHash(
 }
 
 test('a pbkdf2$100000 hash verifies with the right password and fails with the wrong one', async () => {
-  const stored = await makeStoredHash('Temp-Passw0rd!', 100_000);
+  const stored = await makeStoredHash(testPassword, 100_000);
   const parts = stored.split('$');
   assert.equal(parts.length, 4, 'four dollar-separated fields');
   assert.equal(parts[0], 'pbkdf2');
   assert.equal(parts[1], '100000');
-  assert.equal(await verifyPassword('Temp-Passw0rd!', stored), true);
-  assert.equal(await verifyPassword('wrong-password', stored), false);
+  assert.equal(await verifyPassword(testPassword, stored), true);
+  assert.equal(await verifyPassword(otherPassword, stored), false);
 });
 
 test('the iteration count is read from the stored field, not assumed', async () => {
   // 100000 differs from the hasher default, so a match here proves the verifier
   // takes the iteration count from field two rather than a hardcoded constant.
-  const stored = await makeStoredHash('correct horse battery', 100_000);
+  const stored = await makeStoredHash(testPassword, 100_000);
   assert.ok(stored.startsWith('pbkdf2$100000$'));
-  assert.equal(await verifyPassword('correct horse battery', stored), true);
+  assert.equal(await verifyPassword(testPassword, stored), true);
 });
 
 test('the verifier is bound to SHA-256, so a SHA-512 derived hash never matches', async () => {
-  const wrongDigest = await makeStoredHash('same-password', 100_000, 'SHA-512');
-  assert.equal(await verifyPassword('same-password', wrongDigest), false);
+  const wrongDigest = await makeStoredHash(testPassword, 100_000, 'SHA-512');
+  assert.equal(await verifyPassword(testPassword, wrongDigest), false);
 });
 
 test('hashPassword round-trips through verifyPassword', async () => {
-  const stored = await hashPassword('S3cret-value');
+  const stored = await hashPassword(testPassword);
   assert.ok(stored.startsWith('pbkdf2$'));
-  assert.equal(await verifyPassword('S3cret-value', stored), true);
-  assert.equal(await verifyPassword('S3cret-valuE', stored), false);
+  assert.equal(await verifyPassword(testPassword, stored), true);
+  assert.equal(await verifyPassword(otherPassword, stored), false);
 });
 
 test('leading whitespace breaks verification until the stored value is trimmed', async () => {
@@ -96,9 +99,9 @@ test('leading whitespace breaks verification until the stored value is trimmed',
   // equals 'pbkdf2', and a correct password would wrongly fail. (A trailing
   // newline is tolerated because base64 decoding ignores whitespace, but the
   // trim covers both ends regardless.)
-  const stored = await makeStoredHash('boundary-case', 100_000);
-  assert.equal(await verifyPassword('boundary-case', `\n${stored}`), false);
-  assert.equal(await verifyPassword('boundary-case', `  ${stored}\n`.trim()), true);
+  const stored = await makeStoredHash(testPassword, 100_000);
+  assert.equal(await verifyPassword(testPassword, `\n${stored}`), false);
+  assert.equal(await verifyPassword(testPassword, `  ${stored}\n`.trim()), true);
 });
 
 test('malformed or empty stored values fail safe without throwing', async () => {
@@ -110,6 +113,6 @@ test('malformed or empty stored values fail safe without throwing', async () => 
     'pbkdf2$notanumber$c2FsdA==$aGFzaA==',
   ];
   for (const value of bad) {
-    assert.equal(await verifyPassword('whatever', value), false, value);
+    assert.equal(await verifyPassword(testPassword, value), false, value);
   }
 });

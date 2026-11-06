@@ -13,7 +13,7 @@ import {
 import { loadIdentity } from '../../src/lib/cms/repos/identity.ts';
 
 const NOW = new Date('2026-11-03T12:00:00Z');
-const SECRET = 'test-registration-secret-not-for-production';
+const SECRET = crypto.randomUUID() + crypto.randomUUID();
 const input = {
   email: 'applicant@customer.example',
   provider: 'GOOGLE' as const,

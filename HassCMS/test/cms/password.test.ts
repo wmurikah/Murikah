@@ -11,6 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import {
   hashPassword,
   verifyPassword,
@@ -21,6 +22,9 @@ import {
   PBKDF2_ITERATIONS,
   PASSWORD_ALGORITHM_PBKDF2,
 } from '../../src/lib/cms/auth/password.ts';
+
+const testPassword = randomBytes(24).toString('base64url');
+const otherPassword = randomBytes(24).toString('base64url');
 
 /**
  * The Cloudflare Workers runtime caps PBKDF2 at 100,000 iterations and throws
@@ -56,7 +60,7 @@ test('the work factor sits at the ceiling rather than below it', () => {
 });
 
 test('a hash is self-describing: scheme, iterations, salt and derived key', async () => {
-  const stored = await hashPassword('a correct horse battery staple');
+  const stored = await hashPassword(testPassword);
   const [scheme, iterations, salt, key] = stored.split('$');
   assert.equal(scheme, 'pbkdf2-sha256');
   assert.equal(Number(iterations), PBKDF2_ITERATIONS);
@@ -67,37 +71,36 @@ test('a hash is self-describing: scheme, iterations, salt and derived key', asyn
 });
 
 test('the same password hashes differently every time (per-credential salt)', async () => {
-  const a = await hashPassword('same password');
-  const b = await hashPassword('same password');
+  const a = await hashPassword(testPassword);
+  const b = await hashPassword(testPassword);
   assert.notEqual(a, b, 'two hashes of one password must differ, or the salt is not random');
-  assert.deepEqual(await verifyPassword('same password', a, 'PBKDF2'), { ok: true });
-  assert.deepEqual(await verifyPassword('same password', b, 'PBKDF2'), { ok: true });
+  assert.deepEqual(await verifyPassword(testPassword, a, 'PBKDF2'), { ok: true });
+  assert.deepEqual(await verifyPassword(testPassword, b, 'PBKDF2'), { ok: true });
 });
 
 test('the correct password verifies and a wrong one does not', async () => {
-  const stored = await hashPassword('correct');
-  assert.deepEqual(await verifyPassword('correct', stored, 'PBKDF2'), { ok: true });
-  assert.deepEqual(await verifyPassword('wrong', stored, 'PBKDF2'), {
+  const stored = await hashPassword(testPassword);
+  assert.deepEqual(await verifyPassword(testPassword, stored, 'PBKDF2'), { ok: true });
+  assert.deepEqual(await verifyPassword(otherPassword, stored, 'PBKDF2'), {
     ok: false,
     reason: 'mismatch',
   });
 });
 
 test('the plaintext never appears inside the stored string', async () => {
-  const secret = 'Nyayo-Highway-1978';
-  const stored = await hashPassword(secret);
-  assert.ok(!stored.includes(secret));
+  const stored = await hashPassword(testPassword);
+  assert.ok(!stored.includes(testPassword));
 });
 
 test('verification dispatches on the stored algorithm, not on the string alone', async () => {
-  const stored = await hashPassword('correct');
+  const stored = await hashPassword(testPassword);
   // The right hash under the wrong declared algorithm must not verify: the
   // database column is the authority on how a credential was written.
-  assert.deepEqual(await verifyPassword('correct', stored, 'ARGON2ID'), {
+  assert.deepEqual(await verifyPassword(testPassword, stored, 'ARGON2ID'), {
     ok: false,
     reason: 'unsupported_algorithm',
   });
-  assert.deepEqual(await verifyPassword('correct', stored, 'BCRYPT'), {
+  assert.deepEqual(await verifyPassword(testPassword, stored, 'BCRYPT'), {
     ok: false,
     reason: 'unsupported_algorithm',
   });
@@ -115,7 +118,7 @@ test('the seeded DEMO_DISABLED placeholders can never verify', async () => {
 
 test('a malformed stored value fails closed rather than throwing', async () => {
   for (const bad of ['', 'nonsense', 'pbkdf2-sha256$', 'pbkdf2-sha256$0$aa$bb', '$$$$']) {
-    const result = await verifyPassword('anything', bad, 'PBKDF2');
+    const result = await verifyPassword(testPassword, bad, 'PBKDF2');
     assert.equal(result.ok, false, `"${bad}" must not verify`);
   }
 });
@@ -123,18 +126,18 @@ test('a malformed stored value fails closed rather than throwing', async () => {
 test('a credential written at a lower iteration count still verifies', async () => {
   // The migration path the format exists for: verification reads the iteration
   // count from the stored string, not from the module constant.
-  const legacy = 'pbkdf2-sha256$60000$MTIzNDU2Nzg5MDEyMzQ1Ng==$'; // salt only, key added below
-  const salt = Buffer.from('MTIzNDU2Nzg5MDEyMzQ1Ng==', 'base64');
+  const salt = randomBytes(16);
+  const legacy = `pbkdf2-sha256$60000$${salt.toString('base64')}$`;
   const { pbkdf2Sync } = await import('node:crypto');
-  const key = pbkdf2Sync('legacy password', salt, 60_000, 32, 'sha256').toString('base64');
+  const key = pbkdf2Sync(testPassword, salt, 60_000, 32, 'sha256').toString('base64');
   const stored = legacy + key;
-  assert.deepEqual(await verifyPassword('legacy password', stored, 'PBKDF2'), { ok: true });
+  assert.deepEqual(await verifyPassword(testPassword, stored, 'PBKDF2'), { ok: true });
   // ...and is reported as due for a rehash, because it is below current cost.
   assert.equal(needsRehash(stored, 'PBKDF2'), true);
 });
 
 test('a current credential is not flagged for rehash', async () => {
-  const stored = await hashPassword('current');
+  const stored = await hashPassword(testPassword);
   assert.equal(needsRehash(stored, PASSWORD_ALGORITHM_PBKDF2), false);
 });
 
@@ -147,9 +150,9 @@ test('timingSafeEqual is correct on length and content', () => {
 test('dummyVerify costs about the same as a real verification', async () => {
   // The timing guard for an unknown email is only worth having if the two paths
   // are genuinely comparable. A generous band, because CI machines are noisy.
-  const stored = await hashPassword('timing');
+  const stored = await hashPassword(testPassword);
   const t0 = performance.now();
-  await verifyPassword('timing', stored, 'PBKDF2');
+  await verifyPassword(testPassword, stored, 'PBKDF2');
   const real = performance.now() - t0;
   const t1 = performance.now();
   await dummyVerify();

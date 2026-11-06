@@ -8,6 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import {
   newSessionToken,
   hashSessionToken,
@@ -25,7 +26,9 @@ import {
 } from '../../src/lib/cms/auth/cookie.ts';
 import { parseLoginInput, normaliseEmail } from '../../src/lib/cms/auth/loginInput.ts';
 
-const SECRET = 'a-test-only-session-secret-not-a-real-one';
+const SECRET = randomBytes(32).toString('base64url');
+const OTHER_SECRET = randomBytes(32).toString('base64url');
+const TEST_PASSWORD = randomBytes(24).toString('base64url');
 
 test('a token is 256 bits, URL-safe, and unique per call', () => {
   const a = newSessionToken();
@@ -46,7 +49,7 @@ test('the stored hash is never the cookie value', async () => {
 test('the hash is keyed: a different secret gives a different hash', async () => {
   const token = newSessionToken();
   const withKey = await hashSessionToken(token, SECRET);
-  const withOther = await hashSessionToken(token, 'a different secret');
+  const withOther = await hashSessionToken(token, OTHER_SECRET);
   assert.notEqual(
     withKey,
     withOther,
@@ -147,19 +150,19 @@ test('email is normalised for lookup and for the recorded attempt', () => {
 });
 
 test('sign-in input is validated before any database call', () => {
-  assert.equal(parseLoginInput({ email: 'a@b.co', password: 'x' }).ok, true);
+  assert.equal(parseLoginInput({ email: 'a@b.co', password: TEST_PASSWORD }).ok, true);
   for (const bad of [
     null,
     'a string',
     {},
     { email: 'a@b.co' },
-    { password: 'x' },
-    { email: 123, password: 'x' },
+    { password: TEST_PASSWORD },
+    { email: 123, password: TEST_PASSWORD },
     { email: 'a@b.co', password: 123 },
-    { email: '   ', password: 'x' },
-    { email: 'not-an-email', password: 'x' },
+    { email: '   ', password: TEST_PASSWORD },
+    { email: 'not-an-email', password: TEST_PASSWORD },
     { email: 'a@b.co', password: '' },
-    { email: 'a'.repeat(250) + '@b.co', password: 'x' },
+    { email: 'a'.repeat(250) + '@b.co', password: TEST_PASSWORD },
     { email: 'a@b.co', password: 'x'.repeat(1025) },
   ]) {
     assert.equal(parseLoginInput(bad).ok, false, `${JSON.stringify(bad)} must be rejected`);
@@ -167,7 +170,7 @@ test('sign-in input is validated before any database call', () => {
 });
 
 test('a rejected input reports an internal reason, never a browser message', () => {
-  const result = parseLoginInput({ email: 'nope', password: 'x' });
+  const result = parseLoginInput({ email: 'nope', password: TEST_PASSWORD });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.reason, 'email_malformed');
 });

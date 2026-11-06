@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import {
   classifyIdentityEmail,
   normalizeIdentityEmail,
@@ -15,6 +16,12 @@ import {
   verifyRegistrationGrant,
 } from '../../src/lib/cms/auth/registrationGrant.ts';
 
+const oldPassword = randomBytes(24).toString('base64url');
+const newPassword = randomBytes(24).toString('base64url');
+const anotherPassword = randomBytes(24).toString('base64url');
+const testKey = randomBytes(32).toString('base64url');
+const otherKey = randomBytes(32).toString('base64url');
+
 test('corporate policy is centralized, normalized, and rejects protected or consumer domains', () => {
   assert.equal(normalizeIdentityEmail('  MARY@Acme.CO.KE '), 'mary@acme.co.ke');
   assert.equal(classifyIdentityEmail('person@hasspetroleum.com'), 'INTERNAL_PROTECTED');
@@ -27,19 +34,19 @@ test('corporate policy is centralized, normalized, and rejects protected or cons
 test('one-time token hashes are keyed and raw tokens are never the stored value', async () => {
   const token = newOneTimeToken();
   assert.ok(token.length >= 40);
-  assert.notEqual(await hashOneTimeToken(token, 'secret'), token);
-  assert.notEqual(await hashOneTimeToken(token, 'secret'), await hashOneTimeToken(token, 'other'));
+  assert.notEqual(await hashOneTimeToken(token, testKey), token);
+  assert.notEqual(await hashOneTimeToken(token, testKey), await hashOneTimeToken(token, otherKey));
 });
 
 test('a registration grant is short-lived, provider verified, and tamper evident', async () => {
-  const grant = await createRegistrationGrant('registration-secret-long-enough', {
+  const grant = await createRegistrationGrant(testKey, {
     email: 'mary@acme.example',
     provider: 'GOOGLE',
     subject: 'google-subject-1',
     providerIssuer: 'https://accounts.google.com',
     tenantId: null,
   });
-  const verified = await verifyRegistrationGrant('registration-secret-long-enough', grant);
+  const verified = await verifyRegistrationGrant(testKey, grant);
   assert.ok(Number.isFinite(Date.parse(verified.verifiedAt)));
   const { verifiedAt: _verifiedAt, ...identity } = verified;
   assert.deepEqual(identity, {
@@ -53,7 +60,7 @@ test('a registration grant is short-lived, provider verified, and tamper evident
   const signature = parts[2] ?? '';
   parts[2] = `${signature[0] === 'a' ? 'b' : 'a'}${signature.slice(1)}`;
   await assert.rejects(() =>
-    verifyRegistrationGrant('registration-secret-long-enough', parts.join('.')),
+    verifyRegistrationGrant(testKey, parts.join('.')),
   );
 });
 
@@ -68,15 +75,15 @@ test('password reset is generic, single-use, changes password, and revokes sessi
   });
   await db.execute({
     sql: `INSERT INTO auth_credentials(credential_id,user_id,password_hash,password_algorithm,must_change_password) VALUES('CRED-P4',?,?,?,0)`,
-    args: [fixture.userId, await hashPassword('old-secure-password'), PASSWORD_ALGORITHM_PBKDF2],
+    args: [fixture.userId, await hashPassword(oldPassword), PASSWORD_ALGORITHM_PBKDF2],
   });
-  const unknown = await requestPasswordReset(client, 'secret', 'unknown@example.com', {
+  const unknown = await requestPasswordReset(client, testKey, 'unknown@example.com', {
     ip: null,
     userAgent: null,
     now,
   });
   assert.equal(unknown.issued, false);
-  const issued = await requestPasswordReset(client, 'secret', fixture.email, {
+  const issued = await requestPasswordReset(client, testKey, fixture.email, {
     ip: null,
     userAgent: null,
     now,
@@ -84,7 +91,7 @@ test('password reset is generic, single-use, changes password, and revokes sessi
   assert.equal(issued.issued, true);
   if (!issued.issued) return;
   assert.equal(
-    await resetPassword(client, 'secret', issued.rawToken, 'a-new-secure-password', {
+    await resetPassword(client, testKey, issued.rawToken, newPassword, {
       ip: null,
       userAgent: null,
       now: new Date(now.getTime() + 1000),
@@ -92,7 +99,7 @@ test('password reset is generic, single-use, changes password, and revokes sessi
     true,
   );
   assert.equal(
-    await resetPassword(client, 'secret', issued.rawToken, 'another-secure-password', {
+    await resetPassword(client, testKey, issued.rawToken, anotherPassword, {
       ip: null,
       userAgent: null,
       now: new Date(now.getTime() + 2000),
@@ -101,8 +108,8 @@ test('password reset is generic, single-use, changes password, and revokes sessi
   );
   const login = await attemptLogin(
     client,
-    'secret',
-    { email: fixture.email, password: 'a-new-secure-password' },
+    testKey,
+    { email: fixture.email, password: newPassword },
     { ip: null, userAgent: null, now: new Date(now.getTime() + 3000) },
   );
   assert.equal(login.kind, 'success');
