@@ -39,8 +39,9 @@ test('new password policy supports paste-friendly passphrases and enforces lengt
   assert.equal(validateNewPassword('correct horse battery staple'), null);
 });
 
-test('legacy PBKDF2 hashes are marked for automatic upgrade', () => {
-  assert.equal(passwordNeedsRehash('pbkdf2$60000$c2FsdA==$aGFzaA=='), true);
+test('PBKDF2 hashes use the free-Worker-compatible cost', () => {
+  assert.equal(passwordNeedsRehash('pbkdf2$10000$c2FsdA==$aGFzaA=='), true);
+  assert.equal(passwordNeedsRehash('pbkdf2$60000$c2FsdA==$aGFzaA=='), false);
   assert.equal(passwordNeedsRehash('pbkdf2$600000$c2FsdA==$aGFzaA=='), false);
 });
 
@@ -62,33 +63,32 @@ test('breach check uses only the SHA-1 prefix and rejects a matching suffix', as
 
 test('password hashes verify the matching value and reject a different value', async () => {
   const hash = await hashPassword('correct horse battery staple');
-  assert.match(hash, /^pbkdf2\$600000\$/);
+  assert.match(hash, /^pbkdf2\$60000\$/);
   assert.equal(await verifyPassword('correct horse battery staple', hash), true);
   assert.equal(await verifyPassword('incorrect horse battery staple', hash), false);
   assert.equal(hash.includes('correct horse'), false);
 });
 
-test('existing 600,000-iteration WebCrypto hashes remain valid on Workers', async () => {
+test('oversized hashes fail before Worker CPU is spent', async () => {
   const existing =
     'pbkdf2$600000$AAECAwQFBgcICQoLDA0ODw==$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY=';
-  assert.equal(await verifyPassword('correct horse battery staple', existing), true);
-  assert.equal(await verifyPassword('incorrect horse battery staple', existing), false);
-});
-
-test('PBKDF2 remains compatible when the runtime rejects iterations above 100,000', async () => {
   const original = crypto.subtle.deriveBits;
   try {
     Object.defineProperty(crypto.subtle, 'deriveBits', {
       configurable: true,
       value: async () => {
-        throw new Error('iteration counts above 100000 are not supported');
+        throw new Error('oversized PBKDF2 reached the Worker runtime');
       },
     });
-    const stored = await hashPassword('a unique long passphrase');
-    assert.equal(await verifyPassword('a unique long passphrase', stored), true);
+    assert.equal(await verifyPassword('correct horse battery staple', existing), false);
   } finally {
     Object.defineProperty(crypto.subtle, 'deriveBits', { configurable: true, value: original });
   }
+});
+
+test('PBKDF2 uses native WebCrypto within the supported Worker limit', async () => {
+  const stored = await hashPassword('a unique long passphrase');
+  assert.equal(await verifyPassword('a unique long passphrase', stored), true);
 });
 
 test('temporary-password sessions are restricted and expire after ten minutes', async () => {
