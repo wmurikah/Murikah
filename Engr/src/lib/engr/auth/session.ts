@@ -1,9 +1,8 @@
 /**
  * Session tokens for Engineering Rhythm.
  *
- * A compact JWT (HS256) signed with ENGR_SESSION_SECRET is the session; there
- * is no sessions table. The permission keys are cached in the token so
- * per-request checks need no database round trip. The token is carried in an
+ * A compact JWT (HS256) signed with ENGR_SESSION_SECRET identifies a tracked
+ * server-side session. The token is carried in an
  * HttpOnly cookie at Path=/ on the app's own host (engr.murikah.com). It is
  * host-only, with no Domain attribute, so it stays confined to that subdomain
  * and never reaches the marketing site or a sibling subdomain. Secure is gated
@@ -15,9 +14,11 @@ import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 
 export const SESSION_COOKIE = 'engr_session';
 const MAX_AGE_SECONDS = 12 * 60 * 60; // 12 hours
+const PRIVILEGED_MAX_AGE_SECONDS = 2 * 60 * 60;
 const PASSWORD_CHANGE_MAX_AGE_SECONDS = 10 * 60;
 
 export interface SessionPayload {
+  sessionId?: string;
   sub: string; // user id
   org: string; // org id
   orgSlug: string;
@@ -41,6 +42,13 @@ export interface SessionPayload {
   authStage?: 'password-change' | 'mfa-enroll' | 'mfa-challenge';
   /** Unix seconds of the latest successful TOTP/recovery challenge. */
   mfaVerifiedAt?: number;
+  /** Shorter absolute lifetime for owners and administrators. */
+  privilegedSession?: boolean;
+}
+
+export function sessionMaxAge(payload: SessionPayload): number {
+  if (payload.passwordChangeOnly || payload.authStage) return PASSWORD_CHANGE_MAX_AGE_SECONDS;
+  return payload.privilegedSession ? PRIVILEGED_MAX_AGE_SECONDS : MAX_AGE_SECONDS;
 }
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -62,6 +70,7 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
   if (!Array.isArray(roles) || !Array.isArray(perms)) return null;
   const optional = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
   return {
+    sessionId: optional(claims.sessionId),
     sub,
     org,
     orgSlug,
@@ -86,16 +95,15 @@ function toPayload(claims: JWTPayload): SessionPayload | null {
       typeof claims.mfaVerifiedAt === 'number' && Number.isInteger(claims.mfaVerifiedAt)
         ? claims.mfaVerifiedAt
         : undefined,
+    privilegedSession: claims.privilegedSession === true,
   };
 }
 
 // Sign the payload and return the token string.
 async function sign(payload: SessionPayload, secret: string): Promise<string> {
-  const maxAge =
-    payload.passwordChangeOnly || payload.authStage
-      ? PASSWORD_CHANGE_MAX_AGE_SECONDS
-      : MAX_AGE_SECONDS;
+  const maxAge = sessionMaxAge(payload);
   return new SignJWT({
+    sessionId: payload.sessionId,
     org: payload.org,
     orgSlug: payload.orgSlug,
     roles: payload.roles,
@@ -110,6 +118,7 @@ async function sign(payload: SessionPayload, secret: string): Promise<string> {
     passwordChangeOnly: payload.passwordChangeOnly ? true : undefined,
     authStage: payload.authStage,
     mfaVerifiedAt: payload.mfaVerifiedAt,
+    privilegedSession: payload.privilegedSession ? true : undefined,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
@@ -151,10 +160,7 @@ export async function createSession(
   secure: boolean,
 ): Promise<string> {
   const token = await sign(payload, secret);
-  const maxAge =
-    payload.passwordChangeOnly || payload.authStage
-      ? PASSWORD_CHANGE_MAX_AGE_SECONDS
-      : MAX_AGE_SECONDS;
+  const maxAge = sessionMaxAge(payload);
   return cookie(token, maxAge, secure);
 }
 

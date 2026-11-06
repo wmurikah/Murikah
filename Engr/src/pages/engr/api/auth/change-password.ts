@@ -6,7 +6,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { hashPassword, validateNewPassword, verifyPassword } from '@engr/auth/password';
+import { hashPassword, validatePasswordSecurity, verifyPassword } from '@engr/auth/password';
 import { clearSession, readSession } from '@engr/auth/session';
 import { sessionAfterPrimaryAuth } from '@engr/auth/loginSession';
 
@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ request }) => {
   const newPassword = String(form.get('new_password') ?? '');
   const confirmation = String(form.get('confirm_password') ?? '');
   if (newPassword !== confirmation) return redirect('/change-password?error=mismatch');
-  if (validateNewPassword(newPassword)) return redirect('/change-password?error=policy');
+  if (await validatePasswordSecurity(newPassword)) return redirect('/change-password?error=policy');
 
   const db = await getDb(env);
   const result = await db.execute({
@@ -72,6 +72,11 @@ export const POST: APIRoute = async ({ request }) => {
     });
     if (updated.rowsAffected !== 1) throw new Error('The session changed during password update.');
     await tx.execute({
+      sql: `UPDATE auth_sessions SET revoked_at = ?, revoked_reason = 'password changed'
+             WHERE user_id = ? AND revoked_at IS NULL`,
+      args: [new Date().toISOString(), session.sub],
+    });
+    await tx.execute({
       sql: `INSERT INTO audit_logs
               (org_id, actor_user_id, action, entity_type, entity_id, after_json, ip, user_agent)
             VALUES (?, ?, 'users.password.change', 'user', ?, ?, ?, ?)`,
@@ -104,6 +109,7 @@ export const POST: APIRoute = async ({ request }) => {
     },
     env.sessionSecret,
     secure,
+    request,
   );
   return redirect(next.location, next.cookie);
 };

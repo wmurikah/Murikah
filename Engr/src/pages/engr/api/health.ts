@@ -19,10 +19,12 @@ export const GET: APIRoute = async () => {
     const db = await getDb(getEngrEnv());
     const schema = await db.execute({
       sql: `SELECT COUNT(*) AS n FROM sqlite_schema
-             WHERE type = 'table' AND name IN ('notifications', 'org_settings')`,
+             WHERE type = 'table' AND name IN
+                   ('notifications', 'org_settings', 'auth_tokens', 'user_mfa', 'mfa_recovery_codes',
+                    'auth_sessions', 'auth_login_limits', 'auth_login_events')`,
       args: [],
     });
-    if (Number(schema.rows[0]?.n ?? 0) !== 2) {
+    if (Number(schema.rows[0]?.n ?? 0) !== 8) {
       return reply(
         {
           status: 'error',
@@ -30,6 +32,7 @@ export const GET: APIRoute = async () => {
             application: 'ok',
             database: 'reachable',
             notificationSchema: 'missing',
+            authenticationSchema: 'missing',
           },
         },
         503,
@@ -43,6 +46,8 @@ export const GET: APIRoute = async () => {
           application: 'ok',
           database: 'reachable',
           notificationSchema: 'ok',
+          authenticationSchema: 'ok',
+          mfaEncryption: 'ready',
           emailDelivery: delivery.email.ready ? 'ready' : 'held',
           smsDelivery: delivery.sms.ready ? 'ready' : 'held',
         },

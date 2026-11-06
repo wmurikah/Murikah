@@ -1,6 +1,7 @@
 import type { Client } from '@libsql/client/web';
 import { loadUserAuth } from './rbac';
-import { createSession, type SessionPayload } from './session';
+import type { SessionPayload } from './session';
+import { createTrackedSession } from './trackedSession';
 
 export interface LoginIdentity {
   userId: string;
@@ -23,9 +24,11 @@ export async function fullSession(
   sessionSecret: string,
   secure: boolean,
   mfaVerifiedAt?: number,
+  request?: Request,
 ): Promise<string> {
   const auth = await loadUserAuth(db, identity.orgId, identity.userId);
-  return createSession(
+  return createTrackedSession(
+    db,
     {
       sub: identity.userId,
       org: identity.orgId,
@@ -41,6 +44,7 @@ export async function fullSession(
     },
     sessionSecret,
     secure,
+    request,
   );
 }
 
@@ -49,6 +53,7 @@ export async function sessionAfterPrimaryAuth(
   identity: LoginIdentity,
   sessionSecret: string,
   secure: boolean,
+  request?: Request,
 ): Promise<{ cookie: string; location: string }> {
   const auth = await loadUserAuth(db, identity.orgId, identity.userId);
   const mfa = await db.execute({
@@ -67,12 +72,13 @@ export async function sessionAfterPrimaryAuth(
   }
   if (!authStage) {
     return {
-      cookie: await fullSession(db, identity, sessionSecret, secure),
+      cookie: await fullSession(db, identity, sessionSecret, secure, undefined, request),
       location,
     };
   }
   return {
-    cookie: await createSession(
+    cookie: await createTrackedSession(
+      db,
       {
         sub: identity.userId,
         org: identity.orgId,
@@ -88,6 +94,7 @@ export async function sessionAfterPrimaryAuth(
       },
       sessionSecret,
       secure,
+      request,
     ),
     location,
   };

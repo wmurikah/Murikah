@@ -6,7 +6,7 @@
  * back or rendered. Soft-deleted users (deleted_at) are excluded from every read.
  */
 import type { Client } from '@libsql/client/web';
-import { hashPassword, validateNewPassword } from '@engr/auth/password';
+import { hashPassword, validatePasswordSecurity } from '@engr/auth/password';
 import { effectiveRoleIds } from '@engr/repos/adminRoles';
 import { authLink, issueAuthToken } from '@engr/auth/tokens';
 
@@ -103,10 +103,6 @@ function validate(input: UserInput): string | null {
   if (!input.fullName) return 'A name is required.';
   if (!input.email) return 'An email is required.';
   if (!STATUSES.has(input.status)) return 'Choose a valid status.';
-  if (input.password) {
-    const passwordError = validateNewPassword(input.password);
-    if (passwordError) return passwordError;
-  }
   return null;
 }
 
@@ -126,6 +122,10 @@ export async function createUser(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (input.password) {
+    const passwordError = await validatePasswordSecurity(input.password);
+    if (passwordError) return { ok: false, code: 'invalid', message: passwordError };
+  }
   const roleIds = input.assignRoles ? await filterRoleIds(db, ctx.orgId, input.roleIds) : [];
   const passwordHash = input.password ? await hashPassword(input.password) : null;
   const mustChange = input.password ? 1 : 0;
@@ -205,6 +205,10 @@ export async function updateUser(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (input.password) {
+    const passwordError = await validatePasswordSecurity(input.password);
+    if (passwordError) return { ok: false, code: 'invalid', message: passwordError };
+  }
   const roleIds = input.assignRoles ? await filterRoleIds(db, ctx.orgId, input.roleIds) : [];
   const passwordHash = input.password ? await hashPassword(input.password) : null;
   const tx = await db.transaction('write');
@@ -228,6 +232,11 @@ export async function updateUser(
         args: [passwordHash, id, ctx.orgId],
       });
       await tx.execute({
+        sql: `UPDATE auth_sessions SET revoked_at = ?, revoked_reason = 'administrator password reset'
+               WHERE user_id = ? AND revoked_at IS NULL`,
+        args: [new Date().toISOString(), id],
+      });
+      await tx.execute({
         sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
               VALUES (?, ?, 'users.password.reset', 'user', ?, ?)`,
         args: [
@@ -249,13 +258,7 @@ export async function updateUser(
           args: [id, roleId],
         });
       }
-      if (!passwordHash) {
-        await tx.execute({
-          sql: `UPDATE users SET session_version = session_version + 1
-                 WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
-          args: [id, ctx.orgId],
-        });
-      }
+      // Database triggers revoke tracked sessions and advance session_version.
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)

@@ -88,6 +88,11 @@ export const POST: APIRoute = async ({ request }) => {
       args: [session.sub, session.org],
     });
     await tx.execute({
+      sql: `UPDATE auth_sessions SET revoked_at = ?, revoked_reason = 'MFA enabled'
+             WHERE user_id = ? AND revoked_at IS NULL`,
+      args: [now, session.sub],
+    });
+    await tx.execute({
       sql: `INSERT INTO audit_logs
               (org_id, actor_user_id, action, entity_type, entity_id, after_json)
             VALUES (?, ?, 'auth.mfa.enabled', 'user', ?, ?)`,
@@ -118,6 +123,7 @@ export const POST: APIRoute = async ({ request }) => {
     env.sessionSecret,
     secure,
     Math.floor(Date.now() / 1000),
+    request,
   );
   const list = codes.map((item) => `<li><code>${escapeHtml(item)}</code></li>`).join('');
   return new Response(

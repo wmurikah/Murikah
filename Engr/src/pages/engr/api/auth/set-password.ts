@@ -2,8 +2,9 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { hashPassword, validateNewPassword } from '@engr/auth/password';
+import { hashPassword, validatePasswordSecurity } from '@engr/auth/password';
 import { hashOpaqueToken } from '@engr/auth/tokens';
+import { accountLoginHash } from '@engr/auth/loginSecurity';
 
 function back(token: string, error: string): Response {
   return new Response(null, {
@@ -18,13 +19,14 @@ export const POST: APIRoute = async ({ request }) => {
   const password = String(form.get('password') ?? '');
   const confirmation = String(form.get('confirm_password') ?? '');
   if (!token) return back('', 'invalid');
-  if (password !== confirmation || validateNewPassword(password)) return back(token, 'password');
+  if (password !== confirmation || (await validatePasswordSecurity(password)))
+    return back(token, 'password');
   const tokenHash = await hashOpaqueToken(token);
   const db = await getDb(getEngrEnv());
   const tx = await db.transaction('write');
   try {
     const result = await tx.execute({
-      sql: `SELECT t.id AS token_id, t.org_id, t.user_id, t.purpose
+      sql: `SELECT t.id AS token_id, t.org_id, t.user_id, t.purpose, u.email
               FROM auth_tokens t
               JOIN users u ON u.id = t.user_id
              WHERE t.token_hash = ? AND t.used_at IS NULL AND t.expires_at > ?
@@ -54,9 +56,18 @@ export const POST: APIRoute = async ({ request }) => {
       args: [passwordHash, String(row.user_id), String(row.org_id)],
     });
     await tx.execute({
+      sql: `UPDATE auth_sessions SET revoked_at = ?, revoked_reason = 'password recovery'
+             WHERE user_id = ? AND revoked_at IS NULL`,
+      args: [new Date().toISOString(), String(row.user_id)],
+    });
+    await tx.execute({
       sql: `UPDATE auth_tokens SET used_at = ?
              WHERE user_id = ? AND used_at IS NULL`,
       args: [new Date().toISOString(), String(row.user_id)],
+    });
+    await tx.execute({
+      sql: `DELETE FROM auth_login_limits WHERE scope = 'ACCOUNT' AND key_hash = ?`,
+      args: [await accountLoginHash(String(row.email))],
     });
     const action =
       String(row.purpose) === 'INVITE' ? 'auth.invitation.accept' : 'auth.password.recover';
