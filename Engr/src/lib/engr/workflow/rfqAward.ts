@@ -81,6 +81,7 @@ interface RfqCore {
   thresholdMinor: number | null;
   currency: string;
   status: string;
+  releasedAt: string | null;
 }
 
 interface QuoteCore {
@@ -97,7 +98,7 @@ interface RequestSite {
 
 async function loadRfq(db: Client, orgId: string, rfqId: string): Promise<RfqCore | null> {
   const res = await db.execute({
-    sql: `SELECT id, rfq_no, request_id, created_by, approval_threshold_minor, currency, status
+    sql: `SELECT id, rfq_no, request_id, created_by, approval_threshold_minor, currency, status, released_at
             FROM rfqs WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [rfqId, orgId],
   });
@@ -112,6 +113,7 @@ async function loadRfq(db: Client, orgId: string, rfqId: string): Promise<RfqCor
       row.approval_threshold_minor == null ? null : Number(row.approval_threshold_minor),
     currency: String(row.currency),
     status: String(row.status),
+    releasedAt: row.released_at == null ? null : String(row.released_at),
   };
 }
 
@@ -419,7 +421,7 @@ export async function awardRfq(
 ): Promise<AwardOutcome> {
   const rfq = await loadRfq(db, actor.orgId, rfqId);
   if (!rfq) return { ok: false, code: 'not_found', message: 'RFQ not found.' };
-  if (rfq.status !== 'OPEN') {
+  if (rfq.status !== 'OPEN' || !rfq.releasedAt) {
     return { ok: false, code: 'conflict', message: 'Only an open RFQ can be awarded.' };
   }
   const quote = await loadQuote(db, actor.orgId, rfqId, quoteId);

@@ -4,7 +4,7 @@ export const prerender = false;
 /**
  * RFQ builder. From an accepted request the engineer picks pre-qualified
  * contractors to invite, sets a due date and an approval threshold (prefilled
- * from the org default), and sends. Gate: rfq.create. Only contractors covering
+ * from the org default), and saves an internal draft. Gate: rfq.create. Only contractors covering
  * the request's station or category are offered.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
@@ -135,7 +135,7 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
 
         <div class="engr-actionbar">
           <button type="submit" class="engr-btn engr-btn--primary">
-            Send invitations
+            Create draft
           </button>
         </div>
       </form>

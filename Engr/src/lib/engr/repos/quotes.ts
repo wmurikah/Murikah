@@ -9,6 +9,7 @@
 import type { Client } from '@libsql/client/web';
 import { enqueue } from '../notify';
 import { contractorForUser } from './techniciansPick';
+import { hasBeenReleased } from '../workflow/releasePolicy';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -49,11 +50,12 @@ interface RfqOwner {
   status: string;
   createdBy: string;
   rfqNo: string;
+  releasedAt: string | null;
 }
 
 async function loadRfqOwner(db: Client, orgId: string, rfqId: string): Promise<RfqOwner | null> {
   const res = await db.execute({
-    sql: `SELECT status, created_by, rfq_no FROM rfqs WHERE id = ? AND org_id = ? LIMIT 1`,
+    sql: `SELECT status, created_by, rfq_no, released_at FROM rfqs WHERE id = ? AND org_id = ? LIMIT 1`,
     args: [rfqId, orgId],
   });
   const row = res.rows[0];
@@ -62,6 +64,7 @@ async function loadRfqOwner(db: Client, orgId: string, rfqId: string): Promise<R
     status: String(row.status),
     createdBy: String(row.created_by),
     rfqNo: String(row.rfq_no),
+    releasedAt: row.released_at == null ? null : String(row.released_at),
   };
 }
 
@@ -92,7 +95,7 @@ export async function submitQuote(
 
   const rfq = await loadRfqOwner(db, orgId, rfqId);
   if (!rfq) return { ok: false, code: 'not_found', message: 'RFQ not found.' };
-  if (rfq.status !== 'OPEN') {
+  if (rfq.status !== 'OPEN' || !hasBeenReleased(rfq.releasedAt)) {
     return { ok: false, code: 'conflict', message: 'This RFQ is no longer open for quotes.' };
   }
 
@@ -221,6 +224,9 @@ export async function declineInvitation(
 
   const rfq = await loadRfqOwner(db, orgId, rfqId);
   if (!rfq) return { ok: false, code: 'not_found', message: 'RFQ not found.' };
+  if (rfq.status !== 'OPEN' || !hasBeenReleased(rfq.releasedAt)) {
+    return { ok: false, code: 'conflict', message: 'This RFQ is not open for responses.' };
+  }
 
   const tx = await db.transaction('write');
   try {
@@ -346,7 +352,8 @@ export async function getRfqForContractor(
             JOIN rfqs rq ON rq.id = i.rfq_id
             JOIN service_requests sr ON sr.id = rq.request_id
             JOIN stations s ON s.id = sr.station_id
-           WHERE i.org_id = ? AND i.rfq_id = ? AND i.contractor_id = ? LIMIT 1`,
+           WHERE i.org_id = ? AND i.rfq_id = ? AND i.contractor_id = ?
+             AND rq.released_at IS NOT NULL LIMIT 1`,
     args: [orgId, rfqId, contractorId],
   });
   const row = res.rows[0];
