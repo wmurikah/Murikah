@@ -127,6 +127,7 @@ export const POST: APIRoute = async ({ request }) => {
     env.sessionSecret,
     secure,
     Math.floor(Date.now() / 1000),
+    request,
   );
   return new Response(null, { status: 303, headers: { location: next, 'set-cookie': cookie } });
 };

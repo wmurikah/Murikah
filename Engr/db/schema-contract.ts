@@ -54,6 +54,9 @@ export const DOMAIN_TABLES = [
   'auth_tokens',
   'user_mfa',
   'mfa_recovery_codes',
+  'auth_sessions',
+  'auth_login_limits',
+  'auth_login_events',
 ] as const;
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -106,6 +109,37 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'last_totp_step',
   ],
   mfa_recovery_codes: ['id', 'user_id', 'code_hash', 'used_at'],
+  auth_sessions: [
+    'id',
+    'user_id',
+    'org_id',
+    'session_version',
+    'privilege_level',
+    'ip_hash',
+    'user_agent',
+    'created_at',
+    'last_seen_at',
+    'expires_at',
+    'revoked_at',
+    'revoked_reason',
+  ],
+  auth_login_limits: [
+    'scope',
+    'key_hash',
+    'failure_count',
+    'blocked_until',
+    'first_failure_at',
+    'last_failure_at',
+  ],
+  auth_login_events: [
+    'id',
+    'account_hash',
+    'ip_hash',
+    'org_id',
+    'user_id',
+    'outcome',
+    'created_at',
+  ],
 };
 
 interface ColumnShape {
@@ -156,6 +190,9 @@ export const REQUIRED_INDEXES = [
   'ux_users_email',
   'ix_auth_tokens_user_purpose',
   'ix_mfa_recovery_user',
+  'ix_auth_sessions_user_active',
+  'ix_auth_login_events_account',
+  'ix_auth_login_events_ip',
 ] as const;
 
 const INDEX_CONTRACTS = [
@@ -165,6 +202,27 @@ const INDEX_CONTRACTS = [
     unique: false,
     partial: false,
     columns: ['lpo_id'],
+  },
+  {
+    table: 'auth_sessions',
+    name: 'ix_auth_sessions_user_active',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'revoked_at', 'expires_at'],
+  },
+  {
+    table: 'auth_login_events',
+    name: 'ix_auth_login_events_account',
+    unique: false,
+    partial: false,
+    columns: ['account_hash', 'created_at'],
+  },
+  {
+    table: 'auth_login_events',
+    name: 'ix_auth_login_events_ip',
+    unique: false,
+    partial: false,
+    columns: ['ip_hash', 'created_at'],
   },
   { table: 'lpos', name: 'ix_lpos_region', unique: false, partial: false, columns: ['region_id'] },
   {
@@ -210,6 +268,10 @@ const FOREIGN_KEY_CONTRACTS = [
   { table: 'auth_tokens', from: 'user_id', target: 'users' },
   { table: 'user_mfa', from: 'user_id', target: 'users' },
   { table: 'mfa_recovery_codes', from: 'user_id', target: 'users' },
+  { table: 'auth_sessions', from: 'user_id', target: 'users' },
+  { table: 'auth_sessions', from: 'org_id', target: 'organisations' },
+  { table: 'auth_login_events', from: 'org_id', target: 'organisations' },
+  { table: 'auth_login_events', from: 'user_id', target: 'users' },
 ] as const;
 
 export const REQUIRED_VIEWS = [
@@ -232,6 +294,12 @@ export const REQUIRED_TRIGGERS = [
   'trg_work_orders_updated',
   'trg_work_costs_updated',
   'trg_bills_updated',
+  'trg_users_security_revoke',
+  'trg_organisations_security_revoke',
+  'trg_user_roles_security_insert',
+  'trg_user_roles_security_delete',
+  'trg_role_permissions_security_insert',
+  'trg_role_permissions_security_delete',
 ] as const;
 
 async function objectNames(db: MigrationDatabase, type: string): Promise<Set<string>> {
