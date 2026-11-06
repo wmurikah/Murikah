@@ -6,12 +6,12 @@ import { runDispatch } from './lib/engr/notify/dispatch';
 import { runPmScan } from './lib/engr/workflow/pmScan';
 import { systemClock } from './lib/engr/time';
 import { loginEndpointRedirect } from './lib/engr/routing';
+import { allowedFormMutation } from './lib/engr/auth/formOrigin';
 
 const DAILY_PM_CRON = '0 3 * * *';
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/__astro')) return astro.fetch(request, env, ctx);
     const host = (request.headers.get('host') ?? url.host).split(':')[0].toLowerCase();
     if (
       !(
@@ -24,6 +24,13 @@ export default {
       )
     )
       return new Response('Not found', { status: 404 });
+    if (!allowedFormMutation(request)) {
+      return new Response('Form submission forbidden', {
+        status: 403,
+        headers: { 'cache-control': 'no-store' },
+      });
+    }
+    if (url.pathname.startsWith('/__astro')) return astro.fetch(request, env, ctx);
     const earlyLoginRedirect = loginEndpointRedirect(url.pathname, request.method);
     if (earlyLoginRedirect) {
       return new Response(null, {
