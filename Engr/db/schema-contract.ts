@@ -51,6 +51,12 @@ export const DOMAIN_TABLES = [
   'audit_logs',
   'org_settings',
   'lpo_lines',
+  'auth_tokens',
+  'user_mfa',
+  'mfa_recovery_codes',
+  'auth_sessions',
+  'auth_login_limits',
+  'auth_login_events',
 ] as const;
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -91,6 +97,47 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'description',
     'amount_minor',
     'currency',
+    'created_at',
+  ],
+  auth_tokens: ['id', 'org_id', 'user_id', 'purpose', 'token_hash', 'expires_at', 'used_at'],
+  user_mfa: [
+    'user_id',
+    'secret_ciphertext',
+    'secret_iv',
+    'pending_expires_at',
+    'enabled_at',
+    'last_totp_step',
+  ],
+  mfa_recovery_codes: ['id', 'user_id', 'code_hash', 'used_at'],
+  auth_sessions: [
+    'id',
+    'user_id',
+    'org_id',
+    'session_version',
+    'privilege_level',
+    'ip_hash',
+    'user_agent',
+    'created_at',
+    'last_seen_at',
+    'expires_at',
+    'revoked_at',
+    'revoked_reason',
+  ],
+  auth_login_limits: [
+    'scope',
+    'key_hash',
+    'failure_count',
+    'blocked_until',
+    'first_failure_at',
+    'last_failure_at',
+  ],
+  auth_login_events: [
+    'id',
+    'account_hash',
+    'ip_hash',
+    'org_id',
+    'user_id',
+    'outcome',
     'created_at',
   ],
 };
@@ -141,6 +188,11 @@ export const REQUIRED_INDEXES = [
   'ix_org_parent',
   'ux_roles_system',
   'ux_users_email',
+  'ix_auth_tokens_user_purpose',
+  'ix_mfa_recovery_user',
+  'ix_auth_sessions_user_active',
+  'ix_auth_login_events_account',
+  'ix_auth_login_events_ip',
 ] as const;
 
 const INDEX_CONTRACTS = [
@@ -150,6 +202,27 @@ const INDEX_CONTRACTS = [
     unique: false,
     partial: false,
     columns: ['lpo_id'],
+  },
+  {
+    table: 'auth_sessions',
+    name: 'ix_auth_sessions_user_active',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'revoked_at', 'expires_at'],
+  },
+  {
+    table: 'auth_login_events',
+    name: 'ix_auth_login_events_account',
+    unique: false,
+    partial: false,
+    columns: ['account_hash', 'created_at'],
+  },
+  {
+    table: 'auth_login_events',
+    name: 'ix_auth_login_events_ip',
+    unique: false,
+    partial: false,
+    columns: ['ip_hash', 'created_at'],
   },
   { table: 'lpos', name: 'ix_lpos_region', unique: false, partial: false, columns: ['region_id'] },
   {
@@ -161,6 +234,20 @@ const INDEX_CONTRACTS = [
   },
   { table: 'roles', name: 'ux_roles_system', unique: true, partial: true, columns: ['code'] },
   { table: 'users', name: 'ux_users_email', unique: true, partial: false, columns: ['email'] },
+  {
+    table: 'auth_tokens',
+    name: 'ix_auth_tokens_user_purpose',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'purpose', 'used_at'],
+  },
+  {
+    table: 'mfa_recovery_codes',
+    name: 'ix_mfa_recovery_user',
+    unique: false,
+    partial: false,
+    columns: ['user_id', 'used_at'],
+  },
 ] as const;
 
 const FOREIGN_KEY_CONTRACTS = [
@@ -177,6 +264,14 @@ const FOREIGN_KEY_CONTRACTS = [
   { table: 'lpo_lines', from: 'asset_id', target: 'assets' },
   { table: 'lpo_lines', from: 'category_id', target: 'asset_categories' },
   { table: 'lpo_lines', from: 'sla_id', target: 'slas' },
+  { table: 'auth_tokens', from: 'org_id', target: 'organisations' },
+  { table: 'auth_tokens', from: 'user_id', target: 'users' },
+  { table: 'user_mfa', from: 'user_id', target: 'users' },
+  { table: 'mfa_recovery_codes', from: 'user_id', target: 'users' },
+  { table: 'auth_sessions', from: 'user_id', target: 'users' },
+  { table: 'auth_sessions', from: 'org_id', target: 'organisations' },
+  { table: 'auth_login_events', from: 'org_id', target: 'organisations' },
+  { table: 'auth_login_events', from: 'user_id', target: 'users' },
 ] as const;
 
 export const REQUIRED_VIEWS = [
@@ -199,6 +294,12 @@ export const REQUIRED_TRIGGERS = [
   'trg_work_orders_updated',
   'trg_work_costs_updated',
   'trg_bills_updated',
+  'trg_users_security_revoke',
+  'trg_organisations_security_revoke',
+  'trg_user_roles_security_insert',
+  'trg_user_roles_security_delete',
+  'trg_role_permissions_security_insert',
+  'trg_role_permissions_security_delete',
 ] as const;
 
 async function objectNames(db: MigrationDatabase, type: string): Promise<Set<string>> {

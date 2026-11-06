@@ -100,7 +100,15 @@ export function isPassthroughAsset(pathname: string): boolean {
 // Public, unauthenticated app paths on the engr host, in root-relative form:
 // the login screen, the login endpoint, and the self-secured machine endpoints
 // (the cron drains and the provider delivery webhooks carry their own secret).
-const PUBLIC_APP_PATHS = new Set(['/login', '/api/auth/login', '/api/health']);
+const PUBLIC_APP_PATHS = new Set([
+  '/login',
+  '/api/auth/login',
+  '/forgot',
+  '/api/auth/forgot',
+  '/set-password',
+  '/api/auth/set-password',
+  '/api/health',
+]);
 const PUBLIC_APP_PREFIXES = ['/api/cron/', '/api/webhooks/'];
 
 export function isPublicAppPath(appPath: string): boolean {
@@ -110,6 +118,21 @@ export function isPublicAppPath(appPath: string): boolean {
 /** Whether a root-relative app path is an API route (401 JSON on no session). */
 export function isEngrApiPath(appPath: string): boolean {
   return appPath === '/api' || appPath.startsWith('/api/');
+}
+
+/** Keep a browser out of the form-processing endpoint. Browsers can restore or
+ * refresh the last form URL as GET/HEAD. A missing endpoint in a stale or
+ * partially rolled-out build is also recovered to the human login screen. */
+export function loginEndpointRedirect(
+  pathname: string,
+  method: string,
+  responseStatus?: number,
+): string | null {
+  if (toAppPath(pathname) !== '/api/auth/login') return null;
+  const verb = method.toUpperCase();
+  if (verb === 'GET' || verb === 'HEAD') return '/login';
+  if (responseStatus === 404) return '/login?error=1';
+  return null;
 }
 
 /** The branch the worker took, surfaced on every response as x-mrk-branch. */

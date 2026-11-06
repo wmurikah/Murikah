@@ -46,7 +46,7 @@ test('blank install reaches the canonical contract and is idempotent', async () 
   const db = database();
   try {
     const first = await runMigrations(db.client);
-    assert.deepEqual(first.applied, ['001', '002', '003']);
+    assert.deepEqual(first.applied, ['001', '002', '003', '004', '005']);
     await verifySchemaContract(db.client);
 
     const tables = await db.client.execute(
@@ -56,12 +56,12 @@ test('blank install reaches the canonical contract and is idempotent', async () 
     const history = await db.client.execute('SELECT id FROM schema_migrations ORDER BY id');
     assert.deepEqual(
       history.rows.map((row) => String(row.id)),
-      ['001', '002', '003'],
+      ['001', '002', '003', '004', '005'],
     );
 
     const second = await runMigrations(db.client);
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.alreadyApplied, ['001', '002', '003']);
+    assert.deepEqual(second.alreadyApplied, ['001', '002', '003', '004', '005']);
   } finally {
     db.close();
   }
@@ -98,7 +98,7 @@ test('legacy schema upgrades without losing representative LPO data', async () =
     );
 
     const upgraded = await runMigrations(legacy.client);
-    assert.deepEqual(upgraded.applied, ['001', '002', '003']);
+    assert.deepEqual(upgraded.applied, ['001', '002', '003', '004', '005']);
     const row = (
       await legacy.client.execute(
         `SELECT lpo_no, total_minor, subtotal_minor, mileage_minor, version FROM lpos WHERE id = 'lpo1'`,
@@ -117,6 +117,46 @@ test('legacy schema upgrades without losing representative LPO data', async () =
   } finally {
     blank.close();
     legacy.close();
+  }
+});
+
+test('security changes revoke tracked sessions at the database boundary', async () => {
+  const db = database();
+  try {
+    await runMigrations(db.client);
+    await db.client.batch(
+      [
+        { sql: `INSERT INTO organisations (id, name, slug) VALUES ('o1', 'One', 'one')`, args: [] },
+        {
+          sql: `INSERT INTO users (id, org_id, full_name, email) VALUES ('u1', 'o1', 'User', 'u@example.com')`,
+          args: [],
+        },
+        {
+          sql: `INSERT INTO roles (id, org_id, code, name) VALUES ('r1', 'o1', 'ADMIN', 'Admin')`,
+          args: [],
+        },
+        {
+          sql: `INSERT INTO auth_sessions
+                  (id, user_id, org_id, session_version, privilege_level, created_at, last_seen_at, expires_at)
+                VALUES ('s1', 'u1', 'o1', 0, 'STANDARD', '2026-01-01', '2026-01-01', '2030-01-01')`,
+          args: [],
+        },
+        { sql: `INSERT INTO user_roles (user_id, role_id) VALUES ('u1', 'r1')`, args: [] },
+      ],
+      'write',
+    );
+    const session = (
+      await db.client.execute(
+        `SELECT revoked_at, revoked_reason FROM auth_sessions WHERE id = 's1'`,
+      )
+    ).rows[0];
+    const user = (await db.client.execute(`SELECT session_version FROM users WHERE id = 'u1'`))
+      .rows[0];
+    assert.notEqual(session.revoked_at, null);
+    assert.equal(session.revoked_reason, 'role assignment changed');
+    assert.equal(Number(user.session_version), 1);
+  } finally {
+    db.close();
   }
 });
 

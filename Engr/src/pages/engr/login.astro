@@ -17,6 +17,7 @@ import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
 
 const params = Astro.url.searchParams;
 const hasError = params.get('error') === '1';
+const passwordChanged = params.get('password') === 'changed';
 const errId = 'engr-login-error';
 ---
 
@@ -26,6 +27,13 @@ const errId = 'engr-login-error';
     <p class="engr-authcard__sub">Welcome back. Enter your details to continue.</p>
   </div>
 
+  {
+    passwordChanged && (
+      <p class="engr-success" role="status">
+        Your password is ready. Sign in to continue.
+      </p>
+    )
+  }
   {
     hasError && (
       <p id={errId} class="engr-error" role="alert">
@@ -68,7 +76,6 @@ const errId = 'engr-login-error';
   </form>
 
   <div class="engr-authmeta">
-    <a href="/signup" class="engr-authmeta__link">Start free trial</a>
-    <a href="/forgot" class="engr-authmeta__link engr-authmeta__link--muted">Forgot password</a>
+    <a href="/forgot" class="engr-authmeta__link engr-authmeta__link--muted">Forgot password?</a>
   </div>
 </EngrAuthLayout>

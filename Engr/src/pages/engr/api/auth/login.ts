@@ -12,9 +12,15 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { verifyPassword } from '@engr/auth/password';
-import { loadUserAuth } from '@engr/auth/rbac';
-import { createSession } from '@engr/auth/session';
+import { hashPassword, passwordNeedsRehash, verifyPassword } from '@engr/auth/password';
+import { createTrackedSession } from '@engr/auth/trackedSession';
+import { sessionAfterPrimaryAuth } from '@engr/auth/loginSession';
+import {
+  isLoginBlocked,
+  loginKeys,
+  recordLoginFailure,
+  recordLoginSuccess,
+} from '@engr/auth/loginSecurity';
 
 interface Credentials {
   email: string;
@@ -42,6 +48,15 @@ function invalid(): Response {
   return new Response(null, { status: 303, headers: { location: '/login?error=1' } });
 }
 
+/** A form endpoint can be revisited with GET when a browser restores a tab,
+ * refreshes its last URL, or a password manager opens the saved action URL.
+ * Never strand that user on Astro's endpoint 404 page. */
+export const GET: APIRoute = async () =>
+  new Response(null, {
+    status: 303,
+    headers: { location: '/login', 'cache-control': 'no-store' },
+  });
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const { email, password } = await readCredentials(request);
   const emailNorm = email.trim().toLowerCase();
@@ -49,6 +64,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const env = getEngrEnv();
   const db = await getDb(env);
+  const keys = await loginKeys(emailNorm, request);
+  if (await isLoginBlocked(db, keys.accountHash, keys.ipHash)) {
+    await recordLoginFailure(db, keys, undefined, true);
+    return invalid();
+  }
 
   // Resolve the user by their globally unique email, joining their home
   // organisation in the same query. The domain is never used to pick the org:
@@ -64,7 +84,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     args: [emailNorm],
   });
   const row = res.rows[0];
-  if (!row) return invalid();
+  if (!row) {
+    await recordLoginFailure(db, keys);
+    return invalid();
+  }
 
   const userId = String(row.user_id);
   const orgId = String(row.org_id);
@@ -73,37 +96,68 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const userName = row.full_name === null ? undefined : String(row.full_name);
   const storedHash = row.password_hash === null ? '' : String(row.password_hash);
   if (String(row.user_status) !== 'ACTIVE' || String(row.org_status) !== 'ACTIVE' || !storedHash) {
+    await recordLoginFailure(db, keys, { userId, orgId });
     return invalid();
   }
 
   const ok = await verifyPassword(password, storedHash);
-  if (!ok) return invalid();
+  if (!ok) {
+    await recordLoginFailure(db, keys, { userId, orgId });
+    return invalid();
+  }
+  await recordLoginSuccess(db, keys, { userId, orgId });
+  if (passwordNeedsRehash(storedHash)) {
+    const replacement = await hashPassword(password);
+    await db.execute({
+      sql: `UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`,
+      args: [replacement, userId, storedHash],
+    });
+    await db.execute({
+      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id)
+            VALUES (?, ?, 'auth.password.rehashed', 'user', ?)`,
+      args: [orgId, userId, userId],
+    });
+  }
 
   const isPlatformOwner = Number(row.is_platform_owner ?? 0) === 1;
   const sessionVersion = Number(row.session_version ?? 0);
   const passwordChangeOnly = Number(row.must_change_password ?? 0) === 1;
-  const auth = passwordChangeOnly
-    ? { roles: [], perms: [] }
-    : await loadUserAuth(db, orgId, userId);
   // Secure in production (https); off for http development on engr.localhost.
   const secure = new URL(request.url).protocol === 'https:';
-  const cookie = await createSession(
-    {
-      sub: userId,
-      org: orgId,
-      orgSlug,
-      orgName,
-      userName,
-      userEmail: emailNorm,
-      roles: auth.roles,
-      perms: auth.perms,
-      isPlatformOwner,
-      sessionVersion,
-      passwordChangeOnly,
-    },
-    env.sessionSecret,
-    secure,
-  );
+  const identity = {
+    userId,
+    orgId,
+    orgSlug,
+    orgName,
+    userName,
+    userEmail: emailNorm,
+    isPlatformOwner,
+    sessionVersion,
+  };
+  const next = passwordChangeOnly
+    ? {
+        cookie: await createTrackedSession(
+          db,
+          {
+            sub: userId,
+            org: orgId,
+            orgSlug,
+            orgName,
+            userName,
+            userEmail: emailNorm,
+            roles: [],
+            perms: [],
+            isPlatformOwner,
+            sessionVersion,
+            authStage: 'password-change',
+          },
+          env.sessionSecret,
+          secure,
+          request,
+        ),
+        location: '/change-password',
+      }
+    : await sessionAfterPrimaryAuth(db, identity, env.sessionSecret, secure, request);
 
   // Stamp last_login_at without blocking the redirect. waitUntil keeps the
   // write alive after the response in the Worker; if it is unavailable the
@@ -119,6 +173,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   return new Response(null, {
     status: 303,
-    headers: { location: passwordChangeOnly ? '/change-password' : '/', 'set-cookie': cookie },
+    headers: { location: next.location, 'set-cookie': next.cookie },
   });
 };

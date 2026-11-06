@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // and rejects an all-space value.
   const passwordValue = str(scalar.password);
   const password = passwordValue.length ? passwordValue : null;
-  const defaultStatus = 'ACTIVE';
+  const defaultStatus = password ? 'ACTIVE' : 'INVITED';
   const input: UserInput = {
     fullName: str(scalar.full_name).trim(),
     email: str(scalar.email).trim().toLowerCase(),
@@ -55,6 +55,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     password,
     roleIds: assignRoles ? roleIds : [],
     assignRoles,
+    appOrigin: new URL(request.url).origin,
   };
 
   const db = await getDb(getEngrEnv());

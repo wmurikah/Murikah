@@ -11,7 +11,7 @@
  */
 
 // WebCrypto PBKDF2 is native, so this stays well within the Worker CPU budget.
-const ITERATIONS = 60_000;
+export const PASSWORD_ITERATIONS = 600_000;
 const KEY_LEN_BITS = 256; // SHA-256 output width
 const SALT_BYTES = 16;
 
@@ -30,6 +30,41 @@ export function validateNewPassword(plain: string): string | null {
   }
   if (!plain.trim()) return 'The password cannot contain only spaces.';
   return null;
+}
+
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Check a password against Have I Been Pwned without sending the password or
+ * complete hash. A provider outage fails closed for new/reset passwords. */
+export async function validatePasswordSecurity(
+  plain: string,
+  fetcher: typeof fetch = fetch,
+): Promise<string | null> {
+  const local = validateNewPassword(plain);
+  if (local) return local;
+  const digest = hex(
+    await crypto.subtle.digest('SHA-1', new TextEncoder().encode(plain)),
+  ).toUpperCase();
+  try {
+    const response = await fetcher(`https://api.pwnedpasswords.com/range/${digest.slice(0, 5)}`, {
+      headers: { 'Add-Padding': 'true', 'User-Agent': 'Murikah-Engineering-Rhythm' },
+    });
+    if (!response.ok) throw new Error('password range unavailable');
+    const suffix = digest.slice(5);
+    const compromised = (await response.text())
+      .split(/\r?\n/)
+      .some((line) => line.split(':', 1)[0]?.trim().toUpperCase() === suffix);
+    return compromised ? 'Choose a password that has not appeared in a known data breach.' : null;
+  } catch {
+    return 'Password safety checking is temporarily unavailable. Try again shortly.';
+  }
+}
+
+export function passwordNeedsRehash(stored: string): boolean {
+  const parts = stored.split('$');
+  return parts.length !== 4 || parts[0] !== 'pbkdf2' || Number(parts[1]) < PASSWORD_ITERATIONS;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -67,8 +102,8 @@ async function derive(
 
 export async function hashPassword(plain: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
-  const hash = await derive(plain, salt, ITERATIONS);
-  return `pbkdf2$${ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
+  const hash = await derive(plain, salt, PASSWORD_ITERATIONS);
+  return `pbkdf2$${PASSWORD_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
 }
 
 export async function verifyPassword(plain: string, stored: string): Promise<boolean> {

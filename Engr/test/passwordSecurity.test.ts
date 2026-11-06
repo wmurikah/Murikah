@@ -3,7 +3,9 @@ import test from 'node:test';
 import { decodeJwt } from 'jose';
 import {
   hashPassword,
+  passwordNeedsRehash,
   validateNewPassword,
+  validatePasswordSecurity,
   verifyPassword,
 } from '../src/lib/engr/auth/password.ts';
 import { createSession, readSession, type SessionPayload } from '../src/lib/engr/auth/session.ts';
@@ -37,6 +39,27 @@ test('new password policy supports paste-friendly passphrases and enforces lengt
   assert.equal(validateNewPassword('correct horse battery staple'), null);
 });
 
+test('legacy PBKDF2 hashes are marked for automatic upgrade', () => {
+  assert.equal(passwordNeedsRehash('pbkdf2$60000$c2FsdA==$aGFzaA=='), true);
+  assert.equal(passwordNeedsRehash('pbkdf2$600000$c2FsdA==$aGFzaA=='), false);
+});
+
+test('breach check uses only the SHA-1 prefix and rejects a matching suffix', async () => {
+  let requested = '';
+  const password = 'correct horse battery staple';
+  const bytes = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
+  const digest = Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+  const error = await validatePasswordSecurity(password, async (input) => {
+    requested = String(input);
+    return new Response(`${digest.slice(5)}:42\nOTHER:1`, { status: 200 });
+  });
+  assert.match(requested, new RegExp(`/range/${digest.slice(0, 5)}$`));
+  assert.equal(requested.includes(digest.slice(5)), false);
+  assert.match(error ?? '', /data breach/);
+});
+
 test('password hashes verify the matching value and reject a different value', async () => {
   const hash = await hashPassword('correct horse battery staple');
   assert.equal(await verifyPassword('correct horse battery staple', hash), true);
@@ -59,6 +82,20 @@ test('temporary-password sessions are restricted and expire after ten minutes', 
   assert.equal(decoded?.passwordChangeOnly, true);
   assert.equal(decoded?.sessionVersion, 4);
   assert.deepEqual(decoded?.perms, []);
+});
+
+test('MFA enrollment and challenge sessions also expire after ten minutes', async () => {
+  for (const authStage of ['mfa-enroll', 'mfa-challenge'] as const) {
+    const setCookie = await createSession(
+      { ...payload, roles: [], perms: [], authStage },
+      secret,
+      true,
+    );
+    assert.match(setCookie, /Max-Age=600/);
+    const claims = decodeJwt(tokenFromCookie(setCookie));
+    assert.equal((claims.exp ?? 0) - (claims.iat ?? 0), 600);
+    assert.equal((await readSession(requestForCookie(setCookie), secret))?.authStage, authStage);
+  }
 });
 
 test('full sessions retain the twelve-hour lifetime and session generation', async () => {
