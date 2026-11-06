@@ -75,6 +75,22 @@ test('existing 600,000-iteration WebCrypto hashes remain valid on Workers', asyn
   assert.equal(await verifyPassword('incorrect horse battery staple', existing), false);
 });
 
+test('PBKDF2 remains compatible when the runtime rejects iterations above 100,000', async () => {
+  const original = crypto.subtle.deriveBits;
+  try {
+    Object.defineProperty(crypto.subtle, 'deriveBits', {
+      configurable: true,
+      value: async () => {
+        throw new Error('iteration counts above 100000 are not supported');
+      },
+    });
+    const stored = await hashPassword('a unique long passphrase');
+    assert.equal(await verifyPassword('a unique long passphrase', stored), true);
+  } finally {
+    Object.defineProperty(crypto.subtle, 'deriveBits', { configurable: true, value: original });
+  }
+});
+
 test('temporary-password sessions are restricted and expire after ten minutes', async () => {
   const setCookie = await createSession(
     { ...payload, roles: [], perms: [], passwordChangeOnly: true },
