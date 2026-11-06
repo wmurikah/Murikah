@@ -17,6 +17,10 @@
     ]
   },
   "scripts": {
+    "postinstall": "node tools/restore-db-assets.mjs",
+    "pretest": "node tools/restore-db-assets.mjs",
+    "predb:schema:check": "node tools/restore-db-assets.mjs",
+    "predb:schema:generate": "node tools/restore-db-assets.mjs",
     "dev": "astro dev",
     "start": "astro dev",
     "sync": "astro sync",

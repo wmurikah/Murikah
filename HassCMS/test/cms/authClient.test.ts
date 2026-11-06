@@ -12,6 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   submitCredentials,
@@ -21,6 +22,8 @@ import {
 } from '../../src/lib/cms/auth/client.ts';
 import { CMS_NAV, activeNavItem } from '../../src/lib/cms/nav.ts';
 import { isPublicPath, isCmsAuthEntryPage, isOidcCallbackPath } from '../../src/lib/cms/routes.ts';
+
+const testPassword = randomBytes(24).toString('base64url');
 
 /** A fetch stand-in that records the call and returns a scripted response. */
 function stubFetch(response: { status: number; body?: unknown; throws?: boolean }) {
@@ -51,7 +54,7 @@ test('a successful sign-in maps to success and carries the user type', async () 
     },
   });
   try {
-    const result = await submitCredentials({ email: 'c@h.com', password: 'x' });
+    const result = await submitCredentials({ email: 'c@h.com', password: testPassword });
     assert.equal(result.status, 'success');
     // The user type decides the destination after sign-in, so it must survive.
     if (result.status === 'success') assert.equal(result.user.userType, 'INTERNAL');
@@ -72,14 +75,14 @@ test('the request carries only the credentials, and no token comes back', async 
     body: { user: { userId: 'U1', userType: 'INTERNAL' }, mustChangePassword: false },
   });
   try {
-    const result = await submitCredentials({ email: 'a@b.co', password: 'secret-value' });
+    const result = await submitCredentials({ email: 'a@b.co', password: testPassword });
     const sent = JSON.parse(String(stub.calls[0]?.init.body));
     assert.deepEqual(Object.keys(sent).sort(), ['email', 'password']);
     // Nothing token-shaped reaches the caller: the session lives in an HttpOnly
     // cookie the browser holds and JavaScript cannot read, so there is nothing
     // for this code to put in localStorage even if it wanted to.
     const blob = JSON.stringify(result).toLowerCase();
-    for (const forbidden of ['token', 'cookie', 'hash', 'secret-value']) {
+    for (const forbidden of ['token', 'cookie', 'hash', testPassword]) {
       assert.ok(!blob.includes(forbidden), `the result must not contain ${forbidden}`);
     }
   } finally {
@@ -96,14 +99,14 @@ test('a 401 is the generic failure; 429, 5xx and a dead network are transport er
   ] as [number, string][]) {
     const stub = stubFetch({ status });
     try {
-      assert.equal((await submitCredentials({ email: 'a@b.co', password: 'x' })).status, expected);
+      assert.equal((await submitCredentials({ email: 'a@b.co', password: testPassword })).status, expected);
     } finally {
       stub.restore();
     }
   }
   const dead = stubFetch({ status: 0, throws: true });
   try {
-    const result = await submitCredentials({ email: 'a@b.co', password: 'x' });
+    const result = await submitCredentials({ email: 'a@b.co', password: testPassword });
     assert.equal(result.status, 'transport_error');
     // A transport problem may say so: it discloses nothing about any account.
     if (result.status === 'transport_error') assert.match(result.message, /connection/i);
@@ -119,7 +122,7 @@ test('a correct password that must be changed is a distinct state, not a failure
   });
   try {
     assert.equal(
-      (await submitCredentials({ email: 'a@b.co', password: 'x' })).status,
+      (await submitCredentials({ email: 'a@b.co', password: testPassword })).status,
       'password_change_required',
     );
   } finally {
@@ -131,7 +134,7 @@ test('a 200 with a malformed body is a transport error, not a silent success', a
   const stub = stubFetch({ status: 200, body: { nonsense: true } });
   try {
     assert.equal(
-      (await submitCredentials({ email: 'a@b.co', password: 'x' })).status,
+      (await submitCredentials({ email: 'a@b.co', password: testPassword })).status,
       'transport_error',
     );
   } finally {

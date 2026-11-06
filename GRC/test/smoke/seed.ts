@@ -30,9 +30,7 @@ import { seal } from '../../src/lib/grc/auth/secretBox.ts';
  * unseals with; two copies of a secret that must match is exactly the drift
  * worth designing out.
  */
-export const SMOKE_SESSION_SECRET = Buffer.from('grc-smoke-harness-session-secret').toString(
-  'base64',
-);
+export const SMOKE_SESSION_SECRET = randomBytes(32).toString('base64');
 
 export const SMOKE = {
   orgId: 'ORG-HASS',
@@ -42,7 +40,7 @@ export const SMOKE = {
   // The platform owner (Murikah Labs), who is pinned to no organisation and
   // enters an instance to work inside it.
   email: 'wmurikah@gmail.com',
-  password: 'Grc-Smoke-Harness-2026',
+  password: randomBytes(24).toString('base64url'),
   userId: 'USR-WM',
   // The Hass instance admin: the same SUPER_ADMIN role, pinned to Hass, with no
   // platform view and no switcher.
@@ -71,6 +69,8 @@ export const SMOKE = {
   // moment of upload (Build Prompt 51).
   storageProvider: 'r2',
   storageBucket: 'hass-evidence',
+  storageAccessKeyId: randomBytes(16).toString('hex'),
+  storageSecretAccessKey: randomBytes(32).toString('base64url'),
   storageFolder: 'audit-evidence',
   // A second affiliate, and a finding inside it, so affiliate confinement has
   // something real to exclude (Build Prompt 45). Without a second affiliate a
@@ -1018,8 +1018,8 @@ export async function seedDatabase(db: DatabaseSync, s3Origin = ''): Promise<voi
       JSON.stringify({
         account_id: 'smoke-account',
         bucket: SMOKE.storageBucket,
-        access_key_id: 'smoke-access-key',
-        secret_access_key: 'smoke-secret-key',
+        access_key_id: SMOKE.storageAccessKeyId,
+        secret_access_key: SMOKE.storageSecretAccessKey,
         // The endpoint the settings screen has always offered, pointed at the
         // harness's own S3 stand-in so a connection test can really pass and
         // really activate the provider (Build Prompt 54).

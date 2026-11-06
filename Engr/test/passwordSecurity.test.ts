@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomBytes } from 'node:crypto';
 import { decodeJwt } from 'jose';
 import {
   hashPassword,
@@ -11,7 +12,11 @@ import {
 import { createSession, readSession, type SessionPayload } from '../src/lib/engr/auth/session.ts';
 import { passwordGateDecision } from '../src/lib/engr/auth/passwordGate.ts';
 
-const secret = Buffer.alloc(32, 7).toString('base64');
+const secret = randomBytes(32).toString('base64');
+const samplePassword = randomBytes(24).toString('base64url');
+const differentPassword = randomBytes(24).toString('base64url');
+const sampleHash = (iterations: number) =>
+  ['pbkdf2', iterations, Buffer.alloc(16).toString('base64'), Buffer.alloc(32).toString('base64')].join('$');
 
 const payload: SessionPayload = {
   sub: 'user-1',
@@ -36,18 +41,18 @@ test('new password policy supports paste-friendly passphrases and enforces lengt
   assert.match(validateNewPassword('too-short') ?? '', /at least 12/);
   assert.match(validateNewPassword(' '.repeat(12)) ?? '', /only spaces/);
   assert.match(validateNewPassword('x'.repeat(129)) ?? '', /no more than 128/);
-  assert.equal(validateNewPassword('correct horse battery staple'), null);
+  assert.equal(validateNewPassword(samplePassword), null);
 });
 
 test('PBKDF2 hashes use the free-Worker-compatible cost', () => {
-  assert.equal(passwordNeedsRehash('pbkdf2$10000$c2FsdA==$aGFzaA=='), true);
-  assert.equal(passwordNeedsRehash('pbkdf2$60000$c2FsdA==$aGFzaA=='), false);
-  assert.equal(passwordNeedsRehash('pbkdf2$600000$c2FsdA==$aGFzaA=='), false);
+  assert.equal(passwordNeedsRehash(sampleHash(10_000)), true);
+  assert.equal(passwordNeedsRehash(sampleHash(60_000)), false);
+  assert.equal(passwordNeedsRehash(sampleHash(600_000)), false);
 });
 
 test('breach check uses only the SHA-1 prefix and rejects a matching suffix', async () => {
   let requested = '';
-  const password = 'correct horse battery staple';
+  const password = samplePassword;
   const bytes = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
   const digest = Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0'))
     .join('')
@@ -62,16 +67,15 @@ test('breach check uses only the SHA-1 prefix and rejects a matching suffix', as
 });
 
 test('password hashes verify the matching value and reject a different value', async () => {
-  const hash = await hashPassword('correct horse battery staple');
+  const hash = await hashPassword(samplePassword);
   assert.match(hash, /^pbkdf2\$60000\$/);
-  assert.equal(await verifyPassword('correct horse battery staple', hash), true);
-  assert.equal(await verifyPassword('incorrect horse battery staple', hash), false);
-  assert.equal(hash.includes('correct horse'), false);
+  assert.equal(await verifyPassword(samplePassword, hash), true);
+  assert.equal(await verifyPassword(differentPassword, hash), false);
+  assert.equal(hash.includes(samplePassword), false);
 });
 
 test('oversized hashes fail before Worker CPU is spent', async () => {
-  const existing =
-    'pbkdf2$600000$AAECAwQFBgcICQoLDA0ODw==$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY=';
+  const existing = sampleHash(600_000);
   const original = crypto.subtle.deriveBits;
   try {
     Object.defineProperty(crypto.subtle, 'deriveBits', {
@@ -80,15 +84,15 @@ test('oversized hashes fail before Worker CPU is spent', async () => {
         throw new Error('oversized PBKDF2 reached the Worker runtime');
       },
     });
-    assert.equal(await verifyPassword('correct horse battery staple', existing), false);
+    assert.equal(await verifyPassword(samplePassword, existing), false);
   } finally {
     Object.defineProperty(crypto.subtle, 'deriveBits', { configurable: true, value: original });
   }
 });
 
 test('PBKDF2 uses native WebCrypto within the supported Worker limit', async () => {
-  const stored = await hashPassword('a unique long passphrase');
-  assert.equal(await verifyPassword('a unique long passphrase', stored), true);
+  const stored = await hashPassword(samplePassword);
+  assert.equal(await verifyPassword(samplePassword, stored), true);
 });
 
 test('temporary-password sessions are restricted and expire after ten minutes', async () => {

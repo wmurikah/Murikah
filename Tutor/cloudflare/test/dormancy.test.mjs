@@ -5,6 +5,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { randomBytes } from 'node:crypto';
 import vm from 'node:vm';
 
 const directory = await mkdtemp(join(tmpdir(), 'tutor-dormancy-'));
@@ -35,6 +36,8 @@ try {
 }
 
 const origin = 'https://tutor.murikah.com';
+const testAuthSecret = randomBytes(32).toString('hex');
+const testAdminPassword = randomBytes(24).toString('base64url');
 function fixture({ configured = true } = {}) {
   const ctx = {
     starts: [], stops: 0, proxies: 0, probes: 0,
@@ -45,8 +48,8 @@ function fixture({ configured = true } = {}) {
   const container = new TutorContainer(ctx);
   const env = {
     TUTOR_CONTAINER: { getByName: () => container },
-    MURIKAH_TUTOR_AUTH_SECRET: configured ? 'a'.repeat(32) : '',
-    MURIKAH_TUTOR_ADMIN_PASSWORD: configured ? 'p'.repeat(16) : '',
+    MURIKAH_TUTOR_AUTH_SECRET: configured ? testAuthSecret : '',
+    MURIKAH_TUTOR_ADMIN_PASSWORD: configured ? testAdminPassword : '',
     MURIKAH_TUTOR_RUNTIME: 'test',
   };
   const request = (path, init) => worker.fetch(new Request(origin + path, init), env);
@@ -82,7 +85,7 @@ test('explicit wake uses SDK startup with runtime configuration and issues an ad
   const response = await wake();
   assert.equal(response.status, 200);
   assert.equal(ctx.starts.length, 1);
-  assert.equal(ctx.starts[0].envVars.MURIKAH_TUTOR_AUTH_SECRET, 'a'.repeat(32));
+  assert.equal(ctx.starts[0].envVars.MURIKAH_TUTOR_AUTH_SECRET, testAuthSecret);
   const cookie = response.headers.get('set-cookie');
   assert.match(cookie, /Secure; HttpOnly; SameSite=Lax/);
   const app = await request('/api/chat?thread=example', { headers: { cookie: cookie.split(';')[0] } });

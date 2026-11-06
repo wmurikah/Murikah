@@ -34,7 +34,7 @@ const PAGES_ROOT = join(here, '..', '..', 'src', 'pages', 'cms');
 const BUILT = existsSync(join(here, '..', '..', 'dist', 'server', 'entry.mjs'));
 
 const worker = new CmsWorker();
-const SECRET = 'inline-script-test-secret-0123456789';
+const SECRET = crypto.randomUUID() + crypto.randomUUID();
 const PASSWORD = process.env.CMS_TEST_PASSWORD ?? `test-only-${crypto.randomUUID()}`;
 const EMAIL = 'inline.scan@hasspetroleum.com';
 let booted = false;

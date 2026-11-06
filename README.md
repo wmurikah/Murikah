@@ -12,6 +12,8 @@ Five independently built systems live in this repository:
 
 Each system owns its source, documentation, database tooling, assets, dependencies, configuration and tests. Generic helpers needed by multiple systems have local copies, so building a system does not require another system's checkout or package tree. Product documentation is kept inside its folder; there is no root application, docs directory, shared dependency installation or compatibility symlink.
 
+Database schemas and migrations are kept in each product's `tools/db-assets.json` catalogue. The package's install and test scripts materialize the SQL resources that local database tools and tests need; those generated files are ignored by Git. From a product directory, run `node tools/restore-db-assets.mjs` before a direct database command that does not use a package script. After editing or adding a SQL resource, run `node tools/restore-db-assets.mjs --capture db/path/to/resource.sql` and commit the changed catalogue. No SQL file is tracked in the repository.
+
 GitHub Actions entry points remain in `.github/workflows/`, as required by GitHub. The root license, ignore rules and editor defaults apply to the repository.
 
 ## Development

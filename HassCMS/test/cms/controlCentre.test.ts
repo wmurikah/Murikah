@@ -185,23 +185,24 @@ test('an UPDATE and a DELETE against audit_events are refused by the database', 
 
 test('a synthetic row carrying every secret renders none of them', async () => {
   const c = await db();
+  const secrets = Array.from({ length: 8 }, () => crypto.randomUUID());
   // Exactly the five the acceptance criterion names, plus the nesting and the
   // array that a real payload would put them in.
   const poisoned = {
     email: 'grace@example.com',
-    password_hash: 'pbkdf2$210000$abcdef$0123456789abcdef',
-    sessionToken: 'sess_live_9f3a2b1c8d7e6f5a',
-    mfa_secret: 'JBSWY3DPEHPK3PXP',
-    resetToken: 'rst_7f2e9d1c',
-    verification_token: 'vrf_a1b2c3d4',
-    credentials: { passwordHash: 'nested-secret', backupCodes: ['abc-123', 'def-456'] },
+    password_hash: secrets[0],
+    sessionToken: secrets[1],
+    mfa_secret: secrets[2],
+    resetToken: secrets[3],
+    verification_token: secrets[4],
+    credentials: { passwordHash: secrets[5], backupCodes: [secrets[6]] },
     displayName: 'Grace Wanjiru',
   };
   const id = await writeAudit(c, {
     eventType: 'USER_UPDATED',
     entityType: 'USER',
     entityId: 'USR-GAB',
-    before: { email: 'g.old@example.com', password_hash: 'previous-secret' },
+    before: { email: 'g.old@example.com', password_hash: secrets[7] },
     after: poisoned,
   });
 
@@ -211,16 +212,7 @@ test('a synthetic row carrying every secret renders none of them', async () => {
 
   // Not one of the secret values appears anywhere in the rendered object,
   // diff rows, technical JSON and all.
-  for (const secret of [
-    'pbkdf2$210000$abcdef$0123456789abcdef',
-    'sess_live_9f3a2b1c8d7e6f5a',
-    'JBSWY3DPEHPK3PXP',
-    'rst_7f2e9d1c',
-    'vrf_a1b2c3d4',
-    'nested-secret',
-    'abc-123',
-    'previous-secret',
-  ]) {
+  for (const secret of secrets) {
     assert.equal(rendered.includes(secret), false, `${secret} must never be rendered`);
   }
 
@@ -268,10 +260,11 @@ test('the masked-key list recognises the spellings a payload actually uses', () 
 });
 
 test('the technical JSON disclosure is masked too, so it is not the one hole', () => {
-  const raw = JSON.stringify({ password_hash: 'secret', accountName: 'ABC Ltd' });
+  const sample = crypto.randomUUID();
+  const raw = JSON.stringify({ password_hash: sample, accountName: 'ABC Ltd' });
   const masked = maskedJson(raw);
   assert.notEqual(masked, null);
-  assert.equal(masked!.includes('secret'), false);
+  assert.equal(masked!.includes(sample), false);
   assert.equal(masked!.includes('ABC Ltd'), true);
   assert.equal(masked!.includes(MASKED_PLACEHOLDER), true);
 

@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 from pathlib import Path
 import sqlite3
+import secrets
 import sys
 import tempfile
 import threading
@@ -21,7 +22,9 @@ from fastapi.testclient import TestClient
 from jose import jwt
 
 # Load crypto backends before fixture-scoped module patching.
-jwt.encode({"test": True}, "unit-test-key", algorithm="HS256")
+TEST_PASSWORD = secrets.token_urlsafe(24)
+TEST_AUTH_SECRET = secrets.token_urlsafe(32)
+jwt.encode({"test": True}, TEST_AUTH_SECRET, algorithm="HS256")
 
 SOURCE = Path(__file__).resolve().parents[1] / "railway" / "murikah_access.py"
 if not SOURCE.exists():
@@ -49,7 +52,7 @@ class AccessTests(unittest.TestCase):
         parent.identity = identity
         auth = ModuleType("deeptutor.services.auth")
         auth.AUTH_ENABLED = True
-        auth.AUTH_SECRET = "test-secret-used-only-in-unit-tests"
+        auth.AUTH_SECRET = TEST_AUTH_SECRET
         auth.POCKETBASE_ENABLED = False
         auth.hash_password = lambda password: "hashed:" + password
         auth.create_token = lambda name, **kwargs: "signed-test-token"
@@ -153,13 +156,13 @@ class AccessTests(unittest.TestCase):
         self.client.cookies.set("dt_token", "test")
         return uid
 
-    def signup_start(self, email, password="strong-password", **extra):
+    def signup_start(self, email, password=TEST_PASSWORD, **extra):
         return self.client.post(
             "/api/murikah/access/signup",
             json={"email": email, "password": password, **extra},
         )
 
-    def signup_verify(self, start_response, email, password="strong-password"):
+    def signup_verify(self, start_response, email, password=TEST_PASSWORD):
         challenge_id = start_response.json()["challenge_id"]
         return self.client.post(
             "/api/murikah/access/signup/verify",
@@ -230,7 +233,7 @@ class AccessTests(unittest.TestCase):
 
     def test_invalid_email_and_password_are_rejected_before_account_creation(self):
         for email, password in (
-            ("guest_test", "strong-password"),
+            ("guest_test", TEST_PASSWORD),
             ("user@example.com", "short"),
             ("user@example.com", "🎉" * 30),
         ):
@@ -242,7 +245,7 @@ class AccessTests(unittest.TestCase):
         res = self.client.post(
             "/api/murikah/access/signup",
             headers={"Origin": "https://other.example"},
-            json={"email": "user@example.com", "password": "strong-password"},
+            json={"email": "user@example.com", "password": TEST_PASSWORD},
         )
         self.assertEqual(res.status_code, 403)
 
