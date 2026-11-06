@@ -12,6 +12,8 @@ import { getDb } from '@engr/db';
 import { getTechnician, type TechnicianDetail } from '@engr/repos/adminTechnicians';
 import { listContractorOptions, type Option } from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
+import { requiresContractorTechnicianScope } from '@engr/auth/adminPolicy';
+import { contractorForUser } from '@engr/repos/techniciansPick';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -23,13 +25,20 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let technician: TechnicianDetail | null = null;
 let contractors: Option[] = [];
+let contractorScope: string | undefined;
 
 if (canManage) {
   const db = await getDb(getEngrEnv());
-  contractors = await listContractorOptions(db, engr.orgId);
-  if (!isNew && id) technician = await getTechnician(db, engr.orgId, id);
+  if (requiresContractorTechnicianScope(engr.roles)) {
+    contractorScope = (await contractorForUser(db, engr.orgId, engr.userId)) ?? undefined;
+  }
+  if (!requiresContractorTechnicianScope(engr.roles) || contractorScope) {
+    contractors = await listContractorOptions(db, engr.orgId, contractorScope);
+    if (!isNew && id) technician = await getTechnician(db, engr.orgId, id, contractorScope);
+  }
 }
-const notFound = !isNew && technician === null;
+const contractorUnlinked = requiresContractorTechnicianScope(engr.roles) && !contractorScope;
+const notFound = contractorUnlinked || (!isNew && technician === null);
 if (canManage && notFound) Astro.response.status = 404;
 
 const t = technician;

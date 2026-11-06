@@ -59,11 +59,17 @@ export async function listCategoryOptions(db: Client, orgId: string): Promise<Op
   }));
 }
 
-export async function listContractorOptions(db: Client, orgId: string): Promise<Option[]> {
+export async function listContractorOptions(
+  db: Client,
+  orgId: string,
+  contractorId?: string,
+): Promise<Option[]> {
   const res = await db.execute({
     sql: `SELECT id, name FROM contractors
-           WHERE org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE' ORDER BY name`,
-    args: [orgId],
+           WHERE org_id = ? AND deleted_at IS NULL AND status = 'ACTIVE'
+             AND (? IS NULL OR id = ?)
+        ORDER BY name`,
+    args: [orgId, contractorId ?? null, contractorId ?? null],
   });
   return res.rows.map((r) => ({ id: String(r.id), label: String(r.name) }));
 }

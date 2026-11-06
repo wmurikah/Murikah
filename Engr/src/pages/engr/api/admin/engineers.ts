@@ -3,7 +3,7 @@ export const prerender = false;
 /**
  * Engineer-in-charge assignment endpoint for the acting organisation. Create an
  * assignment (an engineer owns a station or a category), or remove one. Only a
- * super-admin with settings.manage may write. The organisation is always the
+ * organisation administrator with engineer_assignments.manage may write. The organisation is always the
  * acting organisation from the session, never a client value.
  */
 import type { APIRoute } from 'astro';
@@ -19,7 +19,7 @@ function seeOther(location: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.perms.includes('settings.manage')) {
+  if (!engr.perms.includes('engineer_assignments.manage')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : seeOther('/admin/engineers?error=forbidden');

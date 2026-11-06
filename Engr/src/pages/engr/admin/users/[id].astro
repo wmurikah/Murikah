@@ -3,8 +3,8 @@ export const prerender = false;
 
 /**
  * User create and edit. The path segment is "new" to create, otherwise a user id
- * to edit. Gate: users.manage. The roles checklist is only shown, and only
- * applied, when the viewer also holds roles.manage. New users require a
+ * to edit. User actions are separately gated. The roles checklist is only
+ * shown, and only applied, when the viewer holds users.assign_roles. New users require a
  * temporary password or send a single-use invitation. Entering a password on an existing user resets their password,
  * revokes their sessions and forces replacement at the next login.
  */
@@ -14,28 +14,44 @@ import { getDb } from '@engr/db';
 import { getUser, type UserDetail } from '@engr/repos/adminUsers';
 import { listAssignableRoles } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
+import {
+  mayAssignRoleCode,
+  mayManageTargetUser,
+  userManagementScope,
+} from '@engr/auth/adminPolicy';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const canManage = can(Astro.locals, 'users.manage');
-const canAssignRoles = can(Astro.locals, 'roles.manage');
 const { id } = Astro.params;
 const isNew = id === 'new';
+const canManageUsers = can(Astro.locals, 'users.update');
+const canInvite = can(Astro.locals, 'users.invite');
+const canResetPassword = can(Astro.locals, 'users.reset_password');
+const canSuspend = can(Astro.locals, 'users.suspend');
+const canAssignRoles = can(Astro.locals, 'users.assign_roles');
+const managementScope = userManagementScope(engr.roles, engr.isPlatformOwner);
+const canOpen = isNew ? canInvite : canManageUsers;
 const errorCode = Astro.url.searchParams.get('error');
 
 let user: UserDetail | null = null;
 let roles: { id: string; name: string; code: string }[] = [];
 
-if (canManage) {
+if (canOpen) {
   const db = await getDb(getEngrEnv());
-  if (canAssignRoles) roles = await listAssignableRoles(db, engr.orgId);
+  if (canAssignRoles) {
+    roles = await listAssignableRoles(db, engr.orgId, (code) =>
+      mayAssignRoleCode(managementScope, code),
+    );
+  }
   if (!isNew && id) user = await getUser(db, engr.orgId, id);
 }
 const notFound = !isNew && user === null;
-if (canManage && notFound) Astro.response.status = 404;
+if (canOpen && notFound) Astro.response.status = 404;
 
 const u = user;
+const canManageTarget =
+  isNew || (u !== null && mayManageTargetUser(managementScope, u.roleCodes, u.isPlatformOwner));
 const selectedRoleIds = new Set(u?.roleIds ?? []);
 ---
 
@@ -71,9 +87,9 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
   }
 
   {
-    !canManage ? (
+    !canOpen || !canManageTarget ? (
       <p class="engr-error" role="alert">
-        You do not have permission to manage users.
+        This account requires a higher administrator.
       </p>
     ) : notFound ? (
       <p class="engr-error" role="alert">
@@ -121,7 +137,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
         </div>
         <div class="engr-field">
           <label for="status">Status</label>
-          <select id="status" class="engr-select" name="status">
+          <select id="status" class="engr-select" name="status" disabled={!isNew && !canSuspend}>
             <option value="INVITED" selected={u?.status === 'INVITED'}>
               Invited
             </option>
@@ -135,27 +151,32 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
               Deactivated
             </option>
           </select>
+          {!isNew && !canSuspend && (
+            <input type="hidden" name="status" value={u?.status ?? 'ACTIVE'} />
+          )}
         </div>
-        <div class="engr-field engr-formgrid__full">
-          <label for="password">
-            {isNew ? 'Temporary password' : 'Reset with a temporary password (optional)'}
-          </label>
-          <input
-            type="password"
-            id="password"
-            class="engr-input"
-            name="password"
-            minlength="12"
-            maxlength="128"
-            autocomplete="new-password"
-          />
-          <span class="engr-field__hint">
-            Pasting is allowed.{' '}
-            {isNew
-              ? 'Leave blank to email a single-use invitation, or enter a temporary password that must be replaced at first sign-in.'
-              : 'The user must replace a reset password immediately after signing in. Leave blank to keep the current password.'}
-          </span>
-        </div>
+        {(isNew || canResetPassword) && (
+          <div class="engr-field engr-formgrid__full">
+            <label for="password">
+              {isNew ? 'Temporary password' : 'Reset with a temporary password (optional)'}
+            </label>
+            <input
+              type="password"
+              id="password"
+              class="engr-input"
+              name="password"
+              minlength="12"
+              maxlength="128"
+              autocomplete="new-password"
+            />
+            <span class="engr-field__hint">
+              Pasting is allowed.{' '}
+              {isNew
+                ? 'Leave blank to email a single-use invitation, or enter a temporary password that must be replaced at first sign-in.'
+                : 'The user must replace a reset password immediately after signing in. Leave blank to keep the current password.'}
+            </span>
+          </div>
+        )}
         {!isNew && u?.mustChangePassword && (
           <p class="engr-field__hint engr-formgrid__full" role="status">
             This user must change their temporary password at the next sign-in.
@@ -164,6 +185,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
         {canAssignRoles && (
           <fieldset class="engr-field engr-formgrid__full">
             <legend>Roles</legend>
+            <input type="hidden" name="roles_present" value="1" />
             <ul class="engr-checklist">
               {roles.map((role) => (
                 <li>

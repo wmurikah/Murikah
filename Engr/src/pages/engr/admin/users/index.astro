@@ -8,12 +8,15 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listUsersAdmin, type UserRow } from '@engr/repos/adminUsers';
 import { can } from '@engr/auth/rbac';
+import { mayManageTargetUser, userManagementScope } from '@engr/auth/adminPolicy';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'users.view');
-const canManage = can(Astro.locals, 'users.manage');
+const canManage = can(Astro.locals, 'users.update');
+const canInvite = can(Astro.locals, 'users.invite');
+const managementScope = userManagementScope(engr.roles, engr.isPlatformOwner);
 const saved = Astro.url.searchParams.get('saved');
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -31,7 +34,7 @@ if (allowed) {
       <p class="engr-lead">People who can sign in and take part in the work.</p>
     </div>
     {
-      canManage && (
+      canInvite && (
         <a href="/admin/users/new" class="engr-btn engr-btn--primary">
           New user
         </a>
@@ -62,7 +65,7 @@ if (allowed) {
     ) : rows.length === 0 ? (
       <EmptyState
         message="No users yet."
-        canAct={canManage}
+        canAct={canInvite}
         actionHref="/admin/users/new"
         actionLabel="Add a user"
         hint="Ask an administrator to add a user."
@@ -82,7 +85,12 @@ if (allowed) {
             {rows.map((r) => (
               <tr>
                 <td>
-                  {canManage ? <a href={`/admin/users/${r.id}`}>{r.fullName}</a> : r.fullName}
+                  {canManage &&
+                  mayManageTargetUser(managementScope, r.roleCodes, r.isPlatformOwner) ? (
+                    <a href={`/admin/users/${r.id}`}>{r.fullName}</a>
+                  ) : (
+                    r.fullName
+                  )}
                 </td>
                 <td>{r.email}</td>
                 <td>{r.roleNames || 'None'}</td>

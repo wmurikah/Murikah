@@ -13,7 +13,14 @@ function isUniqueViolation(err: unknown): boolean {
 
 export type AdminResult =
   | { ok: true; id?: string }
-  | { ok: false; code: 'conflict' | 'invalid' | 'not_found'; message: string };
+  | { ok: false; code: 'conflict' | 'invalid' | 'not_found' | 'forbidden'; message: string };
+
+export interface TechnicianAdminCtx {
+  orgId: string;
+  userId: string;
+  /** Present for a contractor portal actor; absent for organisation staff. */
+  contractorId?: string;
+}
 
 export interface TechnicianRow {
   id: string;
@@ -40,15 +47,20 @@ export interface TechnicianInput {
   status: string;
 }
 
-export async function listTechniciansAdmin(db: Client, orgId: string): Promise<TechnicianRow[]> {
+export async function listTechniciansAdmin(
+  db: Client,
+  orgId: string,
+  contractorId?: string,
+): Promise<TechnicianRow[]> {
   const res = await db.execute({
     sql: `SELECT t.id, t.full_name, t.phone, t.status,
                  c.name AS contractor_name
             FROM technicians t
             JOIN contractors c ON c.id = t.contractor_id
            WHERE t.org_id = ? AND t.deleted_at IS NULL
+             AND (? IS NULL OR t.contractor_id = ?)
         ORDER BY t.full_name`,
-    args: [orgId],
+    args: [orgId, contractorId ?? null, contractorId ?? null],
   });
   return res.rows.map((r) => ({
     id: String(r.id),
@@ -63,11 +75,15 @@ export async function getTechnician(
   db: Client,
   orgId: string,
   id: string,
+  contractorId?: string,
 ): Promise<TechnicianDetail | null> {
   const res = await db.execute({
     sql: `SELECT id, contractor_id, full_name, phone, email, status
-            FROM technicians WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
-    args: [id, orgId],
+            FROM technicians
+           WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+             AND (? IS NULL OR contractor_id = ?)
+           LIMIT 1`,
+    args: [id, orgId, contractorId ?? null, contractorId ?? null],
   });
   const row = res.rows[0];
   if (!row) return null;
@@ -92,11 +108,14 @@ function validate(input: TechnicianInput): string | null {
 
 export async function createTechnician(
   db: Client,
-  ctx: { orgId: string; userId: string },
+  ctx: TechnicianAdminCtx,
   input: TechnicianInput,
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (ctx.contractorId && input.contractorId !== ctx.contractorId) {
+    return { ok: false, code: 'forbidden', message: 'Technicians must belong to your contractor.' };
+  }
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -135,18 +154,22 @@ export async function createTechnician(
 
 export async function updateTechnician(
   db: Client,
-  ctx: { orgId: string; userId: string },
+  ctx: TechnicianAdminCtx,
   id: string,
   input: TechnicianInput,
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
+  if (ctx.contractorId && input.contractorId !== ctx.contractorId) {
+    return { ok: false, code: 'forbidden', message: 'Technicians must belong to your contractor.' };
+  }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({
       sql: `UPDATE technicians
                SET contractor_id = ?, full_name = ?, phone = ?, email = ?, status = ?
-             WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
+             WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+               AND (? IS NULL OR contractor_id = ?)`,
       args: [
         input.contractorId,
         input.fullName,
@@ -155,6 +178,8 @@ export async function updateTechnician(
         input.status,
         id,
         ctx.orgId,
+        ctx.contractorId ?? null,
+        ctx.contractorId ?? null,
       ],
     });
     if (upd.rowsAffected === 0) {

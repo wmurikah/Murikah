@@ -93,12 +93,15 @@ export async function effectiveRoleIds(db: Client, orgId: string): Promise<Set<s
 export async function listAssignableRoles(
   db: Client,
   orgId: string,
+  allowedCode?: (code: string) => boolean,
 ): Promise<{ id: string; name: string; code: string }[]> {
   const res = await db.execute({
     sql: `WITH eff AS (${EFFECTIVE}) SELECT id, name, code FROM eff ORDER BY name`,
     args: [orgId, orgId],
   });
-  return res.rows.map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }));
+  return res.rows
+    .map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }))
+    .filter((role) => allowedCode?.(role.code) ?? true);
 }
 
 export async function listPermissions(db: Client): Promise<PermissionRow[]> {

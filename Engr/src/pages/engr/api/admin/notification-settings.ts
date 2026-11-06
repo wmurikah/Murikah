@@ -9,7 +9,7 @@ import { jsonResponse, wantsJson, redirectResponse } from '@engr/workflow/respon
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  if (!engr.perms.includes('settings.manage')) {
+  if (!engr.perms.includes('notifications.configure')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, '/admin/notifications', 'error=forbidden');

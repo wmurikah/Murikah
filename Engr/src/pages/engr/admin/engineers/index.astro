@@ -4,8 +4,8 @@ export const prerender = false;
 /**
  * Engineers in charge: which engineer owns each station or category of work.
  * When a request is raised it routes to the matching engineer (a station match
- * wins over a category match); with no match it goes to the managers. Gate:
- * settings.manage. Everything is scoped to the acting organisation.
+ * wins over a category match); with no match it goes to the managers. View and
+ * change permissions are separate. Everything is scoped to the acting organisation.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
@@ -28,7 +28,8 @@ import { can } from '@engr/auth/rbac';
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
-const allowed = can(Astro.locals, 'settings.manage');
+const allowed = can(Astro.locals, 'engineer_assignments.view');
+const canManage = can(Astro.locals, 'engineer_assignments.manage');
 const saved = Astro.url.searchParams.get('saved');
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -38,12 +39,14 @@ let stations: StationOption[] = [];
 let categories: CategoryOption[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv());
-  [assignments, engineers, stations, categories] = await Promise.all([
-    listAssignments(db, engr.orgId),
-    listEngineerCandidates(db, engr.orgId),
-    listStations(db, engr.orgId),
-    listAssetCategories(db, engr.orgId),
-  ]);
+  assignments = await listAssignments(db, engr.orgId);
+  if (canManage) {
+    [engineers, stations, categories] = await Promise.all([
+      listEngineerCandidates(db, engr.orgId),
+      listStations(db, engr.orgId),
+      listAssetCategories(db, engr.orgId),
+    ]);
+  }
 }
 ---
 
@@ -75,7 +78,7 @@ if (allowed) {
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        This is managed by a super-admin with the settings permission.
+        You do not have permission to view engineer assignments.
       </p>
     ) : (
       <>
@@ -105,12 +108,16 @@ if (allowed) {
                     <td>{a.scopeType === 'STATION' ? 'Station' : 'Category'}</td>
                     <td>{a.scopeName}</td>
                     <td>
-                      <form method="post" action="/api/admin/engineers">
-                        <input type="hidden" name="delete_id" value={a.id} />
-                        <button type="submit" class="engr-btn engr-btn--danger">
-                          Remove
-                        </button>
-                      </form>
+                      {canManage ? (
+                        <form method="post" action="/api/admin/engineers">
+                          <input type="hidden" name="delete_id" value={a.id} />
+                          <button type="submit" class="engr-btn engr-btn--danger">
+                            Remove
+                          </button>
+                        </form>
+                      ) : (
+                        <span class="engr-muted">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -119,58 +126,60 @@ if (allowed) {
           </div>
         )}
 
-        <section class="engr-panel" style="margin-top:1.5rem">
-          <h2>Assign an engineer</h2>
-          <form
-            method="post"
-            action="/api/admin/engineers"
-            class="engr-formgrid engr-formgrid--two"
-          >
-            <div class="engr-field">
-              <label for="engineer">Engineer</label>
-              <select id="engineer" class="engr-select" name="engineer_user_id" required>
-                <option value="">Choose a person</option>
-                {engineers.map((e) => (
-                  <option value={e.id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
-            <div class="engr-field">
-              <label for="scope_type">Owns</label>
-              <select id="scope_type" class="engr-select" name="scope_type">
-                <option value="STATION">A station</option>
-                <option value="CATEGORY">A category</option>
-              </select>
-            </div>
-            <div class="engr-field">
-              <label for="station">Station</label>
-              <select id="station" class="engr-select" name="station_id">
-                <option value="">Choose a station</option>
-                {stations.map((s) => (
-                  <option value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </select>
-              <p class="engr-field__hint">Used when the engineer owns a station.</p>
-            </div>
-            <div class="engr-field">
-              <label for="category">Category</label>
-              <select id="category" class="engr-select" name="category_id">
-                <option value="">Choose a category</option>
-                {categories.map((c) => (
-                  <option value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <p class="engr-field__hint">Used when the engineer owns a category.</p>
-            </div>
-            <div class="engr-actionbar engr-formgrid__full">
-              <button type="submit" class="engr-btn engr-btn--primary">
-                Add assignment
-              </button>
-            </div>
-          </form>
-        </section>
+        {canManage && (
+          <section class="engr-panel" style="margin-top:1.5rem">
+            <h2>Assign an engineer</h2>
+            <form
+              method="post"
+              action="/api/admin/engineers"
+              class="engr-formgrid engr-formgrid--two"
+            >
+              <div class="engr-field">
+                <label for="engineer">Engineer</label>
+                <select id="engineer" class="engr-select" name="engineer_user_id" required>
+                  <option value="">Choose a person</option>
+                  {engineers.map((e) => (
+                    <option value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="scope_type">Owns</label>
+                <select id="scope_type" class="engr-select" name="scope_type">
+                  <option value="STATION">A station</option>
+                  <option value="CATEGORY">A category</option>
+                </select>
+              </div>
+              <div class="engr-field">
+                <label for="station">Station</label>
+                <select id="station" class="engr-select" name="station_id">
+                  <option value="">Choose a station</option>
+                  {stations.map((s) => (
+                    <option value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+                <p class="engr-field__hint">Used when the engineer owns a station.</p>
+              </div>
+              <div class="engr-field">
+                <label for="category">Category</label>
+                <select id="category" class="engr-select" name="category_id">
+                  <option value="">Choose a category</option>
+                  {categories.map((c) => (
+                    <option value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p class="engr-field__hint">Used when the engineer owns a category.</p>
+              </div>
+              <div class="engr-actionbar engr-formgrid__full">
+                <button type="submit" class="engr-btn engr-btn--primary">
+                  Add assignment
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
       </>
     )
   }

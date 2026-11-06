@@ -177,14 +177,16 @@ const rawGroups: NavGroup[] = [
         ? { href: '/admin/technicians', label: 'Technicians', icon: 'technicians' }
         : null,
       // Engineer-in-charge routing config; an org settings concern.
-      has('settings.manage')
+      has('engineer_assignments.view')
         ? { href: '/admin/engineers', label: 'Engineers in charge', icon: 'engineers' }
         : null,
       has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
       has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
       has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
-      has('roles.manage') ? { href: '/admin/roles', label: 'Roles', icon: 'roles' } : null,
-      has('settings.manage')
+      has('roles.view') || has('roles.manage')
+        ? { href: '/admin/roles', label: 'Roles', icon: 'roles' }
+        : null,
+      has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
     ].filter((i): i is NavItem => i !== null),
