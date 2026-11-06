@@ -7,8 +7,8 @@ import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { hashPassword, validateNewPassword, verifyPassword } from '@engr/auth/password';
-import { clearSession, createSession, readSession } from '@engr/auth/session';
-import { loadUserAuth } from '@engr/auth/rbac';
+import { clearSession, readSession } from '@engr/auth/session';
+import { sessionAfterPrimaryAuth } from '@engr/auth/loginSession';
 
 function redirect(location: string, cookie?: string): Response {
   const headers: Record<string, string> = { location };
@@ -90,22 +90,20 @@ export const POST: APIRoute = async ({ request }) => {
     throw error;
   }
 
-  const { roles, perms } = await loadUserAuth(db, session.org, session.sub);
-  const cookie = await createSession(
+  const next = await sessionAfterPrimaryAuth(
+    db,
     {
-      sub: session.sub,
-      org: session.org,
+      userId: session.sub,
+      orgId: session.org,
       orgSlug: String(user.org_slug),
       orgName: String(user.org_name),
       userName: String(user.full_name),
       userEmail: String(user.email),
-      roles,
-      perms,
       isPlatformOwner: Number(user.is_platform_owner ?? 0) === 1,
       sessionVersion: nextVersion,
     },
     env.sessionSecret,
     secure,
   );
-  return redirect('/', cookie);
+  return redirect(next.location, next.cookie);
 };

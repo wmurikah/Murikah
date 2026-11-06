@@ -1,0 +1,39 @@
+---
+export const prerender = false;
+import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
+const sent = Astro.url.searchParams.get('sent') === '1';
+---
+
+<EngrAuthLayout title="Recover password">
+  <div class="engr-authcard__head">
+    <h1 class="engr-authcard__title">Recover your password</h1>
+    <p class="engr-authcard__sub">Enter your account email address.</p>
+  </div>
+  {
+    sent ? (
+      <p role="status">
+        If an eligible account exists, a single-use recovery link has been queued for delivery.
+      </p>
+    ) : (
+      <form method="post" action="/api/auth/forgot" class="engr-authform">
+        <div class="engr-field">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            class="engr-input"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            autocapitalize="none"
+            autofocus
+          />
+        </div>
+        <button type="submit" class="engr-btn engr-btn--primary engr-authform__submit">
+          Send recovery link
+        </button>
+      </form>
+    )
+  }
+  <div class="engr-authmeta"><a href="/login" class="engr-authmeta__link">Back to sign in</a></div>
+</EngrAuthLayout>

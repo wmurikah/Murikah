@@ -61,6 +61,20 @@ test('temporary-password sessions are restricted and expire after ten minutes', 
   assert.deepEqual(decoded?.perms, []);
 });
 
+test('MFA enrollment and challenge sessions also expire after ten minutes', async () => {
+  for (const authStage of ['mfa-enroll', 'mfa-challenge'] as const) {
+    const setCookie = await createSession(
+      { ...payload, roles: [], perms: [], authStage },
+      secret,
+      true,
+    );
+    assert.match(setCookie, /Max-Age=600/);
+    const claims = decodeJwt(tokenFromCookie(setCookie));
+    assert.equal((claims.exp ?? 0) - (claims.iat ?? 0), 600);
+    assert.equal((await readSession(requestForCookie(setCookie), secret))?.authStage, authStage);
+  }
+});
+
 test('full sessions retain the twelve-hour lifetime and session generation', async () => {
   const setCookie = await createSession(payload, secret, true);
   assert.match(setCookie, /Max-Age=43200/);
