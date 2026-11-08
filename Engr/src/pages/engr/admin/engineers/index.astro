@@ -132,7 +132,7 @@ if (allowed) {
             <form
               method="post"
               action="/api/admin/engineers"
-              class="engr-formgrid engr-formgrid--two"
+              class="engr-formgrid engr-formgrid--two engineer-assignment-form"
             >
               <div class="engr-field">
                 <label for="engineer">Engineer</label>
@@ -184,3 +184,9 @@ if (allowed) {
     )
   }
 </EngrLayout>
+
+<style>
+  .engineer-assignment-form .engr-field {
+    align-content: start;
+  }
+</style>
