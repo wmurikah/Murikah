@@ -23,7 +23,7 @@ import { hashPassword, PASSWORD_ALGORITHM_PBKDF2 } from '../../src/lib/cms/auth/
 import { seedOrganisation, ORG_IDS } from './support/orgSeed.ts';
 import type { TestClient } from './support/db.ts';
 
-const SECRET = 'organisation-test-secret';
+const SECRET = crypto.randomUUID() + crypto.randomUUID();
 /** Never a real password, and never a literal: generated per run. */
 const PASSWORD = process.env.CMS_TEST_PASSWORD ?? `test-only-${crypto.randomUUID()}`;
 

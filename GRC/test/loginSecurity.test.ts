@@ -7,6 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import {
   throttleDecision,
   windowStartIso,
@@ -22,9 +23,10 @@ import {
 } from '../src/lib/grc/auth/sessionRules.ts';
 import { seal, open } from '../src/lib/grc/auth/secretBox.ts';
 import { otpauthUrl } from '../src/lib/grc/auth/otpauth.ts';
-import { totpAt, verifyTotp } from '../src/lib/shared/totp.ts';
+import { generateSecret, totpAt, verifyTotp } from '../src/lib/shared/totp.ts';
 
-const SECRET_B64 = Buffer.from('a-32-byte-secret-for-unit-tests!').toString('base64');
+const SECRET_B64 = randomBytes(32).toString('base64');
+const TOTP_SECRET = generateSecret();
 
 test('the throttle locks on the email streak first, then the IP streak', () => {
   assert.deepEqual(throttleDecision(0, 0), { locked: false, reason: null });
@@ -79,25 +81,25 @@ test('session liveness: absolute expiry, idle window, and the touch throttle', (
 });
 
 test('the sealed box round-trips and rejects tampering', async () => {
-  const sealed = await seal(SECRET_B64, 'JBSWY3DPEHPK3PXP');
-  assert.notEqual(sealed, 'JBSWY3DPEHPK3PXP');
-  assert.equal(await open(SECRET_B64, sealed), 'JBSWY3DPEHPK3PXP');
+  const sealed = await seal(SECRET_B64, TOTP_SECRET);
+  assert.notEqual(sealed, TOTP_SECRET);
+  assert.equal(await open(SECRET_B64, sealed), TOTP_SECRET);
   const tampered = sealed.slice(0, -2) + (sealed.endsWith('A') ? 'BB' : 'AA');
   assert.equal(await open(SECRET_B64, tampered), null);
   assert.equal(await open(SECRET_B64, 'not-a-box'), null);
 });
 
 test('the otpauth URI carries the issuer, account and standard parameters', () => {
-  const url = otpauthUrl('user@example.com', 'JBSWY3DPEHPK3PXP');
+  const url = otpauthUrl('user@example.com', TOTP_SECRET);
   assert.ok(url.startsWith('otpauth://totp/'));
   assert.ok(url.includes('user%40example.com'));
-  assert.ok(url.includes('secret=JBSWY3DPEHPK3PXP'));
+  assert.ok(url.includes(`secret=${TOTP_SECRET}`));
   assert.ok(url.includes('issuer=Assurance%20OS'));
   assert.ok(url.includes('digits=6'));
 });
 
 test('the re-exported TOTP core verifies its own codes with skew', async () => {
-  const secret = 'JBSWY3DPEHPK3PXP';
+  const secret = TOTP_SECRET;
   const at = 1_754_400_000;
   const code = await totpAt(secret, at);
   assert.equal(await verifyTotp(secret, code, at), true);

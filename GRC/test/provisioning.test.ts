@@ -6,6 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import {
   buildProvisioningStatements,
   PHASE1_CONFIG_DEFAULTS,
@@ -18,7 +19,7 @@ const input = {
   organizationName: 'Acme Audit',
   adminEmail: 'admin@acme.test',
   adminName: 'Ada Admin',
-  adminPasswordHash: 'pbkdf2$60000$c2FsdA==$aGFzaA==',
+  adminPasswordHash: randomBytes(32).toString('base64url'),
   now: new Date('2026-07-05T00:00:00.000Z'),
 };
 // The reference dropdowns, injected exactly as provisioning.ts wires them.

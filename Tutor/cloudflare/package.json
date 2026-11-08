@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node tools/restore-db-assets.mjs",
+    "precheck": "node tools/restore-db-assets.mjs",
+    "pretest": "node tools/restore-db-assets.mjs",
+    "predev": "node tools/restore-db-assets.mjs",
+    "predeploy:release": "node tools/restore-db-assets.mjs",
     "check": "python -m py_compile deploy_staging.py && python validate_persistence_config.py && python prepare_runtime_proxy.py && wrangler deploy --dry-run --config wrangler.toml --outdir .wrangler/dry-run",
     "deploy:staging": "node -e \"console.log('[Murikah Tutor] Cloudflare repo deploy is intentionally delegated to the GitHub release workflow; no deployment is performed here.')\"",
     "smoke:staging": "python smoke_staging.py",

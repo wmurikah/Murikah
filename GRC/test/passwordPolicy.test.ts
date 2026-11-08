@@ -5,36 +5,40 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { checkNewPassword, MIN_PASSWORD_LENGTH } from '../src/lib/grc/auth/passwordPolicy.ts';
 
+const oldPassword = randomBytes(18).toString('base64url');
+const newPassword = randomBytes(18).toString('base64url');
+const otherPassword = randomBytes(18).toString('base64url');
+
 test('a long, different, matching password passes', () => {
-  const r = checkNewPassword('oldTempPass1', 'a-brand-new-passphrase', 'a-brand-new-passphrase');
+  const r = checkNewPassword(oldPassword, newPassword, newPassword);
   assert.equal(r.ok, true);
   assert.equal(r.error, undefined);
 });
 
 test('a password shorter than the minimum fails', () => {
   const short = 'x'.repeat(MIN_PASSWORD_LENGTH - 1);
-  const r = checkNewPassword('oldTempPass1', short, short);
+  const r = checkNewPassword(oldPassword, short, short);
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /at least/);
 });
 
 test('exactly the minimum length is allowed', () => {
   const exact = 'x'.repeat(MIN_PASSWORD_LENGTH);
-  const r = checkNewPassword('oldTempPass1', exact, exact);
+  const r = checkNewPassword(oldPassword, exact, exact);
   assert.equal(r.ok, true);
 });
 
 test('the new password may not equal the current one', () => {
-  const same = 'this-is-the-same-1';
-  const r = checkNewPassword(same, same, same);
+  const r = checkNewPassword(oldPassword, oldPassword, oldPassword);
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /different/);
 });
 
 test('a mismatched confirmation fails', () => {
-  const r = checkNewPassword('oldTempPass1', 'a-brand-new-passphrase', 'a-different-confirmation');
+  const r = checkNewPassword(oldPassword, newPassword, otherPassword);
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /do not match/);
 });

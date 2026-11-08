@@ -14,6 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { createTestDb, type TestClient } from './support/db.ts';
 import { seedHass } from './support/hassSeed.ts';
 import { loadIdentity } from '../../src/lib/cms/repos/identity.ts';
@@ -46,6 +47,8 @@ import { purchaseOrderDetail } from '../../src/lib/cms/repos/poPerformance.ts';
 import { auditEvent } from '../../src/lib/cms/repos/auditTrail.ts';
 
 const NOW = '2026-08-27 10:00:00';
+const testPassword = randomBytes(24).toString('base64url');
+const otherPassword = randomBytes(24).toString('base64url');
 const asClient = (c: TestClient) => c as unknown as Parameters<typeof resolveScope>[0];
 
 const db = async (): Promise<TestClient> => {
@@ -79,7 +82,7 @@ test('the password parameters are what the platform allows, and are recorded', a
   assert.equal(PBKDF2_ITERATIONS, 100_000);
   assert.equal(PBKDF2_ITERATIONS <= 100_000, true, 'the Workers runtime rejects more');
 
-  const stored = await hashPassword('a-real-password-1');
+  const stored = await hashPassword(testPassword);
   const parts = stored.split('$');
   assert.equal(parts.length, 4, 'the stored string is self-describing');
   assert.equal(parts[0], 'pbkdf2-sha256', 'the family and the hash are both named');
@@ -88,7 +91,7 @@ test('the password parameters are what the platform allows, and are recorded', a
   // A 16-byte salt, per credential, from the platform CSPRNG.
   const salt = Buffer.from(parts[2] as string, 'base64');
   assert.equal(salt.length, 16);
-  const second = await hashPassword('a-real-password-1');
+  const second = await hashPassword(testPassword);
   assert.notEqual(second.split('$')[2], parts[2], 'the salt is per credential, not global');
   assert.notEqual(second, stored, 'and so two hashes of one password differ');
 
@@ -99,9 +102,9 @@ test('the password parameters are what the platform allows, and are recorded', a
 
   // The verifier dispatches on the stored algorithm, so Argon2id can be added
   // later without a migration and without breaking a PBKDF2 credential.
-  assert.equal((await verifyPassword('a-real-password-1', stored, 'PBKDF2')).ok, true);
-  assert.equal((await verifyPassword('wrong', stored, 'PBKDF2')).ok, false);
-  const unsupported = await verifyPassword('a-real-password-1', stored, 'ARGON2ID');
+  assert.equal((await verifyPassword(testPassword, stored, 'PBKDF2')).ok, true);
+  assert.equal((await verifyPassword(otherPassword, stored, 'PBKDF2')).ok, false);
+  const unsupported = await verifyPassword(testPassword, stored, 'ARGON2ID');
   assert.equal(unsupported.ok, false, 'an algorithm this runtime cannot compute fails closed');
   assert.equal(
     unsupported.ok === false ? unsupported.reason : '',
@@ -113,11 +116,11 @@ test('the password parameters are what the platform allows, and are recorded', a
 test('a credential written at an older cost still verifies', async () => {
   // The iteration count is read from the stored string, not from the module
   // constant, so raising the constant does not invalidate anybody.
-  const stored = await hashPassword('portable');
+  const stored = await hashPassword(testPassword);
   const older = stored.replace(`$${PBKDF2_ITERATIONS}$`, '$60000$');
   // Not the same hash, so it must not verify: the point is that the format
   // CARRIES the cost, which this proves by showing the parse is real.
-  assert.equal((await verifyPassword('portable', older, 'PBKDF2')).ok, false);
+  assert.equal((await verifyPassword(testPassword, older, 'PBKDF2')).ok, false);
   assert.equal(older.split('$')[1], '60000', 'the cost is a field, not a constant');
 });
 

@@ -10,11 +10,12 @@
  * implementation the way a hard-coded hash would.
  */
 import type { TestClient } from './db.ts';
+import { randomBytes } from 'node:crypto';
 import { hashPassword, PASSWORD_ALGORITHM_PBKDF2 } from '../../../src/lib/cms/auth/password.ts';
 
-/** Test-only credentials. Never a real password, and never reused elsewhere. */
-export const FIXTURE_PASSWORD = 'test-only-password-not-a-real-one';
-export const WRONG_PASSWORD = 'test-only-wrong-password';
+/** Fresh test credentials per run; no password is stored in the repository. */
+export const FIXTURE_PASSWORD = randomBytes(24).toString('base64url');
+export const WRONG_PASSWORD = randomBytes(24).toString('base64url');
 
 export const IDS = {
   active: 'USR-ACTIVE',

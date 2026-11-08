@@ -7,6 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { createTestDb, query, type TestClient } from './support/db.ts';
 import { seed, IDS, EMAILS, FIXTURE_PASSWORD, WRONG_PASSWORD } from './support/seed.ts';
 import {
@@ -20,7 +21,7 @@ import { hashSessionToken, toDbTimestamp } from '../../src/lib/cms/auth/session.
 import { upsertCredential } from '../../src/lib/cms/repos/authRecords.ts';
 import { hashPassword, PASSWORD_ALGORITHM_PBKDF2 } from '../../src/lib/cms/auth/password.ts';
 
-const SECRET = 'test-only-session-secret';
+const SECRET = randomBytes(32).toString('base64url');
 const NOW = new Date('2026-08-26T09:00:00Z');
 const CTX = { ip: '10.0.0.10', userAgent: 'HassCMS Test', now: NOW };
 

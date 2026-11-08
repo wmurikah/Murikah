@@ -1,6 +1,6 @@
 # Engineering schema migration rollout
 
-The numbered files in `db/migrations` are the Engineering database source of truth. `db/schema.sql` is generated from those migrations for review and tooling; do not edit it directly.
+The numbered migrations in `tools/db-assets.json` are the Engineering database source of truth. `db/migrations/*.sql` and `db/schema.sql` are generated local resources for database tooling; do not edit `db/schema.sql` directly.
 
 ## What migration 002 reconciles
 
@@ -72,6 +72,6 @@ The history must contain `001` through `005`, and `foreign_key_violations` must 
 2. Add its contract requirements and blank/upgrade tests.
 3. Run `pnpm db:schema:generate`.
 4. Run `pnpm db:schema:check` and the test suite.
-5. Commit the migration and generated `db/schema.sql` together.
+5. From `Engr`, run `node tools/restore-db-assets.mjs --capture db/migrations/NNN_name.sql` and `node tools/restore-db-assets.mjs --capture db/schema.sql`. Commit the changed `tools/db-assets.json`; generated SQL files are ignored by Git.
 
 Never modify an applied migration. The checksum guard intentionally blocks that history rewrite.

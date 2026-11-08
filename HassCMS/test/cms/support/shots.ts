@@ -65,7 +65,7 @@ const { chromium } = (
 };
 
 const OUT = process.argv[2] ?? '.';
-const SECRET = 'shot-session-secret';
+const SECRET = crypto.randomUUID() + crypto.randomUUID();
 const PASSWORD = `shot-only-${crypto.randomUUID()}`;
 const EMAIL = 'catherine.mwangi@hasspetroleum.com';
 

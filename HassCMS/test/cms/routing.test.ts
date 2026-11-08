@@ -19,7 +19,7 @@ import { CmsWorker } from './support/worker.ts';
 import { AUTH_SCHEMA_DDL } from './support/schema.ts';
 import { hashPassword, PASSWORD_ALGORITHM_PBKDF2 } from '../../src/lib/cms/auth/password.ts';
 
-const SECRET = 'route-test-session-secret';
+const SECRET = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 /**
  * Never a real password, and never a literal in the source: read it from the
  * environment where one is supplied, otherwise generate one per run.
@@ -293,11 +293,11 @@ test('an external user lands on /portal and is kept out of /app', { skip: skip()
 test('an unknown email and a wrong password are byte-identical', { skip: skip() }, async () => {
   worker.clearCookies();
   const unknown = await worker.call('POST', '/api/auth/login', {
-    body: { email: 'nobody.here@hasspetroleum.com', password: 'x'.repeat(20) },
+    body: { email: 'nobody.here@hasspetroleum.com', password: PASSWORD },
     cookie: null,
   });
   const wrong = await worker.call('POST', '/api/auth/login', {
-    body: { email: INTERNAL_EMAIL, password: 'x'.repeat(20) },
+    body: { email: INTERNAL_EMAIL, password: PASSWORD },
     cookie: null,
   });
   assert.equal(unknown.status, wrong.status);
@@ -306,7 +306,7 @@ test('an unknown email and a wrong password are byte-identical', { skip: skip() 
 });
 
 test('a missing email or password is refused the same way', { skip: skip() }, async () => {
-  for (const body of [{ password: 'x' }, { email: INTERNAL_EMAIL }, {}]) {
+  for (const body of [{ password: PASSWORD }, { email: INTERNAL_EMAIL }, {}]) {
     const response = await worker.call('POST', '/api/auth/login', { body, cookie: null });
     assert.equal(response.status, 401, JSON.stringify(body));
   }

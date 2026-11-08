@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check origin/main...HEAD
+          node Tutor/cloudflare/tools/restore-db-assets.mjs
           python Tutor/scripts/preflight.py
           python Tutor/cloudflare/preflight.py
 
