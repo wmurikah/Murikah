@@ -106,14 +106,14 @@ if (allowed) {
                       <td>{f.subject ?? 'Notification'}</td>
                       <td>{f.error ?? 'Unknown error'}</td>
                       <td>
-                        {canRetry ? (
+                        {canRetry && f.retryable ? (
                           <form method="post" action={`/api/notifications/${f.id}/retry`}>
                             <button type="submit" class="engr-btn engr-btn--secondary">
                               Retry
                             </button>
                           </form>
                         ) : (
-                          <span class="engr-muted">—</span>
+                          <span class="engr-muted">{f.retryable ? '—' : 'New link needed'}</span>
                         )}
                       </td>
                     </tr>

@@ -9,46 +9,20 @@
  * secrets or in .dev.vars and are never committed.
  */
 import { env } from 'cloudflare:workers';
+export { deliveryReadiness } from './readiness';
+export type { DeliveryReadiness } from './readiness';
 
 export interface DeliveryEnv {
   /** Real external sends happen only in production. Anything else is held. */
   mode: 'production' | 'other';
   at: { username: string; apiKey: string; senderId: string } | null;
   email: { apiKey: string; from: string } | null;
+  /** Separate AES-GCM secret used only for queued authentication emails. */
+  authMessageKey?: string | null;
   /** Shared secret guarding the cron endpoints. */
   cronSecret: string | null;
   /** Shared secret verifying provider delivery-receipt webhooks. */
   webhookSecret: string | null;
-}
-
-export interface DeliveryReadiness {
-  production: boolean;
-  email: { ready: boolean; reason: string | null };
-  sms: { ready: boolean; reason: string | null };
-}
-
-/** Display-safe readiness: credential values are never returned. */
-export function deliveryReadiness(env: DeliveryEnv): DeliveryReadiness {
-  const production = env.mode === 'production';
-  return {
-    production,
-    email: {
-      ready: production && env.email !== null,
-      reason: !production
-        ? 'Production delivery is disabled.'
-        : env.email
-          ? null
-          : 'EMAIL_API_KEY or EMAIL_FROM is missing.',
-    },
-    sms: {
-      ready: production && env.at !== null,
-      reason: !production
-        ? 'Production delivery is disabled.'
-        : env.at
-          ? null
-          : 'AT_USERNAME, AT_API_KEY or AT_SENDER_ID is missing.',
-    },
-  };
 }
 
 function nonEmpty(value: unknown): string | null {
@@ -74,6 +48,7 @@ export function getDeliveryEnv(): DeliveryEnv {
     mode,
     at,
     email,
+    authMessageKey: nonEmpty(env.ENGR_AUTH_MESSAGE_KEY),
     cronSecret: nonEmpty(env.ENGR_CRON_SECRET),
     webhookSecret: nonEmpty(env.ENGR_WEBHOOK_SECRET),
   };

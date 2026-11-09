@@ -3,6 +3,12 @@ import type { Client, Transaction } from '@libsql/client/web';
 export type AuthTokenPurpose = 'INVITE' | 'RESET';
 type Db = Client | Transaction;
 
+export interface IssuedAuthToken {
+  value: string;
+  hash: string;
+  expiresAt: string;
+}
+
 function base64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -18,7 +24,7 @@ export function newOpaqueToken(): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
-export async function issueAuthToken(
+export async function issueAuthTokenWithMetadata(
   db: Db,
   input: {
     orgId: string;
@@ -27,7 +33,7 @@ export async function issueAuthToken(
     createdBy: string | null;
     lifetimeMinutes: number;
   },
-): Promise<string> {
+): Promise<IssuedAuthToken> {
   const token = newOpaqueToken();
   const tokenHash = await hashOpaqueToken(token);
   const expiresAt = new Date(Date.now() + input.lifetimeMinutes * 60_000).toISOString();
@@ -42,7 +48,17 @@ export async function issueAuthToken(
           VALUES (?, ?, ?, ?, ?, ?)`,
     args: [input.orgId, input.userId, input.purpose, tokenHash, expiresAt, input.createdBy],
   });
-  return token;
+  return { value: token, hash: tokenHash, expiresAt };
+}
+
+/** Retain the original string-returning helper for callers that only need the
+ * link. Queue producers use the metadata-bearing variant to bind ciphertext
+ * to a specific token without storing its bearer value in readable columns. */
+export async function issueAuthToken(
+  db: Db,
+  input: Parameters<typeof issueAuthTokenWithMetadata>[1],
+): Promise<string> {
+  return (await issueAuthTokenWithMetadata(db, input)).value;
 }
 
 export function authLink(origin: string, token: string): string {

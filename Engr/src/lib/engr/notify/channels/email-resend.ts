@@ -33,8 +33,15 @@ export const emailChannel: Channel = {
         }),
       });
       if (!res.ok) return { outcome: 'failed', message: `resend http ${res.status}` };
-      const data = (await res.json()) as ResendResponse;
-      return { outcome: 'sent', providerId: data.id };
+      // HTTP success is the provider's acceptance signal. A malformed or empty
+      // optional response body must not cause a retry of an accepted auth link.
+      let providerId: string | undefined;
+      try {
+        providerId = ((await res.json()) as ResendResponse).id;
+      } catch {
+        // The message was still accepted; its id is only diagnostic metadata.
+      }
+      return { outcome: 'sent', providerId };
     } catch (err) {
       return {
         outcome: 'failed',

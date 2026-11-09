@@ -48,6 +48,7 @@ export interface FailedRow {
   subject: string | null;
   error: string | null;
   createdAt: string;
+  retryable: boolean;
 }
 
 export async function listRecentFailed(
@@ -56,11 +57,20 @@ export async function listRecentFailed(
   limit = 50,
 ): Promise<FailedRow[]> {
   const res = await db.execute({
-    sql: `SELECT id, channel, subject, error, created_at
-            FROM notifications
-           WHERE org_id = ? AND status = 'FAILED'
+    sql: `SELECT n.id, n.channel, n.subject, n.error, n.created_at,
+                 CASE WHEN COALESCE(n.template_key, '') NOT IN ('auth.invitation','auth.password.reset')
+                      THEN 1 ELSE EXISTS (
+                        SELECT 1 FROM auth_tokens t
+                         WHERE t.org_id = n.org_id AND t.user_id = n.recipient_user_id
+                           AND t.purpose = CASE n.template_key
+                             WHEN 'auth.invitation' THEN 'INVITE' ELSE 'RESET' END
+                           AND t.token_hash = substr(n.body, 26, 64)
+                           AND t.used_at IS NULL AND t.expires_at > ?
+                      ) END AS retryable
+            FROM notifications n
+           WHERE n.org_id = ? AND n.status = 'FAILED'
         ORDER BY created_at DESC LIMIT ?`,
-    args: [orgId, Math.max(1, Math.min(limit, 200))],
+    args: [new Date().toISOString(), orgId, Math.max(1, Math.min(limit, 200))],
   });
   return res.rows.map((row) => ({
     id: String(row.id),
@@ -68,6 +78,7 @@ export async function listRecentFailed(
     subject: row.subject == null ? null : String(row.subject),
     error: row.error == null ? null : String(row.error),
     createdAt: String(row.created_at),
+    retryable: Number(row.retryable) === 1,
   }));
 }
 
@@ -75,8 +86,18 @@ export async function listRecentFailed(
 export async function retryFailed(db: Client, orgId: string, id: string): Promise<boolean> {
   const res = await db.execute({
     sql: `UPDATE notifications SET status = 'QUEUED', error = NULL, sent_at = NULL
-           WHERE id = ? AND org_id = ? AND status = 'FAILED'`,
-    args: [id, orgId],
+           WHERE id = ? AND org_id = ? AND status = 'FAILED'
+             AND (COALESCE(template_key, '') NOT IN ('auth.invitation','auth.password.reset')
+                  OR EXISTS (
+                    SELECT 1 FROM auth_tokens t
+                     WHERE t.org_id = notifications.org_id
+                       AND t.user_id = notifications.recipient_user_id
+                       AND t.purpose = CASE notifications.template_key
+                         WHEN 'auth.invitation' THEN 'INVITE' ELSE 'RESET' END
+                       AND t.token_hash = substr(notifications.body, 26, 64)
+                       AND t.used_at IS NULL AND t.expires_at > ?
+                  ))`,
+    args: [id, orgId, new Date().toISOString()],
   });
   return res.rowsAffected === 1;
 }

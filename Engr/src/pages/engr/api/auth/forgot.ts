@@ -2,14 +2,16 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { authLink, issueAuthToken } from '@engr/auth/tokens';
+import { authLink, issueAuthTokenWithMetadata } from '@engr/auth/tokens';
+import { authMessageKeyReady, encryptAuthMessage } from '@engr/auth/notificationMessages';
 
 export const POST: APIRoute = async ({ request }) => {
   const form = await request.formData();
   const email = String(form.get('email') ?? '')
     .trim()
     .toLowerCase();
-  const db = await getDb(getEngrEnv());
+  const env = getEngrEnv();
+  const db = await getDb(env);
   const result = await db.execute({
     sql: `SELECT u.id, u.org_id FROM users u
            WHERE u.email = ? AND u.status = 'ACTIVE' AND u.password_hash IS NOT NULL
@@ -23,30 +25,39 @@ export const POST: APIRoute = async ({ request }) => {
     args: [email, new Date(Date.now() - 5 * 60_000).toISOString()],
   });
   const user = result.rows[0];
-  if (user) {
+  if (user && !authMessageKeyReady(env.authMessageKey)) {
+    console.error('[engr.auth.forgot] authentication email encryption is not configured');
+  }
+  if (user && authMessageKeyReady(env.authMessageKey)) {
     const tx = await db.transaction('write');
     try {
-      const token = await issueAuthToken(tx, {
+      const issued = await issueAuthTokenWithMetadata(tx, {
         orgId: String(user.org_id),
         userId: String(user.id),
         purpose: 'RESET',
         createdBy: null,
         lifetimeMinutes: 60,
       });
-      const link = authLink(new URL(request.url).origin, token);
+      const link = authLink(new URL(request.url).origin, issued.value);
+      const notificationId = crypto.randomUUID().replaceAll('-', '');
+      const body = await encryptAuthMessage(
+        `A password reset was requested. This link expires in one hour and works once: ${link}`,
+        {
+          id: notificationId,
+          orgId: String(user.org_id),
+          userId: String(user.id),
+          templateKey: 'auth.password.reset',
+        },
+        issued,
+        env.authMessageKey!,
+      );
       await tx.execute({
         sql: `INSERT INTO notifications
-                (org_id, channel, recipient_user_id, to_address, template_key, subject, body,
+                (id, org_id, channel, recipient_user_id, to_address, template_key, subject, body,
                  entity_type, entity_id, status)
-              VALUES (?, 'EMAIL', ?, ?, 'auth.password.reset', 'Reset your Engineering Rhythm password', ?,
+              VALUES (?, ?, 'EMAIL', ?, ?, 'auth.password.reset', 'Reset your Engineering Rhythm password', ?,
                       'user', ?, 'QUEUED')`,
-        args: [
-          String(user.org_id),
-          String(user.id),
-          email,
-          `A password reset was requested. This link expires in one hour and works once: ${link}`,
-          String(user.id),
-        ],
+        args: [notificationId, String(user.org_id), String(user.id), email, body, String(user.id)],
       });
       await tx.execute({
         sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
