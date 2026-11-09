@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     parentId: str(body.parent_id).trim() || null,
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
   const result = id
     ? await updateCategory(db, ctx, id, input)

@@ -43,7 +43,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const reason = str(body.reason).trim();
   const cancel = ['1', 'true', 'on'].includes(str(body.cancel).trim());
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const actor = { orgId: engr.orgId, userId: engr.userId, perms: engr.perms, roles: engr.roles };
   const result = await decideProcurement(db, actor, id, decision, { reason, cancel });
 

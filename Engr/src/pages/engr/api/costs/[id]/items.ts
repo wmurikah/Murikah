@@ -49,7 +49,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   }
 
   const form = await request.formData();
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await setCostItems(
     db,
     { orgId: engr.orgId, userId: engr.userId },

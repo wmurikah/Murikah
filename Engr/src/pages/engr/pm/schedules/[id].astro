@@ -36,7 +36,7 @@ let slas: Option[] = [];
 let automationEnabled = false;
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   schedule = await getSchedule(db, engr.orgId, id);
   if (schedule && canEdit && schedule.status === 'PAUSED') {
     const [st, cat, con, tpl, sl, auto] = await Promise.all([

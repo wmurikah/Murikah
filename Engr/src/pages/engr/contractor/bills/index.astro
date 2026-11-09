@@ -20,7 +20,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let rows: BillListRow[] = [];
 let isContractor = false;
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   isContractor = contractorId != null;
   if (contractorId) rows = await listBillsForContractor(db, engr.orgId, contractorId);

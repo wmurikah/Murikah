@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       ? jsonResponse({ error: 'forbidden' }, 403)
       : redirectResponse(request, back, 'error=forbidden');
   }
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await releaseRfq(db, { orgId: engr.orgId, userId: engr.userId }, id);
   if (result.ok) {
     return wantsJson(request)

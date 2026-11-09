@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
 
   const body = await readBody(request);
   const technicianId = str(body.technician_id).trim();
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   // The technician must belong to this work order's contractor, in this org.
   const woRow = await db.execute({

@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       ? jsonResponse({ error: 'validation', message: 'Choose a cost.' }, 422)
       : redirectResponse(request, back, 'error=validation');
   }
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await attachCost(db, { orgId: engr.orgId, userId: engr.userId }, id, costId);
   if (result.ok) {
     return wantsJson(request)

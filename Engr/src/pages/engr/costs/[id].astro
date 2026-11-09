@@ -33,7 +33,7 @@ let cost: CostDetail | null = null;
 let isOwner = false;
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   cost = await getCostDetail(db, engr.orgId, id);
   if (cost) {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);

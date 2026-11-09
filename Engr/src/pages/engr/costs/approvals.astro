@@ -17,7 +17,7 @@ const allowed = can(Astro.locals, 'cost.approve');
 let l1: CostListRow[] = [];
 let l2: CostListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   l1 = await listPendingCosts(db, engr.orgId, 1);
   l2 = await listPendingCosts(db, engr.orgId, 2);
 }

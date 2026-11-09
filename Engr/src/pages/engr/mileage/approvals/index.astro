@@ -23,7 +23,7 @@ const done = Astro.url.searchParams.get('done');
 
 let rows: PendingClaimRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listPendingClaims(db, engr.orgId);
 }
 ---

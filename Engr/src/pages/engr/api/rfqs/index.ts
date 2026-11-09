@@ -72,7 +72,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : redirectResponse(request, '/requests', 'error=validation');
   }
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await createRfqWithInvitations(
     db,
     { orgId: engr.orgId, userId: engr.userId },
@@ -94,7 +94,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   if (engr.perms.includes('rfq.view')) {
     const rows = await listRfqsForEngineer(db, engr.orgId);

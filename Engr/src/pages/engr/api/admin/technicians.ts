@@ -26,7 +26,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : seeOther('/admin/technicians?error=forbidden');
   }
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   let contractorScope: string | undefined;
   if (requiresContractorTechnicianScope(engr.roles)) {
     contractorScope = (await contractorForUser(db, engr.orgId, engr.userId)) ?? undefined;

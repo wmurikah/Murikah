@@ -33,7 +33,7 @@ let categories: Option[] = [];
 let portalUsers: Option[] = [];
 
 if (canManage) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   [stations, categories] = await Promise.all([
     listStationOptions(db, engr.orgId),
     listCategoryOptions(db, engr.orgId),

@@ -2,14 +2,22 @@ import type { Client } from '@libsql/client/web';
 
 const KEY = 'security.mfa_enforced';
 
+export function mfaPolicyStatement(orgId: string) {
+  return {
+    sql: `SELECT value_json FROM org_settings WHERE org_id = ? AND key = ? LIMIT 1`,
+    args: [orgId, KEY],
+  };
+}
+
+export function mfaEnforcedFromValue(value: unknown): boolean {
+  return value !== 'false';
+}
+
 /** MFA remains mandatory unless the platform owner explicitly pauses it for
  * this organisation. A missing or malformed setting always fails secure. */
 export async function mfaEnforced(db: Client, orgId: string): Promise<boolean> {
-  const result = await db.execute({
-    sql: `SELECT value_json FROM org_settings WHERE org_id = ? AND key = ? LIMIT 1`,
-    args: [orgId, KEY],
-  });
-  return result.rows[0]?.value_json !== 'false';
+  const result = await db.execute(mfaPolicyStatement(orgId));
+  return mfaEnforcedFromValue(result.rows[0]?.value_json);
 }
 
 export async function setMfaEnforced(

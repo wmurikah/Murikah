@@ -24,7 +24,7 @@ const retried = Astro.url.searchParams.get('retried') === '1';
 let stats = { queued: 0, sent: 0, failed: 0 };
 let failed: FailedRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const since = eatStartOfDayIso(new Date());
   stats = await getStatsSince(db, engr.orgId, since);
   failed = await listRecentFailed(db, engr.orgId);

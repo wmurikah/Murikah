@@ -15,7 +15,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   if (!engr.perms.includes('bill.view')) return jsonResponse({ error: 'forbidden' }, 403);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const bill = await getBillDetail(db, engr.orgId, id);
   if (!bill) return jsonResponse({ ok: false, error: 'not_found' }, 404);
 

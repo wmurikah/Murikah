@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     status: str(body.status).trim() || 'ACTIVE',
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
   const result = id ? await updateStation(db, ctx, id, input) : await createStation(db, ctx, input);
 

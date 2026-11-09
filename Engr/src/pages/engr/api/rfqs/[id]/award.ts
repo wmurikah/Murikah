@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       : redirectResponse(request, back, 'error=validation');
   }
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   if (intent === 'prefer') {
     if (!engr.perms.includes('quotes.select')) {

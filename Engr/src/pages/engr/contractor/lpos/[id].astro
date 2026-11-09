@@ -32,7 +32,7 @@ let rateMinor = 0;
 let stations: StationOption[] = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   lpo = await getLpoDetail(db, engr.orgId, id);
   isOwner =

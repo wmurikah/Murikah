@@ -23,7 +23,7 @@ let actions: WoAction[] = [];
 let technicians: TechnicianOption[] = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   wo = await getWorkOrderForActor(db, engr.orgId, id, 'contractor', engr.userId);
   if (wo) {
     actions = availableActions(

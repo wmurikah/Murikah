@@ -19,7 +19,7 @@ export const GET: APIRoute = async ({ locals }) => {
   if (!engr) return new Response('Unauthorised', { status: 401 });
   if (!engr.perms.includes('reports.export')) return new Response('Forbidden', { status: 403 });
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   let lines: string[];
   let fileName: string;
   if (engr.perms.includes('workorder.view')) {

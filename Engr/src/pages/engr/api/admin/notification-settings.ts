@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
   const capText = String(form.get('sms_monthly_cap') ?? '').trim();
   const result = await saveNotificationSettings(
-    await getDb(getEngrEnv()),
+    await getDb(getEngrEnv(), locals),
     { orgId: engr.orgId, userId: engr.userId },
     {
       emailEnabled: form.get('email_enabled') === '1',

@@ -15,7 +15,7 @@ if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'workorder.view');
 let rows: WorkOrderListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listForTechnician(db, engr.orgId, engr.userId);
 }
 ---

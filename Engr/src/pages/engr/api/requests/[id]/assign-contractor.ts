@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       : redirectResponse(request, back, 'error=validation');
   }
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = workOrderId
     ? await assignWorkOrderDraft(db, { orgId: engr.orgId, userId: engr.userId }, id, workOrderId)
     : await createWorkOrderFromRequest(

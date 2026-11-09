@@ -19,7 +19,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       ? WO_ACTION.contractor_reject
       : WO_ACTION.contractor_accept;
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await applyTransition(
     db,
     { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },

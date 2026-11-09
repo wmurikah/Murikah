@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? jsonResponse({ error: 'validation', message: 'Enter a bill and amount.' }, 422)
       : redirectResponse(request, back, 'error=validation');
   }
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await recordPayment(
     db,
     { orgId: engr.orgId, userId: engr.userId },
@@ -73,7 +73,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   if (!engr.perms.includes('payment.view')) return jsonResponse({ error: 'forbidden' }, 403);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const billId = new URL(request.url).searchParams.get('bill');
   if (billId) {
     return jsonResponse(

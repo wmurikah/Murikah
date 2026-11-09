@@ -23,7 +23,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let region: RegionDetail | null = null;
 
 if (canManage && !isNew && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   region = await getRegion(db, engr.orgId, id);
 }
 const notFound = !isNew && region === null;

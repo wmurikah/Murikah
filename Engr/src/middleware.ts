@@ -13,8 +13,8 @@ import {
 } from '@engr/auth/mfaGate';
 import { readActingOrg } from '@engr/auth/actingOrg';
 import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
-import { loadUserAuth } from '@engr/auth/rbac';
-import { mfaEnforced } from '@engr/auth/mfaPolicy';
+import { userAuthFromRows, userAuthStatements } from '@engr/auth/rbac';
+import { mfaEnforcedFromValue, mfaPolicyStatement } from '@engr/auth/mfaPolicy';
 import { SESSION_IDLE_SECONDS, type SessionPrivilege } from '@engr/auth/trackedSession';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
 function jsonResponse(body: unknown, status: number): Response {
@@ -44,13 +44,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
       : new Response('Engineering Rhythm is not configured.', { status: 503 });
   }
 
+  const authStarted = performance.now();
   const session = await readSession(context.request, env.sessionSecret);
   if (!session) {
     return isApi ? jsonResponse({ error: 'unauthorised' }, 401) : context.redirect('/login');
   }
 
   const secure = context.url.protocol === 'https:';
-  const db = await getEngrDb(env);
+  const db = await getEngrDb(env, context.locals);
+  const dbReady = performance.now();
   if (!session.sessionId) {
     const headers = { 'set-cookie': clearSession(secure) };
     return isApi
@@ -60,8 +62,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
         })
       : new Response(null, { status: 303, headers: { ...headers, location: '/login' } });
   }
-  const current = await db.execute({
-    sql: `SELECT u.status, u.deleted_at, u.must_change_password, u.session_version,
+  const [current, roleRows, permRows, policy] = await db.batch(
+    [
+      {
+        sql: `SELECT u.status, u.deleted_at, u.must_change_password, u.session_version,
                  u.is_platform_owner, o.status AS org_status, o.deleted_at AS org_deleted_at,
                  s.session_version AS tracked_version, s.privilege_level, s.last_seen_at,
                  s.expires_at, s.revoked_at,
@@ -70,8 +74,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
             JOIN organisations o ON o.id = u.org_id
             JOIN auth_sessions s ON s.user_id = u.id AND s.org_id = u.org_id
            WHERE u.id = ? AND u.org_id = ? AND s.id = ? LIMIT 1`,
-    args: [session.sub, session.org, session.sessionId],
-  });
+        args: [session.sub, session.org, session.sessionId],
+      },
+      ...userAuthStatements(session.org, session.sub),
+      mfaPolicyStatement(session.org),
+    ],
+    'read',
+  );
   const account = current.rows[0];
   const now = Date.now();
   const level = String(account?.privilege_level ?? '') as SessionPrivilege;
@@ -113,7 +122,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Permissions and roles are intentionally loaded from the current database,
   // never trusted from a twelve-hour-old JWT. Refresh last_seen sparingly.
-  const currentAuth = await loadUserAuth(db, session.org, session.sub);
+  const currentAuth = userAuthFromRows(roleRows, permRows);
   const touchAfter = level === 'PRIVILEGED' ? 60_000 : 5 * 60_000;
   if (now - lastSeen >= touchAfter) {
     const pending = db.execute({
@@ -146,7 +155,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const platformOwner = Number(account.is_platform_owner ?? 0) === 1;
-  const enforced = await mfaEnforced(db, session.org);
+  const enforced = mfaEnforcedFromValue(policy.rows[0]?.value_json);
   // A session minted only for enrollment/challenge cannot carry application
   // grants. Once the owner pauses MFA, ask for a fresh normal sign-in instead.
   if (!enforced && (session.authStage === 'mfa-enroll' || session.authStage === 'mfa-challenge')) {
@@ -246,5 +255,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
     can: (key: string) => perms.includes(key),
   };
 
-  return next();
+  const authReady = performance.now();
+  const response = await next();
+  // Browser DevTools can now distinguish the Turso client setup, current-grant
+  // check, and page/API rendering. Values are durations only, never identities.
+  const measured = new Response(response.body, response);
+  measured.headers.append(
+    'Server-Timing',
+    `engr-db;dur=${(dbReady - authStarted).toFixed(1)}, engr-auth;dur=${(authReady - dbReady).toFixed(1)}, engr-page;dur=${(performance.now() - authReady).toFixed(1)}`,
+  );
+  return measured;
 });

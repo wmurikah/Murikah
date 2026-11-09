@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = await readBody(request);
   const rateCardId = str(body.rate_card_id).trim();
   const cardPath = `/admin/rate-cards/${rateCardId || 'new'}`;
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
 
   const deleteId = str(body.delete_id).trim();

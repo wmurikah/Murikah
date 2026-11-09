@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : redirectResponse(request, '/contractor/bills', 'error=forbidden');
   }
   const body = await readBody(request);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await createBill(
     db,
     { orgId: engr.orgId, userId: engr.userId },
@@ -47,7 +47,7 @@ export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   if (!engr.perms.includes('bill.view')) return jsonResponse({ error: 'forbidden' }, 403);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   const rows = contractorId ? await listBillsForContractor(db, engr.orgId, contractorId) : [];
   return jsonResponse({ ok: true, bills: rows }, 200);

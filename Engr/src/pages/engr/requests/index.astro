@@ -37,7 +37,7 @@ const periodLabel = from ? `${MONTHS[Number(from.slice(5, 7)) - 1]} ${from.slice
 
 let rows: QueueRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : undefined;
   rows = await listQueue(db, engr.orgId, engr.userId, scope, 100, {
     priority,

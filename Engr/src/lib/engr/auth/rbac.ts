@@ -1,12 +1,11 @@
 /**
  * Role based access control for Engineering Rhythm.
  *
- * On login, a user's role codes and permission keys are loaded once (scoped to
- * their org) and cached in the session JWT. Per-request checks then read the
- * cached list with can(); no database round trip is needed to authorise a page
- * or an endpoint.
+ * Live roles and permissions are loaded on every authenticated request so
+ * suspension and grant changes take effect immediately. Group related reads
+ * in one Turso batch rather than paying two network round trips.
  */
-import type { Client } from '@libsql/client/web';
+import type { Client, InStatement, ResultSet } from '@libsql/client/web';
 
 export interface UserAuth {
   roles: string[]; // role codes, e.g. OWNER, ENGINEER
@@ -18,27 +17,37 @@ export interface UserAuth {
  * roles carry org_id IS NULL; org-custom roles carry the org id, so both are
  * matched. Only this user's grants are returned.
  */
-export async function loadUserAuth(db: Client, orgId: string, userId: string): Promise<UserAuth> {
-  const roleRows = await db.execute({
-    sql: `SELECT r.code AS code
+export function userAuthStatements(orgId: string, userId: string): [InStatement, InStatement] {
+  return [
+    {
+      sql: `SELECT r.code AS code
             FROM user_roles ur
             JOIN roles r ON r.id = ur.role_id
            WHERE ur.user_id = ? AND (r.org_id IS NULL OR r.org_id = ?)`,
-    args: [userId, orgId],
-  });
-  const permRows = await db.execute({
-    sql: `SELECT DISTINCT p.key AS key
+      args: [userId, orgId],
+    },
+    {
+      sql: `SELECT DISTINCT p.key AS key
             FROM user_roles ur
             JOIN roles r ON r.id = ur.role_id
             JOIN role_permissions rp ON rp.role_id = r.id
             JOIN permissions p ON p.id = rp.permission_id
            WHERE ur.user_id = ? AND (r.org_id IS NULL OR r.org_id = ?)`,
-    args: [userId, orgId],
-  });
+      args: [userId, orgId],
+    },
+  ];
+}
+
+export function userAuthFromRows(roleRows: ResultSet, permRows: ResultSet): UserAuth {
   return {
     roles: roleRows.rows.map((row) => String(row.code)),
     perms: permRows.rows.map((row) => String(row.key)),
   };
+}
+
+export async function loadUserAuth(db: Client, orgId: string, userId: string): Promise<UserAuth> {
+  const [roleRows, permRows] = await db.batch(userAuthStatements(orgId, userId), 'read');
+  return userAuthFromRows(roleRows, permRows);
 }
 
 /** True when the current session carries the permission key. */

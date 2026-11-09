@@ -36,7 +36,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : redirectResponse(request, '/pm', 'error=forbidden');
   }
   const input = parseSchedule(await readBody(request));
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await createSchedule(db, { orgId: engr.orgId, userId: engr.userId }, input);
   if (result.ok) {
     return wantsJson(request)

@@ -18,7 +18,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let contractors: Option[] = [];
 let stations: StationOption[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   [contractors, stations] = await Promise.all([
     listActiveContractors(db, engr.orgId),
     listStations(db, engr.orgId),

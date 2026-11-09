@@ -25,7 +25,7 @@ const groupName = engr.orgName ?? 'Organisation';
 
 let rows: AffiliateRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listAffiliates(db, engr.homeOrgId);
 }
 ---

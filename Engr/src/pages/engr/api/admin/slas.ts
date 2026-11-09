@@ -35,7 +35,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     isDefault: str(body.is_default) === 'on' || str(body.is_default) === '1',
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
   const result = id ? await updateSla(db, ctx, id, input) : await createSla(db, ctx, input);
 

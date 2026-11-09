@@ -49,7 +49,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   }
 
   const ctx = { orgId: engr.orgId, userId: engr.userId };
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   // The claim id comes from the form; fall back to the LPO's submitted claim.
   let claimId = str(body.claim_id).trim();

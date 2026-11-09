@@ -25,7 +25,7 @@ const done = Astro.url.searchParams.get('done');
 
 let rows: PendingProcurementRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listPendingProcurement(db, engr.orgId);
 }
 const mayAct = (row: PendingProcurementRow): boolean =>

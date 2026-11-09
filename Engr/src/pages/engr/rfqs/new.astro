@@ -30,7 +30,7 @@ let contractors: ContractorOption[] = [];
 let defaultMajor = '';
 
 if (allowed && requestId) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   detail = await getRequestById(db, engr.orgId, requestId);
   if (detail) {
     const info = await getRequestAssignmentInfo(db, engr.orgId, requestId);

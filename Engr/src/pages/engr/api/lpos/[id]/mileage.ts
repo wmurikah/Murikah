@@ -34,7 +34,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const distanceKm = Number(str(body.distance_km)) || 0;
   const referencedToStationId = str(body.referenced_to_station_id).trim() || null;
   const ctx = { orgId: engr.orgId, userId: engr.userId };
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   let result: ClaimResult;
   if (action === 'save') {

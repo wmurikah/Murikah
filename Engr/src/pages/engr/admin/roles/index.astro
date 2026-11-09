@@ -26,7 +26,7 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let rows: RoleRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listEffectiveRoles(db, engr.orgId);
 }
 ---

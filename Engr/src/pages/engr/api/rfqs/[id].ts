@@ -25,7 +25,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   if (engr.perms.includes('rfq.view')) {
     const rfq = await getRfqDetail(db, engr.orgId, id);
@@ -57,7 +57,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       : redirectResponse(request, back, 'error=forbidden');
   }
   const body = await readBody(request);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await updateRfqDraft(db, { orgId: engr.orgId, userId: engr.userId }, id, {
     dueDate: str(body.due_date).trim() || null,
     thresholdMinor: toMinorUnits(body.threshold),

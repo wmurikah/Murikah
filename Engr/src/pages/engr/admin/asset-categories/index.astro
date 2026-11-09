@@ -19,7 +19,7 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let rows: CategoryRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listCategoriesAdmin(db, engr.orgId);
 }
 ---

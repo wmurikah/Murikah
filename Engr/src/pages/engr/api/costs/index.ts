@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? jsonResponse({ error: 'validation', message: 'Choose a work order.' }, 422)
       : redirectResponse(request, '/contractor/costs', 'error=validation');
   }
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await createCost(db, { orgId: engr.orgId, userId: engr.userId }, workOrderId);
   if (result.ok) {
     return wantsJson(request)
@@ -52,7 +52,7 @@ export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   if (!engr.perms.includes('cost.view')) return jsonResponse({ error: 'forbidden' }, 403);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   const rows = contractorId ? await listCostsForContractor(db, engr.orgId, contractorId) : [];
   return jsonResponse({ ok: true, costs: rows }, 200);

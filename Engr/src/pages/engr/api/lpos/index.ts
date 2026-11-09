@@ -30,7 +30,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? jsonResponse({ error: 'validation', message: 'Choose a contractor.' }, 422)
       : redirectResponse(request, '/lpos/new', 'error=validation');
   }
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await createLpo(
     db,
     { orgId: engr.orgId, userId: engr.userId },
@@ -51,7 +51,7 @@ export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   if (!engr.perms.includes('lpo.view')) return jsonResponse({ error: 'forbidden' }, 403);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   if (actorDataScope(engr.roles) !== 'contractor') {
     return jsonResponse({ ok: true, lpos: await listLpos(db, engr.orgId) }, 200);
   }

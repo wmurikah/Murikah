@@ -83,7 +83,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   }
 
   const input = await parseQuote(request);
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await submitQuote(db, { orgId: engr.orgId, userId: engr.userId }, id, input);
 
   if (result.ok) {

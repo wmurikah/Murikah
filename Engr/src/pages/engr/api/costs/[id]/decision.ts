@@ -36,7 +36,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       : redirectResponse(request, back, 'error=forbidden');
   }
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await decideCost(
     db,
     { orgId: engr.orgId, userId: engr.userId },
