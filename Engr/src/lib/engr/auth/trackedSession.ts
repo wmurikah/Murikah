@@ -1,5 +1,6 @@
 import type { Client } from '@libsql/client/web';
 import { createSession, sessionMaxAge, type SessionPayload } from './session.ts';
+import { hasSensitiveGrant } from './mfaGate.ts';
 
 export type SessionPrivilege = 'STANDARD' | 'PRIVILEGED' | 'RESTRICTED';
 
@@ -8,7 +9,8 @@ function privilege(payload: SessionPayload): SessionPrivilege {
   if (
     payload.isPlatformOwner ||
     payload.roles.includes('OWNER') ||
-    payload.roles.includes('ADMIN')
+    payload.roles.includes('ADMIN') ||
+    hasSensitiveGrant(payload.perms)
   ) {
     return 'PRIVILEGED';
   }

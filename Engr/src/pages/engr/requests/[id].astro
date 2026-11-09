@@ -22,6 +22,7 @@ import { listEligibleContractors, type ContractorOption } from '@engr/repos/cont
 import { can } from '@engr/auth/rbac';
 import { actorDataScope } from '@engr/auth/dataScope';
 import { relativeAge } from '@engr/format';
+import { safeAttachmentUrl } from '@engr/auth/attachmentUrls';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -39,16 +40,20 @@ let detail: RequestDetail | null = null;
 let status = '';
 let contractors: ContractorOption[] = [];
 let slas: SlaOption[] = [];
-let attachments: RequestAttachment[] = [];
+let attachments: (RequestAttachment & { safeUrl: string | null })[] = [];
 let workOrder: { id: string; woNo: string; status: string; createdBy: string } | null = null;
 const canManageRouting = can(Astro.locals, 'engineer_assignments.manage');
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const environment = getEngrEnv();
+  const db = await getDb(environment);
   const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : undefined;
   detail = await getRequestById(db, engr.orgId, id, stationManagerId);
   if (detail) {
-    attachments = await listRequestAttachments(db, engr.orgId, id);
+    attachments = (await listRequestAttachments(db, engr.orgId, id)).map((item) => ({
+      ...item,
+      safeUrl: safeAttachmentUrl(item.fileUrl, environment.attachmentAllowedHosts),
+    }));
     const info = await getRequestAssignmentInfo(db, engr.orgId, id);
     status = info?.status ?? detail.status;
     if (info && info.status === 'ACCEPTED' && canCreateWorkOrder) {
@@ -137,9 +142,9 @@ const errorMessage = errorCode
             <ul class="engr-checklist">
               {attachments.map((a) => (
                 <li>
-                  {a.fileUrl ? (
+                  {a.safeUrl ? (
                     <a
-                      href={a.fileUrl}
+                      href={a.safeUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       class="engr-link engr-link--ext"

@@ -35,9 +35,11 @@ const errorMessage =
     ? 'Check the required fields, then submit again.'
     : errorCode === 'station'
       ? 'Choose a station that belongs to your organisation.'
-      : errorCode
-        ? 'The request could not be created. Please try again.'
-        : null;
+      : errorCode === 'attachment'
+        ? 'Use an approved HTTPS file link, or leave the attachment blank.'
+        : errorCode
+          ? 'The request could not be created. Please try again.'
+          : null;
 
 let stations: StationOption[] = [];
 let categories: CategoryOption[] = [];
@@ -165,8 +167,8 @@ if (allowed) {
               placeholder="https://"
             />
             <p class="engr-field__hint">
-              Paste a link to a photo or video of the fault. Direct file upload arrives with object
-              storage.
+              Paste an approved HTTPS file link. Ask your administrator which file hosts are
+              allowed.
             </p>
           </div>
 

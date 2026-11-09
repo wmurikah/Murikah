@@ -8,6 +8,7 @@ export const prerender = false;
  * to OPEN or CANCELLED. A failed segregation check returns 403, a stale RFQ 409.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { decideProcurement } from '@engr/workflow/rfqAward';
@@ -20,6 +21,8 @@ function statusFor(code: string): number {
 export const POST: APIRoute = async ({ request, locals, params }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/procurement/approvals';

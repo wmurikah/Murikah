@@ -9,6 +9,7 @@ export const prerender = false;
  * dashboard of the now-acting organisation.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { createActingCookie } from '@engr/auth/actingOrg';
@@ -23,6 +24,8 @@ function seeOther(location: string, cookie?: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   if (!engr.isPlatformOwner) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)

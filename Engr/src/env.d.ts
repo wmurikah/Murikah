@@ -58,6 +58,8 @@ declare namespace Cloudflare {
     ENGR_MFA_ENCRYPTION_KEY?: string;
     /** Separate Base64-encoded 32-byte AES-GCM key for queued auth emails. */
     ENGR_AUTH_MESSAGE_KEY?: string;
+    /** Comma-separated exact HTTPS file hosts allowed for Engineering request links. */
+    ENGR_ATTACHMENT_ALLOWED_HOSTS?: string;
 
     // GRC platform product, its own Turso database (hassaudit) and session
     // secret, namespaced so they never clash with engr or the marketing site.
@@ -169,6 +171,9 @@ declare namespace App {
       switchable: { id: string; name: string; slug: string }[];
       roles: string[];
       perms: string[];
+      /** Read from the current account and signed session by middleware. */
+      mfaEnabled: boolean;
+      mfaVerifiedAt: number;
       can: (key: string) => boolean;
     };
 

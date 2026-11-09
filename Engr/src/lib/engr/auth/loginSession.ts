@@ -2,6 +2,7 @@ import type { Client } from '@libsql/client/web';
 import { loadUserAuth } from './rbac';
 import type { SessionPayload } from './session';
 import { createTrackedSession } from './trackedSession';
+import { hasSensitiveGrant } from './mfaGate.ts';
 
 export interface LoginIdentity {
   userId: string;
@@ -14,8 +15,10 @@ export interface LoginIdentity {
   sessionVersion: number;
 }
 
-function privileged(roles: string[], platformOwner: boolean): boolean {
-  return platformOwner || roles.includes('OWNER') || roles.includes('ADMIN');
+function privileged(roles: string[], perms: string[], platformOwner: boolean): boolean {
+  return (
+    platformOwner || roles.includes('OWNER') || roles.includes('ADMIN') || hasSensitiveGrant(perms)
+  );
 }
 
 export async function fullSession(
@@ -63,7 +66,7 @@ export async function sessionAfterPrimaryAuth(
   const mfaEnabled = mfa.rows[0]?.enabled_at != null;
   let authStage: SessionPayload['authStage'];
   let location = '/';
-  if (privileged(auth.roles, identity.isPlatformOwner) && !mfaEnabled) {
+  if (privileged(auth.roles, auth.perms, identity.isPlatformOwner) && !mfaEnabled) {
     authStage = 'mfa-enroll';
     location = '/mfa/enroll';
   } else if (mfaEnabled) {

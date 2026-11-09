@@ -3,7 +3,14 @@ import { getEngrEnv } from '@engr/env';
 import { getDb as getEngrDb } from '@engr/db';
 import { clearSession, readSession } from '@engr/auth/session';
 import { passwordGateDecision } from '@engr/auth/passwordGate';
-import { isPrivilegedAuthPath, mfaPathAllowed, requiredMfaStage } from '@engr/auth/mfaGate';
+import {
+  hasSensitiveGrant,
+  isPrivilegedAuthPath,
+  isSensitiveMutationPath,
+  mfaPathAllowed,
+  requiredMfaStage,
+  safeMfaNext,
+} from '@engr/auth/mfaGate';
 import { readActingOrg } from '@engr/auth/actingOrg';
 import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { loadUserAuth } from '@engr/auth/rbac';
@@ -139,11 +146,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const platformOwner = Number(account.is_platform_owner ?? 0) === 1;
   const administrator = currentAuth.roles.includes('OWNER') || currentAuth.roles.includes('ADMIN');
-  const mandatoryMfa = platformOwner || administrator;
+  const mandatoryMfa = platformOwner || administrator || hasSensitiveGrant(currentAuth.perms);
   const mfaEnabled = Number(account.mfa_enabled ?? 0) === 1;
   const mfaVerifiedAt = session.mfaVerifiedAt ?? 0;
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const privilegedPath = isPrivilegedAuthPath(appPath);
+  const sensitiveMutation = isSensitiveMutationPath(appPath, context.request.method);
+  const privilegedPath = isPrivilegedAuthPath(appPath) || sensitiveMutation;
   const mfaRequirement = requiredMfaStage({
     authStage: session.authStage,
     mandatory: mandatoryMfa,
@@ -154,16 +162,32 @@ export const onRequest = defineMiddleware(async (context, next) => {
   });
   if (mfaRequirement) {
     if (!mfaPathAllowed(mfaRequirement, appPath)) {
-      if (isApi) {
+      if (
+        isApi &&
+        !(sensitiveMutation && context.request.headers.get('accept')?.includes('text/html'))
+      ) {
         return jsonResponse(
           { error: mfaRequirement === 'enroll' ? 'mfa_enrollment_required' : 'mfa_required' },
           403,
         );
       }
       const destination = mfaRequirement === 'enroll' ? '/mfa/enroll' : '/mfa/challenge';
+      let nextPath = privilegedPath && !isApi ? appPath : '/';
+      if (sensitiveMutation) {
+        const referrer = context.request.headers.get('referer');
+        if (referrer) {
+          try {
+            const parsed = new URL(referrer);
+            if (parsed.origin === context.url.origin)
+              nextPath = safeMfaNext(parsed.pathname, context.url.origin);
+          } catch {
+            // Ignore invalid or cross-origin referrers.
+          }
+        }
+      }
       const location =
-        mfaRequirement === 'challenge' && privilegedPath
-          ? `${destination}?next=${encodeURIComponent(appPath)}`
+        mfaRequirement === 'challenge'
+          ? `${destination}?next=${encodeURIComponent(safeMfaNext(nextPath, context.url.origin))}`
           : destination;
       return context.redirect(location);
     }
@@ -205,6 +229,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     switchable,
     roles: currentAuth.roles,
     perms,
+    mfaEnabled,
+    mfaVerifiedAt,
     can: (key: string) => perms.includes(key),
   };
 
