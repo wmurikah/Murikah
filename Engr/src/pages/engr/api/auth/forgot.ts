@@ -4,8 +4,11 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { authLink, issueAuthTokenWithMetadata } from '@engr/auth/tokens';
 import { authMessageKeyReady, encryptAuthMessage } from '@engr/auth/notificationMessages';
+import { runDispatch } from '@engr/notify/dispatch';
+import { getDeliveryEnv } from '@engr/notify/env';
+import { systemClock } from '@engr/time';
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
   const email = String(form.get('email') ?? '')
     .trim()
@@ -30,6 +33,8 @@ export const POST: APIRoute = async ({ request }) => {
   }
   if (user && authMessageKeyReady(env.authMessageKey)) {
     const tx = await db.transaction('write');
+    let notificationId: string | null = null;
+    let queued = false;
     try {
       const issued = await issueAuthTokenWithMetadata(tx, {
         orgId: String(user.org_id),
@@ -39,7 +44,7 @@ export const POST: APIRoute = async ({ request }) => {
         lifetimeMinutes: 60,
       });
       const link = authLink(new URL(request.url).origin, issued.value);
-      const notificationId = crypto.randomUUID().replaceAll('-', '');
+      notificationId = crypto.randomUUID().replaceAll('-', '');
       const body = await encryptAuthMessage(
         `A password reset was requested. This link expires in one hour and works once: ${link}`,
         {
@@ -65,11 +70,29 @@ export const POST: APIRoute = async ({ request }) => {
         args: [String(user.org_id), String(user.id), JSON.stringify({ delivery: 'EMAIL' })],
       });
       await tx.commit();
-    } catch {
+      queued = true;
+    } catch (error) {
       await tx.rollback();
+      console.error('[engr.auth.forgot] unable to queue recovery email', error);
       // Keep the public response indistinguishable for existing and unknown
       // addresses. Operators can diagnose delivery through notification/audit
       // health without exposing account existence here.
+    }
+    if (queued && notificationId) {
+      // Start delivery now, not on the next five-minute Cron tick. waitUntil
+      // keeps the Worker alive after the generic response without making its
+      // timing reveal whether the address matched an account.
+      const delivery = runDispatch(db, getDeliveryEnv(), systemClock, {
+        limit: 1,
+        notificationId,
+      }).then(
+        () => undefined,
+        (error) => {
+          console.error('[engr.auth.forgot] immediate delivery failed', error);
+        },
+      );
+      if (locals.cfContext?.waitUntil) locals.cfContext.waitUntil(delivery);
+      else await delivery;
     }
   }
   // Always identical: never reveal whether the address exists.

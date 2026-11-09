@@ -38,6 +38,8 @@ import {
 
 export interface DispatchOptions {
   limit: number;
+  /** Optional immediate drain for a newly queued authentication email. */
+  notificationId?: string;
 }
 
 export interface DispatchSummary {
@@ -167,8 +169,13 @@ export async function runDispatch(
   const unavailable = await db.execute({
     sql: `SELECT COUNT(*) AS n FROM notifications
            WHERE status = 'QUEUED'
-             AND ((channel = 'EMAIL' AND ? = 0) OR (channel = 'SMS' AND ? = 0))`,
-    args: [readiness.email.ready ? 1 : 0, readiness.sms.ready ? 1 : 0],
+             AND ((channel = 'EMAIL' AND ? = 0) OR (channel = 'SMS' AND ? = 0))
+             ${options.notificationId ? 'AND id = ?' : ''}`,
+    args: [
+      readiness.email.ready ? 1 : 0,
+      readiness.sms.ready ? 1 : 0,
+      ...(options.notificationId ? [options.notificationId] : []),
+    ],
   });
   summary.held += Number(unavailable.rows[0]?.n ?? 0);
 
@@ -225,11 +232,13 @@ export async function runDispatch(
              AND (channel = 'IN_APP'
                   OR (channel = 'EMAIL' AND ? = 1)
                   OR (channel = 'SMS' AND ? = 1))
+             ${options.notificationId ? 'AND id = ?' : ''}
         ORDER BY created_at ASC
            LIMIT ?`,
     args: [
       readiness.email.ready ? 1 : 0,
       readiness.sms.ready ? 1 : 0,
+      ...(options.notificationId ? [options.notificationId] : []),
       Math.max(1, Math.min(options.limit, 500)),
     ],
   });
@@ -247,9 +256,12 @@ export async function runDispatch(
     }
     const policy = await policyFor(orgId);
 
-    // Quiet hours hold SMS and EMAIL; IN_APP is always delivered.
+    // Quiet hours apply to ordinary alerts. Authentication links are
+    // time-limited account-access messages: a one-hour reset must not expire
+    // during an organisation's notification quiet hours.
     if (
       (channel === 'SMS' || channel === 'EMAIL') &&
+      !(channel === 'EMAIL' && authTemplate) &&
       inQuietHours(nowMin, policy.quietStart, policy.quietEnd)
     ) {
       summary.held += 1;
