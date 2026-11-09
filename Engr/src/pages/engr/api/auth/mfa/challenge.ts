@@ -11,10 +11,7 @@ import {
   verifyTotp,
 } from '@engr/auth/mfa';
 import { fullSession } from '@engr/auth/loginSession';
-
-function safeNext(value: string): string {
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/';
-}
+import { safeMfaNext } from '@engr/auth/mfaGate';
 
 export const POST: APIRoute = async ({ request }) => {
   const env = getEngrEnv();
@@ -25,7 +22,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (!session) return new Response(null, { status: 303, headers: { location: '/login' } });
   const form = await request.formData();
   const code = String(form.get('code') ?? '').trim();
-  const next = safeNext(String(form.get('next') ?? '/'));
+  const next = safeMfaNext(String(form.get('next') ?? '/'), new URL(request.url).origin);
   const db = await getDb(env);
   const result = await db.execute({
     sql: `SELECT m.secret_ciphertext, m.secret_iv, m.last_totp_step,

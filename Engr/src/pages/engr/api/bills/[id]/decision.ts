@@ -7,6 +7,7 @@ export const prerender = false;
  * SoD failure a 403.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { decideBill } from '@engr/workflow/billState';
@@ -21,6 +22,8 @@ const LEVEL_KEY: Record<number, string> = {
 export const POST: APIRoute = async ({ request, locals, params }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = `/bills/${id}`;

@@ -2,6 +2,7 @@ export const prerender = false;
 
 /** Reverse a payment; reopens the bill if it no longer covers the total. Gate: payment.record. */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { reversePayment } from '@engr/repos/payments';
@@ -10,6 +11,8 @@ import { jsonResponse, wantsJson, redirectResponse } from '@engr/workflow/respon
 export const POST: APIRoute = async ({ request, locals, params }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/payments';

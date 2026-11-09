@@ -22,6 +22,7 @@ import { resolveEngineerInCharge } from '@engr/repos/engineerAssignments';
 import { usersWithPermission } from '@engr/repos/approvers';
 import { enqueue } from '@engr/notify';
 import { actorDataScope } from '@engr/auth/dataScope';
+import { safeAttachmentUrl } from '@engr/auth/attachmentUrls';
 
 interface Intake {
   stationId: string;
@@ -117,7 +118,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
         : redirect(request, '/requests/new?error=validation');
     }
 
-    const db = await getDb(getEngrEnv());
+    const environment = getEngrEnv();
+    const attachmentUrl = input.attachmentUrl
+      ? safeAttachmentUrl(input.attachmentUrl, environment.attachmentAllowedHosts)
+      : null;
+    if (input.attachmentUrl && !attachmentUrl) {
+      return json
+        ? jsonResponse({ error: 'attachment', message: 'Use an approved HTTPS file link.' }, 422)
+        : redirect(request, '/requests/new?error=attachment');
+    }
+    const db = await getDb(environment);
 
     // The station must belong to this org, so a forged id cannot cross tenants.
     const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : null;
@@ -171,7 +181,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
 
     // Record a photo or video attachment, if one was linked.
-    if (input.attachmentUrl) {
+    if (attachmentUrl) {
       await db.execute({
         sql: `INSERT INTO attachments (org_id, entity_type, entity_id, kind, file_name, file_url, uploaded_by)
               VALUES (?, 'service_request', ?, ?, ?, ?, ?)`,
@@ -179,8 +189,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
           engr.orgId,
           created.id,
           input.attachmentKind,
-          fileNameFromUrl(input.attachmentUrl),
-          input.attachmentUrl,
+          fileNameFromUrl(attachmentUrl),
+          attachmentUrl,
           engr.userId,
         ],
       });

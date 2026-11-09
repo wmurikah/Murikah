@@ -20,6 +20,8 @@ export interface EngrEnv {
   mfaEncryptionKey?: string;
   /** Independent AES-GCM key for queued invitation and recovery emails. */
   authMessageKey?: string;
+  /** Exact file-host names, separated by commas. Empty means links are disabled. */
+  attachmentAllowedHosts?: string;
 }
 
 export function getEngrEnv(): EngrEnv {
@@ -28,10 +30,18 @@ export function getEngrEnv(): EngrEnv {
   const sessionSecret = env.ENGR_SESSION_SECRET;
   const mfaEncryptionKey = env.ENGR_MFA_ENCRYPTION_KEY;
   const authMessageKey = env.ENGR_AUTH_MESSAGE_KEY;
+  const attachmentAllowedHosts = env.ENGR_ATTACHMENT_ALLOWED_HOSTS;
   if (!dbUrl || !dbToken || !sessionSecret) {
     throw new Error(
       'Engineering Rhythm environment is not configured. Set TURSO_ENGR_DATABASE_URL, TURSO_ENGR_AUTH_TOKEN and ENGR_SESSION_SECRET in .dev.vars (local) or as Cloudflare secrets (production).',
     );
   }
-  return { dbUrl, dbToken, sessionSecret, mfaEncryptionKey, authMessageKey };
+  return {
+    dbUrl,
+    dbToken,
+    sessionSecret,
+    mfaEncryptionKey,
+    authMessageKey,
+    attachmentAllowedHosts,
+  };
 }

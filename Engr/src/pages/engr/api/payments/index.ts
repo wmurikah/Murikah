@@ -7,6 +7,7 @@ export const prerender = false;
  *  GET:  payments for a bill (?bill=id), or the bills ready for payment.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { recordPayment, listPaymentsForBill, listReadyBills } from '@engr/repos/payments';
@@ -22,6 +23,8 @@ import {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   const back = '/payments';
   if (!engr.perms.includes('payment.record')) {
     return wantsJson(request)

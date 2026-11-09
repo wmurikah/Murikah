@@ -9,6 +9,7 @@ export const prerender = false;
  * session, never a client value.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { createCustomRole, getRoleEdit, saveRolePermissions } from '@engr/repos/adminRoles';
@@ -22,6 +23,8 @@ function seeOther(location: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   if (!engr.perms.includes('roles.manage')) {
     return wantsJson(request)
       ? jsonResponse({ error: 'forbidden' }, 403)

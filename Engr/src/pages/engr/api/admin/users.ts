@@ -7,6 +7,7 @@ export const prerender = false;
  * receiving the ability to redefine the security policy itself.
  */
 import type { APIRoute } from 'astro';
+import { requireFreshMfa } from '@engr/auth/sensitiveAction';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { createUser, getUser, updateUser, type UserInput } from '@engr/repos/adminUsers';
@@ -20,6 +21,8 @@ function seeOther(location: string): Response {
 export const POST: APIRoute = async ({ request, locals }) => {
   const engr = locals.engr;
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
+  const mfaGate = requireFreshMfa(request, locals);
+  if (mfaGate) return mfaGate;
   const mayManage = engr.perms.includes('users.update');
   const mayInvite = engr.perms.includes('users.invite');
   if (!(mayManage || mayInvite)) {

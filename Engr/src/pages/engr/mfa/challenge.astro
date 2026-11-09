@@ -1,15 +1,19 @@
 ---
 export const prerender = false;
 import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
+import { safeMfaNext } from '@engr/auth/mfaGate';
 Astro.response.headers.set('Cache-Control', 'no-store');
 const error = Astro.url.searchParams.get('error');
-const next = Astro.url.searchParams.get('next') ?? '/';
+const next = safeMfaNext(Astro.url.searchParams.get('next') ?? '/', Astro.url.origin);
 ---
 
 <EngrAuthLayout title="Authenticator verification">
   <div class="engr-authcard__head">
     <h1 class="engr-authcard__title">Verify it is you</h1>
     <p class="engr-authcard__sub">Enter your authenticator code or a recovery code.</p>
+    <p class="engr-authcard__sub">
+      If you were submitting a form, submit it again after verification.
+    </p>
   </div>
   {
     error === 'config' && (
