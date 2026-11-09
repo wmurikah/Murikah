@@ -63,6 +63,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonResponse({ error: 'forbidden' }, 403);
   }
   const defaultStatus = password ? 'ACTIVE' : 'INVITED';
+  const environment = getEngrEnv();
   const input: UserInput = {
     fullName: str(scalar.full_name).trim(),
     email: str(scalar.email).trim().toLowerCase(),
@@ -73,9 +74,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     assignRoles: mayAssignRoles && roleAssignmentRequested,
     managementScope,
     appOrigin: new URL(request.url).origin,
+    authMessageKey: environment.authMessageKey,
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(environment);
   if (id) {
     const existing = await getUser(db, engr.orgId, id);
     if (!existing) return jsonResponse({ error: 'not_found' }, 404);

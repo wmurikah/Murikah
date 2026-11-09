@@ -7,6 +7,7 @@ import type { APIRoute } from 'astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { deliveryReadiness, getDeliveryEnv } from '@engr/notify/env';
+import { authMessageKeyReady } from '@engr/auth/notificationMessages';
 
 const reply = (body: unknown, status: number): Response =>
   new Response(JSON.stringify(body), {
@@ -41,20 +42,22 @@ export const GET: APIRoute = async () => {
     }
     const delivery = deliveryReadiness(getDeliveryEnv());
     const mfaReady = Boolean(engrEnv.mfaEncryptionKey);
+    const authMailReady = authMessageKeyReady(engrEnv.authMessageKey);
     return reply(
       {
-        status: mfaReady ? 'ok' : 'error',
+        status: mfaReady && authMailReady ? 'ok' : 'error',
         checks: {
           application: 'ok',
           database: 'reachable',
           notificationSchema: 'ok',
           authenticationSchema: 'ok',
           mfaEncryption: mfaReady ? 'ready' : 'missing',
+          authMessageEncryption: authMailReady ? 'ready' : 'missing',
           emailDelivery: delivery.email.ready ? 'ready' : 'held',
           smsDelivery: delivery.sms.ready ? 'ready' : 'held',
         },
       },
-      mfaReady ? 200 : 503,
+      mfaReady && authMailReady ? 200 : 503,
     );
   } catch {
     return reply(

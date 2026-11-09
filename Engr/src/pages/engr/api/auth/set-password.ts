@@ -5,6 +5,7 @@ import { getDb } from '@engr/db';
 import { hashPassword, validatePasswordSecurity } from '@engr/auth/password';
 import { hashOpaqueToken } from '@engr/auth/tokens';
 import { accountLoginHash } from '@engr/auth/loginSecurity';
+import { redactUserAuthMessages } from '@engr/auth/notificationMessages';
 
 function back(token: string, error: string): Response {
   return new Response(null, {
@@ -65,6 +66,7 @@ export const POST: APIRoute = async ({ request }) => {
              WHERE user_id = ? AND used_at IS NULL`,
       args: [new Date().toISOString(), String(row.user_id)],
     });
+    await redactUserAuthMessages(tx, String(row.org_id), String(row.user_id));
     await tx.execute({
       sql: `DELETE FROM auth_login_limits WHERE scope = 'ACCOUNT' AND key_hash = ?`,
       args: [await accountLoginHash(String(row.email))],

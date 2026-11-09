@@ -4,9 +4,9 @@
  * downgrades a send.
  */
 import type { Channel } from './types';
-import { smsChannel } from './sms-africastalking';
-import { emailChannel } from './email-resend';
-import { inAppChannel } from './inapp';
+import { smsChannel } from './sms-africastalking.ts';
+import { emailChannel } from './email-resend.ts';
+import { inAppChannel } from './inapp.ts';
 
 const REGISTRY: Record<string, Channel> = {
   SMS: smsChannel,

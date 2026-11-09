@@ -22,10 +22,19 @@
  */
 import type { Client } from '@libsql/client/web';
 import type { Clock } from '../time';
-import { eatMinutesOfDay, eatYearMonth } from '../time';
-import { deliveryReadiness, type DeliveryEnv } from './env';
-import { channelFor } from './channels/registry';
+import { eatMinutesOfDay, eatYearMonth } from '../time.ts';
+import type { DeliveryEnv } from './env';
+import { deliveryReadiness } from './readiness.ts';
+import { channelFor } from './channels/registry.ts';
 import type { DeliveryRecipient, OutboundNotification } from './channels/types';
+import {
+  authMessageForDelivery,
+  authMessageKeyReady,
+  authMessageTemplate,
+  redactAuthMessage,
+  scrubInactiveAuthMessages,
+  scrubLegacyAuthMessages,
+} from '../auth/notificationMessages.ts';
 
 export interface DispatchOptions {
   limit: number;
@@ -144,6 +153,12 @@ export async function runDispatch(
   });
   summary.recovered = recovered.rowsAffected;
 
+  // Old plaintext links must never be sent by this Worker. Revoke and redact
+  // them before selecting any rows, even if email delivery is disabled. Remove
+  // encrypted payloads as soon as their token is expired, used or superseded.
+  await scrubLegacyAuthMessages(db, now);
+  await scrubInactiveAuthMessages(db, now);
+
   // Do not repeatedly claim rows for unavailable external channels. Filtering
   // here also prevents a large held backlog from starving deliverable in-app
   // notifications behind the batch limit. Adapters retain their own deferred
@@ -225,6 +240,11 @@ export async function runDispatch(
     const id = String(row.id);
     const orgId = String(row.org_id);
     const channel = String(row.channel);
+    const authTemplate = authMessageTemplate(row.template_key);
+    if (authTemplate && !authMessageKeyReady(env.authMessageKey)) {
+      summary.held += 1;
+      continue; // Keep the encrypted message queued; never send without its key.
+    }
     const policy = await policyFor(orgId);
 
     // Quiet hours hold SMS and EMAIL; IN_APP is always delivered.
@@ -256,12 +276,37 @@ export async function runDispatch(
       continue;
     }
 
+    let body = row.body == null ? null : String(row.body);
+    if (authTemplate) {
+      const userId = row.recipient_user_id == null ? '' : String(row.recipient_user_id);
+      const clear = userId
+        ? await authMessageForDelivery(
+            db,
+            body,
+            { id, orgId, userId, templateKey: authTemplate },
+            env.authMessageKey!,
+            clock.now(),
+          )
+        : null;
+      if (clear === null) {
+        summary.failed += 1;
+        await db.execute({
+          sql: `UPDATE notifications SET status = 'FAILED', error = ?
+                 WHERE id = ? AND status = 'SENT'`,
+          args: ['Authentication link could not be verified; request a new one.', id],
+        });
+        await redactAuthMessage(db, id);
+        continue;
+      }
+      body = clear;
+    }
+
     const notification: OutboundNotification = {
       id,
       orgId,
       channel,
       subject: row.subject == null ? null : String(row.subject),
-      body: row.body == null ? null : String(row.body),
+      body,
       templateKey: row.template_key == null ? null : String(row.template_key),
       entityType: row.entity_type == null ? null : String(row.entity_type),
       entityId: row.entity_id == null ? null : String(row.entity_id),
@@ -296,13 +341,7 @@ export async function runDispatch(
     const result = await adapter.send(notification, recipient, env);
     if (result.outcome === 'sent') {
       summary.sent += 1;
-      if (notification.templateKey?.startsWith('auth.')) {
-        await db.execute({
-          sql: `UPDATE notifications SET body = '[redacted after authentication email delivery]'
-                 WHERE id = ?`,
-          args: [id],
-        });
-      }
+      if (authTemplate) await redactAuthMessage(db, id);
       const errorNote = note || null;
       if (errorNote) {
         await db.execute({

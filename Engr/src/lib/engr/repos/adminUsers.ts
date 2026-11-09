@@ -8,7 +8,12 @@
 import type { Client } from '@libsql/client/web';
 import { hashPassword, validatePasswordSecurity } from '@engr/auth/password';
 import { effectiveRoleIds } from '@engr/repos/adminRoles';
-import { authLink, issueAuthToken } from '@engr/auth/tokens';
+import { authLink, issueAuthTokenWithMetadata } from '@engr/auth/tokens';
+import {
+  authMessageKeyReady,
+  encryptAuthMessage,
+  redactUserAuthMessages,
+} from '@engr/auth/notificationMessages';
 import {
   mayAssignRoleCode,
   mayManageTargetUser,
@@ -58,6 +63,7 @@ export interface UserInput {
   assignRoles: boolean;
   managementScope: UserManagementScope;
   appOrigin: string;
+  authMessageKey?: string;
 }
 
 export async function listUsersAdmin(db: Client, orgId: string): Promise<UserRow[]> {
@@ -156,6 +162,13 @@ export async function createUser(
     const passwordError = await validatePasswordSecurity(input.password);
     if (passwordError) return { ok: false, code: 'invalid', message: passwordError };
   }
+  if (!input.password && !authMessageKeyReady(input.authMessageKey)) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Invitation email is not configured. Contact the system administrator.',
+    };
+  }
   const roleIds = input.assignRoles
     ? await filterRoleIds(db, ctx.orgId, input.roleIds, input.managementScope)
     : [];
@@ -189,27 +202,28 @@ export async function createUser(
       });
     }
     if (!input.password) {
-      const token = await issueAuthToken(tx, {
+      const issued = await issueAuthTokenWithMetadata(tx, {
         orgId: ctx.orgId,
         userId: id,
         purpose: 'INVITE',
         createdBy: ctx.userId,
         lifetimeMinutes: 48 * 60,
       });
-      const link = authLink(input.appOrigin, token);
+      const link = authLink(input.appOrigin, issued.value);
+      const notificationId = newId();
+      const body = await encryptAuthMessage(
+        `You have been invited to Engineering Rhythm. Set your password within 48 hours: ${link}`,
+        { id: notificationId, orgId: ctx.orgId, userId: id, templateKey: 'auth.invitation' },
+        issued,
+        input.authMessageKey!,
+      );
       await tx.execute({
         sql: `INSERT INTO notifications
-                (org_id, channel, recipient_user_id, to_address, template_key, subject, body,
+                (id, org_id, channel, recipient_user_id, to_address, template_key, subject, body,
                  entity_type, entity_id, status)
-              VALUES (?, 'EMAIL', ?, ?, 'auth.invitation', 'Your Engineering Rhythm invitation', ?,
+              VALUES (?, ?, 'EMAIL', ?, ?, 'auth.invitation', 'Your Engineering Rhythm invitation', ?,
                       'user', ?, 'QUEUED')`,
-        args: [
-          ctx.orgId,
-          id,
-          input.email,
-          `You have been invited to Engineering Rhythm. Set your password within 48 hours: ${link}`,
-          id,
-        ],
+        args: [notificationId, ctx.orgId, id, input.email, body, id],
       });
     }
     await tx.execute({
@@ -285,6 +299,11 @@ export async function updateUser(
                WHERE user_id = ? AND revoked_at IS NULL`,
         args: [new Date().toISOString(), id],
       });
+      await tx.execute({
+        sql: `UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL`,
+        args: [new Date().toISOString(), id],
+      });
+      await redactUserAuthMessages(tx, ctx.orgId, id);
       await tx.execute({
         sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
               VALUES (?, ?, 'users.password.reset', 'user', ?, ?)`,

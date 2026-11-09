@@ -56,6 +56,8 @@ declare namespace Cloudflare {
     ENGR_SESSION_SECRET?: string;
     /** Base64-encoded 32-byte AES-GCM key for authenticator secrets. */
     ENGR_MFA_ENCRYPTION_KEY?: string;
+    /** Separate Base64-encoded 32-byte AES-GCM key for queued auth emails. */
+    ENGR_AUTH_MESSAGE_KEY?: string;
 
     // GRC platform product, its own Turso database (hassaudit) and session
     // secret, namespaced so they never clash with engr or the marketing site.

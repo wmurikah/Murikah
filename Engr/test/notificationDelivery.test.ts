@@ -60,3 +60,20 @@ test('unconfigured SMS is deferred without contacting a provider', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Resend HTTP acceptance is sent even if its optional response JSON is empty', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('', { status: 202 });
+  try {
+    assert.deepEqual(
+      await emailChannel.send(notification, recipient, {
+        ...disabled,
+        mode: 'production',
+        email: { apiKey: 'test-key', from: 'Engineering <test@example.com>' },
+      }),
+      { outcome: 'sent', providerId: undefined },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

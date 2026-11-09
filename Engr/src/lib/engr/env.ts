@@ -18,6 +18,8 @@ export interface EngrEnv {
    * login endpoint or every authenticated page down. MFA routes fail closed
    * and report the missing key explicitly. */
   mfaEncryptionKey?: string;
+  /** Independent AES-GCM key for queued invitation and recovery emails. */
+  authMessageKey?: string;
 }
 
 export function getEngrEnv(): EngrEnv {
@@ -25,10 +27,11 @@ export function getEngrEnv(): EngrEnv {
   const dbToken = env.TURSO_ENGR_AUTH_TOKEN;
   const sessionSecret = env.ENGR_SESSION_SECRET;
   const mfaEncryptionKey = env.ENGR_MFA_ENCRYPTION_KEY;
+  const authMessageKey = env.ENGR_AUTH_MESSAGE_KEY;
   if (!dbUrl || !dbToken || !sessionSecret) {
     throw new Error(
       'Engineering Rhythm environment is not configured. Set TURSO_ENGR_DATABASE_URL, TURSO_ENGR_AUTH_TOKEN and ENGR_SESSION_SECRET in .dev.vars (local) or as Cloudflare secrets (production).',
     );
   }
-  return { dbUrl, dbToken, sessionSecret, mfaEncryptionKey };
+  return { dbUrl, dbToken, sessionSecret, mfaEncryptionKey, authMessageKey };
 }
