@@ -104,12 +104,14 @@ export function isPrivilegedAuthPath(appPath: string): boolean {
 
 export function requiredMfaStage(input: {
   authStage?: string;
+  enforced?: boolean;
   mandatory: boolean;
   enabled: boolean;
   verifiedAt: number;
   now: number;
   privilegedPath: boolean;
 }): MfaRequirement | null {
+  if (input.enforced === false) return null;
   if (input.authStage === 'mfa-enroll' || (input.mandatory && !input.enabled)) return 'enroll';
   if (
     input.authStage === 'mfa-challenge' ||

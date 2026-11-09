@@ -196,6 +196,9 @@ const rawGroups: NavGroup[] = [
       has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
+      isPlatformOwner
+        ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
+        : null,
       has('audit.view') ? { href: '/admin/audit', label: 'Audit history', icon: 'roles' } : null,
     ].filter((i): i is NavItem => i !== null),
   },

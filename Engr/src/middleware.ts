@@ -14,6 +14,7 @@ import {
 import { readActingOrg } from '@engr/auth/actingOrg';
 import { resolveActingContext, type SwitchOrg } from '@engr/repos/orgContext';
 import { loadUserAuth } from '@engr/auth/rbac';
+import { mfaEnforced } from '@engr/auth/mfaPolicy';
 import { SESSION_IDLE_SECONDS, type SessionPrivilege } from '@engr/auth/trackedSession';
 import { toAppPath, isPublicAppPath, isEngrApiPath } from '@engr/routing';
 function jsonResponse(body: unknown, status: number): Response {
@@ -145,6 +146,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const platformOwner = Number(account.is_platform_owner ?? 0) === 1;
+  const enforced = await mfaEnforced(db, session.org);
+  // A session minted only for enrollment/challenge cannot carry application
+  // grants. Once the owner pauses MFA, ask for a fresh normal sign-in instead.
+  if (!enforced && (session.authStage === 'mfa-enroll' || session.authStage === 'mfa-challenge')) {
+    return new Response(null, {
+      status: 303,
+      headers: { location: '/login', 'set-cookie': clearSession(secure) },
+    });
+  }
   const administrator = currentAuth.roles.includes('OWNER') || currentAuth.roles.includes('ADMIN');
   const mandatoryMfa = platformOwner || administrator || hasSensitiveGrant(currentAuth.perms);
   const mfaEnabled = Number(account.mfa_enabled ?? 0) === 1;
@@ -154,6 +164,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const privilegedPath = isPrivilegedAuthPath(appPath) || sensitiveMutation;
   const mfaRequirement = requiredMfaStage({
     authStage: session.authStage,
+    enforced,
     mandatory: mandatoryMfa,
     enabled: mfaEnabled,
     verifiedAt: mfaVerifiedAt,
@@ -230,6 +241,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     roles: currentAuth.roles,
     perms,
     mfaEnabled,
+    mfaEnforced: enforced,
     mfaVerifiedAt,
     can: (key: string) => perms.includes(key),
   };

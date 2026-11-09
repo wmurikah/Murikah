@@ -3,6 +3,7 @@ import { loadUserAuth } from './rbac';
 import type { SessionPayload } from './session';
 import { createTrackedSession } from './trackedSession';
 import { hasSensitiveGrant } from './mfaGate.ts';
+import { mfaEnforced } from './mfaPolicy.ts';
 
 export interface LoginIdentity {
   userId: string;
@@ -59,6 +60,13 @@ export async function sessionAfterPrimaryAuth(
   request?: Request,
 ): Promise<{ cookie: string; location: string }> {
   const auth = await loadUserAuth(db, identity.orgId, identity.userId);
+  const enforced = await mfaEnforced(db, identity.orgId);
+  if (!enforced) {
+    return {
+      cookie: await fullSession(db, identity, sessionSecret, secure, undefined, request),
+      location: '/',
+    };
+  }
   const mfa = await db.execute({
     sql: `SELECT enabled_at FROM user_mfa WHERE user_id = ? LIMIT 1`,
     args: [identity.userId],

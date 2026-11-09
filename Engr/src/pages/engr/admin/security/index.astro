@@ -1,0 +1,72 @@
+---
+export const prerender = false;
+
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { mfaEnforced } from '@engr/auth/mfaPolicy';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+if (!engr.isPlatformOwner) return Astro.redirect('/');
+
+const enforced = await mfaEnforced(await getDb(getEngrEnv()), engr.orgId);
+const saved = Astro.url.searchParams.get('saved') === '1';
+const error = Astro.url.searchParams.get('error');
+---
+
+<EngrLayout title="Security settings">
+  <div class="engr-page-head">
+    <div>
+      <h1>Security settings</h1>
+      <p class="engr-lead">Manage sign-in protection for {engr.orgName ?? engr.orgSlug}.</p>
+    </div>
+  </div>
+
+  {
+    saved && (
+      <p class="engr-notice" role="status">
+        MFA policy saved. Ask affected users to sign in again.
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class="engr-error" role="alert">
+        The MFA policy was not saved. Check your password and try again.
+      </p>
+    )
+  }
+
+  <section class="engr-panel" aria-labelledby="mfa-policy-heading">
+    <h2 id="mfa-policy-heading">Authenticator requirement</h2>
+    <p>
+      Current status: <strong>{enforced ? 'Required' : 'Paused'}</strong> for this organisation. Switch
+      organisations in the sidebar to manage a different organisation.
+    </p>
+    <p class="engr-field__hint">
+      Pausing MFA allows password-only sign-in and approvals for this organisation. Existing
+      authenticator enrollments and recovery codes are preserved. Requiring MFA again will prompt
+      users to enroll or complete an authenticator challenge.
+    </p>
+    <form method="post" action="/api/admin/security/mfa" class="engr-formgrid">
+      <input type="hidden" name="enforced" value={enforced ? '0' : '1'} />
+      <div class="engr-field">
+        <label for="current_password">Confirm your current password</label>
+        <input
+          class="engr-input"
+          id="current_password"
+          name="current_password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+      <div class="engr-field">
+        <button class="engr-btn engr-btn--primary" type="submit">
+          {enforced ? 'Pause MFA requirement' : 'Require MFA again'}
+        </button>
+      </div>
+    </form>
+  </section>
+</EngrLayout>

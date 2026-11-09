@@ -173,6 +173,8 @@ declare namespace App {
       perms: string[];
       /** Read from the current account and signed session by middleware. */
       mfaEnabled: boolean;
+      /** Live organisation policy; defaults to enforced. */
+      mfaEnforced: boolean;
       mfaVerifiedAt: number;
       can: (key: string) => boolean;
     };

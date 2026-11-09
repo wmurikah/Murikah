@@ -85,6 +85,25 @@ test('approval and payment grants require enrollment, then a fresh challenge', (
     sensitiveActionDecision({ engr: { mfaEnabled: false, mfaVerifiedAt: 1400 } }, 2000),
     'enroll',
   );
+  assert.equal(
+    requiredMfaStage({
+      authStage: 'mfa-challenge',
+      enforced: false,
+      mandatory: true,
+      enabled: true,
+      verifiedAt: 0,
+      now: 2000,
+      privilegedPath: true,
+    }),
+    null,
+  );
+  assert.equal(
+    sensitiveActionDecision(
+      { engr: { mfaEnforced: false, mfaEnabled: false, mfaVerifiedAt: 0 } },
+      2000,
+    ),
+    'allow',
+  );
 });
 
 test('mutation endpoint guard allows fresh MFA and rejects stale or unenrolled sessions', async () => {
@@ -103,6 +122,12 @@ test('mutation endpoint guard allows fresh MFA and rejects stale or unenrolled s
   const unenrolled = requireFreshMfa(request, { engr: { mfaEnabled: false, mfaVerifiedAt: 0 } });
   assert.equal(unenrolled?.status, 403);
   assert.equal((await unenrolled?.json()).error, 'mfa_enrollment_required');
+  assert.equal(
+    requireFreshMfa(request, {
+      engr: { mfaEnforced: false, mfaEnabled: false, mfaVerifiedAt: 0 },
+    }),
+    null,
+  );
   const form = new Request(`${origin}/api/lpos/lpo-1/approve`, {
     method: 'POST',
     headers: {

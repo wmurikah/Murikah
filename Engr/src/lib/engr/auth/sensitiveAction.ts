@@ -1,7 +1,7 @@
 import { safeMfaNext } from './mfaGate.ts';
 
 export interface SensitiveActionContext {
-  engr?: { mfaEnabled: boolean; mfaVerifiedAt: number };
+  engr?: { mfaEnforced?: boolean; mfaEnabled: boolean; mfaVerifiedAt: number };
 }
 
 export type SensitiveActionDecision = 'allow' | 'enroll' | 'challenge';
@@ -10,6 +10,7 @@ export function sensitiveActionDecision(
   context: SensitiveActionContext,
   nowSeconds: number,
 ): SensitiveActionDecision {
+  if (context.engr?.mfaEnforced === false) return 'allow';
   if (!context.engr?.mfaEnabled) return 'enroll';
   const verifiedAt = context.engr.mfaVerifiedAt;
   if (
