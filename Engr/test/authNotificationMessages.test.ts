@@ -266,3 +266,54 @@ test('authentication emails stay encrypted through hold, failure and retry, then
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('reset and invitation emails bypass organisation quiet hours while ordinary alerts wait', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'engr-auth-quiet-hours-'));
+  const db = createClient({ url: `file:${join(directory, 'test.db')}` });
+  const originalFetch = globalThis.fetch;
+  const sent: string[] = [];
+  globalThis.fetch = async (_url, init) => {
+    sent.push(String(JSON.parse(String(init?.body)).subject));
+    return new Response(JSON.stringify({ id: 'accepted' }), { status: 200 });
+  };
+  try {
+    await runMigrations(db);
+    await db.execute("INSERT INTO organisations (id, name, slug) VALUES ('o1', 'One', 'one')");
+    await createUser(db, 'u1');
+    await db.execute({
+      sql: `INSERT INTO org_settings (org_id, key, value_json) VALUES ('o1', 'quiet_hours', ?)`,
+      args: [JSON.stringify({ start: '00:00', end: '22:59' })],
+    });
+    await db.execute({
+      sql: `INSERT INTO notifications
+              (id, org_id, channel, recipient_user_id, subject, body, status)
+            VALUES ('ordinary', 'o1', 'EMAIL', 'u1', 'Ordinary alert', 'Wait', 'QUEUED')`,
+    });
+    const reset = await queueEncrypted(db, 'reset', 'u1', 'auth.password.reset');
+    const invite = await queueEncrypted(db, 'invite', 'u1', 'auth.invitation');
+    const clock = fixedClock(new Date('2026-11-09T13:54:03.580Z'));
+    const immediate = await runDispatch(db, production, clock, {
+      limit: 1,
+      notificationId: 'reset',
+    });
+    assert.equal((await notification(db, 'ordinary')).status, 'QUEUED');
+    assert.equal((await notification(db, 'reset')).status, 'SENT');
+    assert.equal((await notification(db, 'invite')).status, 'QUEUED');
+    assert.equal(immediate.sent, 1);
+    assert.equal(sent.length, 1);
+    const summary = await runDispatch(db, production, clock, { limit: 20 });
+    assert.equal((await notification(db, 'invite')).status, 'SENT');
+    assert.equal(summary.held, 1);
+    assert.equal(sent.length, 2);
+    assert.equal(
+      sent.some((subject) => subject === 'Ordinary alert'),
+      false,
+    );
+    assert.equal(String((await notification(db, 'reset')).body).includes(reset.value), false);
+    assert.equal(String((await notification(db, 'invite')).body).includes(invite.value), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
