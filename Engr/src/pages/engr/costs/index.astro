@@ -3,6 +3,7 @@ export const prerender = false;
 
 /** Read-only organisation register. Contractor accounts use their own scoped portal. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import ActionQueueLink from '@/components/engr/ActionQueueLink.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { can } from '@engr/auth/rbac';
@@ -14,6 +15,7 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'cost.view') && actorDataScope(engr.roles) === 'org';
+const canApprove = can(Astro.locals, 'cost.approve') && actorDataScope(engr.roles) === 'org';
 const requestedPage = Number(Astro.url.searchParams.get('page') ?? '1');
 const page =
   Number.isSafeInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000
@@ -37,19 +39,20 @@ const visibleRows = rows.slice(0, pageSize);
         Costs across your organisation, including submitted and completed records.
       </p>
     </div>
-    {
-      can(Astro.locals, 'cost.approve') && (
-        <a href="/costs/approvals" class="engr-btn engr-btn--secondary">
-          Pending approvals
-        </a>
-      )
-    }
+    {canApprove && (
+      <div class="engr-actionbar">
+        <ActionQueueLink href="/mileage/approvals" label="Mileage approvals" countKeys={['mileageApprovals']} />
+        <ActionQueueLink href="/costs/approvals" label="Cost approvals" countKeys={['costApprovals']} />
+      </div>
+    )}
   </div>
 
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        You do not have access to the work cost register.
+        {canApprove
+          ? 'You may review mileage and cost approvals above, but cannot view the full cost register.'
+          : 'You do not have access to the work cost register.'}
       </p>
     ) : visibleRows.length === 0 ? (
       <p class="engr-empty">No costs found on this page.</p>
