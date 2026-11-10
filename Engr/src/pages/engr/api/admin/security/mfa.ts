@@ -20,7 +20,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const value = String(form.get('enforced') ?? '');
   if (value !== '0' && value !== '1') return jsonResponse({ error: 'invalid' }, 422);
   const password = String(form.get('current_password') ?? '');
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const account = await db.execute({
     sql: `SELECT password_hash FROM users WHERE id = ? AND org_id = ? AND status = 'ACTIVE' LIMIT 1`,
     args: [engr.userId, engr.homeOrgId],

@@ -41,7 +41,7 @@ if (!allowed) {
   return Astro.redirect('/notifications');
 }
 
-const db = await getDb(getEngrEnv());
+const db = await getDb(getEngrEnv(), Astro.locals);
 
 let data: Dashboard | null = null;
 let charts: DashboardCharts | null = null;

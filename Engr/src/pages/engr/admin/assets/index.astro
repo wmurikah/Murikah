@@ -20,7 +20,7 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let rows: AssetRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listAssetsAdmin(db, engr.orgId);
 }
 ---

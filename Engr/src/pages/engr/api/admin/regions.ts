@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     code: str(body.code).trim() || null,
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
   const result = id ? await updateRegion(db, ctx, id, input) : await createRegion(db, ctx, input);
 

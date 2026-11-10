@@ -34,7 +34,7 @@ const reversed = Astro.url.searchParams.get('reversed');
 let ready: ReadyBillRow[] = [];
 let recent: RecentPaymentRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   ready = await listReadyBills(db, engr.orgId);
   recent = await listRecentPayments(db, engr.orgId);
 }

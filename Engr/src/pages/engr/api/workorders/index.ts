@@ -21,7 +21,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
   const view = actorDataScope(engr.roles);
   const status = url.searchParams.get('status') ?? undefined;
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   let rows: WorkOrderListRow[];
   if (view === 'contractor') rows = await listForContractor(db, engr.orgId, engr.userId);

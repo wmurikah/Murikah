@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     controls: str(body.controls).trim().slice(0, 2000),
   };
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await applyTransition(
     db,
     { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },

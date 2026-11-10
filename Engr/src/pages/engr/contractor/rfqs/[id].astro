@@ -36,7 +36,7 @@ let myQuote: ContractorQuote | null = null;
 let isContractor = false;
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   isContractor = contractorId != null;
   if (contractorId) {

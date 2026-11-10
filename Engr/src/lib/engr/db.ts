@@ -17,8 +17,15 @@
 import { createClient, type Client } from '@libsql/client/web';
 import type { EngrEnv } from './env';
 
-export async function getDb(env: EngrEnv): Promise<Client> {
+async function createDb(env: EngrEnv): Promise<Client> {
   const client = createClient({ url: env.dbUrl, authToken: env.dbToken });
   await client.execute('PRAGMA foreign_keys = ON;');
   return client;
+}
+
+/** Share one client and its initialization within an Astro request. The cache
+ * lives on request locals, never in the Worker isolate or across users. */
+export function getDb(env: EngrEnv, locals?: App.Locals): Promise<Client> {
+  if (!locals) return createDb(env);
+  return (locals.engrDb ??= createDb(env));
 }

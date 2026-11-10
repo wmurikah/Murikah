@@ -27,7 +27,7 @@ let workOrder: { id: string; woNo: string } | null = null;
 let history: Array<{ channel: string; subject: string; status: string; createdAt: string }> = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   occ = await getOccurrence(db, engr.orgId, id);
   if (occ) {
     const woRes = await db.execute({

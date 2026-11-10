@@ -19,7 +19,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const lpo = await getLpoDetail(db, engr.orgId, id);
   if (!lpo) return jsonResponse({ ok: false, error: 'not_found' }, 404);
 

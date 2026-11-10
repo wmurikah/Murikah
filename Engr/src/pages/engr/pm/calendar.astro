@@ -30,7 +30,7 @@ const periodLabel = from
 
 let rows: OccurrenceListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listUpcomingOccurrences(db, engr.orgId, { from, to });
 }
 ---

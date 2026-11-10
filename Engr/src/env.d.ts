@@ -149,6 +149,8 @@ interface Env extends Cloudflare.Env {}
 type Runtime = import('@astrojs/cloudflare').Runtime;
 declare namespace App {
   interface Locals extends Runtime {
+    /** One Turso client initialization per request, shared by middleware, page and layout. */
+    engrDb?: Promise<import('@libsql/client/web').Client>;
     /**
      * Engineering Rhythm request context, attached by src/middleware.ts for
      * authenticated /engr requests. Absent on the marketing site. The org is

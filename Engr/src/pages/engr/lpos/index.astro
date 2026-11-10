@@ -22,7 +22,7 @@ const canBuild = can(Astro.locals, 'lpo.create');
 
 let rows: LpoListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   if (actorDataScope(engr.roles) !== 'contractor') {
     rows = await listLpos(db, engr.orgId);
   } else {

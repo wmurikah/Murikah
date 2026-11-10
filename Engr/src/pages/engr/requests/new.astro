@@ -45,7 +45,7 @@ let stations: StationOption[] = [];
 let categories: CategoryOption[] = [];
 let assets: AssetOption[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const stationManagerId = actorDataScope(engr.roles) === 'station' ? engr.userId : undefined;
   [stations, categories, assets] = await Promise.all([
     listStations(db, engr.orgId, stationManagerId),

@@ -33,7 +33,7 @@ let contractorScope: string | undefined;
 let portalUsers: Option[] = [];
 
 if (canManage) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   if (requiresContractorTechnicianScope(engr.roles)) {
     contractorScope = (await contractorForUser(db, engr.orgId, engr.userId)) ?? undefined;
   }

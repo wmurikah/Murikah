@@ -40,7 +40,7 @@ let jobCard: JobCardRecord | null = null;
 let spares: SpareRow[] = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   wo = await getWorkOrderForActor(db, engr.orgId, id, 'technician', engr.userId);
   if (wo) {
     actions = availableActions(

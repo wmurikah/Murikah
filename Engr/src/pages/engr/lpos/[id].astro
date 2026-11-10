@@ -45,7 +45,7 @@ let categories: CategoryOption[] = [];
 let slas: SlaOption[] = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   lpo = await getLpoDetail(db, engr.orgId, id);
   if (lpo && actorDataScope(engr.roles) === 'contractor') {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);

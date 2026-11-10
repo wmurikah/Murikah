@@ -38,7 +38,7 @@ let user: UserDetail | null = null;
 let roles: { id: string; name: string; code: string }[] = [];
 
 if (canOpen) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   if (canAssignRoles) {
     roles = await listAssignableRoles(db, engr.orgId, (code) =>
       mayAssignRoleCode(managementScope, code),

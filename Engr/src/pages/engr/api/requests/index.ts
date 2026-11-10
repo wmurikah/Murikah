@@ -244,7 +244,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
     requirePermission(locals, 'requests.view');
     const dataScope = actorDataScope(engr.roles);
     const scope = url.searchParams.get('scope') === 'all' ? 'all' : 'mine';
-    const db = await getDb(getEngrEnv());
+    const db = await getDb(getEngrEnv(), locals);
     const requests = await listQueue(db, engr.orgId, engr.userId, scope, 100, {
       stationManagerId: dataScope === 'station' ? engr.userId : undefined,
     });

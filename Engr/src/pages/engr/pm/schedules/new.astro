@@ -30,7 +30,7 @@ let slas: Option[] = [];
 let automationEnabled = false;
 
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const [st, cat, con, tpl, sl, auto] = await Promise.all([
     listStations(db, engr.orgId),
     listAssetCategories(db, engr.orgId),

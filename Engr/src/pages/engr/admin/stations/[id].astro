@@ -26,7 +26,7 @@ let regions: Option[] = [];
 let users: Option[] = [];
 
 if (canManage) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   [regions, users] = await Promise.all([
     listRegionOptions(db, engr.orgId),
     listUserOptionsByRole(db, engr.orgId, ['STATION_MANAGER']),

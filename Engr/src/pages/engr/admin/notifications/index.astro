@@ -14,7 +14,7 @@ const allowed = can(Astro.locals, 'notifications.configure');
 const saved = Astro.url.searchParams.get('saved') === '1';
 const error = Astro.url.searchParams.get('error');
 const settings = allowed
-  ? await getNotificationSettings(await getDb(getEngrEnv()), engr.orgId)
+  ? await getNotificationSettings(await getDb(getEngrEnv(), Astro.locals), engr.orgId)
   : { emailEnabled: false, smsEnabled: false, quietStart: '', quietEnd: '', smsMonthlyCap: null };
 const readiness = deliveryReadiness(getDeliveryEnv());
 ---

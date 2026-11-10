@@ -10,7 +10,7 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 if (!engr.isPlatformOwner) return Astro.redirect('/');
 
-const enforced = await mfaEnforced(await getDb(getEngrEnv()), engr.orgId);
+const enforced = await mfaEnforced(await getDb(getEngrEnv(), Astro.locals), engr.orgId);
 const saved = Astro.url.searchParams.get('saved') === '1';
 const error = Astro.url.searchParams.get('error');
 ---

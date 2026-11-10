@@ -6,6 +6,9 @@ import test from 'node:test';
 import { createClient, type Client } from '@libsql/client';
 import { runMigrations } from '../db/migrate.ts';
 import { DOMAIN_TABLES, verifySchemaContract } from '../db/schema-contract.ts';
+import { auditIntegrity } from '../db/integrity.ts';
+
+const migrationIds = ['001', '002', '003', '004', '005', '006', '007'];
 
 interface TestDatabase {
   client: Client;
@@ -46,8 +49,9 @@ test('blank install reaches the canonical contract and is idempotent', async () 
   const db = database();
   try {
     const first = await runMigrations(db.client);
-    assert.deepEqual(first.applied, ['001', '002', '003', '004', '005', '006']);
+    assert.deepEqual(first.applied, migrationIds);
     await verifySchemaContract(db.client);
+    assert.deepEqual(Object.values(await auditIntegrity(db.client)), [0, 0, 0, 0, 0, 0]);
 
     const tables = await db.client.execute(
       "SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
@@ -56,12 +60,72 @@ test('blank install reaches the canonical contract and is idempotent', async () 
     const history = await db.client.execute('SELECT id FROM schema_migrations ORDER BY id');
     assert.deepEqual(
       history.rows.map((row) => String(row.id)),
-      ['001', '002', '003', '004', '005', '006'],
+      migrationIds,
     );
 
     const second = await runMigrations(db.client);
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.alreadyApplied, ['001', '002', '003', '004', '005', '006']);
+    assert.deepEqual(second.alreadyApplied, migrationIds);
+  } finally {
+    db.close();
+  }
+});
+
+test('dashboard and queue predicates use the new indexes', async () => {
+  const db = database();
+  try {
+    await runMigrations(db.client);
+    const plans = [
+      [
+        "SELECT id FROM notifications WHERE status = 'QUEUED' ORDER BY created_at LIMIT 25",
+        'ix_notifications_queue_created',
+      ],
+      [
+        "SELECT COUNT(*) FROM notifications WHERE org_id = 'o' AND channel = 'IN_APP' AND status IN ('QUEUED','SENT') AND recipient_user_id = 'u'",
+        'ix_notifications_unread',
+      ],
+      [
+        "SELECT COUNT(*) FROM service_requests WHERE org_id = 'o' AND deleted_at IS NULL AND created_at >= '2026-01-01'",
+        'ix_requests_org_created_active',
+      ],
+      [
+        "SELECT COUNT(*) FROM pm_occurrences WHERE org_id = 'o' AND due_date >= '2026-01-01' AND due_date < '2027-01-01'",
+        'ix_pm_occ_org_due',
+      ],
+    ] as const;
+    for (const [query, index] of plans) {
+      const result = await db.client.execute(`EXPLAIN QUERY PLAN ${query}`);
+      assert.ok(
+        result.rows.some((row) => String(row.detail).includes(index)),
+        `${index}: ${JSON.stringify(result.rows)}`,
+      );
+    }
+  } finally {
+    db.close();
+  }
+});
+
+test('integrity audit detects identity and tenant-link anomalies without changing data', async () => {
+  const db = database();
+  try {
+    await runMigrations(db.client);
+    await db.client.batch(
+      [
+        `INSERT INTO organisations (id, name, slug) VALUES ('one', 'One', 'one')`,
+        `INSERT INTO organisations (id, name, slug) VALUES ('two', 'Two', 'two')`,
+        `INSERT INTO users (id, org_id, full_name, email) VALUES ('u1', 'one', 'One', 'Person@Example.com')`,
+        `INSERT INTO users (id, org_id, full_name, email) VALUES ('u2', 'two', 'Two', 'person@example.com')`,
+        `INSERT INTO roles (id, org_id, code, name) VALUES ('r2', 'two', 'CUSTOM', 'Custom')`,
+        `INSERT INTO user_roles (user_id, role_id) VALUES ('u1', 'r2')`,
+      ],
+      'write',
+    );
+    const counts = await auditIntegrity(db.client);
+    assert.equal(counts.duplicateCanonicalEmails, 1);
+    assert.equal(counts.noncanonicalEmails, 1);
+    assert.equal(counts.crossOrgRoles, 1);
+    assert.equal(counts.foreignKeyViolations, 0);
+    assert.equal(Number((await db.client.execute('SELECT COUNT(*) AS n FROM users')).rows[0].n), 2);
   } finally {
     db.close();
   }
@@ -98,7 +162,7 @@ test('legacy schema upgrades without losing representative LPO data', async () =
     );
 
     const upgraded = await runMigrations(legacy.client);
-    assert.deepEqual(upgraded.applied, ['001', '002', '003', '004', '005', '006']);
+    assert.deepEqual(upgraded.applied, migrationIds);
     const row = (
       await legacy.client.execute(
         `SELECT lpo_no, total_minor, subtotal_minor, mileage_minor, version FROM lpos WHERE id = 'lpo1'`,

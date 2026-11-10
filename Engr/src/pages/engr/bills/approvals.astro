@@ -23,7 +23,7 @@ let l1: BillListRow[] = [];
 let l2: BillListRow[] = [];
 let l3: BillListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   if (canEngineering) {
     l1 = await listPendingBills(db, engr.orgId, 1);
     l2 = await listPendingBills(db, engr.orgId, 2);

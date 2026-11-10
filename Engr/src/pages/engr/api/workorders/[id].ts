@@ -15,7 +15,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const workOrder = await getWorkOrderForActor(
     db,
     engr.orgId,

@@ -23,9 +23,6 @@ import '@/styles/global.css';
 import '@/styles/engr.css';
 import { ClientRouter } from 'astro:transitions';
 import EngrIcon from '@/components/engr/EngrIcon.astro';
-import { getEngrEnv } from '@engr/env';
-import { getDb } from '@engr/db';
-import { getUnreadCount } from '@engr/notify';
 import { orgDisplayName } from '@engr/format';
 import { actorDataScope } from '@engr/auth/dataScope';
 
@@ -58,17 +55,10 @@ const switchable = engr?.switchable ?? [];
 const actingId = engr?.orgId ?? '';
 const showSwitcher = isPlatformOwner && switchable.length > 1;
 
-// Unread in-app notifications for the bell. One light COUNT per page; the bell
-// then refreshes itself from /api/notifications/count. Never fails the render.
-let unread = 0;
-if (engr) {
-  try {
-    const db = await getDb(getEngrEnv());
-    unread = await getUnreadCount(db, engr.orgId, engr.userId);
-  } catch {
-    unread = 0;
-  }
-}
+// The badge is nonessential to the page's first render. Its existing client
+// refresh fills this in after navigation instead of blocking every page on a
+// separate Turso query.
+const unread = 0;
 const unreadLabel = unread > 99 ? '99+' : String(unread);
 
 // Role-aware destinations: staff land on the shared queues, a contractor or

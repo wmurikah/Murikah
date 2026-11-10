@@ -14,7 +14,7 @@ import { getUnreadCount } from '@engr/notify';
 export const GET: APIRoute = async ({ locals }) => {
   const engr = locals.engr;
   if (!engr) return new Response(JSON.stringify({ error: 'unauthorised' }), { status: 401 });
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const count = await getUnreadCount(db, engr.orgId, engr.userId);
   return new Response(JSON.stringify({ count }), {
     status: 200,

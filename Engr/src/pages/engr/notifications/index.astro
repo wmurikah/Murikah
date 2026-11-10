@@ -17,7 +17,7 @@ if (!engr) return Astro.redirect('/login');
 
 const errorCode = Astro.url.searchParams.get('error');
 
-const db = await getDb(getEngrEnv());
+const db = await getDb(getEngrEnv(), Astro.locals);
 const rows: InAppRow[] = await listInApp(db, engr.orgId, engr.userId);
 const isUnread = (r: InAppRow): boolean => r.status === 'QUEUED' || r.status === 'SENT';
 ---

@@ -23,7 +23,7 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let affiliate: AffiliateDetail | null = null;
 if (canManage && !isNew && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   affiliate = await getAffiliate(db, engr.homeOrgId, id);
 }
 const notFound = !isNew && affiliate === null;

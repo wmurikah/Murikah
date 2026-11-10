@@ -20,7 +20,7 @@ const errorCode = Astro.url.searchParams.get('error');
 
 let rows: WorkOrderListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listForStationManager(db, engr.orgId, engr.userId);
 }
 const arrivals = rows.filter((r) => r.status === 'TECH_ACCEPTED');

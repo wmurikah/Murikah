@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
 
   const body = await readBody(request);
   const ctx = { orgId: engr.orgId, userId: engr.userId };
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const action = str(body.action).trim();
 
   const permission =

@@ -35,7 +35,7 @@ let contractors: Option[] = [];
 let categories: Option[] = [];
 
 if (canManage) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   [contractors, categories] = await Promise.all([
     listContractorOptions(db, engr.orgId),
     listCategoryOptions(db, engr.orgId),

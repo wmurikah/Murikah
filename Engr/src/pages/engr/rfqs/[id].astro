@@ -32,7 +32,7 @@ let rfq: RfqDetail | null = null;
 let awardedWo: { id: string; woNo: string } | null = null;
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rfq = await getRfqDetail(db, engr.orgId, id);
   if (rfq && (rfq.status === 'AWARDED' || rfq.status === 'SENT_TO_PROCUREMENT')) {
     awardedWo = await getAwardedWorkOrder(db, engr.orgId, id);

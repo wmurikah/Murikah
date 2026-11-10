@@ -201,9 +201,41 @@ export const REQUIRED_INDEXES = [
   'ux_technicians_portal_user',
   'ux_engineer_assignments_station',
   'ux_engineer_assignments_category',
+  'ix_notifications_queue_created',
+  'ix_notifications_unread',
+  'ix_requests_org_created_active',
+  'ix_pm_occ_org_due',
 ] as const;
 
 const INDEX_CONTRACTS = [
+  {
+    table: 'notifications',
+    name: 'ix_notifications_queue_created',
+    unique: false,
+    partial: true,
+    columns: ['created_at'],
+  },
+  {
+    table: 'notifications',
+    name: 'ix_notifications_unread',
+    unique: false,
+    partial: false,
+    columns: ['org_id', 'channel', 'status', 'recipient_user_id'],
+  },
+  {
+    table: 'service_requests',
+    name: 'ix_requests_org_created_active',
+    unique: false,
+    partial: true,
+    columns: ['org_id', 'created_at'],
+  },
+  {
+    table: 'pm_occurrences',
+    name: 'ix_pm_occ_org_due',
+    unique: false,
+    partial: false,
+    columns: ['org_id', 'due_date'],
+  },
   {
     table: 'lpo_lines',
     name: 'ix_lpo_lines_lpo',

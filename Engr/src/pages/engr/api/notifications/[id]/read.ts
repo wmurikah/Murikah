@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
   const back = '/notifications';
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const ok = await markRead(db, engr.orgId, engr.userId, id);
   if (!ok) {
     return wantsJson(request)

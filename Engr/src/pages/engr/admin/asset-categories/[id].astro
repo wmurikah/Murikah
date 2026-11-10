@@ -25,7 +25,7 @@ let category: CategoryDetail | null = null;
 let categories: Option[] = [];
 
 if (canManage) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   categories = await listCategoryOptions(db, engr.orgId);
   if (!isNew && id) category = await getCategory(db, engr.orgId, id);
 }

@@ -18,7 +18,7 @@ const canActivate = can(Astro.locals, 'pm.activate');
 const canArchive = can(Astro.locals, 'pm.archive');
 let rows: ScheduleListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listSchedules(db, engr.orgId);
 }
 ---

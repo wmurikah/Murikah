@@ -36,7 +36,7 @@ let isOwner = false;
 let billable: CostListRow[] = [];
 
 if (allowed && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   bill = await getBillDetail(db, engr.orgId, id);
   if (bill) {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);

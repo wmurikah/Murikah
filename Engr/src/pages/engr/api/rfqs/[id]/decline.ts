@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const body = await readBody(request);
   const reason = str(body.reason).trim();
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await declineInvitation(
     db,
     { orgId: engr.orgId, userId: engr.userId },

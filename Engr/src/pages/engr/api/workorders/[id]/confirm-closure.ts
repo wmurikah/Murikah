@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const action =
     str(body.decision).toLowerCase() === 'reopen' ? WO_ACTION.reopen : WO_ACTION.confirm_closure;
 
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
   const result = await applyTransition(
     db,
     { orgId: engr.orgId, userId: engr.userId, perms: engr.perms },

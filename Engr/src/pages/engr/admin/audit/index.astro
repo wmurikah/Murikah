@@ -11,7 +11,7 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'audit.view');
 let rows: AuditRow[] = [];
-if (allowed) rows = await listAuditRows(await getDb(getEngrEnv()), engr.orgId);
+if (allowed) rows = await listAuditRows(await getDb(getEngrEnv(), Astro.locals), engr.orgId);
 ---
 
 <EngrLayout title="Audit history">

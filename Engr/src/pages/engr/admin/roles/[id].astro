@@ -32,7 +32,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let role: RoleEdit | null = null;
 let permissions: PermissionRow[] = [];
 if (canManage && !isNew && id) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   [role, permissions] = await Promise.all([getRoleEdit(db, engr.orgId, id), listPermissions(db)]);
 }
 const notFound = !isNew && role === null;

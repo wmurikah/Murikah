@@ -25,7 +25,7 @@ let rows: CostListRow[] = [];
 let costable: Array<{ id: string; woNo: string; stationName: string }> = [];
 let isContractor = false;
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   isContractor = contractorId != null;
   if (contractorId) {

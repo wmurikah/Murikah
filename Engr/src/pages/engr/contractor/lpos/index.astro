@@ -17,7 +17,7 @@ const allowed = can(Astro.locals, 'lpo.view');
 let rows: LpoListRow[] = [];
 let isContractor = false;
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
   isContractor = contractorId != null;
   if (contractorId) rows = await listLposForContractor(db, engr.orgId, contractorId);

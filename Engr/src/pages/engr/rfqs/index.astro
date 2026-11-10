@@ -15,7 +15,7 @@ if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'rfq.view');
 let rows: RfqListRow[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   rows = await listRfqsForEngineer(db, engr.orgId);
 }
 ---

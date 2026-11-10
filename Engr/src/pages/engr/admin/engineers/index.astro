@@ -38,7 +38,7 @@ let engineers: EngineerOption[] = [];
 let stations: StationOption[] = [];
 let categories: CategoryOption[] = [];
 if (allowed) {
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), Astro.locals);
   assignments = await listAssignments(db, engr.orgId);
   if (canManage) {
     [engineers, stations, categories] = await Promise.all([

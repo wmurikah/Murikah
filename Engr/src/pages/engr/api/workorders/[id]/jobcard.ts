@@ -37,7 +37,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
 
   const body = await readBody(request);
   const ctx = { orgId: engr.orgId, userId: engr.userId, perms: engr.perms };
-  const db = await getDb(getEngrEnv());
+  const db = await getDb(getEngrEnv(), locals);
 
   if (str(body.action).toLowerCase() === 'start') {
     const started = await applyTransition(db, ctx, id, WO_ACTION.start_work, {});
