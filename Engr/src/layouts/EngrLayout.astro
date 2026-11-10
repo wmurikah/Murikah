@@ -6,7 +6,7 @@
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
  * When signed in, a persistent left sidebar groups the destinations (Overview,
- * Operations, Finance, Reports, Setup, System Settings) into collapsible sections, each with a category
+ * Operations, Procurement, Finance, Service Setup, Administration) into collapsible sections, each with a category
  * icon and user-specific pending-work counts. Only
  * items the user holds a permission for are rendered, so a contractor sees a
  * much shorter menu than an owner. All groups start closed and open when their
@@ -66,10 +66,12 @@ const workOrdersHref = has('workorder.create')
     ? '/technician/workorders'
     : isContractor
       ? '/contractor/workorders'
-      : has('workorder.view')
+      : has('workorder.view') || has('arrival.confirm') || has('jobcard.confirm')
         ? '/workorders'
         : null;
-const rfqHref = has('rfq.view') ? '/rfqs' : has('quotes.view') ? '/contractor/rfqs' : null;
+const rfqHref = has('rfq.view') || (dataScope === 'org' && has('rfq.award'))
+  ? '/rfqs'
+  : has('quotes.view') ? '/contractor/rfqs' : null;
 const lpoHref = has('lpo.create')
   ? '/lpos'
   : isContractor && has('lpo.view')
@@ -78,13 +80,13 @@ const lpoHref = has('lpo.create')
       ? '/lpos'
       : null;
 const costsHref =
-  has('cost.view') && (dataScope === 'org' || isContractor)
+  (has('cost.view') || (dataScope === 'org' && has('cost.approve'))) && (dataScope === 'org' || isContractor)
     ? isContractor
       ? '/contractor/costs'
       : '/costs'
     : null;
 const billsHref =
-  has('bill.view') && (dataScope === 'org' || isContractor)
+  (has('bill.view') || (dataScope === 'org' && (has('bill.approve.engineering') || has('bill.approve.finance')))) && (dataScope === 'org' || isContractor)
     ? isContractor
       ? '/contractor/bills'
       : '/bills'
@@ -96,6 +98,7 @@ interface NavItem {
   icon: string;
   match?: string[];
   badgeKey?: PendingNavKey;
+  extraBadgeKeys?: PendingNavKey[];
 }
 interface NavGroup {
   label: string;
@@ -115,36 +118,59 @@ const rawGroups: NavGroup[] = [
       has('reports.view')
         ? { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] }
         : null,
+      has('reports.view')
+        ? { href: '/reports', label: 'Report centre', icon: 'dashboard' }
+        : null,
     ]),
   },
   {
     label: 'Operations',
     icon: 'operations',
     items: visibleNavItems([
-      has('requests.view') ? { href: '/requests', label: 'Requests', icon: 'requests', badgeKey: 'requests' } : null,
+      has('requests.view')
+        ? { href: '/requests', label: 'Requests', icon: 'requests', badgeKey: 'requests' }
+        : null,
       workOrdersHref
         ? {
             href: workOrdersHref,
             label: 'Work orders',
             icon: 'workorders',
-            match: ['/workorders', workOrdersHref],
+            match: ['/workorders', workOrdersHref, '/station/confirmations'],
             badgeKey: 'workorders',
+            extraBadgeKeys: ['stationConfirmations'],
           }
         : null,
-      rfqHref
-        ? { href: rfqHref, label: 'RFQs', icon: 'rfqs', match: ['/rfqs', '/contractor/rfqs'], badgeKey: 'rfqs' }
+      has('pm.view')
+        ? { href: '/pm', label: 'Maintenance', icon: 'maintenance', badgeKey: 'maintenance' }
         : null,
-      has('pm.view') ? { href: '/pm', label: 'Maintenance', icon: 'maintenance', badgeKey: 'maintenance' } : null,
+      has('assets.view') || has('assets.transfer.request') || has('assets.transfer.approve') ||
+      has('assets.transfer.dispatch') || has('assets.transfer.receive')
+        ? { href: '/admin/assets', label: 'Assets', icon: 'assets', badgeKey: 'assetTransfers' }
+        : null,
+    ]),
+  },
+  {
+    label: 'Procurement',
+    icon: 'rfqs',
+    items: visibleNavItems([
+      rfqHref
+        ? {
+            href: rfqHref,
+            label: 'RFQs',
+            icon: 'rfqs',
+            match: ['/rfqs', '/contractor/rfqs', '/procurement/approvals'],
+            badgeKey: 'rfqs',
+            extraBadgeKeys: ['procurementApprovals'],
+          }
+        : null,
       lpoHref
         ? { href: lpoHref, label: 'LPOs', icon: 'lpos', match: ['/lpos', '/contractor/lpos'], badgeKey: 'lpos' }
         : null,
-      dataScope === 'station' &&
-      has('workorder.view') &&
-      (has('arrival.confirm') || has('jobcard.confirm'))
-        ? { href: '/station/confirmations', label: 'Station confirmations', icon: 'workorders', badgeKey: 'stationConfirmations' }
+      has('contractors.view')
+        ? { href: '/admin/contractors', label: 'Contractors', icon: 'contractors' }
         : null,
-      has('rfq.award')
-        ? { href: '/procurement/approvals', label: 'Procurement approvals', icon: 'rfqs', badgeKey: 'procurementApprovals' }
+      has('rates.view')
+        ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' }
         : null,
     ]),
   },
@@ -153,91 +179,83 @@ const rawGroups: NavGroup[] = [
     icon: 'finance',
     items: visibleNavItems([
       costsHref
-        ? { href: costsHref, label: 'Costs', icon: 'costs', match: ['/costs', '/contractor/costs'], badgeKey: 'costs' }
+        ? {
+            href: costsHref,
+            label: 'Costs',
+            icon: 'costs',
+            match: ['/costs', '/contractor/costs', '/costs/approvals', '/mileage/approvals'],
+            badgeKey: 'costs',
+            extraBadgeKeys: ['mileageApprovals', 'costApprovals'],
+          }
         : null,
       billsHref
-        ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'], badgeKey: 'bills' }
+        ? {
+            href: billsHref,
+            label: 'Bills',
+            icon: 'bills',
+            match: ['/bills', '/contractor/bills', '/bills/approvals'],
+            badgeKey: 'bills',
+            extraBadgeKeys: ['billApprovals'],
+          }
         : null,
-      has('bill.view') ? { href: '/invoices', label: 'Invoices', icon: 'bills' } : null,
+      has('bill.view')
+        ? { href: '/invoices', label: 'Invoices', icon: 'bills' }
+        : null,
       has('payment.view') || has('payment.record')
         ? { href: '/payments', label: 'Payments', icon: 'payments', badgeKey: 'payments' }
         : null,
-      has('cost.approve')
-        ? { href: '/mileage/approvals', label: 'Mileage approvals', icon: 'costs', badgeKey: 'mileageApprovals' }
-        : null,
-      has('cost.approve')
-        ? { href: '/costs/approvals', label: 'Cost approvals', icon: 'costs', badgeKey: 'costApprovals' }
-        : null,
-      has('bill.approve.engineering') || has('bill.approve.finance')
-        ? { href: '/bills/approvals', label: 'Bill approvals', icon: 'bills', badgeKey: 'billApprovals' }
-        : null,
     ]),
   },
   {
-    label: 'Reports',
-    icon: 'dashboard',
-    items: visibleNavItems([
-      has('reports.view') ? { href: '/reports', label: 'Report centre', icon: 'dashboard' } : null,
-    ]),
-  },
-  {
-    label: 'Setup',
+    label: 'Service Setup',
     icon: 'setup',
     items: visibleNavItems([
       has('stations.view')
         ? { href: '/admin/stations', label: 'Stations', icon: 'stations' }
         : null,
-      // Regions have no dedicated permission key in the seed; they are part of
-      // station setup, so they follow the stations gate.
-      has('stations.view') ? { href: '/admin/regions', label: 'Regions', icon: 'regions' } : null,
-      // Transfers are part of Assets, not a second sidebar destination.
-      has('assets.view') || has('assets.transfer.request') || has('assets.transfer.approve') ||
-      has('assets.transfer.dispatch') || has('assets.transfer.receive')
-        ? { href: '/admin/assets', label: 'Assets', icon: 'assets', badgeKey: 'assetTransfers' }
-        : null,
-      has('contractors.view')
-        ? { href: '/admin/contractors', label: 'Contractors', icon: 'contractors' }
+      // Region setup shares the existing station permission.
+      has('stations.view')
+        ? { href: '/admin/regions', label: 'Regions', icon: 'regions' }
         : null,
       has('technicians.view')
         ? { href: '/admin/technicians', label: 'Technicians', icon: 'technicians' }
         : null,
-      // Engineer-in-charge routing is operational setup.
       has('engineer_assignments.view')
         ? { href: '/admin/engineers', label: 'Engineers in charge', icon: 'engineers' }
         : null,
-      has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
-      has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
+      has('slas.view')
+        ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' }
+        : null,
     ]),
   },
   {
-    label: 'System Settings',
+    label: 'Administration',
     icon: 'settings',
     items: visibleNavItems([
-      // Organisation hierarchy and access control belong with system policy.
       isPlatformOwner && has('org.manage')
         ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
         : null,
-      has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
+      has('users.view')
+        ? { href: '/admin/users', label: 'Users', icon: 'users' }
+        : null,
       has('roles.view') || has('roles.manage')
         ? { href: '/admin/roles', label: 'Roles', icon: 'roles' }
         : null,
       has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
-
       isPlatformOwner
         ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
         : null,
-      has('audit.view') ? { href: '/admin/audit', label: 'Audit history', icon: 'roles' } : null,
+      has('audit.view')
+        ? { href: '/admin/audit', label: 'Audit history', icon: 'roles' }
+        : null,
     ]),
   },
 ];
 const groups = rawGroups.filter((g) => g.items.length > 0);
-const activeItem = (item: NavItem) => {
-  if (item.href === '/costs' && path === '/costs/approvals') return false;
-  if (item.href === '/bills' && path === '/bills/approvals') return false;
-  return (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
-};
+const activeItem = (item: NavItem) =>
+  (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
 const groupActive = (group: NavGroup) => group.items.some(activeItem);
 ---
 
@@ -337,7 +355,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                           <EngrIcon name={item.icon} class="engr-navlink__icon" size={16} />
                           <span class="engr-navlink__label">{item.label}</span>
                           {item.badgeKey && (
-                            <span class="engr-navcount" data-nav-key={item.badgeKey} data-nav-count hidden aria-hidden="true" />
+                            <span class="engr-navcount" data-nav-key={item.badgeKey} data-nav-extra-keys={item.extraBadgeKeys?.join(',')} data-nav-count hidden aria-hidden="true" />
                           )}
                         </a>
                       </li>
@@ -489,8 +507,14 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
           if (shell !== document.querySelector('.engr-shell')) return;
           const counts = body.counts ?? {};
           shell.querySelectorAll<HTMLElement>('[data-nav-key]').forEach((badge) => {
-            const raw = Number(counts[badge.dataset.navKey ?? ''] ?? 0);
-            const n = Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
+            const keys = [
+              badge.dataset.navKey ?? '',
+              ...(badge.dataset.navExtraKeys?.split(',') ?? []),
+            ].filter(Boolean);
+            const n = keys.reduce((sum, key) => {
+              const raw = Number(counts[key] ?? 0);
+              return sum + (Number.isSafeInteger(raw) && raw > 0 ? raw : 0);
+            }, 0);
             badge.dataset.navValue = String(n);
             badge.textContent = badgeText(n);
             badge.title = n ? n + ' pending' : '';
