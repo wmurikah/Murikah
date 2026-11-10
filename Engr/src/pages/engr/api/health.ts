@@ -19,7 +19,7 @@ export const GET: APIRoute = async () => {
   try {
     const engrEnv = getEngrEnv();
     const db = await getDb(engrEnv);
-    const [schema, reportSchema, billColumns] = await db.batch(
+    const [schema, reportSchema, billColumns, transferSchema, movementColumns] = await db.batch(
       [
         {
           sql: `SELECT COUNT(*) AS n FROM sqlite_schema
@@ -34,6 +34,8 @@ export const GET: APIRoute = async () => {
           args: [],
         },
         { sql: `PRAGMA table_info(bills)`, args: [] },
+        { sql: `SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table' AND name = 'asset_transfers'`, args: [] },
+        { sql: `PRAGMA table_info(asset_movements)`, args: [] },
       ],
       'read',
     );
@@ -41,7 +43,9 @@ export const GET: APIRoute = async () => {
     const reportsReady =
       Number(reportSchema.rows[0]?.n ?? 0) === 2 &&
       billColumns.rows.some((row) => String(row.name) === 'invoice_required');
-    if (!coreReady || !reportsReady) {
+    const transferReady = Number(transferSchema.rows[0]?.n ?? 0) === 1 &&
+      movementColumns.rows.some((row) => String(row.name) === 'transfer_id');
+    if (!coreReady || !reportsReady || !transferReady) {
       return reply(
         {
           status: 'error',
@@ -51,6 +55,7 @@ export const GET: APIRoute = async () => {
             notificationSchema: coreReady ? 'ok' : 'missing',
             authenticationSchema: coreReady ? 'ok' : 'missing',
             reportingSchema: reportsReady ? 'ok' : 'missing',
+            assetTransferSchema: transferReady ? 'ok' : 'missing',
           },
         },
         503,
@@ -68,6 +73,7 @@ export const GET: APIRoute = async () => {
           notificationSchema: 'ok',
           authenticationSchema: 'ok',
           reportingSchema: 'ok',
+          assetTransferSchema: 'ok',
           mfaEncryption: mfaReady ? 'ready' : 'missing',
           authMessageEncryption: authMailReady ? 'ready' : 'missing',
           emailDelivery: delivery.email.ready ? 'ready' : 'held',
