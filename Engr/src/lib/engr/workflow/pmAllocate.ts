@@ -25,6 +25,9 @@ interface OccurrenceSchedule {
   status: string;
   scheduleName: string;
   stationId: string | null;
+  assetId: string | null;
+  assetStationId: string | null;
+  scheduleStatus: string;
   categoryId: string | null;
   contractorId: string | null;
   slaId: string | null;
@@ -36,10 +39,12 @@ async function loadOccurrence(
   occurrenceId: string,
 ): Promise<OccurrenceSchedule | null> {
   const res = await db.execute({
-    sql: `SELECT o.id, o.status, s.name AS schedule_name, s.station_id, s.category_id,
-                 s.assigned_contractor_id, s.sla_id
+    sql: `SELECT o.id, o.status, s.name AS schedule_name, s.station_id, s.asset_id,
+                 a.station_id AS asset_station_id, s.status AS schedule_status,
+                 s.category_id, s.assigned_contractor_id, s.sla_id
             FROM pm_occurrences o
             JOIN pm_schedules s ON s.id = o.pm_schedule_id
+            LEFT JOIN assets a ON a.id = s.asset_id AND a.org_id = s.org_id AND a.deleted_at IS NULL
            WHERE o.id = ? AND o.org_id = ? LIMIT 1`,
     args: [occurrenceId, orgId],
   });
@@ -50,6 +55,9 @@ async function loadOccurrence(
     status: String(row.status),
     scheduleName: String(row.schedule_name),
     stationId: row.station_id == null ? null : String(row.station_id),
+    assetId: row.asset_id == null ? null : String(row.asset_id),
+    assetStationId: row.asset_station_id == null ? null : String(row.asset_station_id),
+    scheduleStatus: String(row.schedule_status),
     categoryId: row.category_id == null ? null : String(row.category_id),
     contractorId: row.assigned_contractor_id == null ? null : String(row.assigned_contractor_id),
     slaId: row.sla_id == null ? null : String(row.sla_id),
@@ -74,6 +82,12 @@ export async function allocateOccurrence(
   const { orgId } = ctx;
   const occ = await loadOccurrence(db, orgId, occurrenceId);
   if (!occ) return { ok: false, code: 'not_found', message: 'Occurrence not found.' };
+  if (occ.scheduleStatus !== 'ACTIVE') {
+    return { ok: false, code: 'conflict', message: 'Review and reactivate the maintenance schedule before allocating.' };
+  }
+  if (occ.assetId && occ.stationId !== occ.assetStationId) {
+    return { ok: false, code: 'conflict', message: 'Asset location differs from the maintenance station.' };
+  }
   if (!ALLOCATABLE.includes(occ.status)) {
     return { ok: false, code: 'conflict', message: 'This occurrence cannot be allocated now.' };
   }
@@ -107,15 +121,16 @@ export async function allocateOccurrence(
 
       await tx.execute({
         sql: `INSERT INTO work_orders
-                (id, org_id, wo_no, pm_occurrence_id, station_id, category_id, contractor_id, sla_id,
+                (id, org_id, wo_no, pm_occurrence_id, station_id, asset_id, category_id, contractor_id, sla_id,
                  source, assignment_basis, status, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PM', 'PM', 'CONTRACTOR_NOTIFIED', ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PM', 'PM', 'CONTRACTOR_NOTIFIED', ?)`,
         args: [
           id,
           orgId,
           woNo,
           occ.occurrenceId,
           stationId,
+          occ.assetId,
           occ.categoryId,
           contractorId,
           occ.slaId,
