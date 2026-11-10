@@ -68,7 +68,7 @@ test('one sidebar Assets entry and in-page bubble reuse the existing pending cou
   assert.doesNotMatch(layout, /label: 'Delivery monitor'/);
   assert.match(layout, /engr:pending-counts/);
   assert.match(assets, /data-asset-transfer-count/);
-  assert.match(assets, /addEventListener\\('engr:pending-counts'/);
+  assert.match(assets, /addEventListener\('engr:pending-counts'/);
   assert.match(audit, /filter=delivery/);
   assert.match(audit, /notifications.monitor/);
   assert.doesNotMatch(requests, /deliveryMonitor/);
