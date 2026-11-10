@@ -4,11 +4,49 @@ This release adds migration `008`. Apply it to Turso **before** deploying the ne
 
 ## Turso Web steps
 
-1. Open the Engineering production database in Turso Web. Run `SELECT id FROM schema_migrations ORDER BY id;`. Confirm migrations `001` through `007` are present. If `008` is already present, skip the remaining database steps.
+1. Open the Engineering production database in Turso Web. Run `SELECT id FROM schema_migrations ORDER BY id;`. If `007` is missing but `001` through `006` are present, apply the `007` recovery block below first. If `008` is already present, skip its database steps.
 2. Run `PRAGMA table_info(bills);`. If `invoice_required` is absent, run the first statement below once. Turso Web may show one result for each statement.
 3. Run the table and index statements below. They use `IF NOT EXISTS` and are safe to repeat.
 4. After every statement succeeds, insert the `008` history row. Do not record `008` before its objects exist.
 5. Verify the final queries, then deploy the Worker build containing this change. Open `/api/health` and confirm `reportingSchema` reads `ok`.
+
+### If migration 007 is missing
+
+These four indexes are additive and safe to create again. Run them before recording the migration history row:
+
+```sql
+CREATE INDEX IF NOT EXISTS ix_notifications_queue_created
+  ON notifications(created_at) WHERE status = 'QUEUED';
+CREATE INDEX IF NOT EXISTS ix_notifications_unread
+  ON notifications(org_id, channel, status, recipient_user_id);
+CREATE INDEX IF NOT EXISTS ix_requests_org_created_active
+  ON service_requests(org_id, created_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS ix_pm_occ_org_due
+  ON pm_occurrences(org_id, due_date);
+```
+
+Confirm the count is `4`:
+
+```sql
+SELECT COUNT(*) AS indexes_created FROM sqlite_schema
+WHERE type = 'index' AND name IN (
+  'ix_notifications_queue_created',
+  'ix_notifications_unread',
+  'ix_requests_org_created_active',
+  'ix_pm_occ_org_due'
+);
+```
+
+Then record `007` once:
+
+```sql
+INSERT INTO schema_migrations (id, description, checksum)
+SELECT '007', 'Index notification delivery and organisation dashboard queries',
+       'b2ccf1719a8d3f7ce9ed9d5e3eda1bc9ad910d4744703bd4713ec544e6363033'
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = '007');
+```
+
+Return to the `008` steps below. Do not re-run the table/index block if it already succeeded; only check the bill column and verify the objects.
 
 ```sql
 ALTER TABLE bills ADD COLUMN invoice_required INTEGER NOT NULL DEFAULT 0 CHECK (invoice_required IN (0,1));
@@ -62,7 +100,25 @@ CREATE INDEX IF NOT EXISTS ix_asset_movements_org_time
   ON asset_movements(org_id, moved_at);
 ```
 
-Only after those statements succeed:
+Before recording `008`, confirm this returns `1` for `bill_column`, `2` for `tables_created`, and `5` for `indexes_created`:
+
+```sql
+SELECT
+  (SELECT COUNT(*) FROM pragma_table_info('bills')
+    WHERE name = 'invoice_required') AS bill_column,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN ('supplier_invoices', 'asset_movements')) AS tables_created,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'index' AND name IN (
+      'ux_supplier_invoice_number_folded',
+      'ix_supplier_invoices_org_due',
+      'ix_supplier_invoices_org_created',
+      'ix_asset_movements_asset_time',
+      'ix_asset_movements_org_time'
+    )) AS indexes_created;
+```
+
+Only after those counts match:
 
 ```sql
 INSERT INTO schema_migrations (id, description, checksum)
