@@ -84,7 +84,7 @@ test('physical custody changes only at independent receipt, with full audit and 
     const transfer = await getTransfer(db, manager('receiver'), requested.id);
     assert.equal(transfer?.status, 'RECEIVED');
     assert.deepEqual(transfer && availableTransferActions(manager('receiver'), transfer), []);
-    const audit = await db.execute(`SELECT action FROM audit_logs WHERE entity_id = ? AND entity_type = 'asset_transfer'`, [requested.id]);
+    const audit = await db.execute({ sql: `SELECT action FROM audit_logs WHERE entity_id = ? AND entity_type = 'asset_transfer'`, args: [requested.id] });
     assert.equal(audit.rows.length, 4);
   } finally {
     db.close();
