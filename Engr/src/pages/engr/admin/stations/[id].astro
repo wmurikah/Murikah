@@ -10,6 +10,7 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { getStation, type StationDetail } from '@engr/repos/adminStations';
+import { listRegionAffiliates, type AffiliateOption } from '@engr/repos/adminRegions';
 import { listRegionOptions, listUserOptionsByRole, type Option } from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
 
@@ -24,12 +25,17 @@ const errorCode = Astro.url.searchParams.get('error');
 let station: StationDetail | null = null;
 let regions: Option[] = [];
 let users: Option[] = [];
+let affiliates: AffiliateOption[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  [regions, users] = await Promise.all([
+  [regions, users, affiliates] = await Promise.all([
     listRegionOptions(db, engr.orgId),
     listUserOptionsByRole(db, engr.orgId, ['STATION_MANAGER']),
+    listRegionAffiliates(db, {
+      orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId,
+      isPlatformOwner: engr.isPlatformOwner, roles: engr.roles,
+    }),
   ]);
   if (!isNew && id) station = await getStation(db, engr.orgId, id);
 }
@@ -37,6 +43,10 @@ const notFound = !isNew && station === null;
 if (canManage && notFound) Astro.response.status = 404;
 
 const s = station;
+const selectedAffiliate = s?.affiliateOrgId ?? engr.orgId;
+const formAffiliates = s && !affiliates.some((a) => a.id === selectedAffiliate)
+  ? [{ id: selectedAffiliate, name: 'Current affiliate (existing assignment)' }, ...affiliates]
+  : affiliates;
 ---
 
 <EngrLayout title={isNew ? 'New station' : 'Edit station'}>
@@ -92,15 +102,25 @@ const s = station;
           />
         </div>
         <div class="engr-field">
+          <label for="affiliate_org_id">Affiliate</label>
+          <select id="affiliate_org_id" class="engr-select" name="affiliate_org_id" required>
+            {formAffiliates.map((a) => (
+              <option value={a.id} selected={a.id === selectedAffiliate}>{a.name}</option>
+            ))}
+          </select>
+          <p class="engr-field__hint">Classifies the station within the current tenant; it does not move records.</p>
+        </div>
+        <div class="engr-field">
           <label for="region_id">Region</label>
           <select id="region_id" class="engr-select" name="region_id">
             <option value="">Not set</option>
             {regions.map((r) => (
-              <option value={r.id} selected={s?.regionId === r.id}>
+              <option value={r.id} data-affiliate-id={r.affiliateOrgId} selected={s?.regionId === r.id}>
                 {r.label}
               </option>
             ))}
           </select>
+          <p class="engr-field__hint">Only regions assigned to the selected affiliate are available.</p>
         </div>
         <div class="engr-field">
           <label for="station_manager_id">Station manager</label>
@@ -150,3 +170,24 @@ const s = station;
     )
   }
 </EngrLayout>
+
+<script>
+  // The API performs the authoritative affiliate/region validation. This
+  // client filter only keeps the choices relevant on the form.
+  document.addEventListener('astro:page-load', () => {
+    const affiliate = document.getElementById('affiliate_org_id') as unknown as HTMLSelectElement | null;
+    const region = document.getElementById('region_id') as unknown as HTMLSelectElement | null;
+    if (!affiliate || !region) return;
+    const filter = () => {
+      for (const option of Array.from(region.options)) {
+        if (!option.value) continue;
+        const visible = option.dataset.affiliateId === affiliate.value;
+        option.hidden = !visible;
+        option.disabled = !visible;
+        if (!visible && option.selected) region.value = '';
+      }
+    };
+    affiliate.addEventListener('change', filter);
+    filter();
+  });
+</script>
