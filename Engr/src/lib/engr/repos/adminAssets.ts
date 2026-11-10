@@ -200,17 +200,19 @@ async function referencesBelongToOrg(
   db: Client,
   orgId: string,
   input: AssetInput,
+  requireActiveStation = false,
 ): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT
             EXISTS(
               SELECT 1 FROM stations
                WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+                 AND (? = 0 OR status = 'ACTIVE')
             ) AS station_ok,
             (? IS NULL OR EXISTS(
               SELECT 1 FROM asset_categories WHERE id = ? AND org_id = ?
             )) AS category_ok`,
-    args: [input.stationId, orgId, input.categoryId, input.categoryId, orgId],
+    args: [input.stationId, orgId, requireActiveStation ? 1 : 0, input.categoryId, input.categoryId, orgId],
   });
   const row = result.rows[0];
   return Number(row?.station_ok ?? 0) === 1 && Number(row?.category_ok ?? 0) === 1;
@@ -223,7 +225,7 @@ export async function createAsset(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
-  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input, true))) {
     return {
       ok: false,
       code: 'invalid',
