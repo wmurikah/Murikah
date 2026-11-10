@@ -150,7 +150,7 @@ export async function listNotificationAuditRows(
       templateKey: nullable(r.template_key),
       subject: nullable(r.subject),
       status: String(r.status),
-      reason: nullable(r.error),
+      reason: nullable(r.error)?.replace(/https?:\/\/[^\s"'<>]+/gi, '[link withheld]') ?? null,
       currentStatus: String(r.status),
     });
   }
