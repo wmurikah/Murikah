@@ -34,6 +34,14 @@ const notFound = !isNew && region === null;
 if (canManage && notFound) Astro.response.status = 404;
 
 const s = region;
+// A platform owner can list a child-owned region while acting as group root,
+// but that child-owned region must keep its original affiliate classification.
+const eligibleAffiliates = !isNew && s && s.orgId !== engr.orgId
+  ? affiliates.filter((o) => o.id === s.orgId)
+  : affiliates;
+const formAffiliates = s && !eligibleAffiliates.some((o) => o.id === s.affiliateOrgId)
+  ? [{ id: s.affiliateOrgId, name: s.affiliateName + ' (existing assignment)' }, ...eligibleAffiliates]
+  : eligibleAffiliates;
 ---
 
 <EngrLayout title={isNew ? 'New region' : 'Edit region'}>
@@ -87,7 +95,7 @@ const s = region;
         <div class="engr-field">
           <label for="affiliate_org_id">Affiliate</label>
           <select id="affiliate_org_id" name="affiliate_org_id" class="engr-select" required>
-            {affiliates.map((o) => (
+            {formAffiliates.map((o) => (
               <option value={o.id} selected={o.id === (s?.affiliateOrgId ?? engr.orgId)}>{o.name}</option>
             ))}
           </select>
