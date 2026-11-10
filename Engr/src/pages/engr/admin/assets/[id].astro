@@ -112,29 +112,19 @@ const a = asset;
         </div>
         <div class="engr-field">
           <label for="station_id">Station</label>
-          <select id="station_id" class="engr-select" name="station_id" required>
+          {isNew ? <select id="station_id" class="engr-select" name="station_id" required>
             <option value="">Choose a station</option>
             {stations.map((o) => (
               <option value={o.id} selected={a?.stationId === o.id}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </select> : <><input type="hidden" name="station_id" value={a!.stationId} /><p class="engr-field__hint">{a!.stationName} - use a controlled transfer to change location.</p></>}
         </div>
         {!isNew && (
           <div class="engr-field">
-            <label for="movement_reason">
-              Reason for transfer{' '}
-              <span class="engr-field__hint">(required when changing station)</span>
-            </label>
-            <input
-              type="text"
-              id="movement_reason"
-              class="engr-input"
-              name="movement_reason"
-              maxlength="500"
-              placeholder="e.g. transferred for maintenance"
-            />
+            <a href={`/admin/assets/transfers/new?asset=${a!.id}`} class="engr-btn engr-btn--secondary">Request asset transfer</a>
+            <p class="engr-field__hint">The destination becomes the official location only after approval, dispatch and receipt.</p>
           </div>
         )}
         <div class="engr-field">
@@ -256,7 +246,7 @@ const a = asset;
                       {m.toStation}
                       {m.toRegion ? `, ${m.toRegion}` : ''}
                     </td>
-                    <td>{m.reason ?? '—'}</td>
+                    <td>{m.transferId ? <a href={`/admin/assets/transfers/${m.transferId}`}>{m.reason ?? 'Transfer'}</a> : m.reason ?? '—'}</td>
                     <td>{m.movedBy ?? '—'}</td>
                   </tr>
                 ))}
