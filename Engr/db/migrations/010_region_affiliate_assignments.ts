@@ -35,7 +35,7 @@ export const regionAffiliateAssignments: Migration = {
           FROM regions
          WHERE code IS NULL OR TRIM(code) = ''
          GROUP BY org_id
-      ), numbered AS (
+      ), numbered AS MATERIALIZED (
         SELECT org_id, COALESCE(MAX(CAST(SUBSTR(code, 5) AS INTEGER)), 0) AS last_value
           FROM regions
          WHERE code GLOB 'REG-[0-9][0-9][0-9][0-9][0-9][0-9]'
@@ -48,17 +48,17 @@ export const regionAffiliateAssignments: Migration = {
     if (capacity.rows.length) {
       throw new Error('Region code range exhausted; manual review required before migration 010.');
     }
-    await db.execute(`WITH missing AS (
+    await db.execute(`WITH missing AS MATERIALIZED (
         SELECT id, org_id,
                ROW_NUMBER() OVER (PARTITION BY org_id ORDER BY created_at, id) AS seq
           FROM regions
          WHERE code IS NULL OR TRIM(code) = ''
-      ), maxima AS (
+      ), maxima AS MATERIALIZED (
         SELECT org_id, COALESCE(MAX(CAST(SUBSTR(code, 5) AS INTEGER)), 0) AS last_value
           FROM regions
          WHERE code GLOB 'REG-[0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
          GROUP BY org_id
-      ), numbered AS (
+      ), numbered AS MATERIALIZED (
         SELECT m.id, 'REG-' || printf('%06d', COALESCE(x.last_value, 0) + m.seq) AS generated
           FROM missing m LEFT JOIN maxima x ON x.org_id = m.org_id
       )
