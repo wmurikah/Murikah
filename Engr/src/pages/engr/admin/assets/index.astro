@@ -33,6 +33,8 @@ if (allowed) {
     </div>
     <div class="engr-actionbar">
       <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Categories</a>
+      {engr.perms.some((key) => key.startsWith('assets.transfer.')) &&
+        <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary">Asset transfers</a>}
       {
         canManage && (
           <a href="/admin/assets/new" class="engr-btn engr-btn--primary">
