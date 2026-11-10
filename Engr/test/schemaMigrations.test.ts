@@ -8,7 +8,7 @@ import { runMigrations } from '../db/migrate.ts';
 import { DOMAIN_TABLES, verifySchemaContract } from '../db/schema-contract.ts';
 import { auditIntegrity } from '../db/integrity.ts';
 
-const migrationIds = ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010'];
+const migrationIds = ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011'];
 
 interface TestDatabase {
   client: Client;
