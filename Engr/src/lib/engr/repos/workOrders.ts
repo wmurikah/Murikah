@@ -41,7 +41,7 @@ export async function createWorkOrderFromRequest(
   const { orgId } = ctx;
 
   const reqRes = await db.execute({
-    sql: `SELECT id, station_id, category_id, status FROM service_requests
+    sql: `SELECT id, station_id, asset_id, category_id, status FROM service_requests
            WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
     args: [input.requestId, orgId],
   });
@@ -56,6 +56,7 @@ export async function createWorkOrderFromRequest(
   }
   const stationId = String(request.station_id);
   const categoryId = request.category_id === null ? null : String(request.category_id);
+  const assetId = request.asset_id == null ? null : String(request.asset_id);
 
   const contractorRes = await db.execute({
     sql: `SELECT id, is_prequalified, status FROM contractors
@@ -123,15 +124,16 @@ export async function createWorkOrderFromRequest(
 
       await tx.execute({
         sql: `INSERT INTO work_orders
-                (id, org_id, wo_no, request_id, station_id, category_id, contractor_id, sla_id,
+                (id, org_id, wo_no, request_id, station_id, asset_id, category_id, contractor_id, sla_id,
                  source, assignment_basis, status, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUEST', 'PREDEFINED_RATE', 'CREATED', ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'REQUEST', 'PREDEFINED_RATE', 'CREATED', ?)`,
         args: [
           id,
           orgId,
           woNo,
           input.requestId,
           stationId,
+          assetId,
           categoryId,
           input.contractorId,
           slaId,
