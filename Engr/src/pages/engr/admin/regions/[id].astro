@@ -9,7 +9,7 @@ export const prerender = false;
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getRegion, type RegionDetail } from '@engr/repos/adminRegions';
+import { getRegion, listRegionAffiliates, type RegionDetail, type AffiliateOption } from '@engr/repos/adminRegions';
 import { can } from '@engr/auth/rbac';
 
 const engr = Astro.locals.engr;
@@ -21,11 +21,15 @@ const isNew = id === 'new';
 const errorCode = Astro.url.searchParams.get('error');
 
 let region: RegionDetail | null = null;
+let affiliates: AffiliateOption[] = [];
 
-if (canManage && !isNew && id) {
+if (canManage) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  region = await getRegion(db, engr.orgId, id);
+  const actor = { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner };
+  affiliates = await listRegionAffiliates(db, actor);
+  if (!isNew && id) region = await getRegion(db, actor, id);
 }
+
 const notFound = !isNew && region === null;
 if (canManage && notFound) Astro.response.status = 404;
 
@@ -44,7 +48,7 @@ const s = region;
   {
     errorCode === 'conflict' && (
       <p class="engr-error" role="alert">
-        That code is already used by another region.
+        A region code could not be reserved. Try again.
       </p>
     )
   }
@@ -81,17 +85,21 @@ const s = region;
           />
         </div>
         <div class="engr-field">
-          <label for="code">
-            Code <span class="engr-field__hint">(optional)</span>
-          </label>
-          <input
-            type="text"
-            id="code"
-            class="engr-input"
-            name="code"
-            maxlength="30"
-            value={s?.code ?? ''}
-          />
+          <label for="affiliate_org_id">Affiliate</label>
+          {isNew ? (
+            <select id="affiliate_org_id" name="affiliate_org_id" class="engr-select" required>
+              <option value="">Choose an affiliate</option>
+              {affiliates.map((o) => (
+                <option value={o.id} selected={o.id === engr.orgId}>{o.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p class="engr-field__hint">{s?.affiliateName ?? '—'} (cannot be changed)</p>
+          )}
+        </div>
+        <div class="engr-field">
+          <label>Region code</label>
+          <p class="engr-field__hint">{isNew ? 'Generated automatically for the selected affiliate' : s?.code ?? 'Legacy region'}</p>
         </div>
         <div class="engr-actionbar engr-formgrid__full">
           <button type="submit" class="engr-btn engr-btn--primary">

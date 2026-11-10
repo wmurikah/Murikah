@@ -23,7 +23,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = await readBody(request);
   const id = str(body.id).trim();
   const input: StationInput = {
-    code: str(body.code).trim(),
     name: str(body.name).trim(),
     regionId: str(body.region_id).trim() || null,
     address: str(body.address).trim() || null,

@@ -20,7 +20,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let rows: RegionRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  rows = await listRegionsAdmin(db, engr.orgId);
+  rows = await listRegionsAdmin(db, { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner });
 }
 ---
 
@@ -74,6 +74,7 @@ if (allowed) {
             <tr>
               <th scope="col">Name</th>
               <th scope="col">Code</th>
+              <th scope="col">Affiliate</th>
             </tr>
           </thead>
           <tbody>
@@ -81,6 +82,7 @@ if (allowed) {
               <tr>
                 <td>{canManage ? <a href={`/admin/regions/${r.id}`}>{r.name}</a> : r.name}</td>
                 <td>{r.code ?? 'Not set'}</td>
+                <td>{r.affiliateName}</td>
               </tr>
             ))}
           </tbody>

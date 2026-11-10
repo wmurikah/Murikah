@@ -1,0 +1,63 @@
+---
+export const prerender = false;
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import {
+  listTransferAssets, listTransferDestinations,
+  type TransferAssetOption, type TransferStationOption,
+} from '@engr/repos/assetTransfers';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const actor = { orgId: engr.orgId, userId: engr.userId, roles: engr.roles, perms: engr.perms };
+const allowed = engr.perms.includes('assets.transfer.request');
+const selected = Astro.url.searchParams.get('asset');
+const errorCode = Astro.url.searchParams.get('error');
+let assets: TransferAssetOption[] = [];
+let stations: TransferStationOption[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  [assets, stations] = await Promise.all([
+    listTransferAssets(db, actor), listTransferDestinations(db, actor),
+  ]);
+}
+---
+
+<EngrLayout title="Request asset transfer">
+  <div class="engr-page-head">
+    <div>
+      <h1>Request asset transfer</h1>
+      <p class="engr-lead">The location changes only after approval, dispatch and independent receipt.</p>
+    </div>
+    <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary">Back</a>
+  </div>
+  {errorCode && <p class="engr-error" role="alert">Unable to submit. Check the destination, any outstanding work and whether this asset already has an open transfer.</p>}
+  {!allowed ? <p class="engr-error">You do not have permission to request transfers.</p> : assets.length === 0 ? (
+    <p class="engr-empty">No assets are available at your permitted stations.</p>
+  ) : (
+    <form method="post" action="/api/admin/asset-transfers" class="engr-form" style="max-width:44rem">
+      <input type="hidden" name="action" value="request" />
+      <div class="engr-field">
+        <label for="asset_id">Asset</label>
+        <select class="engr-select" id="asset_id" name="asset_id" required>
+          <option value="">Choose an asset</option>
+          {assets.map((a) => <option value={a.id} selected={a.id === selected}>{a.tag} - {a.name} ({a.stationName})</option>)}
+        </select>
+      </div>
+      <div class="engr-field">
+        <label for="to_station_id">Receiving station</label>
+        <select class="engr-select" id="to_station_id" name="to_station_id" required>
+          <option value="">Choose a destination</option>
+          {stations.map((s) => <option value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+      <div class="engr-field">
+        <label for="reason">Reason for transfer</label>
+        <textarea class="engr-textarea" id="reason" name="reason" maxlength="500" required />
+      </div>
+      <p class="engr-field__hint">An asset with ongoing service or repair work cannot be transferred until that work is resolved.</p>
+      <button type="submit" class="engr-btn engr-btn--primary">Submit transfer request</button>
+    </form>
+  )}
+</EngrLayout>

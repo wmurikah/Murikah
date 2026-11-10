@@ -51,14 +51,14 @@ const s = station;
   {
     errorCode === 'conflict' && (
       <p class="engr-error" role="alert">
-        That code is already used by another station.
+        The station could not be saved because a code could not be reserved. Try again.
       </p>
     )
   }
   {
     errorCode === 'invalid' && (
       <p class="engr-error" role="alert">
-        Check the code, name and status, then try again.
+        Check the name, region and status, then try again.
       </p>
     )
   }
@@ -76,16 +76,8 @@ const s = station;
       <form method="post" action="/api/admin/stations" class="engr-formgrid engr-formgrid--two">
         {!isNew && <input type="hidden" name="id" value={s!.id} />}
         <div class="engr-field">
-          <label for="code">Code</label>
-          <input
-            type="text"
-            id="code"
-            class="engr-input"
-            name="code"
-            maxlength="30"
-            required
-            value={s?.code ?? ''}
-          />
+          <label>Station code</label>
+          <p class="engr-field__hint">{isNew ? 'Generated automatically on creation' : s?.code}</p>
         </div>
         <div class="engr-field">
           <label for="name">Name</label>

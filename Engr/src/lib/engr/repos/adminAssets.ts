@@ -36,6 +36,7 @@ export interface AssetDetail {
   tag: string;
   name: string;
   stationId: string;
+  stationName: string;
   categoryId: string | null;
   manufacturer: string | null;
   model: string | null;
@@ -58,6 +59,7 @@ export interface AssetInput {
 }
 
 export interface AssetMovement {
+  transferId: string | null;
   fromStation: string | null;
   fromRegion: string | null;
   toStation: string;
@@ -74,12 +76,13 @@ export async function listAssetMovements(
 ): Promise<AssetMovement[]> {
   const res = await db.execute({
     sql: `SELECT m.from_station_name, m.from_region_name, m.to_station_name,
-                 m.to_region_name, m.reason, m.moved_at, u.full_name AS moved_by
+                 m.to_region_name, m.transfer_id, m.reason, m.moved_at, u.full_name AS moved_by
             FROM asset_movements m LEFT JOIN users u ON u.id = m.moved_by AND u.org_id = m.org_id
            WHERE m.org_id = ? AND m.asset_id = ? ORDER BY m.moved_at DESC LIMIT 200`,
     args: [orgId, assetId],
   });
   return res.rows.map((r) => ({
+    transferId: r.transfer_id == null ? null : String(r.transfer_id),
     fromStation: r.from_station_name == null ? null : String(r.from_station_name),
     fromRegion: r.from_region_name == null ? null : String(r.from_region_name),
     toStation: String(r.to_station_name),
@@ -90,13 +93,14 @@ export async function listAssetMovements(
   }));
 }
 
-async function recordMovement(
+export async function recordMovement(
   tx: SqlExecutor,
   ctx: { orgId: string; userId: string },
   assetId: string,
   fromStationId: string | null,
   toStationId: string,
   reason: string | null,
+  transferId: string | null = null,
 ): Promise<void> {
   const result = await tx.execute({
     sql: `SELECT s.id, s.name AS station_name, s.region_id, r.name AS region_name
@@ -110,8 +114,8 @@ async function recordMovement(
   await tx.execute({
     sql: `INSERT INTO asset_movements
       (id, org_id, asset_id, from_station_id, from_station_name, from_region_id, from_region_name,
-       to_station_id, to_station_name, to_region_id, to_region_name, reason, moved_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       to_station_id, to_station_name, to_region_id, to_region_name, reason, moved_by, transfer_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       newId(),
       ctx.orgId,
@@ -126,6 +130,7 @@ async function recordMovement(
       to.region_name,
       reason,
       ctx.userId,
+      transferId,
     ],
   });
 }
@@ -158,8 +163,10 @@ export async function listAssetsAdmin(db: Client, orgId: string): Promise<AssetR
 
 export async function getAsset(db: Client, orgId: string, id: string): Promise<AssetDetail | null> {
   const res = await db.execute({
-    sql: `SELECT id, tag, name, station_id, category_id, manufacturer, model, serial_no, install_date, status
-            FROM assets WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+    sql: `SELECT a.id, a.tag, a.name, a.station_id, s.name AS station_name,
+                 a.category_id, a.manufacturer, a.model, a.serial_no, a.install_date, a.status
+            FROM assets a JOIN stations s ON s.id = a.station_id AND s.org_id = a.org_id
+           WHERE a.id = ? AND a.org_id = ? AND a.deleted_at IS NULL LIMIT 1`,
     args: [id, orgId],
   });
   const row = res.rows[0];
@@ -169,6 +176,7 @@ export async function getAsset(db: Client, orgId: string, id: string): Promise<A
     tag: String(row.tag),
     name: String(row.name),
     stationId: String(row.station_id),
+    stationName: String(row.station_name),
     categoryId: row.category_id === null ? null : String(row.category_id),
     manufacturer: row.manufacturer === null ? null : String(row.manufacturer),
     model: row.model === null ? null : String(row.model),
@@ -192,17 +200,19 @@ async function referencesBelongToOrg(
   db: Client,
   orgId: string,
   input: AssetInput,
+  requireActiveStation = false,
 ): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT
             EXISTS(
               SELECT 1 FROM stations
                WHERE id = ? AND org_id = ? AND deleted_at IS NULL
+                 AND (? = 0 OR status = 'ACTIVE')
             ) AS station_ok,
             (? IS NULL OR EXISTS(
               SELECT 1 FROM asset_categories WHERE id = ? AND org_id = ?
             )) AS category_ok`,
-    args: [input.stationId, orgId, input.categoryId, input.categoryId, orgId],
+    args: [input.stationId, orgId, requireActiveStation ? 1 : 0, input.categoryId, input.categoryId, orgId],
   });
   const row = result.rows[0];
   return Number(row?.station_ok ?? 0) === 1 && Number(row?.category_ok ?? 0) === 1;
@@ -215,7 +225,7 @@ export async function createAsset(
 ): Promise<AdminResult> {
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
-  if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
+  if (!(await referencesBelongToOrg(db, ctx.orgId, input, true))) {
     return {
       ok: false,
       code: 'invalid',
@@ -285,9 +295,18 @@ export async function updateAsset(
       await tx.rollback();
       return { ok: false, code: 'not_found', message: 'That asset was not found.' };
     }
-    if (oldStationId !== input.stationId && !input.movementReason?.trim()) {
+    const inTransit = await tx.execute({
+      sql: `SELECT 1 FROM asset_transfers WHERE org_id = ? AND asset_id = ?
+             AND status IN ('REQUESTED','APPROVED','DISPATCHED') LIMIT 1`,
+      args: [ctx.orgId, id],
+    });
+    if (inTransit.rows.length) {
       await tx.rollback();
-      return { ok: false, code: 'invalid', message: 'Give a reason for moving the asset.' };
+      return { ok: false, code: 'conflict', message: 'Asset has an active transfer. Complete it before editing.' };
+    }
+    if (oldStationId !== input.stationId) {
+      await tx.rollback();
+      return { ok: false, code: 'invalid', message: 'Station changes require the asset transfer workflow.' };
     }
     const upd = await tx.execute({
       sql: `UPDATE assets
@@ -315,16 +334,6 @@ export async function updateAsset(
         code: 'conflict',
         message: 'Asset location changed. Reload and try again.',
       };
-    }
-    if (oldStationId !== input.stationId) {
-      await recordMovement(
-        tx,
-        ctx,
-        id,
-        oldStationId,
-        input.stationId,
-        input.movementReason!.trim(),
-      );
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)

@@ -6,6 +6,7 @@ import { sessionAndLoginSecurity } from './005_session_and_login_security.ts';
 import { comprehensiveRbac } from './006_comprehensive_rbac.ts';
 import { queryIndexes } from './007_query_indexes.ts';
 import { invoicesAndAssetMovements } from './008_invoices_asset_movements.ts';
+import { controlledAssetTransfers } from './009_controlled_asset_transfers.ts';
 
 export const migrations = [
   initialSchema,
@@ -16,4 +17,5 @@ export const migrations = [
   comprehensiveRbac,
   queryIndexes,
   invoicesAndAssetMovements,
+  controlledAssetTransfers,
 ];

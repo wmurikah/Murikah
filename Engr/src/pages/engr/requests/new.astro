@@ -115,7 +115,7 @@ if (allowed) {
             <select id="asset" class="engr-select" name="asset_id">
               <option value="">Not specified</option>
               {assets.map((a) => (
-                <option value={a.id}>{a.label}</option>
+                <option value={a.id} data-station-id={a.stationId}>{a.label}</option>
               ))}
             </select>
             <p class="engr-field__hint">Choose the specific asset at the station, if known.</p>
@@ -194,3 +194,26 @@ if (allowed) {
     )
   }
 </EngrLayout>
+
+<script>
+  // Keep the visible asset list consistent with the selected station.
+  // The API independently validates the relationship against the database.
+  document.addEventListener('astro:page-load', () => {
+    const station = document.querySelector<HTMLSelectElement>('#station');
+    const asset = document.querySelector<HTMLSelectElement>('#asset');
+    if (!station || !asset) return;
+    const filter = () => {
+      for (const option of Array.from(asset.options)) {
+        if (!option.value) continue;
+        const matches = !!station.value && option.dataset.stationId === station.value;
+        option.disabled = !matches;
+        option.hidden = !matches;
+        if (option.selected && !matches) asset.value = '';
+      }
+    };
+    station.addEventListener('change', filter);
+    filter();
+  });
+</script>
+
+

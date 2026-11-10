@@ -54,7 +54,6 @@ test('setup links only organisation users holding the required portal or operati
 
     const ctx = { orgId: 'o1', userId: 'actor' };
     const invalidManager = await createStation(db, ctx, {
-      code: 'BAD',
       name: 'Bad station',
       regionId: null,
       address: null,
@@ -64,7 +63,6 @@ test('setup links only organisation users holding the required portal or operati
     });
     assert.equal(invalidManager.ok, false);
     const station = await createStation(db, ctx, {
-      code: 'S1',
       name: 'Station One',
       regionId: null,
       address: null,

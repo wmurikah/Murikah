@@ -59,6 +59,7 @@ export const DOMAIN_TABLES = [
   'auth_login_events',
   'supplier_invoices',
   'asset_movements',
+  'asset_transfers',
 ] as const;
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -76,6 +77,7 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'original_pdf',
   ],
   asset_movements: [
+    'transfer_id',
     'id',
     'org_id',
     'asset_id',
@@ -84,6 +86,11 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'to_station_id',
     'to_region_id',
     'moved_at',
+  ],
+  asset_transfers: [
+    'id', 'org_id', 'asset_id', 'from_station_id', 'to_station_id', 'reason',
+    'status', 'requested_by', 'approved_by', 'dispatched_by', 'received_by',
+    'requested_at', 'approved_at', 'dispatched_at', 'received_at',
   ],
   organisations: ['parent_org_id'],
   regions: ['currency'],
@@ -212,6 +219,10 @@ const REQUIRED_COLUMN_SHAPES: Record<string, Record<string, ColumnShape>> = {
 };
 
 export const REQUIRED_INDEXES = [
+  'ux_asset_transfers_open',
+  'ix_asset_transfers_org_status',
+  'ix_asset_transfers_destination',
+  'ix_asset_movements_transfer',
   'ix_lpo_lines_lpo',
   'ix_lpos_region',
   'ix_org_parent',
@@ -344,6 +355,10 @@ const INDEX_CONTRACTS = [
 ] as const;
 
 const FOREIGN_KEY_CONTRACTS = [
+  { table: 'asset_movements', from: 'transfer_id', target: 'asset_transfers' },
+  { table: 'asset_transfers', from: 'asset_id', target: 'assets' },
+  { table: 'asset_transfers', from: 'from_station_id', target: 'stations' },
+  { table: 'asset_transfers', from: 'to_station_id', target: 'stations' },
   { table: 'organisations', from: 'parent_org_id', target: 'organisations' },
   { table: 'lpos', from: 'region_id', target: 'regions' },
   { table: 'lpos', from: 'approved_by', target: 'users' },

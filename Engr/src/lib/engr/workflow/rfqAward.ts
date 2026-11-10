@@ -93,6 +93,7 @@ interface QuoteCore {
 
 interface RequestSite {
   stationId: string;
+  assetId: string | null;
   categoryId: string | null;
 }
 
@@ -164,7 +165,7 @@ async function loadRequestSite(
   requestId: string,
 ): Promise<RequestSite | null> {
   const res = await db.execute({
-    sql: `SELECT station_id, category_id FROM service_requests
+    sql: `SELECT station_id, asset_id, category_id FROM service_requests
            WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
     args: [requestId, orgId],
   });
@@ -172,6 +173,7 @@ async function loadRequestSite(
   if (!row) return null;
   return {
     stationId: String(row.station_id),
+    assetId: row.asset_id == null ? null : String(row.asset_id),
     categoryId: row.category_id == null ? null : String(row.category_id),
   };
 }
@@ -245,9 +247,9 @@ async function createWorkOrderFromQuote(
       // Create the work order already accepted by the contractor.
       await tx.execute({
         sql: `INSERT INTO work_orders
-                (id, org_id, wo_no, request_id, quote_id, station_id, category_id, contractor_id,
+                (id, org_id, wo_no, request_id, quote_id, station_id, asset_id, category_id, contractor_id,
                  source, assignment_basis, status, created_by, contractor_accepted_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RFQ', 'QUOTE', 'CONTRACTOR_ACCEPTED', ?, ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RFQ', 'QUOTE', 'CONTRACTOR_ACCEPTED', ?, ?)`,
         args: [
           id,
           actor.orgId,
@@ -255,6 +257,7 @@ async function createWorkOrderFromQuote(
           rfq.requestId,
           quote.id,
           site.stationId,
+          site.assetId,
           site.categoryId,
           quote.contractorId,
           actor.userId,

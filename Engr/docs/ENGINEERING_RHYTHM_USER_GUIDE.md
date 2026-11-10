@@ -160,10 +160,10 @@ An Administrator cannot change or assign the Owner role. Saving changes to a sha
 1. Open **Setup → Regions**.
 2. Select **New region**.
 3. Enter the **Name**, for example `Nairobi`.
-4. Enter an optional short **Code**.
-5. Select **Create region**.
+4. Select **Affiliate**, such as Hass Kenya, Hass Uganda or Fleet Kenya. Platform owners can select any active affiliate within their group; other users are restricted to their current organisation.
+5. Select **Create region**. The system generates its permanent `REG-000001`-style code for that affiliate.
 
-To amend a region, open **Setup → Regions**, select its name, make the change and select **Save changes**.
+To amend a region, open **Setup → Regions**, select its name, make the change and select **Save changes**. The code and affiliate ownership cannot be edited after creation. If a region was registered under the wrong affiliate, do not silently move it: create the correct region and reconcile associated stations.
 
 ## 9. Create a station
 
@@ -172,7 +172,7 @@ To amend a region, open **Setup → Regions**, select its name, make the change 
 1. Create the region and Station Manager user first.
 2. Open **Setup → Stations**.
 3. Select **New station**.
-4. Enter the unique **Code** and station **Name**.
+4. Enter the station **Name**. Its permanent `STN-000001`-style code is generated automatically when saved.
 5. Select the **Region**.
 6. Select the **Station manager** who will raise and confirm work for that station.
 7. Enter the optional **Address**.
@@ -180,7 +180,7 @@ To amend a region, open **Setup → Regions**, select its name, make the change 
 9. Select **Base station** only when this station is an origin used for mileage.
 10. Select **Create station**.
 
-To change a station, select it in **Setup → Stations**, update the fields and select **Save changes**. Use **Inactive** instead of deleting a station that has history.
+To change a station, select it in **Setup → Stations**, update the fields and select **Save changes**. Its code cannot be edited. Existing historical codes are preserved. Use **Inactive** instead of deleting a station that has history.
 
 ## 10. Create asset categories and assets
 
@@ -205,7 +205,19 @@ To change a station, select it in **Setup → Stations**, update the fields and 
 6. Set **Status** to **In service**, **Faulty** or **Decommissioned**.
 7. Select **Create asset**.
 
-Accurate station and category assignment makes request routing and contractor selection work correctly.
+Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Setup → Asset transfers**; simply editing an asset does not move it.
+
+### Controlled asset transfers
+
+A transfer passes through four stages: **Requested → Approved → Dispatched → Received**. Rejected or cancelled requests do not change the asset's official station.
+
+1. From **Setup → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
+2. An authorised Engineering Manager, Administrator or Owner **approves** the request. The requester cannot approve their own request.
+3. The sending station manager (or authorised management user) confirms **dispatch**, recording the actual condition and physical serial number where available.
+4. The destination station manager (or another authorised management user) confirms **receipt**. The person who dispatched the asset cannot confirm its receipt.
+5. Only after receiving confirmation does the system update the official location. The transfer, all actor decisions and the old/new station and region are retained in the audit trail. Active asset-specific preventive-maintenance schedules are paused for review before further allocation.
+
+The sidebar displays outstanding transfer actions for your permissions and assigned station. A transfer waiting for someone else's decision is visible in history but does not count as your pending action. Station and region codes do not change when records are renamed.
 
 ## 11. Create and qualify a contractor
 

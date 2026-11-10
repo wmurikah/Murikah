@@ -57,15 +57,25 @@ export type ScheduleResult =
 
 function validate(input: ScheduleInput): string | null {
   if (!input.name.trim()) return 'A name is required.';
-  if (!input.stationId && !input.assetId && !input.categoryId) {
-    return 'Choose a station, an asset or a category.';
-  }
+  if (!input.stationId) return 'Choose a station for maintenance allocation.';
   if (!VALID_FREQUENCIES.has(input.frequency as PmFrequencyValue))
     return 'Choose a valid frequency.';
   if (input.frequency === 'CUSTOM_DAYS' && (!input.intervalDays || input.intervalDays < 1)) {
     return 'Custom frequency needs a day interval.';
   }
   return null;
+}
+
+async function scheduleReferencesValid(db: Client, orgId: string, input: ScheduleInput): Promise<boolean> {
+  const result = await db.execute({
+    sql: `SELECT
+      EXISTS(SELECT 1 FROM stations WHERE id = ? AND org_id = ? AND status = 'ACTIVE' AND deleted_at IS NULL) AS station_ok,
+      (? IS NULL OR EXISTS(SELECT 1 FROM assets WHERE id = ? AND org_id = ? AND station_id = ? AND deleted_at IS NULL)) AS asset_ok,
+      (? IS NULL OR EXISTS(SELECT 1 FROM asset_categories WHERE id = ? AND org_id = ?)) AS category_ok`,
+    args: [input.stationId, orgId, input.assetId, input.assetId, orgId, input.stationId, input.categoryId, input.categoryId, orgId],
+  });
+  const r = result.rows[0];
+  return Number(r?.station_ok) === 1 && Number(r?.asset_ok) === 1 && Number(r?.category_ok) === 1;
 }
 
 export async function createSchedule(
@@ -75,6 +85,8 @@ export async function createSchedule(
 ): Promise<ScheduleResult> {
   const problem = validate(input);
   if (problem) return { ok: false, code: 'invalid', message: problem };
+  if (!(await scheduleReferencesValid(db, ctx.orgId, input)))
+    return { ok: false, code: 'invalid', message: 'Station, asset and category must belong to the same location and affiliate.' };
   const entitled = await pmAutomationEnabled(db, ctx.orgId);
   const automated = input.isAutomated && entitled ? 1 : 0;
   const id = newId();
@@ -159,6 +171,8 @@ export async function updateSchedule(
 ): Promise<ScheduleResult> {
   const problem = validate(input);
   if (problem) return { ok: false, code: 'invalid', message: problem };
+  if (!(await scheduleReferencesValid(db, ctx.orgId, input)))
+    return { ok: false, code: 'invalid', message: 'Station, asset and category must belong to the same location and affiliate.' };
   const current = await loadSchedule(db, ctx.orgId, id);
   if (!current) return { ok: false, code: 'not_found', message: 'Schedule not found.' };
   if (current.status !== 'PAUSED') {

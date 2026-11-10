@@ -16,7 +16,7 @@ export async function listAuditRows(db: Client, orgId: string, limit = 250): Pro
     sql: `SELECT a.id, a.action, a.entity_type, a.entity_id, a.created_at,
                  COALESCE(u.full_name, 'System') AS actor_name
             FROM audit_logs a
-       LEFT JOIN users u ON u.id = a.actor_user_id AND u.org_id = a.org_id
+       LEFT JOIN users u ON u.id = a.actor_user_id
            WHERE a.org_id = ?
         ORDER BY a.created_at DESC
            LIMIT ?`,

@@ -103,20 +103,24 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// Contextual typing avoids the Astro 7 / TypeScript 6 predicate error from PR #445.
+const visibleNavItems = (items: Array<NavItem | null>): NavItem[] =>
+  items.filter((item): item is NavItem => item !== null);
+
 const rawGroups: NavGroup[] = [
   {
     label: 'Overview',
     icon: 'overview',
-    items: [
+    items: visibleNavItems([
       has('reports.view')
         ? { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] }
         : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
   {
     label: 'Operations',
     icon: 'operations',
-    items: [
+    items: visibleNavItems([
       has('requests.view') ? { href: '/requests', label: 'Requests', icon: 'requests', badgeKey: 'requests' } : null,
       workOrdersHref
         ? {
@@ -142,12 +146,12 @@ const rawGroups: NavGroup[] = [
       has('rfq.award')
         ? { href: '/procurement/approvals', label: 'Procurement approvals', icon: 'rfqs', badgeKey: 'procurementApprovals' }
         : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
   {
     label: 'Finance',
     icon: 'finance',
-    items: [
+    items: visibleNavItems([
       costsHref
         ? { href: costsHref, label: 'Costs', icon: 'costs', match: ['/costs', '/contractor/costs'], badgeKey: 'costs' }
         : null,
@@ -167,19 +171,19 @@ const rawGroups: NavGroup[] = [
       has('bill.approve.engineering') || has('bill.approve.finance')
         ? { href: '/bills/approvals', label: 'Bill approvals', icon: 'bills', badgeKey: 'billApprovals' }
         : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
   {
     label: 'Reports',
     icon: 'dashboard',
-    items: [
+    items: visibleNavItems([
       has('reports.view') ? { href: '/reports', label: 'Report centre', icon: 'dashboard' } : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
   {
     label: 'Setup',
     icon: 'setup',
-    items: [
+    items: visibleNavItems([
       has('stations.view')
         ? { href: '/admin/stations', label: 'Stations', icon: 'stations' }
         : null,
@@ -187,6 +191,9 @@ const rawGroups: NavGroup[] = [
       // station setup, so they follow the stations gate.
       has('stations.view') ? { href: '/admin/regions', label: 'Regions', icon: 'regions' } : null,
       has('assets.view') ? { href: '/admin/assets', label: 'Assets', icon: 'assets' } : null,
+      has('assets.transfer.request') || has('assets.transfer.approve') || has('assets.transfer.dispatch') || has('assets.transfer.receive')
+        ? { href: '/admin/assets/transfers', label: 'Asset transfers', icon: 'assets', badgeKey: 'assetTransfers' }
+        : null,
       has('contractors.view')
         ? { href: '/admin/contractors', label: 'Contractors', icon: 'contractors' }
         : null,
@@ -199,12 +206,12 @@ const rawGroups: NavGroup[] = [
         : null,
       has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
       has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
   {
     label: 'System Settings',
     icon: 'settings',
-    items: [
+    items: visibleNavItems([
       // Organisation hierarchy and access control belong with system policy.
       isPlatformOwner && has('org.manage')
         ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
@@ -223,7 +230,7 @@ const rawGroups: NavGroup[] = [
         ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
         : null,
       has('audit.view') ? { href: '/admin/audit', label: 'Audit history', icon: 'roles' } : null,
-    ].filter((i): i is NavItem => i !== null),
+    ]),
   },
 ];
 const groups = rawGroups.filter((g) => g.items.length > 0);

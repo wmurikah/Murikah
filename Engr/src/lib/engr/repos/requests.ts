@@ -48,6 +48,7 @@ export interface RequestDetail {
 
 export interface AssetOption {
   id: string;
+  stationId: string;
   label: string;
 }
 
@@ -191,7 +192,7 @@ export async function listAssetOptions(
   stationManagerId?: string,
 ): Promise<AssetOption[]> {
   const res = await db.execute({
-    sql: `SELECT a.id AS id, a.tag AS tag, a.name AS name, s.name AS station_name
+    sql: `SELECT a.id AS id, a.station_id AS station_id, a.tag AS tag, a.name AS name, s.name AS station_name
             FROM assets a
             JOIN stations s ON s.id = a.station_id
            WHERE a.org_id = ? AND a.deleted_at IS NULL
@@ -201,6 +202,7 @@ export async function listAssetOptions(
   });
   return res.rows.map((r) => ({
     id: String(r.id),
+    stationId: String(r.station_id),
     label: `${String(r.tag)} - ${String(r.name)} (${String(r.station_name)})`,
   }));
 }

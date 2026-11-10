@@ -1,0 +1,88 @@
+---
+export const prerender = false;
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import {
+  getTransfer, availableTransferActions,
+  type TransferRow,
+} from '@engr/repos/assetTransfers';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const actor = { orgId: engr.orgId, userId: engr.userId, roles: engr.roles, perms: engr.perms };
+const id = Astro.params.id ?? '';
+const saved = Astro.url.searchParams.get('saved');
+const errorCode = Astro.url.searchParams.get('error');
+let transfer: TransferRow | null = null;
+if (id) transfer = await getTransfer(await getDb(getEngrEnv(), Astro.locals), actor, id);
+if (!transfer) Astro.response.status = 404;
+const actions = transfer ? availableTransferActions(actor, transfer) : [];
+---
+
+<EngrLayout title="Asset transfer">
+  <div class="engr-page-head">
+    <div>
+      <h1>Asset transfer</h1>
+      <p class="engr-lead">Custody confirmation and recorded transfer decisions.</p>
+    </div>
+    <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary">All transfers</a>
+  </div>
+  {saved && <p class="engr-notice" role="status">Transfer action recorded.</p>}
+  {errorCode && <p class="engr-error" role="alert">Action could not be completed ({errorCode}). Check current state, permissions and physical details.</p>}
+  {!transfer ? <p class="engr-error" role="alert">Transfer was not found or cannot be viewed.</p> : (
+    <>
+      <dl class="engr-detail">
+        <dt>Asset</dt><dd>{transfer.assetTag} - {transfer.assetName}</dd>
+        <dt>Serial number</dt><dd>{transfer.assetSerial ?? 'Not recorded'}</dd>
+        <dt>From</dt><dd>{transfer.fromStation}</dd>
+        <dt>To</dt><dd>{transfer.toStation}</dd>
+        <dt>Reason</dt><dd>{transfer.reason}</dd>
+        <dt>Status</dt><dd><span class="engr-pill">{transfer.status}</span></dd>
+        <dt>Requested</dt><dd>{transfer.requestedName} ({transfer.requestedAt.slice(0, 16)})</dd>
+        <dt>Approved at</dt><dd>{transfer.approvedAt ?? 'Pending'}</dd>
+        <dt>Dispatched at</dt><dd>{transfer.dispatchedAt ?? 'Pending'}</dd>
+        <dt>Received at</dt><dd>{transfer.receivedAt ?? 'Pending'}</dd>
+        {transfer.dispatchCondition && <><dt>Dispatch condition</dt><dd>{transfer.dispatchCondition}</dd></>}
+        {transfer.receiptCondition && <><dt>Receiving condition</dt><dd>{transfer.receiptCondition}</dd></>}
+        {transfer.resolutionReason && <><dt>Resolution</dt><dd>{transfer.resolutionReason}</dd></>}
+      </dl>
+      {actions.length > 0 && (
+        <section class="engr-panel" style="margin-top:1rem">
+          <h2>Actions requiring confirmation</h2>
+          {actions.map((action) => (
+            <form method="post" action="/api/admin/asset-transfers" class="engr-form" style="margin-bottom:1rem">
+              <input type="hidden" name="id" value={transfer.id} />
+              <input type="hidden" name="action" value={action} />
+              {(action === 'dispatch' || action === 'receive') && (
+                <>
+                  <div class="engr-field">
+                    <label for={`serial-${action}`}>Physical serial number</label>
+                    <input id={`serial-${action}`} name="serial" class="engr-input" required={!!transfer.assetSerial}
+                      placeholder={transfer.assetSerial ?? 'Not recorded'} />
+                  </div>
+                  <div class="engr-field">
+                    <label for={`condition-${action}`}>Condition observed</label>
+                    <textarea id={`condition-${action}`} name="condition" class="engr-textarea" maxlength="500" required />
+                  </div>
+                </>
+              )}
+              {(action === 'reject' || action === 'cancel' || action === 'dispatch' || action === 'receive') && (
+                <div class="engr-field">
+                  <label for={`note-${action}`}>Notes {action === 'reject' ? '(required)' : '(optional)'}</label>
+                  <textarea id={`note-${action}`} name="note" class="engr-textarea" maxlength="500" required={action === 'reject'} />
+                </div>
+              )}
+              <button class={action === 'reject' || action === 'cancel' ? 'engr-btn engr-btn--danger' : 'engr-btn engr-btn--primary'} type="submit">
+                {action === 'approve' ? 'Approve transfer' :
+                 action === 'reject' ? 'Reject transfer' :
+                 action === 'dispatch' ? 'Confirm physical dispatch' :
+                 action === 'receive' ? 'Confirm receipt and update asset location' : 'Cancel request'}
+              </button>
+            </form>
+          ))}
+        </section>
+      )}
+    </>
+  )}
+</EngrLayout>

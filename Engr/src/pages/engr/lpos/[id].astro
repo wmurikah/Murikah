@@ -18,6 +18,8 @@ import {
 import {
   listStations,
   listAssetCategories,
+  listAssetOptions,
+  type AssetOption,
   type StationOption,
   type CategoryOption,
 } from '@engr/repos/requests';
@@ -41,6 +43,7 @@ const done = ['attached', 'created', 'submitted', 'approved', 'issued', 'cancell
 let lpo: LpoDetail | null = null;
 let attachable: LpoWorkOrder[] = [];
 let stations: StationOption[] = [];
+let assets: AssetOption[] = [];
 let categories: CategoryOption[] = [];
 let slas: SlaOption[] = [];
 
@@ -52,9 +55,10 @@ if (allowed && id) {
     if (!contractorId || contractorId !== lpo.contractorId || !lpo.issuedAt) lpo = null;
   }
   if (lpo && hasEditPermission && lpo.status === 'OPEN' && !lpo.submittedAt) {
-    [attachable, stations, categories, slas] = await Promise.all([
+    [attachable, stations, assets, categories, slas] = await Promise.all([
       listAttachableWorkOrders(db, engr.orgId, id),
       listStations(db, engr.orgId),
+      listAssetOptions(db, engr.orgId),
       listAssetCategories(db, engr.orgId),
       listSlas(db, engr.orgId),
     ]);
@@ -202,6 +206,16 @@ const canCancel =
                     <option value={s.id}>{s.name}</option>
                   ))}
                 </select>
+              </div>
+              <div class="engr-field">
+                <label for="new-asset">Specific asset (optional)</label>
+                <select id="new-asset" class="engr-select" name="asset_id">
+                  <option value="">Not linked to an asset</option>
+                  {assets.map((a) => (
+                    <option value={a.id} data-station-id={a.stationId}>{a.label}</option>
+                  ))}
+                </select>
+                <p class="engr-field__hint">Select an asset located at the chosen station.</p>
               </div>
               <div class="engr-field">
                 <label for="new-category">
