@@ -36,7 +36,7 @@ const a = affiliate;
   <div class="engr-page-head">
     <div>
       <h1>{isNew ? 'New affiliate' : 'Edit affiliate'}</h1>
-      <p class="engr-lead">A company under this group, with its own data and subscription.</p>
+      <p class="engr-lead">A company within this group's tenant. Assign it to regions and stations without changing the tenant.</p>
     </div>
     <a href="/admin/affiliates" class="engr-btn engr-btn--secondary">Back to affiliates</a>
   </div>
@@ -66,7 +66,7 @@ const a = affiliate;
         That affiliate was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/affiliates" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/affiliates" class="engr-formgrid engr-formgrid--affiliate">
         {!isNew && <input type="hidden" name="id" value={a!.id} />}
         {isNew ? (
           <div class="engr-field">
