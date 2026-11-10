@@ -59,6 +59,7 @@ export interface AssetInput {
 }
 
 export interface AssetMovement {
+  transferId: string | null;
   fromStation: string | null;
   fromRegion: string | null;
   toStation: string;
@@ -75,12 +76,13 @@ export async function listAssetMovements(
 ): Promise<AssetMovement[]> {
   const res = await db.execute({
     sql: `SELECT m.from_station_name, m.from_region_name, m.to_station_name,
-                 m.to_region_name, m.reason, m.moved_at, u.full_name AS moved_by
+                 m.to_region_name, m.transfer_id, m.reason, m.moved_at, u.full_name AS moved_by
             FROM asset_movements m LEFT JOIN users u ON u.id = m.moved_by AND u.org_id = m.org_id
            WHERE m.org_id = ? AND m.asset_id = ? ORDER BY m.moved_at DESC LIMIT 200`,
     args: [orgId, assetId],
   });
   return res.rows.map((r) => ({
+    transferId: r.transfer_id == null ? null : String(r.transfer_id),
     fromStation: r.from_station_name == null ? null : String(r.from_station_name),
     fromRegion: r.from_region_name == null ? null : String(r.from_region_name),
     toStation: String(r.to_station_name),
@@ -290,6 +292,15 @@ export async function updateAsset(
     if (!oldStationId) {
       await tx.rollback();
       return { ok: false, code: 'not_found', message: 'That asset was not found.' };
+    }
+    const inTransit = await tx.execute({
+      sql: `SELECT 1 FROM asset_transfers WHERE org_id = ? AND asset_id = ?
+             AND status IN ('REQUESTED','APPROVED','DISPATCHED') LIMIT 1`,
+      args: [ctx.orgId, id],
+    });
+    if (inTransit.rows.length) {
+      await tx.rollback();
+      return { ok: false, code: 'conflict', message: 'Asset has an active transfer. Complete it before editing.' };
     }
     if (oldStationId !== input.stationId) {
       await tx.rollback();
