@@ -421,7 +421,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 1. Open **Procurement → LPOs** and select the issued LPO.
 2. Under mileage, select the reference station and enter the round-trip distance.
 3. Select **Submit claim**.
-4. The Engineering Manager opens **Action Centre → Mileage approvals**.
+4. The Engineering Manager opens **Finance → Costs → Mileage approvals**.
 5. The manager reviews or overrides distance/rate, then selects **Approve**, or enters a reason and selects **Reject**.
 
 ## 21. Create and activate preventive maintenance
@@ -469,7 +469,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Station Manager: confirm arrival
 
-1. Open **Action Centre → Station confirmations** and select the work order awaiting arrival confirmation.
+1. Open **Operations → Work orders → Station confirmations** and select the work order awaiting arrival confirmation.
 2. Verify the technician is physically on site.
 3. Select **Confirm arrival**.
 
@@ -483,7 +483,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Station Manager: confirm closure
 
-1. Open **Action Centre → Station confirmations** and select the work order awaiting closure confirmation.
+1. Open **Operations → Work orders → Station confirmations** and select the work order awaiting closure confirmation.
 2. Review the diagnosis, repair and spares.
 3. If the issue is resolved, select **Confirm closure**.
 4. If work is incomplete, enter the reason and select **Reopen work order**.
@@ -502,7 +502,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Engineering Manager
 
-1. Open **Action Centre → Cost approvals**.
+1. Open **Finance → Costs → Cost approvals**.
 2. Select the cost.
 3. Review the work order, costing basis, line items, mileage and total.
 4. Enter an optional approval comment or a clear rejection reason.
@@ -524,13 +524,13 @@ The cost submitter cannot approve the same cost. New costs have one Engineering 
 
 ### Engineering Manager
 
-1. Open **Action Centre → Bill approvals**.
+1. Open **Finance → Bills → Bill approvals**.
 2. Select the bill and review its attached costs and total.
 3. Enter a comment and select **Approve** or **Reject** under **Engineering decision**.
 
 ### Financial Controller
 
-1. Open **Action Centre → Bill approvals**.
+1. Open **Finance → Bills → Bill approvals**.
 2. Select a bill awaiting finance approval.
 3. Review the Engineering decision, costs, total and approval trail.
 4. Enter a comment and select **Approve** or **Reject** under **Finance decision**.
