@@ -1,0 +1,135 @@
+---
+export const prerender = false;
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import { actorDataScope } from '@engr/auth/dataScope';
+import { visibleReports, parseReportDates, runReport } from '@engr/reports/catalog';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const allowed = actorDataScope(engr.roles) === 'org';
+const reports = allowed ? visibleReports(engr.perms) : [];
+const requested = Astro.url.searchParams.get('report');
+const selected = reports.find((r) => r.id === requested) ?? reports[0];
+const from = Astro.url.searchParams.get('from') ?? '';
+const to = Astro.url.searchParams.get('to') ?? '';
+const dates = parseReportDates(from, to);
+let rows: (string | number)[][] = [];
+if (selected && dates) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  rows = await runReport(db, engr.orgId, selected, dates, 50);
+}
+const exportBase = selected
+  ? `/api/reports/export?report=${selected.id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+  : '';
+---
+
+<EngrLayout title="Reports">
+  <div class="engr-page-head">
+    <div>
+      <h1>Reports</h1>
+      <p class="engr-lead">
+        Choose a report and date range, review the first 50 records, then export up to 500 records.
+        Narrow the dates for larger reports.
+      </p>
+    </div>
+  </div>
+  {
+    !allowed || !engr.perms.includes('reports.view') ? (
+      <p class="engr-error">You do not have access to organisation reports.</p>
+    ) : reports.length === 0 ? (
+      <p class="engr-empty">No reports are available with your current permissions.</p>
+    ) : (
+      <>
+        <section class="engr-panel">
+          <form method="get" action="/reports" class="engr-formgrid engr-formgrid--two">
+            <div class="engr-field">
+              <>
+                <label for="report">Report</label>
+                <select id="report" name="report" class="engr-select">
+                  {reports.map((r) => (
+                    <option value={r.id} selected={r.id === selected?.id}>
+                      {r.category} · {r.title}
+                    </option>
+                  ))}
+                </select>
+              </>
+            </div>
+            <div class="engr-field">
+              <>
+                <label for="from">From (optional)</label>
+                <input type="date" id="from" name="from" class="engr-input" value={from} />
+              </>
+            </div>
+            <div class="engr-field">
+              <>
+                <label for="to">To (optional)</label>
+                <input type="date" id="to" name="to" class="engr-input" value={to} />
+              </>
+            </div>
+            <div class="engr-actionbar engr-formgrid__full">
+              <button type="submit" class="engr-btn engr-btn--primary">
+                Show report
+              </button>
+            </div>
+          </form>
+        </section>
+        {!dates && (
+          <p class="engr-error">
+            Choose valid dates; the end date must be on or after the start date.
+          </p>
+        )}
+        {selected && dates && (
+          <section class="engr-panel" style="margin-top:1rem">
+            <h2>{selected.title}</h2>
+            <p>{selected.description}</p>
+            {engr.perms.includes('reports.export') && (
+              <div class="engr-actionbar">
+                <a href={`${exportBase}&format=xlsx`} class="engr-btn engr-btn--secondary">
+                  Excel
+                </a>
+                <a href={`${exportBase}&format=docx`} class="engr-btn engr-btn--secondary">
+                  Word
+                </a>
+                <a href={`${exportBase}&format=pdf`} class="engr-btn engr-btn--secondary">
+                  PDF
+                </a>
+                <a href={`${exportBase}&format=svg`} class="engr-btn engr-btn--secondary">
+                  Image (SVG)
+                </a>
+                <a href={`${exportBase}&format=csv`} class="engr-btn engr-btn--secondary">
+                  CSV
+                </a>
+              </div>
+            )}
+            {rows.length === 0 ? (
+              <p class="engr-empty">No records match this date range.</p>
+            ) : (
+              <div class="engr-tablewrap">
+                <table class="engr-table">
+                  <thead>
+                    <tr>
+                      {selected.columns.map((c) => (
+                        <th>{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr>
+                        {row.map((value) => (
+                          <td>{value}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </>
+    )
+  }
+</EngrLayout>

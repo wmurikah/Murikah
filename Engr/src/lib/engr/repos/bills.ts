@@ -95,10 +95,18 @@ export interface BillDetail {
   taxMinor: number;
   totalMinor: number;
   currency: string;
+  invoiceRequired: boolean;
   costs: BillCostRow[];
   approvals: BillApprovalRow[];
   payments: PaymentRow[];
   paidMinor: number;
+  invoice: {
+    id: string;
+    invoiceNo: string;
+    issueDate: string;
+    dueDate: string;
+    amountMinor: number;
+  } | null;
 }
 
 export async function getBillDetail(
@@ -108,7 +116,8 @@ export async function getBillDetail(
 ): Promise<BillDetail | null> {
   const head = await db.execute({
     sql: `SELECT b.id, b.bill_no, b.contractor_id, b.period_label, b.status, b.current_level,
-                 b.subtotal_minor, b.tax_minor, b.total_minor, b.currency, c.name AS contractor_name
+                 b.subtotal_minor, b.tax_minor, b.total_minor, b.currency, b.invoice_required,
+                 c.name AS contractor_name
             FROM bills b
             JOIN contractors c ON c.id = b.contractor_id
            WHERE b.id = ? AND b.org_id = ? LIMIT 1`,
@@ -133,6 +142,12 @@ export async function getBillDetail(
     args: [orgId, billId],
   });
   const payments = await listPaymentsForBill(db, orgId, billId);
+  const invoiceRes = await db.execute({
+    sql: `SELECT id, invoice_no, issue_date, due_date, amount_minor
+            FROM supplier_invoices WHERE org_id = ? AND bill_id = ? LIMIT 1`,
+    args: [orgId, billId],
+  });
+  const invoice = invoiceRes.rows[0];
   const paidMinor = payments
     .filter((p) => p.status !== 'REVERSED')
     .reduce((sum, p) => sum + p.amountMinor, 0);
@@ -149,6 +164,7 @@ export async function getBillDetail(
     taxMinor: Number(row.tax_minor),
     totalMinor: Number(row.total_minor),
     currency: String(row.currency),
+    invoiceRequired: Number(row.invoice_required) === 1,
     costs: costsRes.rows.map((c) => ({
       costId: String(c.cost_id),
       workOrderNo: String(c.wo_no),
@@ -164,5 +180,14 @@ export async function getBillDetail(
     })),
     payments,
     paidMinor,
+    invoice: invoice
+      ? {
+          id: String(invoice.id),
+          invoiceNo: String(invoice.invoice_no),
+          issueDate: String(invoice.issue_date),
+          dueDate: String(invoice.due_date),
+          amountMinor: Number(invoice.amount_minor),
+        }
+      : null,
   };
 }

@@ -147,9 +147,17 @@ const rawGroups: NavGroup[] = [
       billsHref
         ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'] }
         : null,
+      has('bill.view') ? { href: '/invoices', label: 'Invoices', icon: 'bills' } : null,
       has('payment.view') || has('payment.record')
         ? { href: '/payments', label: 'Payments', icon: 'payments' }
         : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+  {
+    label: 'Reports',
+    icon: 'dashboard',
+    items: [
+      has('reports.view') ? { href: '/reports', label: 'Report centre', icon: 'dashboard' } : null,
     ].filter((i): i is NavItem => i !== null),
   },
   {

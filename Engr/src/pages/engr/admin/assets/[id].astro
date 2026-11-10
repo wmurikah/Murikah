@@ -9,7 +9,12 @@ export const prerender = false;
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
-import { getAsset, type AssetDetail } from '@engr/repos/adminAssets';
+import {
+  getAsset,
+  listAssetMovements,
+  type AssetDetail,
+  type AssetMovement,
+} from '@engr/repos/adminAssets';
 import { listStationOptions, listCategoryOptions, type Option } from '@engr/repos/adminOptions';
 import { can } from '@engr/auth/rbac';
 
@@ -24,6 +29,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let asset: AssetDetail | null = null;
 let stations: Option[] = [];
 let categories: Option[] = [];
+let movements: AssetMovement[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv(), Astro.locals);
@@ -31,7 +37,12 @@ if (canManage) {
     listStationOptions(db, engr.orgId),
     listCategoryOptions(db, engr.orgId),
   ]);
-  if (!isNew && id) asset = await getAsset(db, engr.orgId, id);
+  if (!isNew && id) {
+    [asset, movements] = await Promise.all([
+      getAsset(db, engr.orgId, id),
+      listAssetMovements(db, engr.orgId, id),
+    ]);
+  }
 }
 const notFound = !isNew && asset === null;
 if (canManage && notFound) Astro.response.status = 404;
@@ -110,6 +121,22 @@ const a = asset;
             ))}
           </select>
         </div>
+        {!isNew && (
+          <div class="engr-field">
+            <label for="movement_reason">
+              Reason for transfer{' '}
+              <span class="engr-field__hint">(required when changing station)</span>
+            </label>
+            <input
+              type="text"
+              id="movement_reason"
+              class="engr-input"
+              name="movement_reason"
+              maxlength="500"
+              placeholder="e.g. transferred for maintenance"
+            />
+          </div>
+        )}
         <div class="engr-field">
           <label for="category_id">
             Category <span class="engr-field__hint">(optional)</span>
@@ -194,6 +221,50 @@ const a = asset;
           </button>
         </div>
       </form>
+    )
+  }
+  {
+    !isNew && canManage && asset && (
+      <section class="engr-panel" style="margin-top:1rem">
+        <h2>Location history</h2>
+        {movements.length === 0 ? (
+          <p class="engr-empty">
+            No recorded movements. Existing assets begin tracking from their next transfer.
+          </p>
+        ) : (
+          <div class="engr-tablewrap">
+            <table class="engr-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Reason</th>
+                  <th>Recorded by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m) => (
+                  <tr>
+                    <td>{m.movedAt.slice(0, 10)}</td>
+                    <td>
+                      {m.fromStation
+                        ? `${m.fromStation}${m.fromRegion ? `, ${m.fromRegion}` : ''}`
+                        : 'Initial placement'}
+                    </td>
+                    <td>
+                      {m.toStation}
+                      {m.toRegion ? `, ${m.toRegion}` : ''}
+                    </td>
+                    <td>{m.reason ?? '—'}</td>
+                    <td>{m.movedBy ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     )
   }
 </EngrLayout>

@@ -26,8 +26,10 @@ const canEngineering = can(Astro.locals, 'bill.approve.engineering');
 const canFinance = can(Astro.locals, 'bill.approve.finance');
 const { id } = Astro.params;
 const errorCode = Astro.url.searchParams.get('error');
+const invoiceError = Astro.url.searchParams.get('invoice_error');
 const done =
   Astro.url.searchParams.get('done') ||
+  Astro.url.searchParams.get('invoice') ||
   Astro.url.searchParams.get('submitted') ||
   Astro.url.searchParams.get('attached');
 
@@ -41,7 +43,7 @@ if (allowed && id) {
   if (bill) {
     const contractorId = await contractorForUser(db, engr.orgId, engr.userId);
     isOwner = contractorId != null && contractorId === bill.contractorId;
-    if (isOwner && bill.status === 'DRAFT')
+    if (isOwner && bill.status === 'DRAFT' && !bill.invoice)
       billable = await listBillableCosts(db, engr.orgId, contractorId!);
   }
 }
@@ -50,9 +52,14 @@ const canSee = bill != null && (!isContractor || isOwner);
 if (allowed && (!bill || !canSee)) Astro.response.status = 404;
 
 const billId = bill?.id ?? '';
-const canAttach = bill != null && isOwner && bill.status === 'DRAFT';
+const canAttach = bill != null && isOwner && bill.status === 'DRAFT' && !bill.invoice;
 const canSubmit =
-  canAttach && bill != null && bill.costs.length > 0 && can(Astro.locals, 'bill.submit');
+  bill != null &&
+  isOwner &&
+  bill.status === 'DRAFT' &&
+  bill.costs.length > 0 &&
+  (!bill.invoiceRequired || bill.invoice != null) &&
+  can(Astro.locals, 'bill.submit');
 const decideLevel =
   bill?.status === 'PENDING_L1_ENG' && canEngineering
     ? 1
@@ -76,6 +83,17 @@ const decideLevel =
     errorCode && (
       <p class="engr-error" role="alert">
         That action could not be completed. Refresh and try again.
+      </p>
+    )
+  }
+  {
+    invoiceError && (
+      <p class="engr-error" role="alert">
+        {invoiceError === 'file_too_large'
+          ? 'Invoice PDF is too large. Choose a file up to 2 MB.'
+          : invoiceError === 'conflict'
+            ? 'This bill already has an invoice, or that invoice number was used before.'
+            : 'Check the invoice number, dates and original PDF, then try again.'}
       </p>
     )
   }
@@ -111,7 +129,98 @@ const decideLevel =
           <dd>{formatMoneyMinor(bill.totalMinor, bill.currency)}</dd>
           <dt>Paid</dt>
           <dd>{formatMoneyMinor(bill.paidMinor, bill.currency)}</dd>
+          <dt>Contractor invoice</dt>
+          <dd>
+            {bill.invoice
+              ? `${bill.invoice.invoiceNo}, due ${bill.invoice.dueDate}`
+              : 'Not recorded'}
+          </dd>
         </dl>
+        {bill.invoiceRequired && !bill.invoice && (
+          <p class="engr-notice">
+            This bill needs the contractor invoice before it can be submitted.
+          </p>
+        )}
+
+        {bill.invoice && (
+          <section class="engr-panel" style="margin-top:0.75rem">
+            <h2>Original contractor invoice</h2>
+            <p>
+              {bill.invoice.invoiceNo} · issued {bill.invoice.issueDate} ·{' '}
+              {formatMoneyMinor(bill.invoice.amountMinor, bill.currency)}
+            </p>
+            <a
+              href={`/api/invoices/${bill.invoice.id}/original`}
+              class="engr-btn engr-btn--secondary"
+            >
+              Download original PDF
+            </a>
+          </section>
+        )}
+
+        {isOwner && bill.status === 'DRAFT' && !bill.invoice && bill.costs.length > 0 && (
+          <section class="engr-panel" style="margin-top:0.75rem">
+            <h2>Add contractor invoice</h2>
+            <p>
+              Finish attaching approved costs first. The invoice amount is taken from this bill:{' '}
+              {formatMoneyMinor(bill.totalMinor, bill.currency)}.
+            </p>
+            <form
+              method="post"
+              action={`/api/invoices?bill=${billId}`}
+              enctype="multipart/form-data"
+              class="engr-form"
+            >
+              <input type="hidden" name="bill_id" value={billId} />
+              <div class="engr-field">
+                <label for="invoice-no">Contractor invoice number</label>
+                <input
+                  id="invoice-no"
+                  class="engr-input"
+                  name="invoice_no"
+                  maxlength="80"
+                  required
+                />
+              </div>
+              <div class="engr-field">
+                <label for="invoice-issued">Issue date</label>
+                <input
+                  id="invoice-issued"
+                  class="engr-input"
+                  type="date"
+                  name="issue_date"
+                  required
+                />
+              </div>
+              <div class="engr-field">
+                <label for="invoice-due">Due date</label>
+                <input id="invoice-due" class="engr-input" type="date" name="due_date" required />
+              </div>
+              <div class="engr-field">
+                <label for="invoice-tax">Supplier tax reference (optional)</label>
+                <input id="invoice-tax" class="engr-input" name="tax_reference" maxlength="100" />
+              </div>
+              <div class="engr-field">
+                <label for="invoice-original">Original invoice PDF (maximum 2 MB)</label>
+                <input
+                  id="invoice-original"
+                  class="engr-input"
+                  type="file"
+                  name="original_pdf"
+                  accept="application/pdf,.pdf"
+                  required
+                />
+              </div>
+              <div class="engr-field">
+                <label for="invoice-notes">Notes (optional)</label>
+                <textarea id="invoice-notes" class="engr-textarea" name="notes" maxlength="1000" />
+              </div>
+              <button type="submit" class="engr-btn engr-btn--primary">
+                Record invoice
+              </button>
+            </form>
+          </section>
+        )}
 
         <section class="engr-panel" aria-labelledby="bill-costs">
           <h2 id="bill-costs">Cost lines</h2>

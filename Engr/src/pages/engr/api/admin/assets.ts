@@ -32,6 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     serialNo: str(body.serial_no).trim() || null,
     installDate: str(body.install_date).trim() || null,
     status: str(body.status).trim() || 'IN_SERVICE',
+    movementReason: str(body.movement_reason).trim().slice(0, 500) || null,
   };
 
   const db = await getDb(getEngrEnv(), locals);
