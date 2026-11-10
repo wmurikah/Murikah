@@ -8,6 +8,7 @@ import type { Client } from '@libsql/client/web';
 export interface Option {
   id: string;
   label: string;
+  affiliateOrgId?: string;
 }
 
 export interface RoleOption {
@@ -18,12 +19,14 @@ export interface RoleOption {
 
 export async function listRegionOptions(db: Client, orgId: string): Promise<Option[]> {
   const res = await db.execute({
-    sql: `SELECT id, name, code FROM regions WHERE org_id = ? ORDER BY name`,
+    sql: `SELECT id, name, code, COALESCE(affiliate_org_id, org_id) AS affiliate_org_id
+            FROM regions WHERE org_id = ? ORDER BY name`,
     args: [orgId],
   });
   return res.rows.map((r) => ({
     id: String(r.id),
     label: r.code === null ? String(r.name) : `${String(r.name)} (${String(r.code)})`,
+    affiliateOrgId: String(r.affiliate_org_id),
   }));
 }
 
