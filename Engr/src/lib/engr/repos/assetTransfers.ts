@@ -28,6 +28,7 @@ export interface TransferRow {
   assetTag: string;
   assetName: string;
   assetSerial: string | null;
+  expectedSerial: string | null;
   fromStationId: string;
   fromStation: string;
   toStationId: string;
@@ -94,6 +95,7 @@ function mapTransfer(r: Record<string, unknown>): TransferRow {
     assetTag: String(r.asset_tag),
     assetName: String(r.asset_name),
     assetSerial: optional(r.asset_serial),
+    expectedSerial: optional(r.expected_serial),
     fromStationId: String(r.from_station_id),
     fromStation: String(r.from_station),
     toStationId: String(r.to_station_id),
@@ -173,7 +175,7 @@ export async function listTransferDestinations(db: Client, actor: TransferActor)
   return result.rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
 }
 
-async function hasOpenWork(db: Client, orgId: string, assetId: string): Promise<boolean> {
+async function hasOpenWork(db: Pick<Client, 'execute'>, orgId: string, assetId: string): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT
        (SELECT COUNT(*) FROM service_requests sr
@@ -290,9 +292,10 @@ export async function transitionTransfer(
   const note = (input.note ?? '').trim();
   if ((action === 'dispatch' || action === 'receive') && (!condition || condition.length > 500))
     return { ok: false, code: 'invalid', message: 'Record the physical condition (maximum 500 characters).' };
-  if ((action === 'dispatch' || action === 'receive') && tr.assetSerial &&
-      serial.toLocaleLowerCase() !== tr.assetSerial.toLocaleLowerCase())
+  if ((action === 'dispatch' || action === 'receive') && tr.expectedSerial &&
+      serial.toLocaleLowerCase() !== tr.expectedSerial.toLocaleLowerCase())
     return { ok: false, code: 'invalid', message: 'The physical serial number does not match the asset register.' };
+  if (action === 'reject' && !note) return { ok: false, code: 'invalid', message: 'Record a rejection reason.' };
   if (note.length > 500)
     return { ok: false, code: 'invalid', message: 'Notes cannot exceed 500 characters.' };
   if (action === 'dispatch' || action === 'receive') {
@@ -351,7 +354,7 @@ export async function transitionTransfer(
         return { ok: false, code: 'conflict', message: 'The receiving station is no longer active.' };
       }
       // A late work request cannot silently pass the physical handover.
-      if (await hasOpenWork(tx as Client, actor.orgId, tr.assetId)) {
+      if (await hasOpenWork(tx, actor.orgId, tr.assetId)) {
         await tx.rollback();
         return { ok: false, code: 'conflict', message: 'Open repair work appeared before receipt.' };
       }
