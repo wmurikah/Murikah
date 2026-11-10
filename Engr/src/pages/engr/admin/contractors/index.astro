@@ -30,13 +30,14 @@ if (allowed) {
       <h1>Contractors</h1>
       <p class="engr-lead">Firms that carry out work and the stations and categories they cover.</p>
     </div>
-    {
-      canManage && (
-        <a href="/admin/contractors/new" class="engr-btn engr-btn--primary">
-          New contractor
-        </a>
-      )
-    }
+    <div class="engr-actionbar">
+      {can(Astro.locals, 'technicians.view') && (
+        <a href="/admin/technicians" class="engr-btn engr-btn--secondary">Technicians</a>
+      )}
+      {canManage && (
+        <a href="/admin/contractors/new" class="engr-btn engr-btn--primary">New contractor</a>
+      )}
+    </div>
   </div>
 
   {

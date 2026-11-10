@@ -3,6 +3,7 @@ export const prerender = false;
 
 /** Engineer work-order list: all org work orders, filterable by status. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import ActionQueueLink from '@/components/engr/ActionQueueLink.astro';
 import WorkOrderList from '@/components/engr/WorkOrderList.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -20,6 +21,8 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
+const canConfirm = allowed && actorDataScope(engr.roles) === 'station' &&
+  (can(Astro.locals, 'arrival.confirm') || can(Astro.locals, 'jobcard.confirm'));
 const status = Astro.url.searchParams.get('status') ?? undefined;
 const station = Astro.url.searchParams.get('station') ?? undefined;
 const filtered = Boolean(status || station);
@@ -49,6 +52,7 @@ if (allowed) {
       <h1>Work orders</h1>
       <p class="engr-lead">All work orders across your organisation.</p>
     </div>
+    {canConfirm && <ActionQueueLink href="/station/confirmations" label="Station confirmations" countKeys={['stationConfirmations']} />}
   </div>
 
   {
