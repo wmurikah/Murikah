@@ -34,7 +34,7 @@ if (allowed) {
 
   {
     !allowed ? (
-      <p class="engr-error" role="alert">
+      <p class={canProcure ? 'engr-empty' : 'engr-error'} role={canProcure ? undefined : 'alert'}>
         {canProcure
           ? 'You may review procurement approvals above, but cannot view the full RFQ register.'
           : 'You do not have access to RFQs.'}
