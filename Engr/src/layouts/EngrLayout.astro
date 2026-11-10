@@ -6,12 +6,12 @@
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
  * When signed in, a persistent left sidebar groups the destinations (Overview,
- * Operations, Finance, Setup) into collapsible sections, each with a category
+ * Operations, Finance, Setup, System Settings) into collapsible sections, each with a category
  * icon, and shows the organisation name and a notification bell at the top. Only
  * items the user holds a permission for are rendered, so a contractor sees a
- * much shorter menu than an owner. Group expand/collapse persists across
- * navigations; the active item and its group are marked. On narrow screens the
- * sidebar is a drawer; without JavaScript the nav stays open and usable.
+ * much shorter menu than an owner. All groups start closed and open when their
+ * heading is selected; the active group is marked without forcing it open. On
+ * narrow screens the sidebar is a drawer. Native details work without JavaScript.
  *
  * Navigation uses Astro view transitions with a top progress bar, so a click
  * gives feedback within a frame and never freezes. A single-signal guard
@@ -156,10 +156,6 @@ const rawGroups: NavGroup[] = [
     label: 'Setup',
     icon: 'setup',
     items: [
-      // Affiliates are the cross-organisation structure; shown only to a platform owner.
-      isPlatformOwner && has('org.manage')
-        ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
-        : null,
       has('stations.view')
         ? { href: '/admin/stations', label: 'Stations', icon: 'stations' }
         : null,
@@ -173,12 +169,22 @@ const rawGroups: NavGroup[] = [
       has('technicians.view')
         ? { href: '/admin/technicians', label: 'Technicians', icon: 'technicians' }
         : null,
-      // Engineer-in-charge routing config; an org settings concern.
+      // Engineer-in-charge routing is operational setup.
       has('engineer_assignments.view')
         ? { href: '/admin/engineers', label: 'Engineers in charge', icon: 'engineers' }
         : null,
       has('slas.view') ? { href: '/admin/slas', label: 'SLAs', icon: 'slas' } : null,
       has('rates.view') ? { href: '/admin/rate-cards', label: 'Rate cards', icon: 'rates' } : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+  {
+    label: 'System Settings',
+    icon: 'settings',
+    items: [
+      // Organisation hierarchy and access control belong with system policy.
+      isPlatformOwner && has('org.manage')
+        ? { href: '/admin/affiliates', label: 'Affiliates', icon: 'affiliates' }
+        : null,
       has('users.view') ? { href: '/admin/users', label: 'Users', icon: 'users' } : null,
       has('roles.view') || has('roles.manage')
         ? { href: '/admin/roles', label: 'Roles', icon: 'roles' }
@@ -296,9 +302,8 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
               {groups.map((group) => (
                 <details
                   class="engr-navgroup"
-                  data-navgroup={group.label}
+                  name="engr-nav"
                   data-active={groupActive(group) ? 'yes' : undefined}
-                  open
                 >
                   <summary class="engr-navgroup__summary">
                     <EngrIcon name={group.icon} class="engr-navgroup__icon" size={16} />
@@ -419,23 +424,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         true,
       );
 
-      // ---- Sidebar drawer + collapsible group persistence + bell polling ------
-      const STORE_KEY = 'engr:navgroups';
-      function readCollapsed(): Set<string> {
-        try {
-          return new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
-        } catch {
-          return new Set();
-        }
-      }
-      function writeCollapsed(set: Set<string>) {
-        try {
-          localStorage.setItem(STORE_KEY, JSON.stringify([...set]));
-        } catch {
-          /* storage may be unavailable; collapse then resets per navigation */
-        }
-      }
-
+      // ---- Sidebar drawer + bell polling ------------------------------------
       let bellTimer: number | undefined;
       function enhance() {
         const shell = document.querySelector('.engr-shell');
@@ -460,21 +449,6 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         );
         scrim?.addEventListener('click', close);
         shell.querySelectorAll('.engr-navlink').forEach((a) => a.addEventListener('click', close));
-
-        // Restore collapsed groups (the active group is always left open), and
-        // persist changes as the user toggles them.
-        const collapsed = readCollapsed();
-        shell.querySelectorAll<HTMLDetailsElement>('.engr-navgroup').forEach((group) => {
-          const name = group.getAttribute('data-navgroup') || '';
-          const isActive = group.hasAttribute('data-active');
-          if (collapsed.has(name) && !isActive) group.open = false;
-          group.addEventListener('toggle', () => {
-            const set = readCollapsed();
-            if (group.open) set.delete(name);
-            else set.add(name);
-            writeCollapsed(set);
-          });
-        });
       }
 
       let bellRefreshing = false;
