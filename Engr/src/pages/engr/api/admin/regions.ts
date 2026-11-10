@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const id = str(body.id).trim();
   const input: RegionInput = {
     name: str(body.name).trim(),
-    affiliateOrgId: str(body.affiliate_org_id).trim() || engr.orgId,
+    affiliateOrgId: str(body.affiliate_org_id).trim(),
   };
 
   const db = await getDb(getEngrEnv(), locals);
