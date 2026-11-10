@@ -1,5 +1,5 @@
 -- Engineering Rhythm / Turso migration 010 (new install after migration 009)
--- The Hassan / Hass Group tenant data is preserved: regions.org_id, stations.org_id,
+-- The Hass Group tenant data is preserved: regions.org_id, stations.org_id,
 -- station.region_id and every existing record ID are NEVER changed by this script.
 -- Region affiliate selection is independent classification stored in affiliate_org_id.
 --
