@@ -8,7 +8,7 @@ This release adds migration `008`. Apply it to Turso **before** deploying the ne
 2. Run `PRAGMA table_info(bills);`. If `invoice_required` is absent, run the first statement below once. Turso Web may show one result for each statement.
 3. Run the table and index statements below. They use `IF NOT EXISTS` and are safe to repeat.
 4. After every statement succeeds, insert the `008` history row. Do not record `008` before its objects exist.
-5. Verify the final queries, then deploy the Worker build containing this change.
+5. Verify the final queries, then deploy the Worker build containing this change. Open `/api/health` and confirm `reportingSchema` reads `ok`.
 
 ```sql
 ALTER TABLE bills ADD COLUMN invoice_required INTEGER NOT NULL DEFAULT 0 CHECK (invoice_required IN (0,1));

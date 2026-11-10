@@ -19,22 +19,38 @@ export const GET: APIRoute = async () => {
   try {
     const engrEnv = getEngrEnv();
     const db = await getDb(engrEnv);
-    const schema = await db.execute({
-      sql: `SELECT COUNT(*) AS n FROM sqlite_schema
+    const [schema, reportSchema, billColumns] = await db.batch(
+      [
+        {
+          sql: `SELECT COUNT(*) AS n FROM sqlite_schema
              WHERE type = 'table' AND name IN
                    ('notifications', 'org_settings', 'auth_tokens', 'user_mfa', 'mfa_recovery_codes',
                     'auth_sessions', 'auth_login_limits', 'auth_login_events')`,
-      args: [],
-    });
-    if (Number(schema.rows[0]?.n ?? 0) !== 8) {
+          args: [],
+        },
+        {
+          sql: `SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table'
+            AND name IN ('supplier_invoices', 'asset_movements')`,
+          args: [],
+        },
+        { sql: `PRAGMA table_info(bills)`, args: [] },
+      ],
+      'read',
+    );
+    const coreReady = Number(schema.rows[0]?.n ?? 0) === 8;
+    const reportsReady =
+      Number(reportSchema.rows[0]?.n ?? 0) === 2 &&
+      billColumns.rows.some((row) => String(row.name) === 'invoice_required');
+    if (!coreReady || !reportsReady) {
       return reply(
         {
           status: 'error',
           checks: {
             application: 'ok',
             database: 'reachable',
-            notificationSchema: 'missing',
-            authenticationSchema: 'missing',
+            notificationSchema: coreReady ? 'ok' : 'missing',
+            authenticationSchema: coreReady ? 'ok' : 'missing',
+            reportingSchema: reportsReady ? 'ok' : 'missing',
           },
         },
         503,
@@ -51,6 +67,7 @@ export const GET: APIRoute = async () => {
           database: 'reachable',
           notificationSchema: 'ok',
           authenticationSchema: 'ok',
+          reportingSchema: 'ok',
           mfaEncryption: mfaReady ? 'ready' : 'missing',
           authMessageEncryption: authMailReady ? 'ready' : 'missing',
           emailDelivery: delivery.email.ready ? 'ready' : 'held',
