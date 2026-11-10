@@ -25,6 +25,7 @@ import { ClientRouter } from 'astro:transitions';
 import EngrIcon from '@/components/engr/EngrIcon.astro';
 import { orgDisplayName } from '@engr/format';
 import { actorDataScope } from '@engr/auth/dataScope';
+import type { PendingNavKey } from '@engr/repos/navigationPending';
 
 interface Props {
   title: string;
@@ -55,11 +56,7 @@ const switchable = engr?.switchable ?? [];
 const actingId = engr?.orgId ?? '';
 const showSwitcher = isPlatformOwner && switchable.length > 1;
 
-// The badge is nonessential to the page's first render. Its existing client
-// refresh fills this in after navigation instead of blocking every page on a
-// separate Turso query.
-const unread = 0;
-const unreadLabel = unread > 99 ? '99+' : String(unread);
+// Sidebar work counts load after the first paint rather than delaying every page.
 
 // Role-aware destinations: staff land on the shared queues, a contractor or
 // technician on their own portal.
@@ -98,6 +95,7 @@ interface NavItem {
   label: string;
   icon: string;
   match?: string[];
+  badgeKey?: PendingNavKey;
 }
 interface NavGroup {
   label: string;
@@ -113,51 +111,36 @@ const rawGroups: NavGroup[] = [
       has('reports.view')
         ? { href: '/', label: 'Dashboard', icon: 'dashboard', match: ['/'] }
         : null,
-      { href: '/notifications', label: 'Notifications', icon: 'bell' },
     ].filter((i): i is NavItem => i !== null),
   },
   {
     label: 'Operations',
     icon: 'operations',
     items: [
-      has('requests.view') ? { href: '/requests', label: 'Requests', icon: 'requests' } : null,
+      has('requests.view') ? { href: '/requests', label: 'Requests', icon: 'requests', badgeKey: 'requests' } : null,
       workOrdersHref
         ? {
             href: workOrdersHref,
             label: 'Work orders',
             icon: 'workorders',
             match: ['/workorders', workOrdersHref],
+            badgeKey: 'workorders',
           }
         : null,
       rfqHref
-        ? { href: rfqHref, label: 'RFQs', icon: 'rfqs', match: ['/rfqs', '/contractor/rfqs'] }
+        ? { href: rfqHref, label: 'RFQs', icon: 'rfqs', match: ['/rfqs', '/contractor/rfqs'], badgeKey: 'rfqs' }
         : null,
-      has('pm.view') ? { href: '/pm', label: 'Maintenance', icon: 'maintenance' } : null,
+      has('pm.view') ? { href: '/pm', label: 'Maintenance', icon: 'maintenance', badgeKey: 'maintenance' } : null,
       lpoHref
-        ? { href: lpoHref, label: 'LPOs', icon: 'lpos', match: ['/lpos', '/contractor/lpos'] }
+        ? { href: lpoHref, label: 'LPOs', icon: 'lpos', match: ['/lpos', '/contractor/lpos'], badgeKey: 'lpos' }
         : null,
-    ].filter((i): i is NavItem => i !== null),
-  },
-  {
-    label: 'Action Centre',
-    icon: 'actions',
-    items: [
       dataScope === 'station' &&
       has('workorder.view') &&
       (has('arrival.confirm') || has('jobcard.confirm'))
-        ? { href: '/station/confirmations', label: 'Station confirmations', icon: 'workorders' }
+        ? { href: '/station/confirmations', label: 'Station confirmations', icon: 'workorders', badgeKey: 'stationConfirmations' }
         : null,
       has('rfq.award')
-        ? { href: '/procurement/approvals', label: 'Procurement approvals', icon: 'rfqs' }
-        : null,
-      has('cost.approve')
-        ? { href: '/mileage/approvals', label: 'Mileage approvals', icon: 'costs' }
-        : null,
-      has('cost.approve')
-        ? { href: '/costs/approvals', label: 'Cost approvals', icon: 'costs' }
-        : null,
-      has('bill.approve.engineering') || has('bill.approve.finance')
-        ? { href: '/bills/approvals', label: 'Bill approvals', icon: 'bills' }
+        ? { href: '/procurement/approvals', label: 'Procurement approvals', icon: 'rfqs', badgeKey: 'procurementApprovals' }
         : null,
     ].filter((i): i is NavItem => i !== null),
   },
@@ -166,14 +149,23 @@ const rawGroups: NavGroup[] = [
     icon: 'finance',
     items: [
       costsHref
-        ? { href: costsHref, label: 'Costs', icon: 'costs', match: ['/costs', '/contractor/costs'] }
+        ? { href: costsHref, label: 'Costs', icon: 'costs', match: ['/costs', '/contractor/costs'], badgeKey: 'costs' }
         : null,
       billsHref
-        ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'] }
+        ? { href: billsHref, label: 'Bills', icon: 'bills', match: ['/bills', '/contractor/bills'], badgeKey: 'bills' }
         : null,
       has('bill.view') ? { href: '/invoices', label: 'Invoices', icon: 'bills' } : null,
       has('payment.view') || has('payment.record')
-        ? { href: '/payments', label: 'Payments', icon: 'payments' }
+        ? { href: '/payments', label: 'Payments', icon: 'payments', badgeKey: 'payments' }
+        : null,
+      has('cost.approve')
+        ? { href: '/mileage/approvals', label: 'Mileage approvals', icon: 'costs', badgeKey: 'mileageApprovals' }
+        : null,
+      has('cost.approve')
+        ? { href: '/costs/approvals', label: 'Cost approvals', icon: 'costs', badgeKey: 'costApprovals' }
+        : null,
+      has('bill.approve.engineering') || has('bill.approve.finance')
+        ? { href: '/bills/approvals', label: 'Bill approvals', icon: 'bills', badgeKey: 'billApprovals' }
         : null,
     ].filter((i): i is NavItem => i !== null),
   },
@@ -225,7 +217,7 @@ const rawGroups: NavGroup[] = [
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
       has('notifications.monitor')
-        ? { href: '/ops/notifications', label: 'Delivery monitor', icon: 'bell' }
+        ? { href: '/ops/notifications', label: 'Delivery monitor', icon: 'bell', badgeKey: 'deliveryMonitor' }
         : null,
       isPlatformOwner
         ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
@@ -274,18 +266,6 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
             <a href="/" class="engr-appbar__org">
               {orgName}
             </a>
-            <a
-              href="/notifications"
-              class="engr-bell"
-              data-bell
-              data-unread={unread}
-              aria-label={unread > 0 ? `Notifications, ${unreadLabel} unread` : 'Notifications'}
-            >
-              <EngrIcon name="bell" />
-              <span class="engr-bell__badge" data-bell-badge hidden={unread === 0}>
-                {unreadLabel}
-              </span>
-            </a>
           </div>
 
           <div class="engr-navscrim" data-navscrim hidden />
@@ -299,18 +279,6 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                   </span>
                   <span class="engr-orgid__text">
                     <span class="engr-orgid__name">{orgName}</span>
-                  </span>
-                </a>
-                <a
-                  href="/notifications"
-                  class="engr-bell engr-bell--sidebar"
-                  data-bell
-                  data-unread={unread}
-                  aria-label={unread > 0 ? `Notifications, ${unreadLabel} unread` : 'Notifications'}
-                >
-                  <EngrIcon name="bell" />
-                  <span class="engr-bell__badge" data-bell-badge hidden={unread === 0}>
-                    {unreadLabel}
                   </span>
                 </a>
               </div>
@@ -340,12 +308,14 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
               {groups.map((group) => (
                 <details
                   class="engr-navgroup"
+                  data-nav-group
                   name="engr-nav"
                   data-active={groupActive(group) ? 'yes' : undefined}
                 >
                   <summary class="engr-navgroup__summary">
                     <EngrIcon name={group.icon} class="engr-navgroup__icon" size={16} />
                     <span class="engr-navgroup__label">{group.label}</span>
+                    <span class="engr-navcount" data-nav-group-count hidden aria-hidden="true" />
                     <span class="engr-navgroup__chevron" aria-hidden="true" />
                   </summary>
                   <ul class="engr-navgroup__list">
@@ -354,10 +324,14 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                         <a
                           href={item.href}
                           class="engr-navlink"
+                          data-nav-label={item.label}
                           aria-current={activeItem(item) ? 'page' : undefined}
                         >
                           <EngrIcon name={item.icon} class="engr-navlink__icon" size={16} />
-                          <span>{item.label}</span>
+                          <span class="engr-navlink__label">{item.label}</span>
+                          {item.badgeKey && (
+                            <span class="engr-navcount" data-nav-key={item.badgeKey} data-nav-count hidden aria-hidden="true" />
+                          )}
                         </a>
                       </li>
                     ))}
@@ -462,14 +436,13 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         true,
       );
 
-      // ---- Sidebar drawer + bell polling ------------------------------------
-      let bellTimer: number | undefined;
+      // ---- Sidebar drawer + user-specific pending work -----------------------
+      let pendingTimer: number | undefined;
+      let pendingRefreshing = false;
       function enhance() {
         const shell = document.querySelector('.engr-shell');
         if (!shell) return;
         shell.classList.add('is-enhanced');
-
-        // Drawer (narrow screens).
         const btn = shell.querySelector<HTMLButtonElement>('[data-navtoggle]');
         const scrim = shell.querySelector<HTMLElement>('[data-navscrim]');
         const close = () => {
@@ -489,51 +462,62 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         shell.querySelectorAll('.engr-navlink').forEach((a) => a.addEventListener('click', close));
       }
 
-      let bellRefreshing = false;
-      async function refreshBell() {
-        if (document.hidden || bellRefreshing) return;
-        bellRefreshing = true;
+      const badgeText = (n: number) => (n > 99 ? '99+' : String(n));
+      async function refreshPending() {
+        if (document.hidden || pendingRefreshing) return;
+        const shell = document.querySelector('.engr-shell');
+        if (!shell) return;
+        pendingRefreshing = true;
         try {
-          const res = await fetch('/api/notifications/count', {
+          const response = await fetch('/api/navigation/pending', {
             headers: { accept: 'application/json' },
+            cache: 'no-store',
           });
-          if (!res.ok) return;
-          const data = (await res.json()) as { count?: number };
-          const n = Number(data.count ?? 0);
-          document.querySelectorAll<HTMLElement>('[data-bell]').forEach((bell) => {
-            bell.setAttribute('data-unread', String(n));
-            bell.setAttribute(
-              'aria-label',
-              n > 0 ? `Notifications, ${n > 99 ? '99+' : n} unread` : 'Notifications',
-            );
-            const badge = bell.querySelector<HTMLElement>('[data-bell-badge]');
-            if (badge) {
-              badge.textContent = n > 99 ? '99+' : String(n);
-              badge.toggleAttribute('hidden', n === 0);
+          if (!response.ok || shell !== document.querySelector('.engr-shell')) return;
+          const body = (await response.json()) as { counts?: Record<string, number> };
+          if (shell !== document.querySelector('.engr-shell')) return;
+          const counts = body.counts ?? {};
+          shell.querySelectorAll<HTMLElement>('[data-nav-key]').forEach((badge) => {
+            const raw = Number(counts[badge.dataset.navKey ?? ''] ?? 0);
+            const n = Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
+            badge.dataset.navValue = String(n);
+            badge.textContent = badgeText(n);
+            badge.title = n ? n + ' pending' : '';
+            badge.toggleAttribute('hidden', n === 0);
+            const link = badge.closest<HTMLAnchorElement>('[data-nav-label]');
+            if (link) {
+              const label = link.dataset.navLabel ?? '';
+              link.setAttribute('aria-label', n ? label + ', ' + n + ' pending' : label);
             }
           });
+          shell.querySelectorAll<HTMLElement>('[data-nav-group]').forEach((group) => {
+            let total = 0;
+            group.querySelectorAll<HTMLElement>('[data-nav-key]').forEach((badge) => {
+              total += Number(badge.dataset.navValue ?? 0);
+            });
+            const badge = group.querySelector<HTMLElement>('[data-nav-group-count]');
+            if (!badge) return;
+            badge.textContent = badgeText(total);
+            badge.title = total ? total + ' pending in section' : '';
+            badge.toggleAttribute('hidden', total === 0);
+          });
         } catch {
-          /* offline or transient; leave the last known count */
+          // A transient failure leaves the last known counts intact.
         } finally {
-          bellRefreshing = false;
+          pendingRefreshing = false;
         }
       }
 
-      function startBellPolling() {
-        if (bellTimer) window.clearInterval(bellTimer);
-        // A light interval; refreshed on navigation too.
-        bellTimer = window.setInterval(refreshBell, 60000);
-      }
-
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) void refreshBell();
+        if (!document.hidden) void refreshPending();
       });
-
       document.addEventListener('astro:page-load', () => {
         enhance();
-        refreshBell();
-        startBellPolling();
+        void refreshPending();
+        if (pendingTimer) window.clearInterval(pendingTimer);
+        pendingTimer = window.setInterval(refreshPending, 60000);
       });
+
     </script>
   </body>
 </html>
