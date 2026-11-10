@@ -1,0 +1,44 @@
+---
+/**
+ * An actionable queue within its parent register, not another sidebar entry.
+ * Reuses the same permission-filtered pending counts fetched by EngrLayout.
+ */
+interface Props {
+  href: string;
+  label: string;
+  countKeys: string[];
+}
+const { href, label, countKeys } = Astro.props;
+---
+
+<a
+  href={href}
+  class="engr-btn engr-btn--secondary engr-btn--with-count"
+  data-pending-action-keys={countKeys.join(',')}
+  data-pending-action-label={label}
+>
+  {label}
+  <span class="engr-navcount" data-pending-action-count hidden aria-hidden="true" />
+</a>
+
+<script>
+  // The sidebar owns the single API request and emits refreshed counts.
+  // This listener also works after Astro view-transition page swaps.
+  document.addEventListener('engr:pending-counts', (event: Event) => {
+    const counts = (event as CustomEvent<Record<string, number>>).detail ?? {};
+    document.querySelectorAll<HTMLElement>('[data-pending-action-keys]').forEach((link) => {
+      const keys = (link.dataset.pendingActionKeys ?? '').split(',').filter(Boolean);
+      const total = keys.reduce((sum, key) => {
+        const raw = Number(counts[key] ?? 0);
+        return sum + (Number.isSafeInteger(raw) && raw > 0 ? raw : 0);
+      }, 0);
+      const badge = link.querySelector<HTMLElement>('[data-pending-action-count]');
+      if (!badge) return;
+      badge.textContent = total > 99 ? '99+' : String(total);
+      badge.title = total ? total + ' items awaiting your action' : '';
+      badge.toggleAttribute('hidden', total === 0);
+      const label = link.dataset.pendingActionLabel ?? 'Action queue';
+      link.setAttribute('aria-label', total ? label + ', ' + total + ' pending' : label);
+    });
+  });
+</script>
