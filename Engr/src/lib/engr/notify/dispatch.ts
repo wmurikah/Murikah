@@ -27,6 +27,7 @@ import type { DeliveryEnv } from './env';
 import { deliveryReadiness } from './readiness.ts';
 import { channelFor } from './channels/registry.ts';
 import type { DeliveryRecipient, OutboundNotification } from './channels/types';
+import { recordNotificationEvent, type NotificationAuditEvent } from './deliveryAudit';
 import {
   authMessageForDelivery,
   authMessageKeyReady,
@@ -249,6 +250,18 @@ export async function runDispatch(
     const id = String(row.id);
     const orgId = String(row.org_id);
     const channel = String(row.channel);
+    const auditDelivery = async (
+      event: NotificationAuditEvent,
+      status: 'SENT' | 'FAILED' | 'QUEUED',
+      reason?: string | null,
+    ) => {
+      try {
+        await recordNotificationEvent(db, { notificationId: id, orgId, event, status, reason });
+      } catch (error) {
+        // Do not retry a message already accepted by its delivery provider.
+        console.error('[engr.delivery.audit] event could not be recorded', id, event, error);
+      }
+    };
     const authTemplate = authMessageTemplate(row.template_key);
     if (authTemplate && !authMessageKeyReady(env.authMessageKey)) {
       summary.held += 1;
@@ -285,6 +298,7 @@ export async function runDispatch(
         sql: `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ?`,
         args: ['recipient not found', id],
       });
+      await auditDelivery('failed', 'FAILED', 'recipient not found');
       continue;
     }
 
@@ -308,6 +322,7 @@ export async function runDispatch(
           args: ['Authentication link could not be verified; request a new one.', id],
         });
         await redactAuthMessage(db, id);
+        await auditDelivery('failed', 'FAILED', 'Authentication link could not be verified; request a new one.');
         continue;
       }
       body = clear;
@@ -347,6 +362,7 @@ export async function runDispatch(
         sql: `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ?`,
         args: [`no adapter for channel ${effectiveKey}`, id],
       });
+      await auditDelivery('failed', 'FAILED', `no adapter for channel ${effectiveKey}`);
       continue;
     }
 
@@ -364,6 +380,7 @@ export async function runDispatch(
       if (meteredSms && effectiveKey === 'SMS') {
         await bumpSmsUsage(orgId, policy);
       }
+      await auditDelivery('sent', 'SENT', errorNote);
     } else if (result.outcome === 'deferred') {
       summary.held += 1;
       await db.execute({
@@ -374,12 +391,14 @@ export async function runDispatch(
           id,
         ],
       });
+      await auditDelivery('deferred', 'QUEUED', [note, result.message].filter(Boolean).join('; '));
     } else {
       summary.failed += 1;
       await db.execute({
         sql: `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ?`,
         args: [[note, result.message].filter(Boolean).join('; ') || 'send failed', id],
       });
+      await auditDelivery('failed', 'FAILED', [note, result.message].filter(Boolean).join('; ') || 'send failed');
     }
   }
 
