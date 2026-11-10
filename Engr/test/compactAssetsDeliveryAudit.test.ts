@@ -62,13 +62,16 @@ test('one sidebar Assets entry and in-page bubble reuse the existing pending cou
   const layout = readFileSync(new URL('../src/layouts/EngrLayout.astro', import.meta.url), 'utf8');
   const assets = readFileSync(new URL('../src/pages/engr/admin/assets/index.astro', import.meta.url), 'utf8');
   const audit = readFileSync(new URL('../src/pages/engr/admin/audit/index.astro', import.meta.url), 'utf8');
+  const action = readFileSync(new URL('../src/components/engr/ActionQueueLink.astro', import.meta.url), 'utf8');
   const requests = readFileSync(new URL('../src/lib/engr/repos/navigationPending.ts', import.meta.url), 'utf8');
   assert.match(layout, /label: 'Assets', icon: 'assets', badgeKey: 'assetTransfers'/);
   assert.doesNotMatch(layout, /label: 'Asset transfers'/);
   assert.doesNotMatch(layout, /label: 'Delivery monitor'/);
   assert.match(layout, /engr:pending-counts/);
-  assert.match(assets, /data-asset-transfer-count/);
-  assert.match(assets, /addEventListener\('engr:pending-counts'/);
+  assert.match(assets, /<ActionQueueLink href="\/admin\/assets\/transfers"/);
+  assert.match(assets, /countKeys=\{\['assetTransfers'\]\}/);
+  assert.match(action, /data-pending-action-count/);
+  assert.match(action, /addEventListener\('engr:pending-counts'/);
   assert.match(audit, /filter=delivery/);
   assert.match(audit, /notifications.monitor/);
   assert.doesNotMatch(requests, /deliveryMonitor/);
