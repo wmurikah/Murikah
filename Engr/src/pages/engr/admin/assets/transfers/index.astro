@@ -1,0 +1,59 @@
+---
+export const prerender = false;
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import {
+  listTransfers, availableTransferActions, type TransferRow,
+} from '@engr/repos/assetTransfers';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const actor = { orgId: engr.orgId, userId: engr.userId, roles: engr.roles, perms: engr.perms };
+const allowed = actor.perms.some((p) => p.startsWith('assets.transfer.'));
+const canRequest = actor.perms.includes('assets.transfer.request');
+let rows: TransferRow[] = [];
+if (allowed) rows = await listTransfers(await getDb(getEngrEnv(), Astro.locals), actor);
+---
+
+<EngrLayout title="Asset transfers">
+  <div class="engr-adminbar">
+    <div>
+      <h1>Asset transfers</h1>
+      <p class="engr-lead">Request, approve, dispatch and confirm receipt of equipment across stations.</p>
+    </div>
+    {canRequest && <a href="/admin/assets/transfers/new" class="engr-btn engr-btn--primary">Request transfer</a>}
+  </div>
+  {!allowed ? (
+    <p class="engr-error" role="alert">You do not have permission to view asset transfers.</p>
+  ) : rows.length === 0 ? (
+    <p class="engr-empty">No asset transfers yet.</p>
+  ) : (
+    <div class="engr-tablewrap">
+      <table class="engr-table" aria-label="Asset transfers">
+        <thead>
+          <tr>
+            <th>Asset</th><th>From station</th><th>To station</th>
+            <th>Requested</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td><a href={`/admin/assets/transfers/${r.id}`}>{r.assetTag} - {r.assetName}</a></td>
+              <td>{r.fromStation}</td>
+              <td>{r.toStation}</td>
+              <td><time datetime={r.requestedAt}>{r.requestedAt.slice(0, 10)}</time></td>
+              <td><span class="engr-status">{r.status}</span></td>
+              <td>
+                {availableTransferActions(actor, r).length
+                  ? <a href={`/admin/assets/transfers/${r.id}`}>Review / act</a>
+                  : <a href={`/admin/assets/transfers/${r.id}`}>View history</a>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</EngrLayout>
