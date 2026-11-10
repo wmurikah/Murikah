@@ -199,8 +199,10 @@ if (allowed) {
   // Keep the visible asset list consistent with the selected station.
   // The API independently validates the relationship against the database.
   document.addEventListener('astro:page-load', () => {
-    const station = document.querySelector<HTMLSelectElement>('#station');
-    const asset = document.querySelector<HTMLSelectElement>('#asset');
+    // Cloudflare's DOM typings are not compatible with the querySelector<T>
+    // Element constraint here. Use a checked lookup and a narrow DOM assertion.
+    const station = document.getElementById('station') as unknown as HTMLSelectElement | null;
+    const asset = document.getElementById('asset') as unknown as HTMLSelectElement | null;
     if (!station || !asset) return;
     const filter = () => {
       for (const option of Array.from(asset.options)) {
