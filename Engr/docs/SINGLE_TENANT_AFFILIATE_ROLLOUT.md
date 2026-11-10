@@ -3,10 +3,10 @@
 ## Confirmed model and intentional boundary
 
 An Engineering tenant is the TOP-LEVEL organisation row:
-\`organisations.parent_org_id IS NULL\`.
+`organisations.parent_org_id IS NULL`.
 
 **Hass Group** is the parent tenant. Hass Kenya, Hass Uganda, Fleet Kenya,
-etc. are affiliates recorded as child rows with \`parent_org_id = Hass Group.id\`.
+etc. are affiliates recorded as child rows with `parent_org_id = Hass Group.id`.
 The existing platform-owner "Acting organisation" switcher now lists only
 active TOP-LEVEL tenants. It does not list the Hass subsidiaries. If the
 system has only one active top-level tenant, the switcher is hidden.
@@ -14,10 +14,10 @@ system has only one active top-level tenant, the switcher is hidden.
 The Affiliate dropdown in Regions and Stations is distinct from tenant
 ownership:
 
-- \`regions.org_id\`, \`stations.org_id\` are tenant/data-owner IDs and are not
+- `regions.org_id`, `stations.org_id` are tenant/data-owner IDs and are not
   changed by these forms or the new migration.
-- \`regions.affiliate_org_id\` (migration 010) and
-  \`stations.affiliate_org_id\` (migration **011**) classify those records
+- `regions.affiliate_org_id` (migration 010) and
+  `stations.affiliate_org_id` (migration **011**) classify those records
   within the existing tenant.
 - A region can only be assigned to the parent tenant or its active child
   affiliates, according to the acting user's existing permissions.
@@ -38,7 +38,7 @@ grant all subsidiary users group-wide access. Existing Hass Group users
 retain their own role-based access to the Hass-owned dataset.
 Legacy users created inside a child organisation are not automatically
 moved or elevated to Hass Group. If historical operational records or
-users already exist with a child \`org_id\`, review those records and
+users already exist with a child `org_id`, review those records and
 perform a separate authorised identity/data consolidation; do not
 reparent their foreign keys by a blanket SQL update.
 
@@ -48,17 +48,17 @@ reparent their foreign keys by a blanket SQL update.
 2. Confirm migrations **009 and 010** were applied and **011 is absent**.
    If 010 is absent, apply and verify the already released migration 010
    first, using its provided Turso SQL file.
-3. Use \`cd Engr && pnpm db:apply\` with the configured Engr Turso
+3. Use `cd Engr && pnpm db:apply` with the configured Engr Turso
    credentials, OR run the commands in
-   \`Engr/docs/sql/011_station_affiliates.sql\` from Turso Web in order.
-   The Web SQL \`ALTER TABLE\` is intentionally NOT repeatable: run it only
-   if \`PRAGMA table_info(stations)\` does not already show
-   \`affiliate_org_id\`.
-4. Verify \`schema_migrations.id='011'\`, both affiliation checks return
-   zero, and \`PRAGMA foreign_key_check\` returns no rows.
+   `Engr/docs/sql/011_station_affiliates.sql` from Turso Web in order.
+   The Web SQL `ALTER TABLE` is intentionally NOT repeatable: run it only
+   if `PRAGMA table_info(stations)` does not already show
+   `affiliate_org_id`.
+4. Verify `schema_migrations.id='011'`, both affiliation checks return
+   zero, and `PRAGMA foreign_key_check` returns no rows.
 
 Migration 011 checksum:
-\`5479ab2934d894fa4d26c0cbb35b0bb94906f94be0173afacca9c5647c08a4ed\`.
+`5479ab2934d894fa4d26c0cbb35b0bb94906f94be0173afacca9c5647c08a4ed`.
 
 ## Display name "Hass Group"
 
@@ -66,7 +66,7 @@ Tenant names are now refreshed from the database on each authenticated
 request, rather than relying on the text originally stored in a session.
 If the parent is currently named just "Hass", inspect and (optionally)
 execute the guarded
-\`Engr/docs/sql/011_optional_rename_hass_group.sql\`.
+`Engr/docs/sql/011_optional_rename_hass_group.sql`.
 It changes only the NAME of the one root organisation currently
 named Hass. It does not touch the ID, slug, affiliate links, users,
 subscriptions or operational records. It is intentionally separate from
@@ -78,7 +78,7 @@ not have its names overwritten.
 Before claiming the parent has all existing data, inspect the current
 ownership. The query below is READ-ONLY:
 
-\`\`\`sql
+```sql
 SELECT parent.name AS tenant, child.name AS affiliate,
        (SELECT COUNT(*) FROM stations s WHERE s.org_id = child.id) AS stations_owned_by_child,
        (SELECT COUNT(*) FROM regions r WHERE r.org_id = child.id) AS regions_owned_by_child,
@@ -89,7 +89,7 @@ SELECT parent.name AS tenant, child.name AS affiliate,
   JOIN organisations parent ON parent.id = child.parent_org_id
  WHERE child.deleted_at IS NULL
  ORDER BY parent.name, child.name;
-\`\`\`
+```
 
 For affiliates with nonzero child-owned operational records, the
 single-tenant UI does NOT by itself migrate their data into the parent.
@@ -97,16 +97,16 @@ Review with the group owner before making any separate data migration.
 
 ## Application release gates
 
-From \`Engr/\` run:
+From `Engr/` run:
 
-\`\`\`sh
+```sh
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm run test
 pnpm run lint
 pnpm run format:check
 pnpm run db:schema:check
-\`\`\`
+```
 
 Then deploy the existing Cloudflare Worker and verify:
 
