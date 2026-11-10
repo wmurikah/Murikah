@@ -43,7 +43,7 @@ const visibleRows = rows.slice(0, pageSize);
 
   {
     !allowed ? (
-      <p class="engr-error" role="alert">
+      <p class={canApprove ? 'engr-empty' : 'engr-error'} role={canApprove ? undefined : 'alert'}>
         {canApprove
           ? 'You may review bill approvals above, but cannot view the full bill register.'
           : 'You do not have access to the contractor bill register.'}
