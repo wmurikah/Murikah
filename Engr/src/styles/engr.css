@@ -1597,6 +1597,22 @@ input.engr-switch:hover {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+/* Affiliate fields stay on one row at desktop widths; narrow viewports
+   wrap without horizontal scrolling or shrinking inputs into unusable widths. */
+.engr-formgrid--affiliate {
+  max-width: none;
+  grid-template-columns: 1fr;
+}
+.engr-formgrid--affiliate > .engr-field { min-width: 0; }
+@media (min-width: 48rem) {
+  .engr-formgrid--affiliate { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 72rem) {
+  .engr-formgrid--affiliate { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 90rem) {
+  .engr-formgrid--affiliate { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
 .engr-checklist {
   list-style: none;
   margin: 0;
