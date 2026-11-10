@@ -20,7 +20,7 @@ const errorCode = Astro.url.searchParams.get('error');
 let rows: RegionRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  rows = await listRegionsAdmin(db, { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner });
+  rows = await listRegionsAdmin(db, { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner, roles: engr.roles });
 }
 ---
 
