@@ -6,8 +6,8 @@
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
  * When signed in, a persistent left sidebar groups the destinations (Overview,
- * Operations, Action Centre, Finance, Setup, System Settings) into collapsible sections, each with a category
- * icon, and shows the organisation name and a notification bell at the top. Only
+ * Operations, Finance, Reports, Setup, System Settings) into collapsible sections, each with a category
+ * icon and user-specific pending-work counts. Only
  * items the user holds a permission for are rendered, so a contractor sees a
  * much shorter menu than an owner. All groups start closed and open when their
  * heading is selected; the active group is marked without forcing it open. On
@@ -309,6 +309,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                 <details
                   class="engr-navgroup"
                   data-nav-group
+                  data-nav-group-label={group.label}
                   name="engr-nav"
                   data-active={groupActive(group) ? 'yes' : undefined}
                 >
@@ -439,6 +440,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
       // ---- Sidebar drawer + user-specific pending work -----------------------
       let pendingTimer: number | undefined;
       let pendingRefreshing = false;
+      let pendingRequest: AbortController | undefined;
       function enhance() {
         const shell = document.querySelector('.engr-shell');
         if (!shell) return;
@@ -468,10 +470,13 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
         const shell = document.querySelector('.engr-shell');
         if (!shell) return;
         pendingRefreshing = true;
+        const controller = new AbortController();
+        pendingRequest = controller;
         try {
           const response = await fetch('/api/navigation/pending', {
             headers: { accept: 'application/json' },
             cache: 'no-store',
+            signal: controller.signal,
           });
           if (!response.ok || shell !== document.querySelector('.engr-shell')) return;
           const body = (await response.json()) as { counts?: Record<string, number> };
@@ -500,14 +505,25 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
             badge.textContent = badgeText(total);
             badge.title = total ? total + ' pending in section' : '';
             badge.toggleAttribute('hidden', total === 0);
+            const heading = group.querySelector<HTMLElement>('.engr-navgroup__summary');
+            const label = group.dataset.navGroupLabel ?? 'Section';
+            heading?.setAttribute('aria-label', total ? label + ', ' + total + ' pending' : label);
           });
         } catch {
           // A transient failure leaves the last known counts intact.
         } finally {
-          pendingRefreshing = false;
+          if (pendingRequest === controller) {
+            pendingRequest = undefined;
+            pendingRefreshing = false;
+          }
         }
       }
 
+      document.addEventListener('astro:before-swap', () => {
+        pendingRequest?.abort();
+        pendingRequest = undefined;
+        pendingRefreshing = false;
+      });
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) void refreshPending();
       });
