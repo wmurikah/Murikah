@@ -9,6 +9,7 @@ import { comprehensiveRbac, RBAC_PERMISSIONS } from '../db/migrations/006_compre
 import { queryIndexes } from '../db/migrations/007_query_indexes.ts';
 import { invoicesAndAssetMovements } from '../db/migrations/008_invoices_asset_movements.ts';
 import { controlledAssetTransfers } from '../db/migrations/009_controlled_asset_transfers.ts';
+import { regionAffiliateAssignments } from '../db/migrations/010_region_affiliate_assignments.ts';
 import { verifySchemaContract } from '../db/schema-contract.ts';
 
 test('Turso Web RBAC script upgrades migration 005 without transaction keywords or drift', async () => {
@@ -50,6 +51,7 @@ test('Turso Web RBAC script upgrades migration 005 without transaction keywords 
     );
     assert.equal(owner, total);
     await controlledAssetTransfers.up(client);
+    await regionAffiliateAssignments.up(client);
     await verifySchemaContract(client);
     const check = readFileSync(
       new URL('../db/turso-web/13_check_comprehensive_rbac.sql', import.meta.url),
