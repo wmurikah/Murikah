@@ -29,7 +29,7 @@ function safeReason(reason: string | null | undefined): string | null {
   if (!reason) return null;
   return reason
     .replace(/https?:\/\/[^\s"'<>]+/gi, '[link withheld]')
-    .replace(/(?:token|secret|api[_-]?key)=[^\s;&]+/gi, '$1=[redacted]')
+    .replace(/(token|secret|api[_-]?key)=[^\s;&]+/gi, '$1=[redacted]')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .slice(0, 400);
 }
