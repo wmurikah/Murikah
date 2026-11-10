@@ -220,6 +220,26 @@ export async function updateRegion(
       await tx.rollback();
       return { ok: false, code: 'conflict', message: 'Region changed. Reload and review its affiliate.' };
     }
+    if (current.affiliateOrgId !== input.affiliateOrgId) {
+      // Reclassify linked stations atomically with the region. Their tenant
+      // org_id, region_id, station codes and history remain unchanged.
+      await tx.execute({
+        sql: `INSERT INTO audit_logs
+                (org_id, actor_user_id, action, entity_type, entity_id, before_json, after_json)
+              SELECT s.org_id, ?, 'stations.affiliate_reassigned', 'station', s.id,
+                     json_object('regionId', s.region_id,
+                                 'affiliateOrgId', COALESCE(s.affiliate_org_id, s.org_id)),
+                     json_object('regionId', s.region_id, 'affiliateOrgId', ?)
+                FROM stations s
+               WHERE s.org_id = ? AND s.region_id = ?`,
+        args: [actor.userId, input.affiliateOrgId, current.orgId, id],
+      });
+      await tx.execute({
+        sql: `UPDATE stations SET affiliate_org_id = ?
+               WHERE org_id = ? AND region_id = ?`,
+        args: [input.affiliateOrgId, current.orgId, id],
+      });
+    }
     await tx.execute({
       sql: `INSERT INTO audit_logs
               (org_id, actor_user_id, action, entity_type, entity_id, before_json, after_json)
