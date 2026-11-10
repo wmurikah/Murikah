@@ -255,43 +255,6 @@
   text-decoration: none;
 }
 
-/* Notification bell: lights up in the gold accent with a count badge. */
-.engr-bell {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--engr-radius-sm);
-  color: var(--engr-on-navy-dim);
-  text-decoration: none;
-}
-.engr-bell:hover {
-  color: var(--engr-on-navy);
-  background: rgba(242, 244, 250, 0.08);
-}
-.engr-bell[data-unread]:not([data-unread='0']) {
-  color: var(--engr-gold);
-}
-.engr-bell__badge {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.1rem;
-  min-width: 1rem;
-  height: 1rem;
-  padding: 0 0.2rem;
-  border-radius: 999px;
-  background: var(--engr-gold);
-  color: var(--engr-navy);
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1rem;
-  text-align: center;
-}
-.engr-bell__badge[hidden] {
-  display: none;
-}
 .engr-orgid__mark {
   display: inline-grid;
   place-items: center;
@@ -491,6 +454,35 @@
   opacity: 1;
   color: var(--engr-gold);
 }
+/* Role-scoped pending work counters. No badge for a zero count.
+   Closed sections show one total; open sections show their individual items. */
+.engr-navlink__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.engr-navcount {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--engr-gold);
+  color: var(--engr-navy);
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.engr-navcount[hidden],
+.engr-navgroup[open] > .engr-navgroup__summary [data-nav-group-count] {
+  display: none;
+}
+
 .engr-account {
   display: flex;
   flex-direction: column;
