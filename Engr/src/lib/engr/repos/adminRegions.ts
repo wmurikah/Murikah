@@ -221,6 +221,19 @@ export async function updateRegion(
       return { ok: false, code: 'conflict', message: 'Region changed. Reload and review its affiliate.' };
     }
     if (current.affiliateOrgId !== input.affiliateOrgId) {
+      const pending = await tx.execute({
+        sql: `SELECT 1 FROM asset_transfers t
+               JOIN stations s ON s.id IN (t.from_station_id, t.to_station_id)
+                              AND s.org_id = t.org_id
+              WHERE t.org_id = ? AND s.region_id = ?
+                AND t.status IN ('REQUESTED','APPROVED','DISPATCHED')
+              LIMIT 1`,
+        args: [current.orgId, id],
+      });
+      if (pending.rows.length) {
+        await tx.rollback();
+        return { ok: false, code: 'conflict', message: 'Finish pending asset transfers before changing the region affiliate.' };
+      }
       // Reclassify linked stations atomically with the region. Their tenant
       // org_id, region_id, station codes and history remain unchanged.
       await tx.execute({
