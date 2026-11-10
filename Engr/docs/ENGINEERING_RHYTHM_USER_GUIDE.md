@@ -31,12 +31,12 @@ Never share a personal password or authenticator code. Administrators can reset 
 
 The left menu is divided into sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first. Only sections and pages your role can use are shown.
 
-- **Overview:** Dashboard.
-- **Operations:** Requests, Work orders, RFQs, Maintenance, LPOs, Station confirmations and Procurement approvals, as permitted by your role.
-- **Finance:** Costs, Bills, Invoices, Payments, Mileage approvals, Cost approvals and Bill approvals, as permitted by your role. Staff Costs and Bills open the full organisation registers; contractors see their own records.
-- **Reports:** Report centre for authorised reporting roles.
-- **Setup:** Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs and Rate cards.
-- **System Settings:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history. Notification delivery events are available within Audit history to authorised administrators.
+- **Overview:** Dashboard and Report centre.
+- **Operations:** Requests, Work orders, Maintenance and Assets. Station confirmations are available from Work orders; asset transfers and categories are accessed from Assets.
+- **Procurement:** RFQs, LPOs, Contractors and Rate cards. The procurement approval queue is accessed from RFQs.
+- **Finance:** Costs, Bills, Invoices and Payments. Mileage and cost approvals are available from Costs; bill approvals are available from Bills. Contractors see their own scoped records.
+- **Service Setup:** Stations, Regions, Technicians, Engineers in charge and SLAs.
+- **Administration:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history. Notification delivery history remains within Audit history for authorised administrators.
 
 On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. A gold number beside a page means you have that many items requiring action. When a menu section is closed, its number totals the pending items inside it; open the section to see which pages need attention. The counts refresh when you change pages, return to the tab or after approximately one minute. No number means nothing currently requires your action in that menu. Personal notification delivery and history still operate in the background, but a separate notification bell and Action Centre menu are no longer displayed.
 
@@ -84,7 +84,7 @@ Do not create Uganda, Tanzania or other affiliate records during the Kenya pilot
 
 ### Create a user with a temporary password
 
-1. Open **System Settings → Users**.
+1. Open **Administration → Users**.
 2. Select **New user**.
 3. Enter **Full name**, **Email** and, if available, **Phone**.
 4. Set **Status** to **Active**.
@@ -98,7 +98,7 @@ Leave the temporary-password field blank only when email delivery is shown as re
 
 ### Edit, suspend or reset a user
 
-1. Open **System Settings → Users**.
+1. Open **Administration → Users**.
 2. Select the user’s name.
 3. Update the name, email, phone, status or permitted roles.
 4. To reset the password, enter a new value under **Reset with a temporary password**.
@@ -110,9 +110,9 @@ A role change, suspension or password reset revokes current sessions. The user m
 
 Giving someone a Contractor or Technician role does not by itself connect them to operational records:
 
-- Link a Contractor user under **Setup → Contractors → contractor → Portal account**.
-- Link a Technician user under **Setup → Technicians → technician → Portal account**.
-- Assign a Station Manager under **Setup → Stations → station → Station manager**.
+- Link a Contractor user under **Procurement → Contractors → contractor → Portal account**.
+- Link a Technician user under **Service Setup → Technicians → technician → Portal account**.
+- Assign a Station Manager under **Service Setup → Stations → station → Station manager**.
 
 One portal user can be linked to only one contractor and one technician record of the relevant type.
 
@@ -123,7 +123,7 @@ One portal user can be linked to only one contractor and one technician record o
 The Kenya affiliate already exists for this pilot. Use these steps later when another affiliate is approved for rollout:
 
 1. Confirm that you are acting in the intended organisation.
-2. Open **System Settings → Affiliates**.
+2. Open **Administration → Affiliates**.
 3. Select **New affiliate**.
 4. Enter the unique affiliate **Code**, for example `HPK`. The code becomes the fixed login slug and cannot be changed later.
 5. Enter the affiliate **Name**.
@@ -131,7 +131,7 @@ The Kenya affiliate already exists for this pilot. Use these steps later when an
 7. Enter the three-letter **Base currency**, for example `KES`, `UGX` or `TZS`.
 8. Select **Create affiliate**.
 
-To suspend or reactivate an affiliate, select it in **System Settings → Affiliates**, change **Status** and select **Save changes**. Suspending an affiliate prevents its users from signing in.
+To suspend or reactivate an affiliate, select it in **Administration → Affiliates**, change **Status** and select **Save changes**. Suspending an affiliate prevents its users from signing in.
 
 ## 7. Review or create roles
 
@@ -141,7 +141,7 @@ Use the nine standard roles in section 3 for the Kenya pilot. Do not change thei
 
 To create a genuinely required custom role:
 
-1. Open **System Settings → Roles**.
+1. Open **Administration → Roles**.
 2. Select **New role**.
 3. Enter an uppercase **Code** using letters, numbers and underscores, for example `AREA_MANAGER`. The code cannot be changed later.
 4. Enter the role **Name** and optional **Description**.
@@ -149,7 +149,7 @@ To create a genuinely required custom role:
 6. Open the new role.
 7. Review each permission group and select only the actions the role needs.
 8. Select **Save permissions**.
-9. Open **System Settings → Users**, select the person and assign the custom role.
+9. Open **Administration → Users**, select the person and assign the custom role.
 
 An Administrator cannot change or assign the Owner role. Saving changes to a shared default role creates an organisation-specific copy; it does not change other affiliates.
 
@@ -157,20 +157,20 @@ An Administrator cannot change or assign the Owner role. Saving changes to a sha
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Open **Setup → Regions**.
+1. Open **Service Setup → Regions**.
 2. Select **New region**.
 3. Enter the **Name**, for example `Nairobi`.
 4. Select **Affiliate**, such as Hass Kenya, Hass Uganda or Fleet Kenya. Platform owners can select any active affiliate within their group; other users are restricted to their current organisation.
 5. Select **Create region**. The system generates its permanent `REG-000001`-style code for that affiliate.
 
-To amend a region, open **Setup → Regions**, select its name, make the change and select **Save changes**. The code and affiliate ownership cannot be edited after creation. If a region was registered under the wrong affiliate, do not silently move it: create the correct region and reconcile associated stations.
+To amend a region, open **Service Setup → Regions**, select its name, make the change and select **Save changes**. The code and affiliate ownership cannot be edited after creation. If a region was registered under the wrong affiliate, do not silently move it: create the correct region and reconcile associated stations.
 
 ## 9. Create a station
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
 1. Create the region and Station Manager user first.
-2. Open **Setup → Stations**.
+2. Open **Service Setup → Stations**.
 3. Select **New station**.
 4. Enter the station **Name**. Its permanent `STN-000001`-style code is generated automatically when saved.
 5. Select the **Region**.
@@ -180,7 +180,7 @@ To amend a region, open **Setup → Regions**, select its name, make the change 
 9. Select **Base station** only when this station is an origin used for mileage.
 10. Select **Create station**.
 
-To change a station, select it in **Setup → Stations**, update the fields and select **Save changes**. Its code cannot be edited. Existing historical codes are preserved. Use **Inactive** instead of deleting a station that has history.
+To change a station, select it in **Service Setup → Stations**, update the fields and select **Save changes**. Its code cannot be edited. Existing historical codes are preserved. Use **Inactive** instead of deleting a station that has history.
 
 ## 10. Create asset categories and assets
 
@@ -188,7 +188,7 @@ To change a station, select it in **Setup → Stations**, update the fields and 
 
 ### Asset category
 
-1. Open **Setup → Assets**.
+1. Open **Operations → Assets**.
 2. Select **Categories**.
 3. Select **New category**.
 4. Enter a unique **Code** and category **Name**.
@@ -197,7 +197,7 @@ To change a station, select it in **Setup → Stations**, update the fields and 
 
 ### Asset
 
-1. Open **Setup → Assets**.
+1. Open **Operations → Assets**.
 2. Select **New asset**.
 3. Enter the unique **Tag** and asset **Name**.
 4. Select the **Station** and optional **Category**.
@@ -205,13 +205,13 @@ To change a station, select it in **Setup → Stations**, update the fields and 
 6. Set **Status** to **In service**, **Faulty** or **Decommissioned**.
 7. Select **Create asset**.
 
-Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Setup → Assets → Asset transfers**; simply editing an asset does not move it. A gold count on **Assets** and its **Asset transfers** button shows your pending custody decisions.
+Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Operations → Assets → Asset transfers**; simply editing an asset does not move it. A gold count on **Assets** and its **Asset transfers** button shows your pending custody decisions.
 
 ### Controlled asset transfers
 
 A transfer passes through four stages: **Requested → Approved → Dispatched → Received**. Rejected or cancelled requests do not change the asset's official station.
 
-1. From **Setup → Assets → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
+1. From **Operations → Assets → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
 2. An authorised Engineering Manager, Administrator or Owner **approves** the request. The requester cannot approve their own request.
 3. The sending station manager (or authorised management user) confirms **dispatch**, recording the actual condition and physical serial number where available.
 4. The destination station manager (or another authorised management user) confirms **receipt**. The person who dispatched the asset cannot confirm its receipt.
@@ -224,7 +224,7 @@ The sidebar displays outstanding transfer actions for your permissions and assig
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
 1. If the contractor needs system access, create its Contractor user first.
-2. Open **Setup → Contractors**.
+2. Open **Procurement → Contractors**.
 3. Select **New contractor**.
 4. Enter the contractor **Name**.
 5. Select the Contractor user under **Portal account**.
@@ -243,7 +243,7 @@ Only an active, prequalified contractor whose coverage matches the request’s s
 **Who can do this:** Owner, Administrator, Engineering Manager or the linked Contractor for its own team.
 
 1. Create the Technician user first if the technician will sign in.
-2. Open **Setup → Technicians**.
+2. Open **Service Setup → Technicians**.
 3. Select **New technician**.
 4. Select the **Contractor**.
 5. Select the Technician user under **Portal account**.
@@ -258,7 +258,7 @@ The technician sees only work assigned to this linked technician record.
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
 1. Create the Engineer user and give that user the Engineer role.
-2. Open **Setup → Engineers in charge**.
+2. Open **Service Setup → Engineers in charge**.
 3. Under **Assign an engineer**, select the **Engineer**.
 4. Under **Owns**, select **A station** or **A category**.
 5. Select the relevant **Station** or **Category**.
@@ -270,7 +270,7 @@ A station assignment takes priority over a category assignment. If neither match
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Open **Setup → SLAs**.
+1. Open **Service Setup → SLAs**.
 2. Select **New SLA**.
 3. Enter the SLA **Name**.
 4. Enter the **Response hours** and **Resolution hours**.
@@ -283,7 +283,7 @@ Keep only one intentional default and use names that users can distinguish.
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Open **Setup → Rate cards**.
+1. Open **Procurement → Rate cards**.
 2. Select **New rate card**.
 3. Enter the rate-card **Name**.
 4. Select the optional **Contractor** when the rates apply to one contractor.
@@ -299,7 +299,7 @@ Use the displayed edit and delete controls to correct items. Rates are used when
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Open **System Settings → Notification settings**.
+1. Open **Administration → Notification settings**.
 2. Review **Delivery readiness**. Production delivery and each required provider should show **Ready**.
 3. In-app notifications remain enabled for all users.
 4. Enable **Email** and **SMS** only for the channels the organisation intends to use.
@@ -308,7 +308,7 @@ Use the displayed edit and delete controls to correct items. Rates are used when
 
 Provider credentials are Cloudflare secrets and are not shown in the page. If an enabled external channel is not configured, its alerts remain queued rather than being marked as delivered.
 
-To review delivery issues, open **System Settings → Audit history → Notification delivery** (requires both audit and delivery-monitor permissions). Filtered records include channel, recipient, subject/template, outcome, reason, actor and time; authentication message bodies and links are not displayed. Historical notification records remain available. Select **Retry** only for an eligible failed delivery and only after the underlying issue is corrected. Expired authentication links must be newly requested rather than replayed.
+To review delivery issues, open **Administration → Audit history → Notification delivery** (requires both audit and delivery-monitor permissions). Filtered records include channel, recipient, subject/template, outcome, reason, actor and time; authentication message bodies and links are not displayed. Historical notification records remain available. Select **Retry** only for an eligible failed delivery and only after the underlying issue is corrected. Expired authentication links must be newly requested rather than replayed.
 
 ## 17. Raise and triage a request
 
@@ -367,7 +367,7 @@ The person who prepared the work order cannot approve their own contractor assig
 
 ### Manager: release the RFQ
 
-1. Open **Operations → RFQs** and select the submitted RFQ.
+1. Open **Procurement → RFQs** and select the submitted RFQ.
 2. Review the request, invitees, due date and threshold.
 3. Select **Release to contractors**.
 
@@ -375,7 +375,7 @@ The account that submitted the RFQ cannot release it. A different manager-level 
 
 ### Contractor: submit a quote
 
-1. Open **Operations → RFQs**.
+1. Open **Procurement → RFQs**.
 2. Select an invitation.
 3. Enter the diagnosis and proposed solution.
 4. Mark whether a site visit was done.
@@ -391,13 +391,13 @@ Contractors see only their own invitations and quotes.
 3. Select **Prefer** to record the recommended quote.
 4. Select **Award** on the chosen quote.
 5. If the amount is within the threshold, the system creates the work order.
-6. If it is above the threshold, open **Action Centre → Procurement approvals**. A different authorised approver selects **Approve and create work order**, or records a rejection reason and selects **Reject**.
+6. If it is above the threshold, open **Procurement → RFQs → Procurement approvals**. A different authorised approver selects **Approve and create work order**, or records a rejection reason and selects **Reject**.
 
 ## 20. Create and issue an LPO
 
 ### Engineer: create the LPO draft
 
-1. Open **Operations → LPOs**.
+1. Open **Procurement → LPOs**.
 2. Select **New LPO**.
 3. Select the **Contractor** and optional **Base station**.
 4. Select **Create LPO**.
@@ -409,7 +409,7 @@ Contractors see only their own invitations and quotes.
 
 ### Manager: approve and issue
 
-1. Open **Operations → LPOs** and select the submitted LPO.
+1. Open **Procurement → LPOs** and select the submitted LPO.
 2. Check contractor, base station, total and work orders.
 3. Select **Approve LPO**.
 4. Select **Issue to contractor**.
@@ -418,7 +418,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 
 ### Contractor mileage claim
 
-1. Open **Operations → LPOs** and select the issued LPO.
+1. Open **Procurement → LPOs** and select the issued LPO.
 2. Under mileage, select the reference station and enter the round-trip distance.
 3. Select **Submit claim**.
 4. The Engineering Manager opens **Action Centre → Mileage approvals**.
@@ -554,7 +554,7 @@ To correct an incorrect payment, find it in the payment history and select **Rev
 - Open **Overview → Dashboard** to review open work, approval queues, trends and organisation charts.
 - Select a count or chart segment to open the records behind it.
 - Select **Export work orders** to download the organisation report when the role permits export.
-- Open **System Settings → Audit history** to review recorded operational actions. The **Notification delivery** filter shows delivery events, failures and retries to authorised administrators. The dedicated Delivery Monitor page has been retired.
+- Open **Administration → Audit history** to review recorded operational actions. The **Notification delivery** filter shows delivery events, failures and retries to authorised administrators. The dedicated Delivery Monitor page has been retired.
 - Use the organisation switcher only when signed in as an authorised platform owner. Confirm the acting organisation before changing data.
 
 ## 27. Standard daily routine by role
