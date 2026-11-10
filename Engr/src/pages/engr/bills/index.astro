@@ -3,6 +3,7 @@ export const prerender = false;
 
 /** Read-only organisation register. Contractor accounts use their own scoped portal. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import ActionQueueLink from '@/components/engr/ActionQueueLink.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { can } from '@engr/auth/rbac';
@@ -14,6 +15,8 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'bill.view') && actorDataScope(engr.roles) === 'org';
+const canApprove = actorDataScope(engr.roles) === 'org' &&
+  (can(Astro.locals, 'bill.approve.engineering') || can(Astro.locals, 'bill.approve.finance'));
 const requestedPage = Number(Astro.url.searchParams.get('page') ?? '1');
 const page =
   Number.isSafeInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000
@@ -35,20 +38,15 @@ const visibleRows = rows.slice(0, pageSize);
       <h1>Contractor bills</h1>
       <p class="engr-lead">Bills across your organisation, including approved and paid records.</p>
     </div>
-    {
-      (can(Astro.locals, 'bill.approve.engineering') ||
-        can(Astro.locals, 'bill.approve.finance')) && (
-        <a href="/bills/approvals" class="engr-btn engr-btn--secondary">
-          Pending approvals
-        </a>
-      )
-    }
+    {canApprove && <ActionQueueLink href="/bills/approvals" label="Bill approvals" countKeys={['billApprovals']} />}
   </div>
 
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        You do not have access to the contractor bill register.
+        {canApprove
+          ? 'You may review bill approvals above, but cannot view the full bill register.'
+          : 'You do not have access to the contractor bill register.'}
       </p>
     ) : visibleRows.length === 0 ? (
       <p class="engr-empty">No bills found on this page.</p>
