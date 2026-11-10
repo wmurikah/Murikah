@@ -24,7 +24,8 @@ export type PendingNavKey =
   | 'costs'
   | 'bills'
   | 'payments'
-  | 'deliveryMonitor';
+  | 'deliveryMonitor'
+  | 'assetTransfers';
 
 export type PendingNavCounts = Partial<Record<PendingNavKey, number>>;
 
@@ -154,6 +155,38 @@ export function pendingNavigationPlan(actor: PendingNavActor, today: string): Co
 
   if (scope === 'org' && has('notifications.monitor'))
     add('deliveryMonitor', "SELECT COUNT(*) AS n FROM notifications WHERE org_id = ? AND status = 'FAILED'");
+
+  // Transfer counts represent the next action, not an unread notification.
+  if (has('assets.transfer.request') || has('assets.transfer.approve') ||
+      has('assets.transfer.dispatch') || has('assets.transfer.receive')) {
+    const clauses: string[] = [];
+    const args: Array<string | number> = [orgId];
+    if (scope === 'org') {
+      if (has('assets.transfer.approve')) {
+        clauses.push("(tr.status = 'REQUESTED' AND tr.requested_by <> ?)");
+        args.push(userId);
+      }
+      if (has('assets.transfer.dispatch')) clauses.push("tr.status = 'APPROVED'");
+      if (has('assets.transfer.receive')) {
+        clauses.push("(tr.status = 'DISPATCHED' AND tr.dispatched_by <> ?)");
+        args.push(userId);
+      }
+    } else if (scope === 'station') {
+      if (has('assets.transfer.dispatch')) {
+        clauses.push("(tr.status = 'APPROVED' AND fs.station_manager_id = ?)");
+        args.push(userId);
+      }
+      if (has('assets.transfer.receive')) {
+        clauses.push("(tr.status = 'DISPATCHED' AND ts.station_manager_id = ? AND tr.dispatched_by <> ?)");
+        args.push(userId, userId);
+      }
+    }
+    if (clauses.length)
+      add('assetTransfers', `SELECT COUNT(*) AS n FROM asset_transfers tr
+        JOIN stations fs ON fs.id = tr.from_station_id AND fs.org_id = tr.org_id
+        JOIN stations ts ON ts.id = tr.to_station_id AND ts.org_id = tr.org_id
+        WHERE tr.org_id = ? AND (${clauses.join(' OR ')})`, args);
+  }
 
   return statements;
 }
