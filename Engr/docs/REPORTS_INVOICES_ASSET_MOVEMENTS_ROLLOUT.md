@@ -6,7 +6,7 @@ This release adds migration `008`. Apply it to Turso **before** deploying the ne
 
 1. Open the Engineering production database in Turso Web. Run `SELECT id FROM schema_migrations ORDER BY id;`. If `007` is missing but `001` through `006` are present, apply the `007` recovery block below first. If `008` is already present, skip its database steps.
 2. Run `PRAGMA table_info(bills);`. If `invoice_required` is absent, run the first statement below once. Turso Web may show one result for each statement.
-3. Run the table and index statements below. They use `IF NOT EXISTS` and are safe to repeat.
+3. Run each table and index statement below **separately** in Turso Web, checking its result before moving to the next. A generic `OK` from a pasted multi-statement block does not prove every statement was executed. They use `IF NOT EXISTS` and are safe to repeat.
 4. After every statement succeeds, insert the `008` history row. Do not record `008` before its objects exist.
 5. Verify the final queries, then deploy the Worker build containing this change. Open `/api/health` and confirm `reportingSchema` reads `ok`.
 
