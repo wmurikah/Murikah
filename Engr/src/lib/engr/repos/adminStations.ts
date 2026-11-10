@@ -223,6 +223,20 @@ export async function updateStation(
   }
   const tx = await db.transaction('write');
   try {
+    if (affiliateOrgId !== current.affiliateOrgId) {
+      const pending = await tx.execute({
+        sql: `SELECT 1 FROM asset_transfers t
+               WHERE t.org_id = ?
+                 AND (t.from_station_id = ? OR t.to_station_id = ?)
+                 AND t.status IN ('REQUESTED','APPROVED','DISPATCHED')
+               LIMIT 1`,
+        args: [ctx.orgId, id, id],
+      });
+      if (pending.rows.length) {
+        await tx.rollback();
+        return { ok: false, code: 'conflict', message: 'Finish pending asset transfers before changing this station affiliate.' };
+      }
+    }
     const upd = await tx.execute({
       sql: `UPDATE stations
                SET name = ?, affiliate_org_id = ?, region_id = ?, address = ?, station_manager_id = ?, is_base = ?, status = ?
