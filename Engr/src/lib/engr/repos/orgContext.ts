@@ -63,10 +63,14 @@ export async function resolveActingContext(
   }));
 
   // The requested id is honoured only when it is in the set; otherwise home.
-  const homeRoot = switchable.find((s) => s.id === homeOrgId) ?? null;
+  const homeParent = await db.execute({
+    sql: 'SELECT COALESCE(parent_org_id, id) AS tenant_id FROM organisations WHERE id = ? LIMIT 1',
+    args: [homeOrgId],
+  });
+  const homeTenantId = String(homeParent.rows[0]?.tenant_id ?? homeOrgId);
   const chosen = requestedActingId && switchable.some((s) => s.id === requestedActingId)
     ? requestedActingId
-    : homeRoot?.id ?? homeOrgId;
+    : homeTenantId;
   const actingRow = switchable.find((s) => s.id === chosen) ?? null;
 
   return {
