@@ -139,6 +139,7 @@ export async function createWorkOrderInLpo(
   input: {
     lpoId: string;
     stationId: string;
+    assetId?: string | null;
     categoryId: string | null;
     slaId: string | null;
     mileageReferenceStationId: string | null;
@@ -197,6 +198,13 @@ export async function createWorkOrderInLpo(
     };
   }
 
+  if (input.assetId) {
+    const matched = await db.execute({
+      sql: `SELECT 1 FROM assets WHERE id = ? AND org_id = ? AND station_id = ? AND deleted_at IS NULL LIMIT 1`,
+      args: [input.assetId, orgId, input.stationId],
+    });
+    if (!matched.rows.length) return { ok: false, code: 'invalid', message: 'The asset does not belong to the chosen station.' };
+  }
   const year = new Date().getUTCFullYear();
   const base = await countWoForYear(db, orgId, year);
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -206,15 +214,16 @@ export async function createWorkOrderInLpo(
     try {
       await tx.execute({
         sql: `INSERT INTO work_orders
-                (id, org_id, wo_no, lpo_id, station_id, base_station_id, mileage_reference_station_id,
+                (id, org_id, wo_no, lpo_id, station_id, asset_id, base_station_id, mileage_reference_station_id,
                  category_id, contractor_id, sla_id, source, assignment_basis, status, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LPO', 'PREDEFINED_RATE', 'CREATED', ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LPO', 'PREDEFINED_RATE', 'CREATED', ?)`,
         args: [
           id,
           orgId,
           woNo,
           input.lpoId,
           input.stationId,
+          input.assetId ?? null,
           lpo.baseStationId,
           input.mileageReferenceStationId,
           input.categoryId,
