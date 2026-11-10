@@ -21,7 +21,7 @@ const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'workorder.view');
-const canConfirm = actorDataScope(engr.roles) === 'station' &&
+const canConfirm = allowed && actorDataScope(engr.roles) === 'station' &&
   (can(Astro.locals, 'arrival.confirm') || can(Astro.locals, 'jobcard.confirm'));
 const status = Astro.url.searchParams.get('status') ?? undefined;
 const station = Astro.url.searchParams.get('station') ?? undefined;
