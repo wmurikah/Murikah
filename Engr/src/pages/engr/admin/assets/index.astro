@@ -3,6 +3,7 @@ export const prerender = false;
 
 /** Assets list. Gate: assets.view; create/edit gates on assets.manage. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import ActionQueueLink from '@/components/engr/ActionQueueLink.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -35,10 +36,7 @@ if (allowed) {
     <div class="engr-actionbar">
       {allowed && <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Categories</a>}
       {canSeeTransfers && (
-        <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary engr-btn--with-count" data-asset-transfer-link>
-          Asset transfers
-          <span class="engr-navcount" data-asset-transfer-count hidden aria-hidden="true" />
-        </a>
+        <ActionQueueLink href="/admin/assets/transfers" label="Asset transfers" countKeys={['assetTransfers']} />
       )}
       {
         canManage && (
@@ -135,21 +133,3 @@ if (allowed) {
   }
 </EngrLayout>
 
-<script>
-  // Use the same permission-scoped pending counts already loaded for the sidebar.
-  // No duplicate API call or independent interpretation of transfer permissions.
-  document.addEventListener('engr:pending-counts', (event: Event) => {
-    const badge = document.querySelector<HTMLElement>('[data-asset-transfer-count]');
-    const link = document.querySelector<HTMLAnchorElement>('[data-asset-transfer-link]');
-    if (!badge || !link) return;
-    const counts = (event as CustomEvent<Record<string, number>>).detail;
-    const raw = Number(counts?.assetTransfers ?? 0);
-    const n = Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
-    badge.textContent = n > 99 ? '99+' : String(n);
-    badge.title = n ? n + ' transfers awaiting your action' : '';
-    badge.toggleAttribute('hidden', n === 0);
-    link.setAttribute('aria-label', n
-      ? 'Asset transfers, ' + n + ' awaiting your action'
-      : 'Asset transfers');
-  });
-</script>
