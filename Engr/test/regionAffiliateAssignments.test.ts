@@ -106,8 +106,8 @@ test('Hass admin may edit affiliate classification; Hass tenant and station owne
     assert.deepEqual((await listRegionAffiliates(db,anotherTenant)).map(x=>x.id), ['other','otherchild']);
     assert.equal((await getRegion(db,anotherTenant,created.id)),null);
     assert.equal((await listRegionsAdmin(db,child)).length,0, 'Hass Group region is not re-owned by Kenya');
-    const audits = await db.execute(`SELECT before_json,after_json FROM audit_logs
-      WHERE entity_type='region' AND entity_id=? AND action='regions.update'`,[created.id]);
+    const audits = await db.execute({ sql: `SELECT before_json,after_json FROM audit_logs
+      WHERE entity_type='region' AND entity_id=? AND action='regions.update'`, args: [created.id] });
     assert.equal(audits.rows.length,1);
     assert.match(String(audits.rows[0].before_json),/hass/);
     assert.match(String(audits.rows[0].after_json),/kenya/);
