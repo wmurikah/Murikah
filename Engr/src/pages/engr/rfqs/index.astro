@@ -3,16 +3,19 @@ export const prerender = false;
 
 /** Engineer RFQ list: every RFQ in the org, with invite and quote counts. */
 import EngrLayout from '@/layouts/EngrLayout.astro';
+import ActionQueueLink from '@/components/engr/ActionQueueLink.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listRfqsForEngineer, type RfqListRow } from '@engr/repos/rfqs';
 import { shortDate } from '@engr/format';
 import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'rfq.view');
+const canProcure = actorDataScope(engr.roles) === 'org' && can(Astro.locals, 'rfq.award');
 let rows: RfqListRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv(), Astro.locals);
@@ -26,12 +29,15 @@ if (allowed) {
       <h1>RFQs</h1>
       <p class="engr-lead">Requests for quotation and their quotes.</p>
     </div>
+    {canProcure && <ActionQueueLink href="/procurement/approvals" label="Procurement approvals" countKeys={['procurementApprovals']} />}
   </div>
 
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        You do not have access to RFQs.
+        {canProcure
+          ? 'You may review procurement approvals above, but cannot view the full RFQ register.'
+          : 'You do not have access to RFQs.'}
       </p>
     ) : rows.length === 0 ? (
       <p class="engr-empty">
