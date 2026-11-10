@@ -127,7 +127,7 @@ export async function listNotificationAuditRows(
       notificationId: String(r.notification_id),
       occurredAt: String(r.occurred_at),
       actorName: String(r.actor_name),
-      action: String(r.action).replace(/^notification\\./, '').replaceAll('_', ' '),
+      action: String(r.action).replace(/^notification\./, '').replaceAll('_', ' '),
       channel: nullable(snapshot.channel) ?? nullable(r.channel) ?? 'Unknown',
       recipient: nullable(r.recipient_name) ??
         (recipientType && recipientId ? `${recipientType} ${recipientId}` : 'Recipient unavailable'),
