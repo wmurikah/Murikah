@@ -29,12 +29,13 @@ Never share a personal password or authenticator code. Administrators can reset 
 
 ## 2. Find pages and complete actions
 
-The left menu is divided into four sections:
+The left menu is divided into five sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first.
 
 - **Overview:** Dashboard and Notifications.
 - **Operations:** Requests, Work orders, RFQs, Maintenance and LPOs.
 - **Finance:** Costs, Bills and Payments.
-- **Setup:** Affiliates, Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs, Rate cards, Users, Roles, Notification settings and Audit history.
+- **Setup:** Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs and Rate cards.
+- **System Settings:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history.
 
 On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. The bell opens personal notifications. Select **Mark read** after reviewing a notification.
 
@@ -82,7 +83,7 @@ Do not create Uganda, Tanzania or other affiliate records during the Kenya pilot
 
 ### Create a user with a temporary password
 
-1. Open **Setup → Users**.
+1. Open **System Settings → Users**.
 2. Select **New user**.
 3. Enter **Full name**, **Email** and, if available, **Phone**.
 4. Set **Status** to **Active**.
@@ -96,7 +97,7 @@ Leave the temporary-password field blank only when email delivery is shown as re
 
 ### Edit, suspend or reset a user
 
-1. Open **Setup → Users**.
+1. Open **System Settings → Users**.
 2. Select the user’s name.
 3. Update the name, email, phone, status or permitted roles.
 4. To reset the password, enter a new value under **Reset with a temporary password**.
@@ -121,7 +122,7 @@ One portal user can be linked to only one contractor and one technician record o
 The Kenya affiliate already exists for this pilot. Use these steps later when another affiliate is approved for rollout:
 
 1. Confirm that you are acting in the intended organisation.
-2. Open **Setup → Affiliates**.
+2. Open **System Settings → Affiliates**.
 3. Select **New affiliate**.
 4. Enter the unique affiliate **Code**, for example `HPK`. The code becomes the fixed login slug and cannot be changed later.
 5. Enter the affiliate **Name**.
@@ -129,7 +130,7 @@ The Kenya affiliate already exists for this pilot. Use these steps later when an
 7. Enter the three-letter **Base currency**, for example `KES`, `UGX` or `TZS`.
 8. Select **Create affiliate**.
 
-To suspend or reactivate an affiliate, select it in **Setup → Affiliates**, change **Status** and select **Save changes**. Suspending an affiliate prevents its users from signing in.
+To suspend or reactivate an affiliate, select it in **System Settings → Affiliates**, change **Status** and select **Save changes**. Suspending an affiliate prevents its users from signing in.
 
 ## 7. Review or create roles
 
@@ -139,7 +140,7 @@ Use the nine standard roles in section 3 for the Kenya pilot. Do not change thei
 
 To create a genuinely required custom role:
 
-1. Open **Setup → Roles**.
+1. Open **System Settings → Roles**.
 2. Select **New role**.
 3. Enter an uppercase **Code** using letters, numbers and underscores, for example `AREA_MANAGER`. The code cannot be changed later.
 4. Enter the role **Name** and optional **Description**.
@@ -147,7 +148,7 @@ To create a genuinely required custom role:
 6. Open the new role.
 7. Review each permission group and select only the actions the role needs.
 8. Select **Save permissions**.
-9. Open **Setup → Users**, select the person and assign the custom role.
+9. Open **System Settings → Users**, select the person and assign the custom role.
 
 An Administrator cannot change or assign the Owner role. Saving changes to a shared default role creates an organisation-specific copy; it does not change other affiliates.
 
@@ -285,7 +286,7 @@ Use the displayed edit and delete controls to correct items. Rates are used when
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Open **Setup → Notification settings**.
+1. Open **System Settings → Notification settings**.
 2. Review **Delivery readiness**. Production delivery and each required provider should show **Ready**.
 3. In-app notifications remain enabled for all users.
 4. Enable **Email** and **SMS** only for the channels the organisation intends to use.
@@ -540,7 +541,7 @@ To correct an incorrect payment, find it in the payment history and select **Rev
 - Open **Overview → Dashboard** to review open work, approval queues, trends and organisation charts.
 - Select a count or chart segment to open the records behind it.
 - Select **Export work orders** to download the organisation report when the role permits export.
-- Open **Setup → Audit history** to review who performed a recorded action and when.
+- Open **System Settings → Audit history** to review who performed a recorded action and when.
 - Use the organisation switcher only when signed in as an authorised platform owner. Confirm the acting organisation before changing data.
 
 ## 27. Standard daily routine by role
