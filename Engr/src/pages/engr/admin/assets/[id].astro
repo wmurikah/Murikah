@@ -62,14 +62,14 @@ const a = asset;
   {
     errorCode === 'conflict' && (
       <p class="engr-error" role="alert">
-        That tag is already used by another asset.
+        Asset details could not be saved because the tag conflicts, the location changed, or a transfer is active. Reload and review.
       </p>
     )
   }
   {
     errorCode === 'invalid' && (
       <p class="engr-error" role="alert">
-        Check the tag, name, station and status, then try again.
+        Check required asset details. Use Request asset transfer to change its station.
       </p>
     )
   }
