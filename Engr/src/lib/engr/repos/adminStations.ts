@@ -5,6 +5,7 @@
  * request".
  */
 import type { Client } from '@libsql/client/web';
+import { nextOrganisationCode } from './organisationCodes';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -39,7 +40,6 @@ export interface StationDetail {
 }
 
 export interface StationInput {
-  code: string;
   name: string;
   regionId: string | null;
   address: string | null;
@@ -97,7 +97,6 @@ export async function getStation(
 const STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 
 function validate(input: StationInput): string | null {
-  if (!input.code) return 'A code is required.';
   if (!input.name) return 'A name is required.';
   if (!STATUSES.has(input.status)) return 'Choose a valid status.';
   return null;
@@ -142,43 +141,32 @@ export async function createStation(
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
   if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
-    return {
-      ok: false,
-      code: 'invalid',
-      message: 'Choose a region and manager from this organisation.',
-    };
+    return { ok: false, code: 'invalid', message: 'Choose a region and manager from this organisation.' };
   }
-  const id = newId();
-  const tx = await db.transaction('write');
-  try {
-    await tx.execute({
-      sql: `INSERT INTO stations (id, org_id, code, name, region_id, address, station_manager_id, is_base, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        id,
-        ctx.orgId,
-        input.code,
-        input.name,
-        input.regionId,
-        input.address,
-        input.stationManagerId,
-        input.isBase ? 1 : 0,
-        input.status,
-      ],
-    });
-    await tx.execute({
-      sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
-            VALUES (?, ?, 'stations.create', 'station', ?, ?)`,
-      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ code: input.code, name: input.name })],
-    });
-    await tx.commit();
-    return { ok: true, id };
-  } catch (err) {
-    await tx.rollback();
-    if (isUniqueViolation(err))
-      return { ok: false, code: 'conflict', message: 'That code is already used.' };
-    throw err;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const id = newId();
+    const tx = await db.transaction('write');
+    try {
+      const code = await nextOrganisationCode(tx, ctx.orgId, 'station');
+      await tx.execute({
+        sql: `INSERT INTO stations (id, org_id, code, name, region_id, address, station_manager_id, is_base, status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [id, ctx.orgId, code, input.name, input.regionId, input.address, input.stationManagerId, input.isBase ? 1 : 0, input.status],
+      });
+      await tx.execute({
+        sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
+              VALUES (?, ?, 'stations.create', 'station', ?, ?)`,
+        args: [ctx.orgId, ctx.userId, id, JSON.stringify({ code, name: input.name })],
+      });
+      await tx.commit();
+      return { ok: true, id };
+    } catch (err) {
+      await tx.rollback();
+      if (isUniqueViolation(err)) continue;
+      throw err;
+    }
   }
+  return { ok: false, code: 'conflict', message: 'A station code could not be reserved. Try again.' };
 }
 
 export async function updateStation(
@@ -190,29 +178,15 @@ export async function updateStation(
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
   if (!(await referencesBelongToOrg(db, ctx.orgId, input))) {
-    return {
-      ok: false,
-      code: 'invalid',
-      message: 'Choose a region and manager from this organisation.',
-    };
+    return { ok: false, code: 'invalid', message: 'Choose a region and manager from this organisation.' };
   }
   const tx = await db.transaction('write');
   try {
     const upd = await tx.execute({
       sql: `UPDATE stations
-               SET code = ?, name = ?, region_id = ?, address = ?, station_manager_id = ?, is_base = ?, status = ?
+               SET name = ?, region_id = ?, address = ?, station_manager_id = ?, is_base = ?, status = ?
              WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
-      args: [
-        input.code,
-        input.name,
-        input.regionId,
-        input.address,
-        input.stationManagerId,
-        input.isBase ? 1 : 0,
-        input.status,
-        id,
-        ctx.orgId,
-      ],
+      args: [input.name, input.regionId, input.address, input.stationManagerId, input.isBase ? 1 : 0, input.status, id, ctx.orgId],
     });
     if (upd.rowsAffected === 0) {
       await tx.rollback();
@@ -221,14 +195,13 @@ export async function updateStation(
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
             VALUES (?, ?, 'stations.update', 'station', ?, ?)`,
-      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ code: input.code, name: input.name })],
+      args: [ctx.orgId, ctx.userId, id, JSON.stringify({ name: input.name })],
     });
     await tx.commit();
     return { ok: true, id };
   } catch (err) {
     await tx.rollback();
-    if (isUniqueViolation(err))
-      return { ok: false, code: 'conflict', message: 'That code is already used.' };
+    if (isUniqueViolation(err)) return { ok: false, code: 'conflict', message: 'Unable to save the station.' };
     throw err;
   }
 }
