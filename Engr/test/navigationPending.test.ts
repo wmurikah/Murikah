@@ -47,10 +47,10 @@ test('portal roles have only their own actionable queues', () => {
   assert.ok(station[0].args.includes('user-ke'));
 
   const contractor = pendingNavigationPlan(
-    actor(['workorder.view', 'workorder.accept', 'workorder.assign_technician', 'quotes.view', 'cost.view', 'bill.view', 'cost.approve'], ['CONTRACTOR']),
+    actor(['workorder.view', 'workorder.accept', 'workorder.assign_technician', 'quotes.view', 'quotes.submit', 'cost.view', 'cost.create', 'cost.submit', 'bill.view', 'bill.submit', 'cost.approve'], ['CONTRACTOR']),
     today,
   );
-  assert.deepEqual(contractor.map((q) => q.key), ['workorders', 'rfqs', 'costs', 'bills']);
+  assert.deepEqual(contractor.map((q) => q.key), ['workorders', 'rfqs', 'costs', 'costs', 'bills']);
   assert.ok(contractor.every((q) => q.sql.includes('portal_user_id = ?')));
   assert.ok(contractor.every((q) => q.args.includes('user-ke')));
 
@@ -64,10 +64,10 @@ test('portal roles have only their own actionable queues', () => {
 
 test('permissions, not general visibility, determine who receives approval badges', () => {
   const engineer = pendingNavigationPlan(
-    actor(['requests.view', 'workorder.create', 'rfq.view', 'rfq.create', 'pm.view', 'pm.create', 'lpo.view', 'lpo.create'], ['ENGINEER']),
+    actor(['requests.view', 'workorder.create', 'rfq.view', 'rfq.create', 'rfq.submit', 'pm.view', 'pm.create', 'lpo.view', 'lpo.create', 'lpo.submit'], ['ENGINEER']),
     today,
   );
-  assert.deepEqual(engineer.map((q) => q.key), ['requests']);
+  assert.deepEqual(engineer.map((q) => q.key), ['requests', 'rfqs', 'lpos']);
   const finance = pendingNavigationPlan(
     actor(['bill.approve.finance', 'payment.record', 'payment.view']),
     today,
