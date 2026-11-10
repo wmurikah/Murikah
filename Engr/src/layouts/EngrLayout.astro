@@ -190,9 +190,10 @@ const rawGroups: NavGroup[] = [
       // Regions have no dedicated permission key in the seed; they are part of
       // station setup, so they follow the stations gate.
       has('stations.view') ? { href: '/admin/regions', label: 'Regions', icon: 'regions' } : null,
-      has('assets.view') ? { href: '/admin/assets', label: 'Assets', icon: 'assets' } : null,
-      has('assets.transfer.request') || has('assets.transfer.approve') || has('assets.transfer.dispatch') || has('assets.transfer.receive')
-        ? { href: '/admin/assets/transfers', label: 'Asset transfers', icon: 'assets', badgeKey: 'assetTransfers' }
+      // Transfers are part of Assets, not a second sidebar destination.
+      has('assets.view') || has('assets.transfer.request') || has('assets.transfer.approve') ||
+      has('assets.transfer.dispatch') || has('assets.transfer.receive')
+        ? { href: '/admin/assets', label: 'Assets', icon: 'assets', badgeKey: 'assetTransfers' }
         : null,
       has('contractors.view')
         ? { href: '/admin/contractors', label: 'Contractors', icon: 'contractors' }
@@ -223,9 +224,7 @@ const rawGroups: NavGroup[] = [
       has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
-      has('notifications.monitor')
-        ? { href: '/ops/notifications', label: 'Delivery monitor', icon: 'bell', badgeKey: 'deliveryMonitor' }
-        : null,
+
       isPlatformOwner
         ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
         : null,
@@ -516,6 +515,8 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
             const label = group.dataset.navGroupLabel ?? 'Section';
             heading?.setAttribute('aria-label', total ? label + ', ' + total + ' pending' : label);
           });
+          // Let in-page actions reuse this one authorised fetch rather than make a second request.
+          document.dispatchEvent(new CustomEvent('engr:pending-counts', { detail: counts }));
         } catch {
           // A transient failure leaves the last known counts intact.
         } finally {
