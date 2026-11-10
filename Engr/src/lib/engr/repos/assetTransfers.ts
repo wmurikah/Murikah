@@ -7,6 +7,7 @@
 import type { Client } from '@libsql/client/web';
 import { actorDataScope } from '../auth/dataScope';
 import { recordMovement } from './adminAssets';
+import type { SqlExecutor } from '../notify';
 
 export type TransferStatus =
   | 'REQUESTED' | 'APPROVED' | 'DISPATCHED'
@@ -175,7 +176,7 @@ export async function listTransferDestinations(db: Client, actor: TransferActor)
   return result.rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
 }
 
-async function hasOpenWork(db: Pick<Client, 'execute'>, orgId: string, assetId: string): Promise<boolean> {
+async function hasOpenWork(db: SqlExecutor, orgId: string, assetId: string): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT
        (SELECT COUNT(*) FROM service_requests sr
@@ -190,7 +191,7 @@ async function hasOpenWork(db: Pick<Client, 'execute'>, orgId: string, assetId: 
 }
 
 async function audit(
-  tx: Awaited<ReturnType<Client['transaction']>>,
+  tx: SqlExecutor,
   actor: TransferActor,
   id: string,
   event: string,
