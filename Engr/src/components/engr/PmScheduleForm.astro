@@ -5,12 +5,14 @@
  * note. The day interval applies only to the custom frequency.
  */
 import type { ScheduleDetail, Option } from '@engr/repos/pm';
+import type { AssetOption } from '@engr/repos/requests';
 
 interface Props {
   action: string;
   schedule?: ScheduleDetail | null;
   stations: Option[];
   categories: Option[];
+  assets: AssetOption[];
   contractors: Option[];
   templates: Option[];
   slas: Option[];
@@ -23,6 +25,7 @@ const {
   schedule,
   stations,
   categories,
+  assets,
   contractors,
   templates,
   slas,
@@ -58,7 +61,7 @@ const currentFrequency = s?.frequency ?? 'MONTHLY';
   <div class="engr-field">
     <label for="pm-station">Station</label>
     <select id="pm-station" class="engr-select" name="station_id">
-      <option value="">Not set</option>
+      <option value="">Choose a station (required)</option>
       {
         stations.map((o) => (
           <option value={o.id} selected={s?.stationId === o.id}>
@@ -67,6 +70,17 @@ const currentFrequency = s?.frequency ?? 'MONTHLY';
         ))
       }
     </select>
+  </div>
+
+  <div class="engr-field">
+    <label for="pm-asset">Specific asset (optional)</label>
+    <select id="pm-asset" class="engr-select" name="asset_id">
+      <option value="">Not linked to an individual asset</option>
+      {assets.map((a) => (
+        <option value={a.id} data-station-id={a.stationId} selected={s?.assetId === a.id}>{a.label}</option>
+      ))}
+    </select>
+    <p class="engr-field__hint">If selected, choose the same station where this asset currently belongs.</p>
   </div>
 
   <div class="engr-field">
