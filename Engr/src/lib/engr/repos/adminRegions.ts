@@ -193,6 +193,15 @@ export async function updateRegion(
   if (!(await canClassify(db, actor, input.affiliateOrgId)))
     return { ok: false, code: 'invalid', message: 'Choose an affiliate in the current group.' };
 
+  // Regions owned by an individual affiliate must remain classified to that
+  // affiliate. Only group-owned regions can be assigned among group children.
+  const owner = await db.execute({
+    sql: 'SELECT parent_org_id FROM organisations WHERE id = ? LIMIT 1',
+    args: [current.orgId],
+  });
+  if (owner.rows[0]?.parent_org_id !== null && input.affiliateOrgId !== current.orgId)
+    return { ok: false, code: 'invalid', message: 'A region owned by an affiliate cannot be reassigned outside it.' };
+
   const tx = await db.transaction('write');
   try {
     const updated = await tx.execute({
