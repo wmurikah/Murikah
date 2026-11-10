@@ -70,9 +70,7 @@ if (allowed) {
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        {canConfirm
-          ? 'You can review station confirmations above, but do not have permission to view the full work-order register.'
-          : 'You do not have access to work orders.'}
+        You do not have access to work orders.
       </p>
     ) : (
       <WorkOrderList
