@@ -153,17 +153,17 @@ To create a genuinely required custom role:
 
 An Administrator cannot change or assign the Owner role. Saving changes to a shared default role creates an organisation-specific copy; it does not change other affiliates.
 
-## 8. Create a region
+## 8. Create or reclassify a region
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
 1. Open **Service Setup → Regions**.
 2. Select **New region**.
 3. Enter the **Name**, for example `Nairobi`.
-4. Select **Affiliate**, such as Hass Kenya, Hass Uganda or Fleet Kenya. Platform owners can select any active affiliate within their group; other users are restricted to their current organisation.
-5. Select **Create region**. The system generates its permanent `REG-000001`-style code for that affiliate.
+4. Select **Affiliate** from the existing organisations. When acting as the Hass Group owner or administrator, you can classify the region under Hass, Hass Kenya, Hass Uganda or another active Hass affiliate. Ordinary affiliate users can select only their own organisation.
+5. Select **Create region**. The system generates its permanent `REG-000001`-style code in the owning organisation. It cannot be edited.
 
-To amend a region, open **Service Setup → Regions**, select its name, make the change and select **Save changes**. The code and affiliate ownership cannot be edited after creation. If a region was registered under the wrong affiliate, do not silently move it: create the correct region and reconcile associated stations.
+To amend a region, open **Service Setup → Regions**, select its name, choose another allowed **Affiliate**, and select **Save changes**. Affiliate classification is editable; the region's owning organisation, station links and code are not moved or rewritten. Earlier regions with blank codes receive generated codes when database migration 010 is applied. Existing nonblank/manual codes are preserved.
 
 ## 9. Create a station
 
