@@ -190,8 +190,11 @@ export async function updateRegion(
     return { ok: false, code: 'invalid', message: 'A name of up to 120 characters is required.' };
   const current = await getRegion(db, actor, id);
   if (!current) return { ok: false, code: 'not_found', message: 'Region not found.' };
-  if (!(await canClassify(db, actor, input.affiliateOrgId)))
-    return { ok: false, code: 'invalid', message: 'Choose an affiliate in the current group.' };
+  // Existing affiliation may be inactive. Keep it on a name-only edit, but
+  // require active authorised choices for every actual reassignment.
+  if (input.affiliateOrgId !== current.affiliateOrgId &&
+      !(await canClassify(db, actor, input.affiliateOrgId)))
+    return { ok: false, code: 'invalid', message: 'Choose an active affiliate in the current group.' };
 
   // Regions owned by an individual affiliate must remain classified to that
   // affiliate. Only group-owned regions can be assigned among group children.
