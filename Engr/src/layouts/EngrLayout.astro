@@ -66,7 +66,7 @@ const workOrdersHref = has('workorder.create')
     ? '/technician/workorders'
     : isContractor
       ? '/contractor/workorders'
-      : has('workorder.view') || has('arrival.confirm') || has('jobcard.confirm')
+      : has('workorder.view')
         ? '/workorders'
         : null;
 const rfqHref = has('rfq.view') || (dataScope === 'org' && has('rfq.award'))
