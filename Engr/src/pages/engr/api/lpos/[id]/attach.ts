@@ -58,6 +58,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   const result = await createWorkOrderInLpo(db, ctx, {
     lpoId: id,
     stationId,
+    assetId: str(body.asset_id).trim() || null,
     categoryId: str(body.category_id).trim() || null,
     slaId: str(body.sla_id).trim() || null,
     mileageReferenceStationId: str(body.mileage_reference_station_id).trim() || null,
