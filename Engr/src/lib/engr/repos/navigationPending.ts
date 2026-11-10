@@ -69,16 +69,20 @@ export function pendingNavigationPlan(actor: PendingNavActor, today: string): Co
     if (scope === 'contractor' && (has('workorder.accept') || has('workorder.assign_technician')))
       add('workorders', "SELECT COUNT(*) AS n FROM work_orders wo JOIN contractors c ON c.id = wo.contractor_id AND c.org_id = wo.org_id WHERE wo.org_id = ? AND wo.deleted_at IS NULL AND c.portal_user_id = ? AND ((wo.status = 'CONTRACTOR_NOTIFIED' AND ? = 1) OR (wo.status = 'CONTRACTOR_ACCEPTED' AND ? = 1))", [orgId, userId, Number(has('workorder.accept')), Number(has('workorder.assign_technician'))]);
     else if (scope === 'technician' && has('workorder.execute'))
-      add('workorders', "SELECT COUNT(*) AS n FROM work_orders wo JOIN technicians t ON t.id = wo.technician_id AND t.org_id = wo.org_id WHERE wo.org_id = ? AND wo.deleted_at IS NULL AND t.portal_user_id = ? AND wo.status IN ('TECH_ASSIGNED', 'TECH_ONSITE', 'IN_PROGRESS')", [orgId, userId]);
+      add('workorders', "SELECT COUNT(*) AS n FROM work_orders wo JOIN technicians t ON t.id = wo.technician_id AND t.org_id = wo.org_id WHERE wo.org_id = ? AND wo.deleted_at IS NULL AND t.portal_user_id = ? AND (wo.status IN ('TECH_ASSIGNED', 'TECH_ONSITE', 'IN_PROGRESS') OR (wo.status = 'TECH_ACCEPTED' AND ? = 1 AND NOT EXISTS (SELECT 1 FROM job_safety_analyses j WHERE j.org_id = wo.org_id AND j.work_order_id = wo.id AND j.arrival_requested_at IS NOT NULL)))", [orgId, userId, Number(has('jsa.submit'))]);
     else if (scope === 'org' && has('workorder.assign'))
       add('workorders', "SELECT COUNT(*) AS n FROM work_orders wo WHERE wo.org_id = ? AND wo.deleted_at IS NULL AND wo.status = 'CREATED' AND wo.source = 'REQUEST' AND wo.created_by <> ?", [orgId, userId]);
   }
 
-  if (scope === 'contractor' && has('quotes.view'))
+  if (scope === 'contractor' && has('quotes.view') && has('quotes.submit'))
     add('rfqs', "SELECT COUNT(*) AS n FROM rfq_invitations i JOIN contractors c ON c.id = i.contractor_id AND c.org_id = i.org_id JOIN rfqs rq ON rq.id = i.rfq_id AND rq.org_id = i.org_id WHERE i.org_id = ? AND c.portal_user_id = ? AND i.status <> 'DECLINED' AND rq.status = 'OPEN' AND rq.released_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.rfq_id = rq.id AND q.contractor_id = c.id AND q.org_id = i.org_id AND q.status IN ('SUBMITTED','SELECTED'))", [orgId, userId]);
   else if (scope === 'org' && has('rfq.view')) {
     const conditions: string[] = [];
     const args: Array<string | number> = [orgId];
+    if (has('rfq.submit')) {
+      conditions.push("(rq.status = 'OPEN' AND rq.submitted_at IS NULL AND rq.created_by = ?)");
+      args.push(userId);
+    }
     if (has('rfq.release')) {
       conditions.push("(rq.status = 'OPEN' AND rq.submitted_at IS NOT NULL AND rq.released_at IS NULL AND rq.submitted_by <> ?)");
       args.push(userId);
@@ -105,6 +109,10 @@ export function pendingNavigationPlan(actor: PendingNavActor, today: string): Co
   if (scope === 'org' && has('lpo.view')) {
     const conditions: string[] = [];
     const args: Array<string | number> = [orgId];
+    if (has('lpo.submit')) {
+      conditions.push("(l.status = 'OPEN' AND l.submitted_at IS NULL AND l.created_by = ? AND EXISTS (SELECT 1 FROM work_orders wo WHERE wo.lpo_id = l.id AND wo.org_id = l.org_id AND wo.deleted_at IS NULL))");
+      args.push(userId);
+    }
     if (has('lpo.approve')) {
       conditions.push("(l.status = 'OPEN' AND l.submitted_at IS NOT NULL AND l.approved_at IS NULL AND COALESCE(l.submitted_by,l.created_by) <> ?)");
       args.push(userId);
@@ -133,10 +141,12 @@ export function pendingNavigationPlan(actor: PendingNavActor, today: string): Co
   }
 
   if (scope === 'contractor') {
-    if (has('cost.view'))
-      add('costs', "SELECT COUNT(*) AS n FROM work_costs wc JOIN contractors c ON c.id = wc.contractor_id AND c.org_id = wc.org_id WHERE wc.org_id = ? AND c.portal_user_id = ? AND wc.status IN ('DRAFT','REJECTED')", [orgId, userId]);
-    if (has('bill.view'))
-      add('bills', "SELECT COUNT(*) AS n FROM bills b JOIN contractors c ON c.id = b.contractor_id AND c.org_id = b.org_id WHERE b.org_id = ? AND c.portal_user_id = ? AND b.status IN ('DRAFT','REJECTED')", [orgId, userId]);
+    if (has('cost.view') && has('cost.submit'))
+      add('costs', "SELECT COUNT(*) AS n FROM work_costs wc JOIN contractors c ON c.id = wc.contractor_id AND c.org_id = wc.org_id WHERE wc.org_id = ? AND c.portal_user_id = ? AND wc.status IN ('DRAFT','RECALLED')", [orgId, userId]);
+    if (has('cost.view') && has('cost.create'))
+      add('costs', "SELECT COUNT(*) AS n FROM work_orders wo JOIN contractors c ON c.id = wo.contractor_id AND c.org_id = wo.org_id WHERE wo.org_id = ? AND wo.deleted_at IS NULL AND wo.status = 'CLOSED' AND c.portal_user_id = ? AND NOT EXISTS (SELECT 1 FROM work_costs wc WHERE wc.work_order_id = wo.id AND wc.org_id = wo.org_id AND wc.status <> 'REJECTED')", [orgId, userId]);
+    if (has('bill.view') && has('bill.submit'))
+      add('bills', "SELECT COUNT(*) AS n FROM bills b JOIN contractors c ON c.id = b.contractor_id AND c.org_id = b.org_id WHERE b.org_id = ? AND c.portal_user_id = ? AND b.status = 'DRAFT'", [orgId, userId]);
   }
 
   if (scope === 'org' && has('payment.record'))
