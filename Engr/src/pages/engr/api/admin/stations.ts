@@ -24,6 +24,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const id = str(body.id).trim();
   const input: StationInput = {
     name: str(body.name).trim(),
+    affiliateOrgId: str(body.affiliate_org_id).trim(),
     regionId: str(body.region_id).trim() || null,
     address: str(body.address).trim() || null,
     stationManagerId: str(body.station_manager_id).trim() || null,
@@ -32,7 +33,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   };
 
   const db = await getDb(getEngrEnv(), locals);
-  const ctx = { orgId: engr.orgId, userId: engr.userId };
+  const ctx = { orgId: engr.orgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner, roles: engr.roles };
   const result = id ? await updateStation(db, ctx, id, input) : await createStation(db, ctx, input);
 
   if (result.ok) {
