@@ -5,62 +5,150 @@ import EngrLayout from '@/layouts/EngrLayout.astro';
 import { can } from '@engr/auth/rbac';
 import { getDb } from '@engr/db';
 import { getEngrEnv } from '@engr/env';
-import { listAuditRows, type AuditRow } from '@engr/repos/audit';
+import {
+  listAuditRows, listNotificationAuditRows,
+  type AuditRow, type NotificationAuditRow,
+} from '@engr/repos/audit';
+import { listRecentFailed, type FailedRow } from '@engr/repos/notifications';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
 const allowed = can(Astro.locals, 'audit.view');
+const canSeeDelivery = allowed && can(Astro.locals, 'notifications.monitor');
+const canRetry = canSeeDelivery && can(Astro.locals, 'notifications.retry');
+const filter = Astro.url.searchParams.get('filter') === 'delivery' ? 'delivery' : 'actions';
+const errorCode = Astro.url.searchParams.get('error');
+const retried = Astro.url.searchParams.get('retried') === '1';
 let rows: AuditRow[] = [];
-if (allowed) rows = await listAuditRows(await getDb(getEngrEnv(), Astro.locals), engr.orgId);
+let deliveryRows: NotificationAuditRow[] = [];
+let failed: FailedRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  if (filter === 'delivery' && canSeeDelivery) {
+    [deliveryRows, failed] = await Promise.all([
+      listNotificationAuditRows(db, engr.orgId),
+      canRetry ? listRecentFailed(db, engr.orgId, 200) : Promise.resolve([]),
+    ]);
+  } else if (filter === 'actions') {
+    rows = await listAuditRows(db, engr.orgId);
+  }
+}
+const retryable = new Set(failed.filter((f) => f.retryable).map((f) => f.id));
+const latestEventByNotification = new Map<string, string>();
+for (const row of deliveryRows) {
+  if (!latestEventByNotification.has(row.notificationId)) {
+    latestEventByNotification.set(row.notificationId, row.id);
+  }
+}
 ---
 
 <EngrLayout title="Audit history">
   <div class="engr-page-head">
     <div>
       <h1>Audit history</h1>
-      <p class="engr-lead">Recent recorded actions in this organisation.</p>
+      <p class="engr-lead">Recorded actions and notification delivery outcomes for your organisation.</p>
     </div>
-  </div>
-  {
-    !allowed ? (
-      <p class="engr-error" role="alert">
-        You do not have access to audit history.
-      </p>
-    ) : rows.length === 0 ? (
-      <p class="engr-empty">No audit activity has been recorded.</p>
-    ) : (
-      <div class="engr-tablewrap">
-        <table class="engr-table">
-          <thead>
-            <tr>
-              <>
-                <th>Time</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Record</th>
-              </>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr>
-                <td>
-                  <time datetime={row.createdAt}>
-                    {new Date(row.createdAt).toLocaleString('en-KE')}
-                  </time>
-                </td>
-                <td>{row.actorName}</td>
-                <td>{row.action}</td>
-                <td>
-                  {row.entityType
-                    ? `${row.entityType}${row.entityId ? ` · ${row.entityId}` : ''}`
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    {allowed && (
+      <div class="engr-actionbar">
+        <a href="/admin/audit" class={filter === 'actions' ? 'engr-btn engr-btn--primary' : 'engr-btn engr-btn--secondary'}>
+          Operational actions
+        </a>
+        {canSeeDelivery && (
+          <a href="/admin/audit?filter=delivery" class={filter === 'delivery' ? 'engr-btn engr-btn--primary' : 'engr-btn engr-btn--secondary'}>
+            Notification delivery
+          </a>
+        )}
       </div>
-    )
-  }
+    )}
+  </div>
+
+  {!allowed ? (
+    <p class="engr-error" role="alert">You do not have access to audit history.</p>
+  ) : filter === 'delivery' && !canSeeDelivery ? (
+    <p class="engr-error" role="alert">You do not have permission to review notification deliveries.</p>
+  ) : filter === 'delivery' ? (
+    <>
+      {errorCode && <p class="engr-error" role="alert">The retry could not be completed. The notification may no longer be eligible.</p>}
+      {retried && <p class="engr-notice" role="status">A permitted notification was queued for another delivery attempt.</p>}
+      {deliveryRows.length === 0 ? (
+        <p class="engr-empty">No notification delivery records.</p>
+      ) : (
+        <div class="engr-tablewrap">
+          <table class="engr-table" aria-label="Notification delivery audit">
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Channel</th>
+                <th scope="col">Recipient</th>
+                <th scope="col">Subject / type</th>
+                <th scope="col">Event</th>
+                <th scope="col">Status</th>
+                <th scope="col">Reason / outcome</th>
+                {canRetry && <th scope="col">Retry</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {deliveryRows.map((row) => (
+                <tr>
+                  <td><time datetime={row.occurredAt}>{new Date(row.occurredAt).toLocaleString('en-KE')}</time></td>
+                  <td>{row.actorName}</td>
+                  <td>{row.channel}</td>
+                  <td>{row.recipient}</td>
+                  <td>
+                    {row.subject ?? 'Notification'}
+                    {row.templateKey && <span class="engr-muted"> ({row.templateKey})</span>}
+                  </td>
+                  <td>{row.action}</td>
+                  <td><span class="engr-status">{row.status}</span></td>
+                  <td>{row.reason ?? '—'}</td>
+                  {canRetry && (
+                    <td>
+                      {row.status === 'FAILED' && row.currentStatus === 'FAILED' &&
+                        latestEventByNotification.get(row.notificationId) === row.id &&
+                        retryable.has(row.notificationId) ? (
+                          <form method="post" action={`/api/notifications/${row.notificationId}/retry`}>
+                            <button type="submit" class="engr-btn engr-btn--secondary">Retry</button>
+                          </form>
+                        ) : row.currentStatus === 'FAILED' && row.status === 'FAILED' &&
+                           (row.templateKey === 'auth.invitation' || row.templateKey === 'auth.password.reset') ? (
+                          <span class="engr-muted">New link required</span>
+                        ) : (
+                          <span class="engr-muted">—</span>
+                        )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p class="engr-field__hint">
+        Previous notifications without separate audit events are shown using their recorded status.
+        New delivery attempts, provider receipts and authorised retries retain separate audit entries.
+        Authentication links and notification bodies are never displayed here.
+      </p>
+    </>
+  ) : rows.length === 0 ? (
+    <p class="engr-empty">No audit activity has been recorded.</p>
+  ) : (
+    <div class="engr-tablewrap">
+      <table class="engr-table" aria-label="Operational audit history">
+        <thead>
+          <tr><th>Time</th><th>Actor</th><th>Action</th><th>Record</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr>
+              <td><time datetime={row.createdAt}>{new Date(row.createdAt).toLocaleString('en-KE')}</time></td>
+              <td>{row.actorName}</td>
+              <td>{row.action}</td>
+              <td>{row.entityType ? `${row.entityType}${row.entityId ? ` · ${row.entityId}` : ''}` : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
 </EngrLayout>
