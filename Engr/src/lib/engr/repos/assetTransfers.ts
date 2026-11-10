@@ -183,9 +183,10 @@ async function hasOpenWork(db: SqlExecutor, orgId: string, assetId: string): Pro
          WHERE sr.org_id = ? AND sr.asset_id = ? AND sr.deleted_at IS NULL
            AND sr.status IN ('OPEN','ACCEPTED','RFQ','ASSIGNED','IN_PROGRESS'))
        + (SELECT COUNT(*) FROM work_orders wo
-         WHERE wo.org_id = ? AND wo.asset_id = ? AND wo.deleted_at IS NULL
-           AND wo.status NOT IN ('CLOSED','CANCELLED')) AS n`,
-    args: [orgId, assetId, orgId, assetId],
+          LEFT JOIN service_requests sr ON sr.id = wo.request_id AND sr.org_id = wo.org_id
+         WHERE wo.org_id = ? AND (wo.asset_id = ? OR sr.asset_id = ?)
+           AND wo.deleted_at IS NULL AND wo.status NOT IN ('CLOSED','CANCELLED')) AS n`,
+    args: [orgId, assetId, orgId, assetId, assetId],
   });
   return Number(result.rows[0]?.n ?? 0) > 0;
 }
