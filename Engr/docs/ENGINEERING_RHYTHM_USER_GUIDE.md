@@ -4,7 +4,7 @@
 **Address:** <https://engr.murikah.com>  
 **Initial pilot:** Kenya  
 **Audience:** Owners, administrators, engineering managers, engineers, station managers, finance controllers, contractors, technicians and viewers  
-**Last updated:** 6 November 2026
+**Last updated:** 10 November 2026
 
 This guide explains where to go, what to enter and which role completes each step. A user only sees menu items and records allowed by their role and organisation. The Kenya pilot should use real Kenya records only. Uganda, Tanzania and the other affiliates will be introduced after the Kenya workflow is confirmed.
 
@@ -31,15 +31,14 @@ Never share a personal password or authenticator code. Administrators can reset 
 
 The left menu is divided into sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first. Only sections and pages your role can use are shown.
 
-- **Overview:** Dashboard and Notifications.
-- **Operations:** Requests, Work orders, RFQs, Maintenance and LPOs.
-- **Action Centre:** Station confirmations, Procurement approvals, Mileage approvals, Cost approvals and Bill approvals, according to your role.
-- **Finance:** Costs, Bills, Invoices and Payments. Staff Costs and Bills open the full organisation registers; contractors see their own records.
+- **Overview:** Dashboard.
+- **Operations:** Requests, Work orders, RFQs, Maintenance, LPOs, Station confirmations and Procurement approvals, as permitted by your role.
+- **Finance:** Costs, Bills, Invoices, Payments, Mileage approvals, Cost approvals and Bill approvals, as permitted by your role. Staff Costs and Bills open the full organisation registers; contractors see their own records.
 - **Reports:** Report centre for authorised reporting roles.
 - **Setup:** Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs and Rate cards.
 - **System Settings:** Affiliates, Users, Roles, Notification settings, Delivery monitor, Security settings and Audit history.
 
-On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. The bell opens personal notifications. Select **Mark read** after reviewing a notification.
+On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. A gold number beside a page means you have that many items requiring action. When a menu section is closed, its number totals the pending items inside it; open the section to see which pages need attention. The counts refresh when you change pages, return to the tab or after approximately one minute. No number means nothing currently requires your action in that menu. Personal notification delivery and history still operate in the background, but a separate notification bell and Action Centre menu are no longer displayed.
 
 Buttons only appear when the record is at the correct stage and the signed-in user is allowed to perform the action. Refresh the record before retrying a rejected or conflicting action.
 
