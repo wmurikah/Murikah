@@ -49,7 +49,7 @@ test('existing queues remain linked under the correct parent and contribute to i
   for (const route of [
     '/station/confirmations', '/procurement/approvals',
     '/mileage/approvals', '/costs/approvals', '/bills/approvals',
-  ]) assert.ok(layout.includes(`'\${route}'`), route + ' should keep its parent highlighted');
+  ]) assert.ok(layout.includes(`'${route}'`), route + ' should keep its parent highlighted');
 
   const queues: Array<[string, string, string]> = [
     ['src/pages/engr/workorders/index.astro', '/station/confirmations', 'stationConfirmations'],
