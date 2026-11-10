@@ -74,6 +74,7 @@ if (allowed) {
             <tr>
               <th scope="col">Code</th>
               <th scope="col">Name</th>
+              <th scope="col">Affiliate</th>
               <th scope="col">Region</th>
               <th scope="col">Manager</th>
               <th scope="col">Base</th>
@@ -85,6 +86,7 @@ if (allowed) {
               <tr>
                 <td>{canManage ? <a href={`/admin/stations/${r.id}`}>{r.code}</a> : r.code}</td>
                 <td>{r.name}</td>
+                <td>{r.affiliateName}</td>
                 <td>{r.regionName ?? 'Not set'}</td>
                 <td>{r.managerName ?? 'Not set'}</td>
                 <td>{r.isBase ? 'Yes' : 'No'}</td>
