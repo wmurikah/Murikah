@@ -150,8 +150,8 @@ export async function createBill(
     const tx = await db.transaction('write');
     try {
       await tx.execute({
-        sql: `INSERT INTO bills (id, org_id, contractor_id, bill_no, period_label, period_start, period_end, status, current_level)
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', 0)`,
+        sql: `INSERT INTO bills (id, org_id, contractor_id, bill_no, period_label, period_start, period_end, status, current_level, invoice_required)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', 0, 1)`,
         args: [
           id,
           orgId,
@@ -226,6 +226,18 @@ export async function attachCost(
   const now = new Date().toISOString();
   const tx = await db.transaction('write');
   try {
+    const existingInvoice = await tx.execute({
+      sql: `SELECT 1 FROM supplier_invoices WHERE org_id = ? AND bill_id = ? LIMIT 1`,
+      args: [orgId, billId],
+    });
+    if (existingInvoice.rows.length) {
+      await tx.rollback();
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'Invoice recorded. Create a new bill for further costs.',
+      };
+    }
     await tx.execute({
       sql: `INSERT INTO bill_costs (bill_id, cost_id, org_id, amount_minor) VALUES (?, ?, ?, ?)`,
       args: [billId, costId, orgId, Number(cost.total_minor)],
@@ -271,12 +283,26 @@ export async function submitBill(
       message: 'Attach at least one approved cost before submitting.',
     };
   }
+  const invoiceCheck = await db.execute({
+    sql: `SELECT b.invoice_required, i.id AS invoice_id FROM bills b
+       LEFT JOIN supplier_invoices i ON i.bill_id = b.id AND i.org_id = b.org_id
+           WHERE b.id = ? AND b.org_id = ? LIMIT 1`,
+    args: [billId, orgId],
+  });
+  if (
+    Number(invoiceCheck.rows[0]?.invoice_required ?? 0) === 1 &&
+    !invoiceCheck.rows[0]?.invoice_id
+  )
+    return { ok: false, code: 'invalid', message: 'Add the contractor invoice before submitting.' };
   const now = new Date().toISOString();
   const tx = await db.transaction('write');
   try {
     const moved = await tx.execute({
       sql: `UPDATE bills SET status = 'PENDING_L1_ENG', current_level = 1, submitted_at = ?, updated_at = ?
-             WHERE id = ? AND org_id = ? AND status = 'DRAFT'`,
+             WHERE id = ? AND org_id = ? AND status = 'DRAFT'
+               AND (invoice_required = 0 OR EXISTS (
+                 SELECT 1 FROM supplier_invoices i WHERE i.bill_id = bills.id AND i.org_id = bills.org_id
+               ))`,
       args: [now, now, billId, orgId],
     });
     if (moved.rowsAffected === 0) {

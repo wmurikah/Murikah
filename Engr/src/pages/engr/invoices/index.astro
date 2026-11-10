@@ -1,0 +1,85 @@
+---
+export const prerender = false;
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getDb } from '@engr/db';
+import { getEngrEnv } from '@engr/env';
+import { actorDataScope } from '@engr/auth/dataScope';
+import { contractorForUser } from '@engr/repos/techniciansPick';
+import { listSupplierInvoices, type SupplierInvoice } from '@engr/repos/supplierInvoices';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const allowed = engr.perms.includes('bill.view');
+const scope = actorDataScope(engr.roles);
+let invoices: SupplierInvoice[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  const contractorId =
+    scope === 'contractor' ? await contractorForUser(db, engr.orgId, engr.userId) : null;
+  if (scope !== 'contractor' || contractorId)
+    invoices = await listSupplierInvoices(db, engr.orgId, contractorId);
+}
+---
+
+<EngrLayout title="Contractor invoices">
+  <div class="engr-page-head">
+    <div>
+      <h1>Contractor invoices</h1>
+      <p class="engr-lead">
+        Original invoices attached to contractor bills, with due dates and payment progress.
+      </p>
+    </div>
+  </div>
+  {
+    !allowed ? (
+      <p class="engr-error">You do not have access to invoices.</p>
+    ) : invoices.length === 0 ? (
+      <p class="engr-empty">
+        No invoices have been recorded yet. Contractors add an invoice to a draft bill after
+        attaching costs.
+      </p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table">
+          <>
+            <thead>
+              <tr>
+                <>
+                  <th>Invoice</th>
+                  <th>Contractor</th>
+                  <th>Bill</th>
+                  <th>Issued</th>
+                  <th>Due</th>
+                  <th>Amount</th>
+                  <th>Outstanding</th>
+                  <th>Status</th>
+                  <th>Original</th>
+                </>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((i) => (
+                <tr>
+                  <td>{i.invoiceNo}</td>
+                  <td>{i.contractorName}</td>
+                  <td>
+                    <a href={`/bills/${i.billId}`}>{i.billNo}</a>
+                  </td>
+                  <td>{i.issueDate}</td>
+                  <td>{i.dueDate}</td>
+                  <td>{formatMoneyMinor(i.amountMinor, i.currency)}</td>
+                  <td>{formatMoneyMinor(Math.max(0, i.amountMinor - i.paidMinor), i.currency)}</td>
+                  <td>{i.billStatus}</td>
+                  <td>
+                    {i.hasOriginal && <a href={`/api/invoices/${i.id}/original`}>Download PDF</a>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </>
+        </table>
+      </div>
+    )
+  }
+</EngrLayout>

@@ -5,6 +5,7 @@
  * skip anything already removed.
  */
 import type { Client } from '@libsql/client/web';
+import type { SqlExecutor } from '../notify';
 
 const newId = (): string => crypto.randomUUID().replace(/-/g, '');
 
@@ -53,6 +54,80 @@ export interface AssetInput {
   serialNo: string | null;
   installDate: string | null;
   status: string;
+  movementReason?: string | null;
+}
+
+export interface AssetMovement {
+  fromStation: string | null;
+  fromRegion: string | null;
+  toStation: string;
+  toRegion: string | null;
+  reason: string | null;
+  movedBy: string | null;
+  movedAt: string;
+}
+
+export async function listAssetMovements(
+  db: Client,
+  orgId: string,
+  assetId: string,
+): Promise<AssetMovement[]> {
+  const res = await db.execute({
+    sql: `SELECT m.from_station_name, m.from_region_name, m.to_station_name,
+                 m.to_region_name, m.reason, m.moved_at, u.full_name AS moved_by
+            FROM asset_movements m LEFT JOIN users u ON u.id = m.moved_by AND u.org_id = m.org_id
+           WHERE m.org_id = ? AND m.asset_id = ? ORDER BY m.moved_at DESC LIMIT 200`,
+    args: [orgId, assetId],
+  });
+  return res.rows.map((r) => ({
+    fromStation: r.from_station_name == null ? null : String(r.from_station_name),
+    fromRegion: r.from_region_name == null ? null : String(r.from_region_name),
+    toStation: String(r.to_station_name),
+    toRegion: r.to_region_name == null ? null : String(r.to_region_name),
+    reason: r.reason == null ? null : String(r.reason),
+    movedBy: r.moved_by == null ? null : String(r.moved_by),
+    movedAt: String(r.moved_at),
+  }));
+}
+
+async function recordMovement(
+  tx: SqlExecutor,
+  ctx: { orgId: string; userId: string },
+  assetId: string,
+  fromStationId: string | null,
+  toStationId: string,
+  reason: string | null,
+): Promise<void> {
+  const result = await tx.execute({
+    sql: `SELECT s.id, s.name AS station_name, s.region_id, r.name AS region_name
+            FROM stations s LEFT JOIN regions r ON r.id = s.region_id AND r.org_id = s.org_id
+           WHERE s.org_id = ? AND s.id IN (?, ?)`,
+    args: [ctx.orgId, fromStationId ?? toStationId, toStationId],
+  });
+  const from = fromStationId ? result.rows.find((r) => String(r.id) === fromStationId) : null;
+  const to = result.rows.find((r) => String(r.id) === toStationId);
+  if (!to || (fromStationId && !from)) throw new Error('Asset station is unavailable.');
+  await tx.execute({
+    sql: `INSERT INTO asset_movements
+      (id, org_id, asset_id, from_station_id, from_station_name, from_region_id, from_region_name,
+       to_station_id, to_station_name, to_region_id, to_region_name, reason, moved_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      newId(),
+      ctx.orgId,
+      assetId,
+      fromStationId,
+      from?.station_name ?? null,
+      from?.region_id ?? null,
+      from?.region_name ?? null,
+      toStationId,
+      to.station_name,
+      to.region_id,
+      to.region_name,
+      reason,
+      ctx.userId,
+    ],
+  });
 }
 
 export async function listAssetsAdmin(db: Client, orgId: string): Promise<AssetRow[]> {
@@ -172,6 +247,7 @@ export async function createAsset(
             VALUES (?, ?, 'assets.create', 'asset', ?, ?)`,
       args: [ctx.orgId, ctx.userId, id, JSON.stringify({ tag: input.tag, name: input.name })],
     });
+    await recordMovement(tx, ctx, id, null, input.stationId, 'Initial placement');
     await tx.commit();
     return { ok: true, id };
   } catch (err) {
@@ -199,10 +275,24 @@ export async function updateAsset(
   }
   const tx = await db.transaction('write');
   try {
+    const current = await tx.execute({
+      sql: `SELECT station_id FROM assets WHERE id = ? AND org_id = ? AND deleted_at IS NULL LIMIT 1`,
+      args: [id, ctx.orgId],
+    });
+    const oldStationId =
+      current.rows[0]?.station_id == null ? null : String(current.rows[0].station_id);
+    if (!oldStationId) {
+      await tx.rollback();
+      return { ok: false, code: 'not_found', message: 'That asset was not found.' };
+    }
+    if (oldStationId !== input.stationId && !input.movementReason?.trim()) {
+      await tx.rollback();
+      return { ok: false, code: 'invalid', message: 'Give a reason for moving the asset.' };
+    }
     const upd = await tx.execute({
       sql: `UPDATE assets
                SET station_id = ?, category_id = ?, tag = ?, name = ?, manufacturer = ?, model = ?, serial_no = ?, install_date = ?, status = ?
-             WHERE id = ? AND org_id = ? AND deleted_at IS NULL`,
+             WHERE id = ? AND org_id = ? AND station_id = ? AND deleted_at IS NULL`,
       args: [
         input.stationId,
         input.categoryId,
@@ -215,11 +305,26 @@ export async function updateAsset(
         input.status,
         id,
         ctx.orgId,
+        oldStationId,
       ],
     });
     if (upd.rowsAffected === 0) {
       await tx.rollback();
-      return { ok: false, code: 'not_found', message: 'That asset was not found.' };
+      return {
+        ok: false,
+        code: 'conflict',
+        message: 'Asset location changed. Reload and try again.',
+      };
+    }
+    if (oldStationId !== input.stationId) {
+      await recordMovement(
+        tx,
+        ctx,
+        id,
+        oldStationId,
+        input.stationId,
+        input.movementReason!.trim(),
+      );
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)

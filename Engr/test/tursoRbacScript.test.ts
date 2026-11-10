@@ -7,6 +7,7 @@ import { createClient } from '@libsql/client';
 import { migrations } from '../db/migrations/index.ts';
 import { comprehensiveRbac, RBAC_PERMISSIONS } from '../db/migrations/006_comprehensive_rbac.ts';
 import { queryIndexes } from '../db/migrations/007_query_indexes.ts';
+import { invoicesAndAssetMovements } from '../db/migrations/008_invoices_asset_movements.ts';
 import { verifySchemaContract } from '../db/schema-contract.ts';
 
 test('Turso Web RBAC script upgrades migration 005 without transaction keywords or drift', async () => {
@@ -33,6 +34,7 @@ test('Turso Web RBAC script upgrades migration 005 without transaction keywords 
     assert.doesNotMatch(apply, /__CHECKSUM__/);
     await client.executeMultiple(apply);
     await queryIndexes.up(client);
+    await invoicesAndAssetMovements.up(client);
     await verifySchemaContract(client);
 
     const history = await client.execute(`SELECT checksum FROM schema_migrations WHERE id = '006'`);
