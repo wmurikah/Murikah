@@ -15,6 +15,7 @@ if (!engr) return Astro.redirect('/login');
 
 const allowed = can(Astro.locals, 'assets.view');
 const canManage = can(Astro.locals, 'assets.manage');
+const canSeeTransfers = engr.perms.some((key) => key.startsWith('assets.transfer.'));
 const saved = Astro.url.searchParams.get('saved');
 const errorCode = Astro.url.searchParams.get('error');
 
@@ -32,9 +33,13 @@ if (allowed) {
       <p class="engr-lead">Equipment tracked against each station.</p>
     </div>
     <div class="engr-actionbar">
-      <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Categories</a>
-      {engr.perms.some((key) => key.startsWith('assets.transfer.')) &&
-        <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary">Asset transfers</a>}
+      {allowed && <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Categories</a>}
+      {canSeeTransfers && (
+        <a href="/admin/assets/transfers" class="engr-btn engr-btn--secondary engr-btn--with-count" data-asset-transfer-link>
+          Asset transfers
+          <span class="engr-navcount" data-asset-transfer-count hidden aria-hidden="true" />
+        </a>
+      )}
       {
         canManage && (
           <a href="/admin/assets/new" class="engr-btn engr-btn--primary">
@@ -63,7 +68,9 @@ if (allowed) {
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        You do not have access to assets.
+        {canSeeTransfers
+          ? 'Use Asset transfers above to review movements assigned to you. You do not have access to the asset register.'
+          : 'You do not have access to assets.'}
       </p>
     ) : rows.length === 0 ? (
       <EmptyState
@@ -127,3 +134,22 @@ if (allowed) {
     )
   }
 </EngrLayout>
+
+<script>
+  // Use the same permission-scoped pending counts already loaded for the sidebar.
+  // No duplicate API call or independent interpretation of transfer permissions.
+  document.addEventListener('engr:pending-counts', (event: Event) => {
+    const badge = document.querySelector<HTMLElement>('[data-asset-transfer-count]');
+    const link = document.querySelector<HTMLAnchorElement>('[data-asset-transfer-link]');
+    if (!badge || !link) return;
+    const counts = (event as CustomEvent<Record<string, number>>).detail;
+    const raw = Number(counts?.assetTransfers ?? 0);
+    const n = Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.title = n ? n + ' transfers awaiting your action' : '';
+    badge.toggleAttribute('hidden', n === 0);
+    link.setAttribute('aria-label', n
+      ? 'Asset transfers, ' + n + ' awaiting your action'
+      : 'Asset transfers');
+  });
+</script>
