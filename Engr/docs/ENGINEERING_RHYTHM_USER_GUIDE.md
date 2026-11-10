@@ -36,7 +36,7 @@ The left menu is divided into sections. Each section starts closed; select its h
 - **Finance:** Costs, Bills, Invoices, Payments, Mileage approvals, Cost approvals and Bill approvals, as permitted by your role. Staff Costs and Bills open the full organisation registers; contractors see their own records.
 - **Reports:** Report centre for authorised reporting roles.
 - **Setup:** Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs and Rate cards.
-- **System Settings:** Affiliates, Users, Roles, Notification settings, Delivery monitor, Security settings and Audit history.
+- **System Settings:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history. Notification delivery events are available within Audit history to authorised administrators.
 
 On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. A gold number beside a page means you have that many items requiring action. When a menu section is closed, its number totals the pending items inside it; open the section to see which pages need attention. The counts refresh when you change pages, return to the tab or after approximately one minute. No number means nothing currently requires your action in that menu. Personal notification delivery and history still operate in the background, but a separate notification bell and Action Centre menu are no longer displayed.
 
@@ -205,13 +205,13 @@ To change a station, select it in **Setup → Stations**, update the fields and 
 6. Set **Status** to **In service**, **Faulty** or **Decommissioned**.
 7. Select **Create asset**.
 
-Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Setup → Asset transfers**; simply editing an asset does not move it.
+Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Setup → Assets → Asset transfers**; simply editing an asset does not move it. A gold count on **Assets** and its **Asset transfers** button shows your pending custody decisions.
 
 ### Controlled asset transfers
 
 A transfer passes through four stages: **Requested → Approved → Dispatched → Received**. Rejected or cancelled requests do not change the asset's official station.
 
-1. From **Setup → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
+1. From **Setup → Assets → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
 2. An authorised Engineering Manager, Administrator or Owner **approves** the request. The requester cannot approve their own request.
 3. The sending station manager (or authorised management user) confirms **dispatch**, recording the actual condition and physical serial number where available.
 4. The destination station manager (or another authorised management user) confirms **receipt**. The person who dispatched the asset cannot confirm its receipt.
@@ -308,7 +308,7 @@ Use the displayed edit and delete controls to correct items. Rates are used when
 
 Provider credentials are Cloudflare secrets and are not shown in the page. If an enabled external channel is not configured, its alerts remain queued rather than being marked as delivered.
 
-To monitor delivery, open **System Settings → Delivery monitor**. Review queued, sent and failed totals. Select **Retry** only after the provider issue is corrected.
+To review delivery issues, open **System Settings → Audit history → Notification delivery** (requires both audit and delivery-monitor permissions). Filtered records include channel, recipient, subject/template, outcome, reason, actor and time; authentication message bodies and links are not displayed. Historical notification records remain available. Select **Retry** only for an eligible failed delivery and only after the underlying issue is corrected. Expired authentication links must be newly requested rather than replayed.
 
 ## 17. Raise and triage a request
 
@@ -554,7 +554,7 @@ To correct an incorrect payment, find it in the payment history and select **Rev
 - Open **Overview → Dashboard** to review open work, approval queues, trends and organisation charts.
 - Select a count or chart segment to open the records behind it.
 - Select **Export work orders** to download the organisation report when the role permits export.
-- Open **System Settings → Audit history** to review who performed a recorded action and when.
+- Open **System Settings → Audit history** to review recorded operational actions. The **Notification delivery** filter shows delivery events, failures and retries to authorised administrators. The dedicated Delivery Monitor page has been retired.
 - Use the organisation switcher only when signed in as an authorised platform owner. Confirm the acting organisation before changing data.
 
 ## 27. Standard daily routine by role
