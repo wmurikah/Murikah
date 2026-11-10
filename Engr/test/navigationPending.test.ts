@@ -88,12 +88,11 @@ test('read batch combines maintenance items and omits completed or zero counts',
       return [
         { rows: [{ n: 2 }] },
         { rows: [{ n: 3 }] },
-        { rows: [{ n: 0 }] },
       ];
     },
   } as unknown as Client;
   const counts = await getPendingNavigationCounts(fakeDb, allowed, today);
-  assert.equal(queries.length, 3);
+  assert.equal(queries.length, 2);
   assert.deepEqual(counts, { maintenance: 5 });
 });
 
@@ -107,5 +106,8 @@ test('sidebar shows section totals when closed and item counters when opened', (
   assert.doesNotMatch(layout, /label: 'Action Centre'/);
   assert.match(layout, /label: 'Procurement approvals'/);
   assert.match(layout, /label: 'Bill approvals'/);
+  assert.match(layout, /label: 'Assets'.*badgeKey: 'assetTransfers'/);
+  assert.doesNotMatch(layout, /label: 'Asset transfers'/);
+  assert.doesNotMatch(layout, /label: 'Delivery monitor'/);
   assert.match(css, /\.engr-navgroup\[open\].*\[data-nav-group-count\]/);
 });

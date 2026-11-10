@@ -15,7 +15,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   if (!engr) return jsonResponse({ error: 'unauthorised' }, 401);
   const id = params.id;
   if (!id) return jsonResponse({ error: 'invalid' }, 400);
-  const back = '/ops/notifications';
+  const back = '/admin/audit?filter=delivery';
 
   if (!engr.perms.includes('notifications.retry')) {
     return wantsJson(request)
@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   }
 
   const db = await getDb(getEngrEnv(), locals);
-  const ok = await retryFailed(db, engr.orgId, id);
+  const ok = await retryFailed(db, engr.orgId, id, engr.userId);
   if (!ok) {
     return wantsJson(request)
       ? jsonResponse({ ok: false, error: 'conflict' }, 409)

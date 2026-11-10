@@ -102,17 +102,13 @@ const spendByContractor = charts
   {
     (can(Astro.locals, 'arrival.confirm') ||
       can(Astro.locals, 'rfq.award') ||
-      can(Astro.locals, 'cost.approve') ||
-      can(Astro.locals, 'notifications.monitor')) && (
+      can(Astro.locals, 'cost.approve')) && (
       <nav class="engr-toggle" aria-label="Queues" style="margin:0 0 1.25rem;flex-wrap:wrap">
         {can(Astro.locals, 'arrival.confirm') && <a href="/station/confirmations">Confirmations</a>}
         {can(Astro.locals, 'rfq.award') && (
           <a href="/procurement/approvals">Procurement approvals</a>
         )}
         {can(Astro.locals, 'cost.approve') && <a href="/mileage/approvals">Mileage approvals</a>}
-        {can(Astro.locals, 'notifications.monitor') && (
-          <a href="/ops/notifications">Notifications ops</a>
-        )}
       </nav>
     )
   }

@@ -4,6 +4,7 @@
  * a recipient mark a row read or an operator retry a failed row.
  */
 import type { Client } from '@libsql/client/web';
+import { recordNotificationEvent } from '../notify/deliveryAudit';
 
 // A recipient's own IN_APP rows: addressed directly, or to a contractor or
 // technician whose portal account they are.
@@ -83,9 +84,16 @@ export async function listRecentFailed(
 }
 
 /** Flip a FAILED row back to QUEUED so the dispatcher retries it. */
-export async function retryFailed(db: Client, orgId: string, id: string): Promise<boolean> {
-  const res = await db.execute({
-    sql: `UPDATE notifications SET status = 'QUEUED', error = NULL, sent_at = NULL
+export async function retryFailed(
+  db: Client,
+  orgId: string,
+  id: string,
+  actorUserId?: string,
+): Promise<boolean> {
+  const tx = await db.transaction('write');
+  try {
+    const res = await tx.execute({
+      sql: `UPDATE notifications SET status = 'QUEUED', error = NULL, sent_at = NULL
            WHERE id = ? AND org_id = ? AND status = 'FAILED'
              AND (COALESCE(template_key, '') NOT IN ('auth.invitation','auth.password.reset')
                   OR EXISTS (
@@ -97,9 +105,26 @@ export async function retryFailed(db: Client, orgId: string, id: string): Promis
                        AND t.token_hash = substr(notifications.body, 26, 64)
                        AND t.used_at IS NULL AND t.expires_at > ?
                   ))`,
-    args: [id, orgId, new Date().toISOString()],
-  });
-  return res.rowsAffected === 1;
+      args: [id, orgId, new Date().toISOString()],
+    });
+    if (res.rowsAffected !== 1) {
+      await tx.rollback();
+      return false;
+    }
+    await recordNotificationEvent(tx, {
+      notificationId: id,
+      orgId,
+      actorUserId,
+      event: 'retry_queued',
+      status: 'QUEUED',
+      reason: 'Authorised manual retry queued',
+    });
+    await tx.commit();
+    return true;
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
 }
 
 export interface InAppRow {
@@ -151,18 +176,30 @@ export async function applyDeliveryReceipt(
   delivered: boolean,
   reason: string | null,
 ): Promise<boolean> {
-  if (delivered) {
-    const res = await db.execute({
-      sql: `UPDATE notifications SET error = NULL WHERE id = ? AND status = 'SENT'`,
-      args: [id],
+  const tx = await db.transaction('write');
+  try {
+    const res = await tx.execute({
+      sql: delivered
+        ? `UPDATE notifications SET error = NULL WHERE id = ? AND status = 'SENT'`
+        : `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ? AND status = 'SENT'`,
+      args: delivered ? [id] : [reason ?? 'provider reported delivery failure', id],
     });
-    return res.rowsAffected === 1;
+    if (res.rowsAffected !== 1) {
+      await tx.rollback();
+      return false;
+    }
+    await recordNotificationEvent(tx, {
+      notificationId: id,
+      event: delivered ? 'provider_delivered' : 'provider_failed',
+      status: delivered ? 'DELIVERED' : 'FAILED',
+      reason: delivered ? null : reason ?? 'provider reported delivery failure',
+    });
+    await tx.commit();
+    return true;
+  } catch (error) {
+    await tx.rollback();
+    throw error;
   }
-  const res = await db.execute({
-    sql: `UPDATE notifications SET status = 'FAILED', error = ? WHERE id = ? AND status = 'SENT'`,
-    args: [reason ?? 'provider reported delivery failure', id],
-  });
-  return res.rowsAffected === 1;
 }
 
 /** Mark one of the user's own IN_APP rows READ. */

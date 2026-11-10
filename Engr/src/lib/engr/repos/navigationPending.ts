@@ -24,7 +24,6 @@ export type PendingNavKey =
   | 'costs'
   | 'bills'
   | 'payments'
-  | 'deliveryMonitor'
   | 'assetTransfers';
 
 export type PendingNavCounts = Partial<Record<PendingNavKey, number>>;
@@ -152,9 +151,6 @@ export function pendingNavigationPlan(actor: PendingNavActor, today: string): Co
 
   if (scope === 'org' && has('payment.record'))
     add('payments', "SELECT COUNT(*) AS n FROM bills b WHERE b.org_id = ? AND b.status = 'APPROVED_READY_FOR_PAYMENT' AND b.total_minor > (SELECT COALESCE(SUM(p.amount_minor),0) FROM payments p WHERE p.org_id = b.org_id AND p.bill_id = b.id AND p.status <> 'REVERSED') AND NOT EXISTS (SELECT 1 FROM bill_approvals a WHERE a.org_id = b.org_id AND a.bill_id = b.id AND a.level = 3 AND a.decision = 'APPROVED' AND a.approver_id = ?)", [orgId, userId]);
-
-  if (scope === 'org' && has('notifications.monitor'))
-    add('deliveryMonitor', "SELECT COUNT(*) AS n FROM notifications WHERE org_id = ? AND status = 'FAILED'");
 
   // Transfer counts represent the next action, not an unread notification.
   if (has('assets.transfer.request') || has('assets.transfer.approve') ||
