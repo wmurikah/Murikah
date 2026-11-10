@@ -2,6 +2,9 @@ import type { Client, Transaction } from '@libsql/client/web';
 import { requestIp } from './trackedSession.ts';
 
 const FAILURE_THRESHOLD = 5;
+// A shared office address can have many legitimate users. Keep account
+// throttling strict while requiring more failures to block the whole address.
+const IP_FAILURE_THRESHOLD = 30;
 const MAX_BLOCK_SECONDS = 30 * 60;
 
 async function hash(value: string): Promise<string> {
@@ -20,9 +23,10 @@ export async function accountLoginHash(email: string): Promise<string> {
   return hash(email.trim().toLowerCase());
 }
 
-export function blockSeconds(failures: number): number {
-  if (failures < FAILURE_THRESHOLD) return 0;
-  return Math.min(MAX_BLOCK_SECONDS, 60 * 2 ** (failures - FAILURE_THRESHOLD));
+export function blockSeconds(failures: number, scope: 'ACCOUNT' | 'IP' = 'ACCOUNT'): number {
+  const threshold = scope === 'IP' ? IP_FAILURE_THRESHOLD : FAILURE_THRESHOLD;
+  if (failures < threshold) return 0;
+  return Math.min(MAX_BLOCK_SECONDS, 60 * 2 ** (failures - threshold));
 }
 
 export async function isLoginBlocked(
@@ -30,13 +34,32 @@ export async function isLoginBlocked(
   accountHash: string,
   ipHash: string,
 ): Promise<boolean> {
+  const cutoff = new Date(Date.now() - MAX_BLOCK_SECONDS * 1000).toISOString();
   const result = await db.execute({
-    sql: `SELECT blocked_until FROM auth_login_limits
-           WHERE (scope = 'ACCOUNT' AND key_hash = ?) OR (scope = 'IP' AND key_hash = ?)`,
-    args: [accountHash, ipHash],
+    sql: `SELECT l.scope, l.blocked_until,
+                 CASE WHEN l.scope = 'ACCOUNT' THEN
+                   (SELECT COUNT(*) FROM auth_login_events e
+                     WHERE e.account_hash = ? AND e.outcome = 'FAILURE'
+                       AND e.created_at >= MAX(COALESCE(l.first_failure_at, ''), ?))
+                 ELSE
+                   (SELECT COUNT(*) FROM auth_login_events e
+                     WHERE e.ip_hash = ? AND e.outcome = 'FAILURE'
+                       AND e.created_at >= MAX(COALESCE(l.first_failure_at, ''), ?))
+                 END AS recent_failures
+            FROM auth_login_limits l
+           WHERE (l.scope = 'ACCOUNT' AND l.key_hash = ?)
+              OR (l.scope = 'IP' AND l.key_hash = ?)`,
+    args: [accountHash, cutoff, ipHash, cutoff, accountHash, ipHash],
   });
   const now = Date.now();
-  return result.rows.some((row) => Date.parse(String(row.blocked_until ?? '')) > now);
+  return result.rows.some((row) => {
+    const scope = String(row.scope) as 'ACCOUNT' | 'IP';
+    return (
+      Number(row.recent_failures ?? 0) >=
+        (scope === 'IP' ? IP_FAILURE_THRESHOLD : FAILURE_THRESHOLD) &&
+      Date.parse(String(row.blocked_until ?? '')) > now
+    );
+  });
 }
 
 async function increment(
@@ -46,12 +69,27 @@ async function increment(
   now: Date,
 ): Promise<number> {
   const prior = await tx.execute({
-    sql: `SELECT failure_count FROM auth_login_limits WHERE scope = ? AND key_hash = ?`,
+    sql: `SELECT first_failure_at FROM auth_login_limits WHERE scope = ? AND key_hash = ?`,
     args: [scope, key],
   });
-  const count = Number(prior.rows[0]?.failure_count ?? 0) + 1;
-  const seconds = blockSeconds(count);
+  const cutoff = new Date(now.getTime() - MAX_BLOCK_SECONDS * 1000).toISOString();
+  const from = prior.rows[0]
+    ? String(prior.rows[0].first_failure_at ?? '') > cutoff
+      ? String(prior.rows[0].first_failure_at)
+      : cutoff
+    : now.toISOString();
+  const column = scope === 'ACCOUNT' ? 'account_hash' : 'ip_hash';
+  const recent = prior.rows[0]
+    ? await tx.execute({
+        sql: `SELECT COUNT(*) AS n, MIN(created_at) AS first_at FROM auth_login_events
+               WHERE ${column} = ? AND outcome = 'FAILURE' AND created_at >= ?`,
+        args: [key, from],
+      })
+    : null;
+  const count = Number(recent?.rows[0]?.n ?? 0) + 1;
+  const seconds = blockSeconds(count, scope);
   const blocked = seconds ? new Date(now.getTime() + seconds * 1000).toISOString() : null;
+  const firstFailure = String(recent?.rows[0]?.first_at ?? now.toISOString());
   await tx.execute({
     sql: `INSERT INTO auth_login_limits
             (scope, key_hash, failure_count, blocked_until, first_failure_at, last_failure_at)
@@ -59,8 +97,9 @@ async function increment(
           ON CONFLICT(scope, key_hash) DO UPDATE SET
             failure_count = excluded.failure_count,
             blocked_until = excluded.blocked_until,
+            first_failure_at = excluded.first_failure_at,
             last_failure_at = excluded.last_failure_at`,
-    args: [scope, key, count, blocked, now.toISOString(), now.toISOString()],
+    args: [scope, key, count, blocked, firstFailure, now.toISOString()],
   });
   return count;
 }
@@ -69,7 +108,6 @@ export async function recordLoginFailure(
   db: Client,
   keys: { accountHash: string; ipHash: string },
   identity?: { userId: string; orgId: string },
-  blocked = false,
 ): Promise<void> {
   const tx = await db.transaction('write');
   try {
@@ -85,7 +123,7 @@ export async function recordLoginFailure(
         keys.ipHash,
         identity?.orgId ?? null,
         identity?.userId ?? null,
-        blocked ? 'BLOCKED' : 'FAILURE',
+        'FAILURE',
         now.toISOString(),
       ],
     });
@@ -110,6 +148,19 @@ export async function recordLoginFailure(
     await tx.rollback();
     throw error;
   }
+}
+
+/** Log a denied retry without extending either lockout. Repeated clicks on
+ * Sign in must not keep a legitimate user locked out indefinitely. */
+export async function recordLoginBlocked(
+  db: Client,
+  keys: { accountHash: string; ipHash: string },
+): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO auth_login_events (account_hash, ip_hash, outcome)
+          VALUES (?, ?, 'BLOCKED')`,
+    args: [keys.accountHash, keys.ipHash],
+  });
 }
 
 export async function recordLoginSuccess(

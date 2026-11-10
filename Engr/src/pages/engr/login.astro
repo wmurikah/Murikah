@@ -17,6 +17,7 @@ import EngrAuthLayout from '@/layouts/EngrAuthLayout.astro';
 
 const params = Astro.url.searchParams;
 const hasError = params.get('error') === '1';
+const limited = params.get('error') === 'limited';
 const unavailable = params.get('error') === 'unavailable';
 const passwordChanged = params.get('password') === 'changed';
 const errId = 'engr-login-error';
@@ -46,8 +47,16 @@ const errId = 'engr-login-error';
   {
     hasError && (
       <p id={errId} class="engr-error" role="alert">
-        Sign-in failed. Check your details, or use Forgot password to set a new one. After several
-        attempts, wait 30 minutes before trying again.
+        We couldn't sign you in. Check the details you entered, or use Forgot password to set a new
+        password.
+      </p>
+    )
+  }
+  {
+    limited && (
+      <p id={errId} class="engr-error" role="alert">
+        Too many sign-in attempts. Please wait and try again, or use Forgot password to reset your
+        account. Repeated clicks will not extend the wait.
       </p>
     )
   }
