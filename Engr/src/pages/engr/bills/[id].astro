@@ -76,7 +76,18 @@ const decideLevel =
       <h1>{bill ? bill.billNo : 'Bill'}</h1>
       <p class="engr-lead">Contractor bill and its approvals.</p>
     </div>
-    <a href="/bills/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+    <div class="engr-actionbar">
+      <a href={isContractor ? '/contractor/bills' : '/bills'} class="engr-btn engr-btn--secondary">
+        {isContractor ? 'My bills' : 'All bills'}
+      </a>
+      {
+        (canEngineering || canFinance) && (
+          <a href="/bills/approvals" class="engr-btn engr-btn--secondary">
+            Approvals
+          </a>
+        )
+      }
+    </div>
   </div>
 
   {

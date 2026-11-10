@@ -3,9 +3,8 @@ export const prerender = false;
 
 /**
  * Dashboard. Count cards and analytics charts, each org-scoped and each a launch
- * surface: every card and every chart segment links into the filtered list
- * behind it, as a real, shareable URL. Primary navigation lives in the sidebar;
- * this page keeps only the niche queues the sidebar does not carry.
+ * surface: every card and every chart segment links to its corresponding
+ * register or action queue. Primary navigation lives in the sidebar.
  *
  * Gate: the seeded permissions table has no dashboard.view key, so this gates on
  * reports.view ("View reports and dashboards"), the closest existing key, rather
@@ -62,12 +61,8 @@ const woByStatus = charts
 const reqByPriority = charts
   ? withHref(charts.requestsByPriority, (d) => `/requests?scope=all&priority=${d.key}`)
   : [];
-const costPipeline = charts ? withHref(charts.costPipeline, () => '/costs/approvals') : [];
-const billPipeline = charts
-  ? withHref(charts.billPipeline, (d) =>
-      d.key === 'PAID' || d.key === 'APPROVED_READY_FOR_PAYMENT' ? '/payments' : '/bills/approvals',
-    )
-  : [];
+const costPipeline = charts ? withHref(charts.costPipeline, () => '/costs') : [];
+const billPipeline = charts ? withHref(charts.billPipeline, () => '/bills') : [];
 const openByStation = charts
   ? withHref(charts.openWorkByStation, (d) => `/workorders?station=${d.key}`)
   : [];
@@ -142,7 +137,7 @@ const spendByContractor = charts
               </a>
             )}
 
-            {canCosts && (
+            {can(Astro.locals, 'cost.approve') && (
               <a class="engr-card" href="/costs/approvals" aria-labelledby="card-cost">
                 <h2 class="engr-card__label" id="card-cost">
                   Pending cost approvals
@@ -153,7 +148,8 @@ const spendByContractor = charts
               </a>
             )}
 
-            {canBills && (
+            {(can(Astro.locals, 'bill.approve.engineering') ||
+              can(Astro.locals, 'bill.approve.finance')) && (
               <a class="engr-card" href="/bills/approvals" aria-labelledby="card-bill">
                 <h2 class="engr-card__label" id="card-bill">
                   Pending bill approvals

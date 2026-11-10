@@ -48,6 +48,20 @@ export async function listCostsForContractor(
   return res.rows.map((r) => mapCostRow(r as Record<string, unknown>));
 }
 
+/** Organisation register, newest first. Fetch one extra row to support paging. */
+export async function listCostsForOrganisation(
+  db: Client,
+  orgId: string,
+  offset: number,
+  pageSize = 50,
+): Promise<CostListRow[]> {
+  const res = await db.execute({
+    sql: `${COST_LIST_SELECT} ORDER BY wc.created_at DESC, wc.id DESC LIMIT ? OFFSET ?`,
+    args: [orgId, pageSize + 1, offset],
+  });
+  return res.rows.map((r) => mapCostRow(r as Record<string, unknown>));
+}
+
 /** Costs awaiting a given approval level (1 or 2). */
 export async function listPendingCosts(
   db: Client,

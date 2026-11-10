@@ -6,7 +6,7 @@
  * assistive tech. The product is marked noindex; it is an authenticated app.
  *
  * When signed in, a persistent left sidebar groups the destinations (Overview,
- * Operations, Finance, Setup, System Settings) into collapsible sections, each with a category
+ * Operations, Action Centre, Finance, Setup, System Settings) into collapsible sections, each with a category
  * icon, and shows the organisation name and a notification bell at the top. Only
  * items the user holds a permission for are rendered, so a contractor sees a
  * much shorter menu than an owner. All groups start closed and open when their
@@ -80,17 +80,18 @@ const lpoHref = has('lpo.create')
     : has('lpo.view')
       ? '/lpos'
       : null;
-const costsHref = has('cost.approve')
-  ? '/costs/approvals'
-  : has('cost.create')
-    ? '/contractor/costs'
+const costsHref =
+  has('cost.view') && (dataScope === 'org' || isContractor)
+    ? isContractor
+      ? '/contractor/costs'
+      : '/costs'
     : null;
 const billsHref =
-  has('bill.approve.engineering') || has('bill.approve.finance')
-    ? '/bills/approvals'
-    : has('bill.create')
+  has('bill.view') && (dataScope === 'org' || isContractor)
+    ? isContractor
       ? '/contractor/bills'
-      : null;
+      : '/bills'
+    : null;
 
 interface NavItem {
   href: string;
@@ -134,6 +135,29 @@ const rawGroups: NavGroup[] = [
       has('pm.view') ? { href: '/pm', label: 'Maintenance', icon: 'maintenance' } : null,
       lpoHref
         ? { href: lpoHref, label: 'LPOs', icon: 'lpos', match: ['/lpos', '/contractor/lpos'] }
+        : null,
+    ].filter((i): i is NavItem => i !== null),
+  },
+  {
+    label: 'Action Centre',
+    icon: 'actions',
+    items: [
+      dataScope === 'station' &&
+      has('workorder.view') &&
+      (has('arrival.confirm') || has('jobcard.confirm'))
+        ? { href: '/station/confirmations', label: 'Station confirmations', icon: 'workorders' }
+        : null,
+      has('rfq.award')
+        ? { href: '/procurement/approvals', label: 'Procurement approvals', icon: 'rfqs' }
+        : null,
+      has('cost.approve')
+        ? { href: '/mileage/approvals', label: 'Mileage approvals', icon: 'costs' }
+        : null,
+      has('cost.approve')
+        ? { href: '/costs/approvals', label: 'Cost approvals', icon: 'costs' }
+        : null,
+      has('bill.approve.engineering') || has('bill.approve.finance')
+        ? { href: '/bills/approvals', label: 'Bill approvals', icon: 'bills' }
         : null,
     ].filter((i): i is NavItem => i !== null),
   },
@@ -200,6 +224,9 @@ const rawGroups: NavGroup[] = [
       has('notifications.configure')
         ? { href: '/admin/notifications', label: 'Notification settings', icon: 'bell' }
         : null,
+      has('notifications.monitor')
+        ? { href: '/ops/notifications', label: 'Delivery monitor', icon: 'bell' }
+        : null,
       isPlatformOwner
         ? { href: '/admin/security', label: 'Security settings', icon: 'roles' }
         : null,
@@ -208,8 +235,11 @@ const rawGroups: NavGroup[] = [
   },
 ];
 const groups = rawGroups.filter((g) => g.items.length > 0);
-const activeItem = (item: NavItem) =>
-  (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
+const activeItem = (item: NavItem) => {
+  if (item.href === '/costs' && path === '/costs/approvals') return false;
+  if (item.href === '/bills' && path === '/bills/approvals') return false;
+  return (item.match ?? [item.href]).some((m) => (m === '/' ? path === '/' : isActive(m)));
+};
 const groupActive = (group: NavGroup) => group.items.some(activeItem);
 ---
 
