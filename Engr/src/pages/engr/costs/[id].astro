@@ -71,7 +71,18 @@ const rows = cost
       <h1>{cost ? `Cost for ${cost.workOrderNo}` : 'Work cost'}</h1>
       <p class="engr-lead">Contractor cost and its approvals.</p>
     </div>
-    <a href="/costs/approvals" class="engr-btn engr-btn--secondary">Approvals</a>
+    <div class="engr-actionbar">
+      <a href={isContractor ? '/contractor/costs' : '/costs'} class="engr-btn engr-btn--secondary">
+        {isContractor ? 'My costs' : 'All costs'}
+      </a>
+      {
+        canApprove && (
+          <a href="/costs/approvals" class="engr-btn engr-btn--secondary">
+            Approvals
+          </a>
+        )
+      }
+    </div>
   </div>
 
   {

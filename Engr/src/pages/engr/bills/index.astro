@@ -1,0 +1,98 @@
+---
+export const prerender = false;
+
+/** Read-only organisation register. Contractor accounts use their own scoped portal. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
+import { listBillsForOrganisation, type BillListRow } from '@engr/repos/bills';
+import { formatMoneyMinor } from '@engr/format';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+
+const allowed = can(Astro.locals, 'bill.view') && actorDataScope(engr.roles) === 'org';
+const requestedPage = Number(Astro.url.searchParams.get('page') ?? '1');
+const page =
+  Number.isSafeInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000
+    ? requestedPage
+    : 1;
+const pageSize = 50;
+let rows: BillListRow[] = [];
+if (allowed) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  rows = await listBillsForOrganisation(db, engr.orgId, (page - 1) * pageSize, pageSize);
+}
+const hasNext = rows.length > pageSize;
+const visibleRows = rows.slice(0, pageSize);
+---
+
+<EngrLayout title="Contractor bills">
+  <div class="engr-page-head">
+    <div>
+      <h1>Contractor bills</h1>
+      <p class="engr-lead">Bills across your organisation, including approved and paid records.</p>
+    </div>
+    {
+      (can(Astro.locals, 'bill.approve.engineering') ||
+        can(Astro.locals, 'bill.approve.finance')) && (
+        <a href="/bills/approvals" class="engr-btn engr-btn--secondary">
+          Pending approvals
+        </a>
+      )
+    }
+  </div>
+
+  {
+    !allowed ? (
+      <p class="engr-error" role="alert">
+        You do not have access to the contractor bill register.
+      </p>
+    ) : visibleRows.length === 0 ? (
+      <p class="engr-empty">No bills found on this page.</p>
+    ) : (
+      <div class="engr-tablewrap">
+        <table class="engr-table" aria-label="Organisation contractor bills">
+          <thead>
+            <tr>
+              <th scope="col">Bill</th>
+              <th scope="col">Contractor</th>
+              <th scope="col">Period</th>
+              <th scope="col">Created</th>
+              <th scope="col">Total</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map((r) => (
+              <tr>
+                <td>
+                  <a href={`/bills/${r.id}`}>{r.billNo}</a>
+                </td>
+                <td>{r.contractorName}</td>
+                <td>{r.periodLabel ?? 'Not set'}</td>
+                <td>{r.createdAt.slice(0, 10)}</td>
+                <td>{formatMoneyMinor(r.totalMinor, r.currency)}</td>
+                <td>
+                  <span class="engr-status">{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  {
+    allowed && (page > 1 || hasNext) && (
+      <nav class="engr-actionbar" aria-label="Bill register pages">
+        {page > 1 && <a href={page === 2 ? '/bills' : `/bills?page=${page - 1}`}>Previous page</a>}
+        <span>Page {page}</span>
+        {hasNext && <a href={`/bills?page=${page + 1}`}>Next page</a>}
+      </nav>
+    )
+  }
+</EngrLayout>

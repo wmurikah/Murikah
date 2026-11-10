@@ -56,6 +56,20 @@ export async function listBillsForContractor(
   return res.rows.map((r) => mapBillRow(r as Record<string, unknown>));
 }
 
+/** Organisation register, newest first. Fetch one extra row to support paging. */
+export async function listBillsForOrganisation(
+  db: Client,
+  orgId: string,
+  offset: number,
+  pageSize = 50,
+): Promise<BillListRow[]> {
+  const res = await db.execute({
+    sql: `${BILL_LIST_SELECT} ORDER BY b.created_at DESC, b.id DESC LIMIT ? OFFSET ?`,
+    args: [orgId, pageSize + 1, offset],
+  });
+  return res.rows.map((r) => mapBillRow(r as Record<string, unknown>));
+}
+
 export async function listPendingBills(
   db: Client,
   orgId: string,

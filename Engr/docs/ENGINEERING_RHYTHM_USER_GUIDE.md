@@ -29,13 +29,15 @@ Never share a personal password or authenticator code. Administrators can reset 
 
 ## 2. Find pages and complete actions
 
-The left menu is divided into five sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first.
+The left menu is divided into sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first. Only sections and pages your role can use are shown.
 
 - **Overview:** Dashboard and Notifications.
 - **Operations:** Requests, Work orders, RFQs, Maintenance and LPOs.
-- **Finance:** Costs, Bills and Payments.
+- **Action Centre:** Station confirmations, Procurement approvals, Mileage approvals, Cost approvals and Bill approvals, according to your role.
+- **Finance:** Costs, Bills, Invoices and Payments. Staff Costs and Bills open the full organisation registers; contractors see their own records.
+- **Reports:** Report centre for authorised reporting roles.
 - **Setup:** Stations, Regions, Assets, Contractors, Technicians, Engineers in charge, SLAs and Rate cards.
-- **System Settings:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history.
+- **System Settings:** Affiliates, Users, Roles, Notification settings, Delivery monitor, Security settings and Audit history.
 
 On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. The bell opens personal notifications. Select **Mark read** after reviewing a notification.
 
@@ -295,7 +297,7 @@ Use the displayed edit and delete controls to correct items. Rates are used when
 
 Provider credentials are Cloudflare secrets and are not shown in the page. If an enabled external channel is not configured, its alerts remain queued rather than being marked as delivered.
 
-To monitor delivery, use the **Notifications ops** link on the Dashboard. Review queued, sent and failed totals. Select **Retry** only after the provider issue is corrected.
+To monitor delivery, open **System Settings → Delivery monitor**. Review queued, sent and failed totals. Select **Retry** only after the provider issue is corrected.
 
 ## 17. Raise and triage a request
 
@@ -378,7 +380,7 @@ Contractors see only their own invitations and quotes.
 3. Select **Prefer** to record the recommended quote.
 4. Select **Award** on the chosen quote.
 5. If the amount is within the threshold, the system creates the work order.
-6. If it is above the threshold, open **Dashboard → Procurement approvals**. A different authorised approver selects **Approve and create work order**, or records a rejection reason and selects **Reject**.
+6. If it is above the threshold, open **Action Centre → Procurement approvals**. A different authorised approver selects **Approve and create work order**, or records a rejection reason and selects **Reject**.
 
 ## 20. Create and issue an LPO
 
@@ -408,7 +410,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 1. Open **Operations → LPOs** and select the issued LPO.
 2. Under mileage, select the reference station and enter the round-trip distance.
 3. Select **Submit claim**.
-4. The Engineering Manager opens **Dashboard → Mileage approvals**.
+4. The Engineering Manager opens **Action Centre → Mileage approvals**.
 5. The manager reviews or overrides distance/rate, then selects **Approve**, or enters a reason and selects **Reject**.
 
 ## 21. Create and activate preventive maintenance
@@ -456,7 +458,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Station Manager: confirm arrival
 
-1. Open **Operations → Work orders** and select the work order awaiting arrival confirmation.
+1. Open **Action Centre → Station confirmations** and select the work order awaiting arrival confirmation.
 2. Verify the technician is physically on site.
 3. Select **Confirm arrival**.
 
@@ -470,7 +472,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Station Manager: confirm closure
 
-1. Open **Operations → Work orders** and select the work order awaiting closure confirmation.
+1. Open **Action Centre → Station confirmations** and select the work order awaiting closure confirmation.
 2. Review the diagnosis, repair and spares.
 3. If the issue is resolved, select **Confirm closure**.
 4. If work is incomplete, enter the reason and select **Reopen work order**.
@@ -489,7 +491,7 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 
 ### Engineering Manager
 
-1. Open **Finance → Costs** or select **Pending cost approvals** on the Dashboard.
+1. Open **Action Centre → Cost approvals**.
 2. Select the cost.
 3. Review the work order, costing basis, line items, mileage and total.
 4. Enter an optional approval comment or a clear rejection reason.
@@ -511,13 +513,13 @@ The cost submitter cannot approve the same cost. New costs have one Engineering 
 
 ### Engineering Manager
 
-1. Open **Finance → Bills** or select **Pending bill approvals** on the Dashboard.
+1. Open **Action Centre → Bill approvals**.
 2. Select the bill and review its attached costs and total.
 3. Enter a comment and select **Approve** or **Reject** under **Engineering decision**.
 
 ### Financial Controller
 
-1. Open **Finance → Bills**.
+1. Open **Action Centre → Bill approvals**.
 2. Select a bill awaiting finance approval.
 3. Review the Engineering decision, costs, total and approval trail.
 4. Enter a comment and select **Approve** or **Reject** under **Finance decision**.
