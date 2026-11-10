@@ -110,27 +110,29 @@ test('region affiliate ownership and immutable station/region codes are enforced
     if(!newRegion.ok)return;
     const region=await getRegion(db,owner,newRegion.id);
     assert.match(region?.code ?? '',/^REG-[0-9]{6}$/);
-    assert.equal(region?.orgId,'child');
+    assert.equal(region?.orgId,'parent', 'creating under Hass keeps the original owner');
+    assert.equal(region?.affiliateOrgId,'child');
     assert.equal(region?.affiliateName,'Fleet Kenya');
     const unauthorized = await createRegion(db,ordinary,{name:'Foreign',affiliateOrgId:'other'});
     assert.equal(unauthorized.ok,false);
-    assert.equal((await listRegionsAdmin(db,ordinary)).length,1);
+    assert.equal((await listRegionsAdmin(db,ordinary)).length,0, 'child cannot read parent-owned region');
     const edited = await (await import('../src/lib/engr/repos/adminRegions.ts')).updateRegion(db,owner,newRegion.id,{name:'Nairobi West',affiliateOrgId:'other'});
     assert.equal(edited.ok,true);
-    assert.equal((await getRegion(db,owner,newRegion.id))?.orgId,'child');
+    assert.equal((await getRegion(db,owner,newRegion.id))?.orgId,'parent');
+    assert.equal((await getRegion(db,owner,newRegion.id))?.affiliateOrgId,'other');
     assert.equal((await getRegion(db,owner,newRegion.id))?.code,region?.code);
-    const created = await createStation(db,{orgId:'child',userId:'owner'},{
+    const created = await createStation(db,{orgId:'parent',userId:'owner'},{
       name:'Depot',regionId:newRegion.id,address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
     });
     assert.equal(created.ok,true);
     if(!created.ok||!created.id)return;
-    const station=await getStation(db,'child',created.id);
+    const station=await getStation(db,'parent',created.id);
     assert.match(station?.code ?? '',/^STN-[0-9]{6}$/);
-    const updated=await updateStation(db,{orgId:'child',userId:'owner'},created.id,{
+    const updated=await updateStation(db,{orgId:'parent',userId:'owner'},created.id,{
       name:'Depot Renamed',regionId:newRegion.id,address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
     });
     assert.equal(updated.ok,true);
-    assert.equal((await getStation(db,'child',created.id))?.code,station?.code);
+    assert.equal((await getStation(db,'parent',created.id))?.code,station?.code);
   } finally {
     db.close();
     rmSync(dir,{recursive:true,force:true});

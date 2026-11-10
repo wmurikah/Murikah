@@ -25,7 +25,7 @@ let affiliates: AffiliateOption[] = [];
 
 if (canManage) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  const actor = { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner };
+  const actor = { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner, roles: engr.roles };
   affiliates = await listRegionAffiliates(db, actor);
   if (!isNew && id) region = await getRegion(db, actor, id);
 }
@@ -34,6 +34,14 @@ const notFound = !isNew && region === null;
 if (canManage && notFound) Astro.response.status = 404;
 
 const s = region;
+// A platform owner can list a child-owned region while acting as group root,
+// but that child-owned region must keep its original affiliate classification.
+const eligibleAffiliates = !isNew && s && s.orgId !== engr.orgId
+  ? affiliates.filter((o) => o.id === s.orgId)
+  : affiliates;
+const formAffiliates = s && !eligibleAffiliates.some((o) => o.id === s.affiliateOrgId)
+  ? [{ id: s.affiliateOrgId, name: s.affiliateName + ' (existing assignment)' }, ...eligibleAffiliates]
+  : eligibleAffiliates;
 ---
 
 <EngrLayout title={isNew ? 'New region' : 'Edit region'}>
@@ -48,14 +56,14 @@ const s = region;
   {
     errorCode === 'conflict' && (
       <p class="engr-error" role="alert">
-        A region code could not be reserved. Try again.
+        The region was changed by another user or a new code could not be reserved. Reload and try again.
       </p>
     )
   }
   {
     errorCode === 'invalid' && (
       <p class="engr-error" role="alert">
-        Check the name, then try again.
+        Choose a valid affiliate from this organisation's group and check the region name.
       </p>
     )
   }
@@ -86,20 +94,18 @@ const s = region;
         </div>
         <div class="engr-field">
           <label for="affiliate_org_id">Affiliate</label>
-          {isNew ? (
-            <select id="affiliate_org_id" name="affiliate_org_id" class="engr-select" required>
-              <option value="">Choose an affiliate</option>
-              {affiliates.map((o) => (
-                <option value={o.id} selected={o.id === engr.orgId}>{o.name}</option>
-              ))}
-            </select>
-          ) : (
-            <p class="engr-field__hint">{s?.affiliateName ?? '—'} (cannot be changed)</p>
-          )}
+          <select id="affiliate_org_id" name="affiliate_org_id" class="engr-select" required>
+            {formAffiliates.map((o) => (
+              <option value={o.id} selected={o.id === (s?.affiliateOrgId ?? engr.orgId)}>{o.name}</option>
+            ))}
+          </select>
+          <p class="engr-field__hint">
+            Select an existing affiliate. The region and its stations remain owned by their current organisation.
+          </p>
         </div>
         <div class="engr-field">
           <label>Region code</label>
-          <p class="engr-field__hint">{isNew ? 'Generated automatically for the selected affiliate' : s?.code ?? 'Legacy region'}</p>
+          <p class="engr-field__hint">{isNew ? 'Generated automatically on creation' : s?.code ?? 'Pending legacy code backfill'}</p>
         </div>
         <div class="engr-actionbar engr-formgrid__full">
           <button type="submit" class="engr-btn engr-btn--primary">

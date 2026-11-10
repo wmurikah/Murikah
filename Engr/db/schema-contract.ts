@@ -93,7 +93,7 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'requested_at', 'approved_at', 'dispatched_at', 'received_at',
   ],
   organisations: ['parent_org_id'],
-  regions: ['currency'],
+  regions: ['currency', 'affiliate_org_id'],
   users: ['is_platform_owner', 'session_version'],
   lpos: [
     'region_id',
@@ -189,6 +189,7 @@ const REQUIRED_COLUMN_SHAPES: Record<string, Record<string, ColumnShape>> = {
     parent_org_id: { type: 'TEXT', notNull: false, defaultValue: null },
   },
   regions: {
+    affiliate_org_id: { type: 'TEXT', notNull: false, defaultValue: null },
     currency: { type: 'TEXT', notNull: true, defaultValue: "'KES'" },
   },
   users: {
@@ -219,6 +220,7 @@ const REQUIRED_COLUMN_SHAPES: Record<string, Record<string, ColumnShape>> = {
 };
 
 export const REQUIRED_INDEXES = [
+  'ix_regions_affiliate',
   'ux_asset_transfers_open',
   'ix_asset_transfers_org_status',
   'ix_asset_transfers_destination',
@@ -244,6 +246,13 @@ export const REQUIRED_INDEXES = [
 ] as const;
 
 const INDEX_CONTRACTS = [
+  {
+    table: 'regions',
+    name: 'ix_regions_affiliate',
+    unique: false,
+    partial: false,
+    columns: ['affiliate_org_id', 'org_id'],
+  },
   {
     table: 'notifications',
     name: 'ix_notifications_queue_created',
@@ -355,6 +364,7 @@ const INDEX_CONTRACTS = [
 ] as const;
 
 const FOREIGN_KEY_CONTRACTS = [
+  { table: 'regions', from: 'affiliate_org_id', target: 'organisations' },
   { table: 'asset_movements', from: 'transfer_id', target: 'asset_transfers' },
   { table: 'asset_transfers', from: 'asset_id', target: 'assets' },
   { table: 'asset_transfers', from: 'from_station_id', target: 'stations' },

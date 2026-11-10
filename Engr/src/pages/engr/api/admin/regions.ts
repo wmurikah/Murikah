@@ -24,11 +24,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const id = str(body.id).trim();
   const input: RegionInput = {
     name: str(body.name).trim(),
-    affiliateOrgId: str(body.affiliate_org_id).trim() || engr.orgId,
+    affiliateOrgId: str(body.affiliate_org_id).trim(),
   };
 
   const db = await getDb(getEngrEnv(), locals);
-  const ctx = { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner };
+  const ctx = { orgId: engr.orgId, homeOrgId: engr.homeOrgId, userId: engr.userId, isPlatformOwner: engr.isPlatformOwner, roles: engr.roles };
   const result = id ? await updateRegion(db, ctx, id, input) : await createRegion(db, ctx, input);
 
   if (result.ok) {
