@@ -85,7 +85,7 @@ test('public app paths cover login and machine endpoints only', () => {
   assert.equal(isPublicAppPath('/api/cron/dispatch'), true);
   assert.equal(isPublicAppPath('/api/webhooks/delivery'), true);
   assert.equal(isPublicAppPath('/'), false);
-  assert.equal(isPublicAppPath('/api/auth/logout'), false);
+  assert.equal(isPublicAppPath('/api/auth/logout'), true);
   assert.equal(isEngrApiPath('/api/requests'), true);
   assert.equal(isEngrApiPath('/requests'), false);
 });

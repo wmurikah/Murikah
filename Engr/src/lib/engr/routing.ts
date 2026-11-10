@@ -103,6 +103,9 @@ export function isPassthroughAsset(pathname: string): boolean {
 const PUBLIC_APP_PATHS = new Set([
   '/login',
   '/api/auth/login',
+  // Logout handles an expired or revoked cookie itself so the browser can
+  // always clear it and return to the sign-in screen.
+  '/api/auth/logout',
   '/forgot',
   '/api/auth/forgot',
   '/set-password',

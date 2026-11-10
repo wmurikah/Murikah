@@ -18,6 +18,7 @@ import { sessionAfterPrimaryAuth } from '@engr/auth/loginSession';
 import {
   isLoginBlocked,
   loginKeys,
+  recordLoginBlocked,
   recordLoginFailure,
   recordLoginSuccess,
 } from '@engr/auth/loginSecurity';
@@ -44,8 +45,14 @@ async function readCredentials(request: Request): Promise<Credentials> {
 }
 
 // One generic outcome for every failure path.
-function invalid(): Response {
-  return new Response(null, { status: 303, headers: { location: '/login?error=1' } });
+function invalid(limited = false): Response {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: limited ? '/login?error=limited' : '/login?error=1',
+      'cache-control': 'no-store',
+    },
+  });
 }
 
 /** A form endpoint can be revisited with GET when a browser restores a tab,
@@ -66,8 +73,8 @@ const handleLogin: APIRoute = async ({ request, locals }) => {
   const db = await getDb(env);
   const keys = await loginKeys(emailNorm, request);
   if (await isLoginBlocked(db, keys.accountHash, keys.ipHash)) {
-    await recordLoginFailure(db, keys, undefined, true);
-    return invalid();
+    await recordLoginBlocked(db, keys);
+    return invalid(true);
   }
 
   // Resolve the user by their globally unique email, joining their home
