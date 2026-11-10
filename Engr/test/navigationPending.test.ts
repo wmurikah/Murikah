@@ -104,8 +104,12 @@ test('sidebar shows section totals when closed and item counters when opened', (
   assert.match(layout, /api\/navigation\/pending/);
   assert.doesNotMatch(layout, /data-bell/);
   assert.doesNotMatch(layout, /label: 'Action Centre'/);
-  assert.match(layout, /label: 'Procurement approvals'/);
-  assert.match(layout, /label: 'Bill approvals'/);
+  assert.match(layout, /extraBadgeKeys: \['procurementApprovals'\]/);
+  assert.match(layout, /extraBadgeKeys: \['billApprovals'\]/);
+  assert.match(layout, /extraBadgeKeys: \['stationConfirmations'\]/);
+  assert.match(layout, /extraBadgeKeys: \['mileageApprovals', 'costApprovals'\]/);
+  assert.doesNotMatch(layout, /label: 'Procurement approvals'/);
+  assert.doesNotMatch(layout, /label: 'Bill approvals'/);
   assert.match(layout, /label: 'Assets'.*badgeKey: 'assetTransfers'/);
   assert.doesNotMatch(layout, /label: 'Asset transfers'/);
   assert.doesNotMatch(layout, /label: 'Delivery monitor'/);
