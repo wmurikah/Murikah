@@ -4,7 +4,7 @@ export const prerender = false;
 /**
  * Contractor create and edit. The path segment is "new" to create, otherwise a
  * contractor id to edit. Gate: contractors.manage. The form posts to the write
- * endpoint, which redirects back to the list on success. Station and category
+ * endpoint, which redirects back to the list on success. Location and category
  * coverage are edited as checkbox lists, pre-checked from the current links.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
@@ -59,7 +59,7 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
     <div>
       <h1>{isNew ? 'New contractor' : 'Edit contractor'}</h1>
       <p class="engr-lead">
-        A firm that carries out work, with the stations and categories it covers.
+        A firm that carries out work, with the locations and categories it covers.
       </p>
     </div>
     <a href="/admin/contractors" class="engr-btn engr-btn--secondary">Back to contractors</a>
