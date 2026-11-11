@@ -2,8 +2,8 @@
 export const prerender = false;
 
 /**
- * Engineers in charge: which engineer owns each station or category of work.
- * When a request is raised it routes to the matching engineer (a station match
+ * Engineers in charge: which engineer owns each location or category of work.
+ * When a request is raised it routes to the matching engineer (a location match
  * wins over a category match); with no match it goes to the managers. View and
  * change permissions are separate. Everything is scoped to the acting organisation.
  */
@@ -55,7 +55,7 @@ if (allowed) {
     <div>
       <h1>Engineers in charge</h1>
       <p class="engr-lead">
-        Route raised requests to the engineer who owns the station or category.
+        Route raised requests to the engineer who owns the location or category.
       </p>
     </div>
   </div>
@@ -146,21 +146,21 @@ if (allowed) {
               <div class="engr-field">
                 <label for="scope_type">Owns</label>
                 <select id="scope_type" class="engr-select" name="scope_type">
-                  <option value="STATION">A station</option>
+                  <option value="STATION">A location</option>
                   <option value="CATEGORY">A category</option>
                 </select>
               </div>
               <div class="engr-field">
-                <label for="station">Station</label>
+                <label for="station">Location</label>
                 <select id="station" class="engr-select" name="station_id">
-                  <option value="">Choose a station</option>
+                  <option value="">Choose a location</option>
                   {stations.map((s) => (
                     <option value={s.id}>
                       {s.name} ({s.code})
                     </option>
                   ))}
                 </select>
-                <p class="engr-field__hint">Used when the engineer owns a station.</p>
+                <p class="engr-field__hint">Used when the engineer owns a location.</p>
               </div>
               <div class="engr-field">
                 <label for="category">Category</label>
