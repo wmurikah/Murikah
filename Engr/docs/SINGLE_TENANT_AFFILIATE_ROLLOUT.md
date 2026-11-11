@@ -19,8 +19,10 @@ ownership:
 - `regions.affiliate_org_id` (migration 010) and
   `stations.affiliate_org_id` (migration **011**) classify those records
   within the existing tenant.
-- A region can only be assigned to the parent tenant or its active child
-  affiliates, according to the acting user's existing permissions.
+- Only active CHILD organisations appear in Affiliate dropdowns. Hass Group
+  is the parent tenant and never an affiliate choice. Previously unclassified
+  records display Unassigned until deliberately linked to a child affiliate,
+  subject to the acting user's existing permissions.
 - A station's chosen region must have the SAME affiliate as the station.
   An affiliate change to a region synchronises linked stations in the
   SAME write transaction, with per-station audit rows.
@@ -114,7 +116,8 @@ Then deploy the existing Cloudflare Worker and verify:
 - Hass Group remains visible as the single parent after the optional rename.
 - Affiliate edit shows Code, Name, Country, Currency and Status across one
   desktop row, wrapping at smaller screen widths.
-- Station and Region forms show affiliate choices only from Hass Group.
+- Station and Region forms show ONLY active Hass Group subsidiaries (HPK, HPU
+  and others); Hass Group itself does not appear in the dropdown.
 - Station Region choices respond to affiliate changes, and API submissions
   reject mismatched/foreign IDs.
 - Changing a region affiliate updates linked stations and audit history,
