@@ -77,10 +77,12 @@ test('Hass admin may edit affiliate classification; Hass tenant and station owne
     await runMigrations(db);
     await db.batch(organisations,'write');
     const options = await listRegionAffiliates(db,root);
-    assert.deepEqual(options.map(x=>x.name), ['Hass Group','Hass Kenya','Hass Uganda']);
-    assert.deepEqual((await listRegionAffiliates(db,regular)).map(x=>x.id), ['hass']);
+    assert.deepEqual(options.map(x=>x.name), ['Hass Kenya','Hass Uganda']);
+    assert.deepEqual((await listRegionAffiliates(db,regular)).map(x=>x.id), []);
     assert.deepEqual((await listRegionAffiliates(db,child)).map(x=>x.id), ['kenya']);
-    const created = await createRegion(db,root,{name:'Coast',affiliateOrgId:'hass'});
+    assert.equal((await createRegion(db,root,{name:'Invalid',affiliateOrgId:'hass'})).ok,false,
+      'Hass Group is not a subsidiary affiliate');
+    const created = await createRegion(db,root,{name:'Coast',affiliateOrgId:'kenya'});
     assert.equal(created.ok,true);
     if(!created.ok)return;
     const station = await createStation(db,{orgId:'hass',userId:'hass-admin'},{
@@ -90,12 +92,12 @@ test('Hass admin may edit affiliate classification; Hass tenant and station owne
     if(!station.ok||!station.id)return;
     const original = await getRegion(db,root,created.id);
     assert.match(original?.code ?? '',/^REG-[0-9]{6}$/);
-    const renamed = await updateRegion(db,root,created.id,{name:'Coastal',affiliateOrgId:'kenya'});
+    const renamed = await updateRegion(db,root,created.id,{name:'Coastal',affiliateOrgId:'uganda'});
     assert.equal(renamed.ok,true);
     const after = await getRegion(db,root,created.id);
     assert.equal(after?.orgId,'hass');
-    assert.equal(after?.affiliateOrgId,'kenya');
-    assert.equal(after?.affiliateName,'Hass Kenya');
+    assert.equal(after?.affiliateOrgId,'uganda');
+    assert.equal(after?.affiliateName,'Hass Uganda');
     assert.equal(after?.code,original?.code);
     assert.equal((await getStation(db,'hass',station.id))?.regionId,created.id);
     assert.equal((await getStation(db,'kenya',station.id)),null);
@@ -103,7 +105,7 @@ test('Hass admin may edit affiliate classification; Hass tenant and station owne
     assert.equal(denied.ok,false);
     assert.equal((await getRegion(db,owner,created.id))?.name,'Coastal');
     const anotherTenant = {...owner,orgId:'other'};
-    assert.deepEqual((await listRegionAffiliates(db,anotherTenant)).map(x=>x.id), ['other','otherchild']);
+    assert.deepEqual((await listRegionAffiliates(db,anotherTenant)).map(x=>x.id), ['otherchild']);
     assert.equal((await getRegion(db,anotherTenant,created.id)),null);
     assert.equal((await listRegionsAdmin(db,child)).length,0, 'Hass Group region is not re-owned by Kenya');
     const audits = await db.execute({ sql: `SELECT before_json,after_json FROM audit_logs

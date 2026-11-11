@@ -13,7 +13,7 @@ transfer the region or its stations into another tenant.
   affiliate within that owning group's hierarchy.
 - Hass Group Owner/Administrator (with the existing \`stations.manage\`
   permission) and a system/platform owner acting under Hass Group can choose
-  Hass Group and its active child affiliates.
+  only active Hass Group child affiliates, not Hass Group itself.
 - Other operators, including administrators acting within a child affiliate,
   can choose only their acting organisation.
 - A region already owned by a child affiliate cannot be classified as a

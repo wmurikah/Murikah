@@ -39,9 +39,8 @@ const s = region;
 const eligibleAffiliates = !isNew && s && s.orgId !== engr.orgId
   ? affiliates.filter((o) => o.id === s.orgId)
   : affiliates;
-const formAffiliates = s && !eligibleAffiliates.some((o) => o.id === s.affiliateOrgId)
-  ? [{ id: s.affiliateOrgId, name: s.affiliateName + ' (existing assignment)' }, ...eligibleAffiliates]
-  : eligibleAffiliates;
+const formAffiliates = eligibleAffiliates;
+const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id === s.affiliateOrgId);
 ---
 
 <EngrLayout title={isNew ? 'New region' : 'Edit region'}>
@@ -95,12 +94,14 @@ const formAffiliates = s && !eligibleAffiliates.some((o) => o.id === s.affiliate
         <div class="engr-field">
           <label for="affiliate_org_id">Affiliate</label>
           <select id="affiliate_org_id" name="affiliate_org_id" class="engr-select" required>
+            <option value="" disabled selected={!currentAffiliateSelectable}>Select affiliate</option>
             {formAffiliates.map((o) => (
-              <option value={o.id} selected={o.id === (s?.affiliateOrgId ?? engr.orgId)}>{o.name}</option>
+              <option value={o.id} selected={s?.affiliateOrgId === o.id}>{o.name}</option>
             ))}
           </select>
           <p class="engr-field__hint">
-            Select an existing affiliate. The region and its stations remain owned by their current organisation.
+            Select an affiliate under the currently selected tenant. The region and its stations retain their existing tenant ownership.
+            {s && !currentAffiliateSelectable && ' This region has not yet been assigned to an affiliate.'}
           </p>
         </div>
         <div class="engr-field">

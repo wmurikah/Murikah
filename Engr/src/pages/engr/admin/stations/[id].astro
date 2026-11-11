@@ -43,10 +43,9 @@ const notFound = !isNew && station === null;
 if (canManage && notFound) Astro.response.status = 404;
 
 const s = station;
-const selectedAffiliate = s?.affiliateOrgId ?? engr.orgId;
-const formAffiliates = s && !affiliates.some((a) => a.id === selectedAffiliate)
-  ? [{ id: selectedAffiliate, name: 'Current affiliate (existing assignment)' }, ...affiliates]
-  : affiliates;
+const selectedAffiliate = s?.affiliateOrgId ?? '';
+const currentAffiliateSelectable = affiliates.some((a) => a.id === selectedAffiliate);
+const formAffiliates = affiliates;
 ---
 
 <EngrLayout title={isNew ? 'New station' : 'Edit station'}>
@@ -104,11 +103,15 @@ const formAffiliates = s && !affiliates.some((a) => a.id === selectedAffiliate)
         <div class="engr-field">
           <label for="affiliate_org_id">Affiliate</label>
           <select id="affiliate_org_id" class="engr-select" name="affiliate_org_id" required>
+            <option value="" disabled selected={!currentAffiliateSelectable}>Select affiliate</option>
             {formAffiliates.map((a) => (
               <option value={a.id} selected={a.id === selectedAffiliate}>{a.name}</option>
             ))}
           </select>
-          <p class="engr-field__hint">Classifies the station within the current tenant; it does not move records.</p>
+          <p class="engr-field__hint">
+            Choose an affiliate under the current tenant. The station's owning tenant does not change.
+            {s && !currentAffiliateSelectable && ' This station needs an affiliate assignment.'}
+          </p>
         </div>
         <div class="engr-field">
           <label for="region_id">Region</label>

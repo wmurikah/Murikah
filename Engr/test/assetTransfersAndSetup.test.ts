@@ -121,15 +121,17 @@ test('region affiliate ownership and immutable station/region codes are enforced
     assert.equal((await getRegion(db,owner,newRegion.id))?.orgId,'parent');
     assert.equal((await getRegion(db,owner,newRegion.id))?.affiliateOrgId,'other');
     assert.equal((await getRegion(db,owner,newRegion.id))?.code,region?.code);
-    const created = await createStation(db,{orgId:'parent',userId:'owner'},{
-      name:'Depot',regionId:newRegion.id,address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
+    const created = await createStation(db,{orgId:'parent',userId:'owner',isPlatformOwner:true},{
+      name:'Depot',affiliateOrgId:'other',regionId:newRegion.id,
+      address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
     });
     assert.equal(created.ok,true);
     if(!created.ok||!created.id)return;
     const station=await getStation(db,'parent',created.id);
     assert.match(station?.code ?? '',/^STN-[0-9]{6}$/);
-    const updated=await updateStation(db,{orgId:'parent',userId:'owner'},created.id,{
-      name:'Depot Renamed',regionId:newRegion.id,address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
+    const updated=await updateStation(db,{orgId:'parent',userId:'owner',isPlatformOwner:true},created.id,{
+      name:'Depot Renamed',affiliateOrgId:'other',regionId:newRegion.id,
+      address:null,stationManagerId:null,isBase:false,status:'ACTIVE',
     });
     assert.equal(updated.ok,true);
     assert.equal((await getStation(db,'parent',created.id))?.code,station?.code);

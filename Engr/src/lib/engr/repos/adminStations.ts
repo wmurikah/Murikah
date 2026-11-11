@@ -64,7 +64,12 @@ export async function listStationsAdmin(db: Client, orgId: string): Promise<Stat
   const res = await db.execute({
     sql: `SELECT s.id, s.code, s.name, s.is_base, s.status,
                  r.name AS region_name, u.full_name AS manager_name,
-                 COALESCE(aff.name, owner.name) AS affiliate_name
+                 CASE
+                   WHEN owner.parent_org_id IS NULL AND
+                     (aff.parent_org_id IS NULL OR aff.parent_org_id <> owner.id)
+                   THEN 'Unassigned'
+                   ELSE COALESCE(aff.name, owner.name)
+                 END AS affiliate_name
             FROM stations s
             LEFT JOIN regions r ON r.id = s.region_id AND r.org_id = s.org_id
             LEFT JOIN users u ON u.id = s.station_manager_id
@@ -217,7 +222,7 @@ export async function updateStation(
   const current = await getStation(db, ctx.orgId, id);
   if (!current) return { ok: false, code: 'not_found', message: 'That station was not found.' };
   const affiliateOrgId = input.affiliateOrgId ?? current.affiliateOrgId;
-  if ((affiliateOrgId !== current.affiliateOrgId && !(await affiliateAllowed(db, ctx, affiliateOrgId))) ||
+  if (!(await affiliateAllowed(db, ctx, affiliateOrgId)) ||
       !(await referencesBelongToOrg(db, ctx.orgId, input, affiliateOrgId))) {
     return { ok: false, code: 'invalid', message: 'Choose a permitted affiliate and a region in that affiliate.' };
   }

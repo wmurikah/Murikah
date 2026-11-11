@@ -23,6 +23,7 @@ test('setup links only organisation users holding the required portal or operati
       [
         { sql: `INSERT INTO organisations (id,name,slug) VALUES ('o1','One','one')`, args: [] },
         { sql: `INSERT INTO organisations (id,name,slug) VALUES ('o2','Two','two')`, args: [] },
+        { sql: `INSERT INTO organisations (id,name,slug,parent_org_id) VALUES ('o1-affiliate','Service One','service-one','o1')`, args: [] },
         ...[
           ['actor', 'o1', 'Manager', 'manager@example.test'],
           ['eng', 'o1', 'Engineer', 'engineer@example.test'],
@@ -52,9 +53,10 @@ test('setup links only organisation users holding the required portal or operati
       'write',
     );
 
-    const ctx = { orgId: 'o1', userId: 'actor' };
+    const ctx = { orgId: 'o1', userId: 'actor', roles: ['ADMIN'] };
     const invalidManager = await createStation(db, ctx, {
       name: 'Bad station',
+      affiliateOrgId: 'o1-affiliate',
       regionId: null,
       address: null,
       stationManagerId: 'viewer',
@@ -64,6 +66,7 @@ test('setup links only organisation users holding the required portal or operati
     assert.equal(invalidManager.ok, false);
     const station = await createStation(db, ctx, {
       name: 'Station One',
+      affiliateOrgId: 'o1-affiliate',
       regionId: null,
       address: null,
       stationManagerId: 'station',
