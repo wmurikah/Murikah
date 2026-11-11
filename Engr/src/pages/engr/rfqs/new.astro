@@ -78,11 +78,11 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
       </p>
     ) : contractors.length === 0 ? (
       <EmptyState
-        message="No pre-qualified contractor covers this station or category yet, so there is nobody to invite."
+        message="No pre-qualified contractor covers this location or category yet, so there is nobody to invite."
         canAct={can(Astro.locals, 'contractors.manage')}
         actionHref="/admin/contractors/new"
         actionLabel="Add a contractor"
-        hint="Ask an administrator to set up and pre-qualify a contractor for this station."
+        hint="Ask an administrator to set up and pre-qualify a contractor for this location."
       />
     ) : (
       <form method="post" action="/api/rfqs" class="engr-form" style="max-width:44rem">
@@ -91,7 +91,7 @@ if (allowed && requestId && !detail) Astro.response.status = 404;
         <dl class="engr-detail">
           <dt>Request</dt>
           <dd>{detail.requestNo}</dd>
-          <dt>Station</dt>
+          <dt>Location</dt>
           <dd>{detail.stationName}</dd>
           <dt>Issue</dt>
           <dd>{detail.issue}</dd>
