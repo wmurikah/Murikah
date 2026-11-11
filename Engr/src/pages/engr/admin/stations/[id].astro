@@ -138,6 +138,17 @@ const formAffiliates = affiliates;
             ))}
           </select>
         </div>
+        <div class="engr-field">
+          <label for="status">Status</label>
+          <select id="status" class="engr-select" name="status">
+            <option value="ACTIVE" selected={(s?.status ?? 'ACTIVE') === 'ACTIVE'}>
+              Active
+            </option>
+            <option value="INACTIVE" selected={s?.status === 'INACTIVE'}>
+              Inactive
+            </option>
+          </select>
+        </div>
         <div class="engr-field engr-formgrid__full">
           <label for="address">
             Address <span class="engr-field__hint">(optional)</span>
@@ -150,17 +161,6 @@ const formAffiliates = affiliates;
             maxlength="200"
             value={s?.address ?? ''}
           />
-        </div>
-        <div class="engr-field">
-          <label for="status">Status</label>
-          <select id="status" class="engr-select" name="status">
-            <option value="ACTIVE" selected={(s?.status ?? 'ACTIVE') === 'ACTIVE'}>
-              Active
-            </option>
-            <option value="INACTIVE" selected={s?.status === 'INACTIVE'}>
-              Inactive
-            </option>
-          </select>
         </div>
         <div class="engr-check engr-formgrid__full">
           <input type="checkbox" id="is_base" name="is_base" checked={s?.isBase ?? false} />
