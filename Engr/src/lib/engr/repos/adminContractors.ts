@@ -173,7 +173,7 @@ export async function createContractor(
     return {
       ok: false,
       code: 'invalid',
-      message: 'Choose stations and categories from this organisation.',
+      message: 'Choose locations and categories from this organisation.',
     };
   }
   const id = newId();
@@ -243,7 +243,7 @@ export async function updateContractor(
     return {
       ok: false,
       code: 'invalid',
-      message: 'Choose stations and categories from this organisation.',
+      message: 'Choose locations and categories from this organisation.',
     };
   }
   const tx = await db.transaction('write');
