@@ -42,6 +42,7 @@ test('Setup forms use a shared three-column grid with aligned labels, controls a
   assert.match(rules, /height: 2\.75rem/);
   for (const path of [
     'admin/affiliates/[id].astro',
+    'admin/asset-categories/[id].astro',
     'admin/regions/[id].astro',
     'admin/stations/[id].astro',
     'admin/technicians/[id].astro',
