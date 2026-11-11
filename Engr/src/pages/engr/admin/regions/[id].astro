@@ -106,7 +106,7 @@ const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id 
         </div>
         <div class="engr-field">
           <label>Region code</label>
-          <div class="engr-static-control" role="textbox" aria-readonly="true">
+          <div class="engr-static-control" role="textbox" aria-label="Region code" aria-readonly="true">
             {isNew ? 'Generated on creation' : s?.code ?? 'Pending code'}
           </div>
         </div>
