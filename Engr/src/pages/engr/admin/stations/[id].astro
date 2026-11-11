@@ -48,19 +48,19 @@ const currentAffiliateSelectable = affiliates.some((a) => a.id === selectedAffil
 const formAffiliates = affiliates;
 ---
 
-<EngrLayout title={isNew ? 'New station' : 'Edit station'}>
+<EngrLayout title={isNew ? 'New location' : 'Edit location'}>
   <div class="engr-page-head">
     <div>
-      <h1>{isNew ? 'New station' : 'Edit station'}</h1>
+      <h1>{isNew ? 'New location' : 'Edit location'}</h1>
       <p class="engr-lead">A site where work is raised and carried out.</p>
     </div>
-    <a href="/admin/stations" class="engr-btn engr-btn--secondary">Back to stations</a>
+    <a href="/admin/stations" class="engr-btn engr-btn--secondary">Back to locations</a>
   </div>
 
   {
     errorCode === 'conflict' && (
       <p class="engr-error" role="alert">
-        The station could not be saved because a code could not be reserved. Try again.
+        The location could not be saved because a code could not be reserved. Try again.
       </p>
     )
   }
@@ -75,18 +75,20 @@ const formAffiliates = affiliates;
   {
     !canManage ? (
       <p class="engr-error" role="alert">
-        You do not have permission to manage stations.
+        You do not have permission to manage locations.
       </p>
     ) : notFound ? (
       <p class="engr-error" role="alert">
-        That station was not found.
+        That location was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/stations" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/stations" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={s!.id} />}
         <div class="engr-field">
-          <label>Station code</label>
-          <p class="engr-field__hint">{isNew ? 'Generated automatically on creation' : s?.code}</p>
+          <label for="display_location_code">Location code</label>
+          <input id="display_location_code" type="text" class="engr-input"
+            value={isNew ? 'Generated automatically on save' : s?.code ?? ''}
+            readonly aria-readonly="true" />
         </div>
         <div class="engr-field">
           <label for="name">Name</label>
@@ -109,8 +111,8 @@ const formAffiliates = affiliates;
             ))}
           </select>
           <p class="engr-field__hint">
-            Choose an affiliate under the current tenant. The station's owning tenant does not change.
-            {s && !currentAffiliateSelectable && ' This station needs an affiliate assignment.'}
+            Choose an affiliate under the current tenant. The location's owning tenant does not change.
+            {s && !currentAffiliateSelectable && ' This location needs an affiliate assignment.'}
           </p>
         </div>
         <div class="engr-field">
@@ -126,7 +128,7 @@ const formAffiliates = affiliates;
           <p class="engr-field__hint">Only regions assigned to the selected affiliate are available.</p>
         </div>
         <div class="engr-field">
-          <label for="station_manager_id">Station manager</label>
+          <label for="station_manager_id">Location manager</label>
           <select id="station_manager_id" class="engr-select" name="station_manager_id">
             <option value="">Not set</option>
             {users.map((u) => (
@@ -162,11 +164,11 @@ const formAffiliates = affiliates;
         </div>
         <div class="engr-check engr-formgrid__full">
           <input type="checkbox" id="is_base" name="is_base" checked={s?.isBase ?? false} />
-          <label for="is_base">Base station (origin for mileage)</label>
+          <label for="is_base">Base location (origin for mileage)</label>
         </div>
         <div class="engr-actionbar engr-formgrid__full">
           <button type="submit" class="engr-btn engr-btn--primary">
-            {isNew ? 'Create station' : 'Save changes'}
+            {isNew ? 'Create location' : 'Save changes'}
           </button>
         </div>
       </form>
