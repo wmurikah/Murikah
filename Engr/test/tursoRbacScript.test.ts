@@ -11,6 +11,7 @@ import { invoicesAndAssetMovements } from '../db/migrations/008_invoices_asset_m
 import { controlledAssetTransfers } from '../db/migrations/009_controlled_asset_transfers.ts';
 import { regionAffiliateAssignments } from '../db/migrations/010_region_affiliate_assignments.ts';
 import { stationAffiliateWithinTenant } from '../db/migrations/011_station_affiliate_within_tenant.ts';
+import { legacyWorkOrderArchive } from '../db/migrations/012_legacy_work_order_archive.ts';
 import { verifySchemaContract } from '../db/schema-contract.ts';
 
 test('Turso Web RBAC script upgrades migration 005 without transaction keywords or drift', async () => {
@@ -54,6 +55,7 @@ test('Turso Web RBAC script upgrades migration 005 without transaction keywords 
     await controlledAssetTransfers.up(client);
     await regionAffiliateAssignments.up(client);
     await stationAffiliateWithinTenant.up(client);
+    await legacyWorkOrderArchive.up(client);
     await verifySchemaContract(client);
     const check = readFileSync(
       new URL('../db/turso-web/13_check_comprehensive_rbac.sql', import.meta.url),
