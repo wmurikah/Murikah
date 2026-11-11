@@ -84,7 +84,7 @@ const a = asset;
         That asset was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/assets" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/assets" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={a!.id} />}
         <div class="engr-field">
           <label for="tag">Tag</label>
