@@ -2,6 +2,7 @@
 export const prerender = false;
 
 /** Users list. View, invitation and profile changes use separate permissions. */
+import { displayLocationTerminology } from '@engr/format';
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
@@ -93,7 +94,7 @@ if (allowed) {
                   )}
                 </td>
                 <td>{r.email}</td>
-                <td>{r.roleNames || 'None'}</td>
+                <td>{displayLocationTerminology(r.roleNames || 'None')}</td>
                 <td>
                   <span class="engr-status">{r.status}</span>
                 </td>
