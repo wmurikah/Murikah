@@ -41,7 +41,7 @@ export async function listLegacyWorkOrders(
        OR h.description LIKE ? ESCAPE '\\'
        OR h.location_source LIKE ? ESCAPE '\\'
        OR h.contractor_source LIKE ? ESCAPE '\\')` : '');
-  const args = q ? [orgId, ...Array(4).fill(`%${escaped}`)] : [orgId];
+  const args = q ? [orgId, ...Array(4).fill(`%${escaped}%`)] : [orgId];
   const totalResult = await db.execute({
     sql: `SELECT COUNT(*) AS n FROM legacy_work_order_history h WHERE ${where}`, args,
   });
