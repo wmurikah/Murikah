@@ -105,7 +105,7 @@ if (allowed) {
                 {assignments.map((a) => (
                   <tr>
                     <td>{a.engineerName}</td>
-                    <td>{a.scopeType === 'STATION' ? 'Station' : 'Category'}</td>
+                    <td>{a.scopeType === 'STATION' ? 'Location' : 'Category'}</td>
                     <td>{a.scopeName}</td>
                     <td>
                       {canManage ? (
@@ -132,7 +132,7 @@ if (allowed) {
             <form
               method="post"
               action="/api/admin/engineers"
-              class="engr-formgrid engr-formgrid--two engineer-assignment-form"
+              class="engr-formgrid engr-formgrid--setup engineer-assignment-form"
             >
               <div class="engr-field">
                 <label for="engineer">Engineer</label>
