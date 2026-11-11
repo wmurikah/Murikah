@@ -126,7 +126,7 @@ const canCancel =
           </dd>
           <dt>Contractor</dt>
           <dd>{lpo.contractorName}</dd>
-          <dt>Base station</dt>
+          <dt>Base location</dt>
           <dd>{lpo.baseStationName ?? 'Not set'}</dd>
           <dt>Total</dt>
           <dd>{formatMoneyMinor(lpo.totalMinor, lpo.currency)}</dd>
@@ -148,7 +148,7 @@ const canCancel =
                 <thead>
                   <tr>
                     <th scope="col">Work order</th>
-                    <th scope="col">Station</th>
+                    <th scope="col">Location</th>
                     <th scope="col">Status</th>
                   </tr>
                 </thead>
@@ -196,12 +196,12 @@ const canCancel =
 
             <form method="post" action={`/api/lpos/${lpoId}/attach`} class="engr-form">
               <p class="engr-field__hint">
-                Or create a new work order at a station under this LPO.
+                Or create a new work order at a location under this LPO.
               </p>
               <div class="engr-field">
-                <label for="new-station">Station</label>
+                <label for="new-station">Location</label>
                 <select id="new-station" class="engr-select" name="station_id" required>
-                  <option value="">Choose a station</option>
+                  <option value="">Choose a location</option>
                   {stations.map((s) => (
                     <option value={s.id}>{s.name}</option>
                   ))}
@@ -215,7 +215,7 @@ const canCancel =
                     <option value={a.id} data-station-id={a.stationId}>{a.label}</option>
                   ))}
                 </select>
-                <p class="engr-field__hint">Select an asset located at the chosen station.</p>
+                <p class="engr-field__hint">Select an asset located at the chosen location.</p>
               </div>
               <div class="engr-field">
                 <label for="new-category">
