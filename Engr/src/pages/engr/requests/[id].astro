@@ -112,7 +112,7 @@ const errorMessage = errorCode
     ) : (
       <>
         <dl class="engr-detail">
-          <dt>Station</dt>
+          <dt>Location</dt>
           <dd>{detail.stationName}</dd>
           <dt>Asset or equipment</dt>
           <dd>{detail.assetName ?? 'Not specified'}</dd>
@@ -164,7 +164,7 @@ const errorMessage = errorCode
 
         {status === 'OPEN' && !detail.assignedEngineerName && (
           <p class="engr-notice" role="status">
-            No engineer is assigned to this station or category, so this request went to the
+            No engineer is assigned to this location or category, so this request went to the
             managers.
             {canManageRouting && (
               <>
@@ -223,7 +223,7 @@ const errorMessage = errorCode
             <h2>Prepare work order</h2>
             {contractors.length === 0 ? (
               <p class="engr-empty">
-                No pre-qualified contractor covers this station or category yet.
+                No pre-qualified contractor covers this location or category yet.
               </p>
             ) : (
               <form

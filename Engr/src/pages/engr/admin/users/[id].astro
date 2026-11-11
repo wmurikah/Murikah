@@ -14,6 +14,7 @@ import { getDb } from '@engr/db';
 import { getUser, type UserDetail } from '@engr/repos/adminUsers';
 import { listAssignableRoles } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
+import { locationDisplayLabel } from '@engr/format';
 import {
   mayAssignRoleCode,
   mayManageTargetUser,
@@ -96,7 +97,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
         That user was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/users" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/users" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={u!.id} />}
         <div class="engr-field">
           <label for="full_name">Full name</label>
@@ -196,7 +197,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
                     value={role.id}
                     checked={selectedRoleIds.has(role.id)}
                   />
-                  <label for={`role_${role.id}`}>{role.name}</label>
+                  <label for={`role_${role.id}`}>{locationDisplayLabel(role.name)}</label>
                 </li>
               ))}
             </ul>

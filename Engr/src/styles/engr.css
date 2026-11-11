@@ -1597,6 +1597,47 @@ input.engr-switch:hover {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+/* Shared Setup form alignment: consistent 3-column desktop / 2-column tablet
+   grid, matching label and control heights, and separate hint tracks.
+   Keep server form fields and values unchanged. */
+.engr-formgrid--setup {
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.engr-formgrid--setup > .engr-field:not(fieldset) {
+  min-width: 0;
+  align-content: start;
+  align-items: start;
+  grid-template-rows: minmax(1.4rem, max-content) 2.75rem auto;
+}
+.engr-formgrid--setup > .engr-field > label { line-height: 1.4; }
+.engr-formgrid--setup > .engr-field > :is(.engr-input, .engr-select, .engr-static-control) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+}
+.engr-static-control {
+  display: flex;
+  align-items: center;
+  padding: var(--engr-s2) var(--engr-s3);
+  border: 1px solid var(--engr-line);
+  border-radius: var(--engr-radius-sm);
+  background: var(--engr-surface);
+  color: var(--engr-ink);
+  font: inherit;
+  font-size: var(--engr-fs-body);
+}
+@media (min-width: 48rem) {
+  .engr-formgrid--setup { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 72rem) {
+  .engr-formgrid--setup { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 /* Affiliate edit: five equally sized controls in two aligned desktop rows:
    Code / Name / Country; Base currency / Status. Help text must not stretch
    inputs, including fields with no hint (Name and Status). */

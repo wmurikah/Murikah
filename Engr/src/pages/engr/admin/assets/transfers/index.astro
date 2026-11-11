@@ -20,7 +20,7 @@ if (allowed) rows = await listTransfers(await getDb(getEngrEnv(), Astro.locals),
   <div class="engr-adminbar">
     <div>
       <h1>Asset transfers</h1>
-      <p class="engr-lead">Request, approve, dispatch and confirm receipt of equipment across stations.</p>
+      <p class="engr-lead">Request, approve, dispatch and confirm receipt of equipment across locations.</p>
     </div>
     {canRequest && <a href="/admin/assets/transfers/new" class="engr-btn engr-btn--primary">Request transfer</a>}
   </div>
@@ -33,7 +33,7 @@ if (allowed) rows = await listTransfers(await getDb(getEngrEnv(), Astro.locals),
       <table class="engr-table" aria-label="Asset transfers">
         <thead>
           <tr>
-            <th>Asset</th><th>From station</th><th>To station</th>
+            <th>Asset</th><th>From location</th><th>To location</th>
             <th>Requested</th><th>Status</th><th>Action</th>
           </tr>
         </thead>

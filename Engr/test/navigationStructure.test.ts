@@ -22,14 +22,14 @@ test('six collapsible groups contain exactly the approved 25 destinations', () =
     'Requests', 'Work orders', 'Maintenance', 'Assets',
     'RFQs', 'LPOs', 'Contractors', 'Rate cards',
     'Costs', 'Bills', 'Invoices', 'Payments',
-    'Stations', 'Regions', 'Technicians', 'Engineers in charge', 'SLAs',
+    'Locations', 'Regions', 'Technicians', 'Engineers in charge', 'SLAs',
     'Affiliates', 'Users', 'Roles', 'Notification settings', 'Security settings', 'Audit history',
   ];
   assert.equal(items.length, 25);
   assert.deepEqual(items, expected);
   assert.equal(new Set(items).size, 25, 'no destination may be repeated');
   for (const removed of [
-    'Station confirmations', 'Procurement approvals', 'Mileage approvals',
+    'Location confirmations', 'Procurement approvals', 'Mileage approvals',
     'Cost approvals', 'Bill approvals', 'Asset transfers', 'Delivery monitor',
   ]) {
     assert.equal(items.includes(removed), false, removed + ' belongs inside a parent page');
@@ -86,6 +86,8 @@ test('approval-only roles have a parent landing page without granting visibility
   assert.match(rfq, /canProcure/);
   assert.match(costs, /canApprove/);
   assert.match(bills, /canApprove/);
+  assert.match(layout, /open=\{\['Overview', 'Operations', 'Procurement'\]\.includes\(group.label\)\}/);
+  assert.doesNotMatch(layout, /name="engr-nav"/, 'multiple default-expanded sections must be possible');
   const wo = source('src/pages/engr/workorders/index.astro');
   assert.match(wo, /const canConfirm = allowed &&/, 'station confirmations retain the existing workorder.view gate');
   const contractors = source('src/pages/engr/admin/contractors/index.astro');

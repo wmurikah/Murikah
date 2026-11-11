@@ -13,6 +13,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listEffectiveRoles, type RoleRow } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
+import { locationDisplayLabel } from '@engr/format';
 import { mayManageRoleCode, userManagementScope } from '@engr/auth/adminPolicy';
 
 const engr = Astro.locals.engr;
@@ -89,9 +90,9 @@ if (allowed) {
               <tr>
                 <td>
                   {canManage && mayManageRoleCode(managementScope, r.code) ? (
-                    <a href={`/admin/roles/${r.id}`}>{r.name}</a>
+                    <a href={`/admin/roles/${r.id}`}>{locationDisplayLabel(r.name)}</a>
                   ) : (
-                    r.name
+                    locationDisplayLabel(r.name)
                   )}
                 </td>
                 <td>{r.code}</td>

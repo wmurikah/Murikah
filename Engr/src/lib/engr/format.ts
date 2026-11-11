@@ -29,6 +29,16 @@ export function titleCase(text: string): string {
     .join(' ');
 }
 
+/** Display-only terminology. Existing station keys, role codes and DB schema
+ * remain unchanged so permissions and integrations continue to work. */
+export function locationDisplayLabel(text: string): string {
+  return text
+    .replace(/\bStations\b/g, 'Locations')
+    .replace(/\bstations\b/g, 'locations')
+    .replace(/\bStation\b/g, 'Location')
+    .replace(/\bstation\b/g, 'location');
+}
+
 /**
  * The human-facing label for an organisation. Prefer the stored name; fall back
  * to a title-cased slug only when no name is available, so a raw slug is never

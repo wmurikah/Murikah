@@ -59,9 +59,9 @@ const currentFrequency = s?.frequency ?? 'MONTHLY';
   </div>
 
   <div class="engr-field">
-    <label for="pm-station">Station</label>
+    <label for="pm-station">Location</label>
     <select id="pm-station" class="engr-select" name="station_id">
-      <option value="">Choose a station (required)</option>
+      <option value="">Choose a location (required)</option>
       {
         stations.map((o) => (
           <option value={o.id} selected={s?.stationId === o.id}>
@@ -80,7 +80,7 @@ const currentFrequency = s?.frequency ?? 'MONTHLY';
         <option value={a.id} data-station-id={a.stationId} selected={s?.assetId === a.id}>{a.label}</option>
       ))}
     </select>
-    <p class="engr-field__hint">If selected, choose the same station where this asset currently belongs.</p>
+    <p class="engr-field__hint">If selected, choose the same location where this asset currently belongs.</p>
   </div>
 
   <div class="engr-field">
@@ -95,7 +95,7 @@ const currentFrequency = s?.frequency ?? 'MONTHLY';
         ))
       }
     </select>
-    <p class="engr-field__hint">Choose a station, a category, or both.</p>
+    <p class="engr-field__hint">Choose a location, a category, or both.</p>
   </div>
 
   <div class="engr-field">
