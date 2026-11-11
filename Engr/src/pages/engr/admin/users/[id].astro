@@ -96,7 +96,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
         That user was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/users" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/users" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={u!.id} />}
         <div class="engr-field">
           <label for="full_name">Full name</label>
