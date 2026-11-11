@@ -106,9 +106,14 @@ const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id 
         </div>
         <div class="engr-field">
           <label for="display_region_code">Region code</label>
-          <input id="display_region_code" type="text" class="engr-input"
+          <input
+            id="display_region_code"
+            type="text"
+            class="engr-input"
             value={isNew ? 'Generated automatically on save' : s?.code ?? 'Pending legacy code backfill'}
-            readonly aria-readonly="true" />
+            readonly
+            aria-readonly="true"
+          />
         </div>
         <div class="engr-actionbar engr-formgrid__full">
           <button type="submit" class="engr-btn engr-btn--primary">
