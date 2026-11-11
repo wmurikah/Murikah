@@ -55,7 +55,7 @@ if (allowed) {
     <div>
       <h1>Engineers in charge</h1>
       <p class="engr-lead">
-        Route raised requests to the engineer who owns the station or category.
+        Route raised requests to the engineer who owns the location or category.
       </p>
     </div>
   </div>
@@ -105,7 +105,7 @@ if (allowed) {
                 {assignments.map((a) => (
                   <tr>
                     <td>{a.engineerName}</td>
-                    <td>{a.scopeType === 'STATION' ? 'Station' : 'Category'}</td>
+                    <td>{a.scopeType === 'STATION' ? 'Location' : 'Category'}</td>
                     <td>{a.scopeName}</td>
                     <td>
                       {canManage ? (
@@ -146,21 +146,21 @@ if (allowed) {
               <div class="engr-field">
                 <label for="scope_type">Owns</label>
                 <select id="scope_type" class="engr-select" name="scope_type">
-                  <option value="STATION">A station</option>
+                  <option value="STATION">A location</option>
                   <option value="CATEGORY">A category</option>
                 </select>
               </div>
               <div class="engr-field">
-                <label for="station">Station</label>
+                <label for="station">Location</label>
                 <select id="station" class="engr-select" name="station_id">
-                  <option value="">Choose a station</option>
+                  <option value="">Choose a location</option>
                   {stations.map((s) => (
                     <option value={s.id}>
                       {s.name} ({s.code})
                     </option>
                   ))}
                 </select>
-                <p class="engr-field__hint">Used when the engineer owns a station.</p>
+                <p class="engr-field__hint">Used when the engineer owns a location.</p>
               </div>
               <div class="engr-field">
                 <label for="category">Category</label>
