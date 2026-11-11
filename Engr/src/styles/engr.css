@@ -1597,25 +1597,27 @@ input.engr-switch:hover {
     grid-template-columns: repeat(3, 1fr);
   }
 }
-/* Affiliate edit: five equally sized controls in two aligned desktop rows:
-   Code / Name / Country; Base currency / Status. Help text must not stretch
-   inputs, including fields with no hint (Name and Status). */
+/* All Engineering setup forms share identical field tracks and 3/2/1-column
+   responsive widths. Explanatory hints occupy their own track and must never
+   stretch an adjacent input or select. Keep the affiliate alias for existing pages. */
+.engr-formgrid--setup,
 .engr-formgrid--affiliate {
   max-width: none;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
+.engr-formgrid--setup > .engr-field,
 .engr-formgrid--affiliate > .engr-field {
   min-width: 0;
   display: grid;
-  grid-template-rows: min-content 2.75rem auto;
+  grid-template-rows: minmax(1.5rem, auto) 2.75rem auto;
   align-content: start;
   align-items: start;
 }
-.engr-formgrid--affiliate > .engr-field > label {
-  line-height: 1.4;
-}
-.engr-formgrid--affiliate > .engr-field > :is(.engr-input, .engr-select) {
+.engr-formgrid--setup > .engr-field > label,
+.engr-formgrid--affiliate > .engr-field > label { line-height: 1.4; }
+.engr-formgrid--setup > .engr-field > :is(.engr-input, .engr-select, .engr-static-control),
+.engr-formgrid--affiliate > .engr-field > :is(.engr-input, .engr-select, .engr-static-control) {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -1623,11 +1625,27 @@ input.engr-switch:hover {
   min-height: 2.75rem;
   max-height: 2.75rem;
 }
+.engr-static-control {
+  display: flex;
+  align-items: center;
+  padding: var(--engr-s2) var(--engr-s3);
+  border: 1px solid var(--engr-line);
+  border-radius: var(--engr-radius-sm);
+  background: var(--engr-surface);
+  color: var(--engr-ink);
+  font: inherit;
+}
+.engr-formgrid--setup > .engr-formgrid__full,
+.engr-formgrid--affiliate > .engr-formgrid__full { grid-column: 1 / -1; }
 @media (min-width: 48rem) {
-  .engr-formgrid--affiliate { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .engr-formgrid--setup, .engr-formgrid--affiliate {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (min-width: 72rem) {
-  .engr-formgrid--affiliate { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .engr-formgrid--setup, .engr-formgrid--affiliate {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .engr-checklist {
   list-style: none;
