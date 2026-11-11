@@ -24,12 +24,12 @@ test('Location is a view-layer label; existing IDs, route paths and permission k
   assert.match(location, /<EngrLayout title=\{isNew \? 'New location' : 'Edit location'\}>/);
   assert.match(locations, /<EngrLayout title="Locations">/);
   assert.match(location, /Location code/);
-  assert.match(location, /readonly aria-readonly="true"/);
+  assert.match(location, /readonly\s+aria-readonly="true"/);
   assert.match(location, /name="station_id"|name="affiliate_org_id"/);
 
   const regions = file('src/pages/engr/admin/regions/[id].astro');
   assert.match(regions, /Region code/);
-  assert.match(regions, /readonly aria-readonly="true"/);
+  assert.match(regions, /readonly\s+aria-readonly="true"/);
 });
 
 test('Setup forms use a shared three-column grid with aligned labels, controls and hints', () => {
