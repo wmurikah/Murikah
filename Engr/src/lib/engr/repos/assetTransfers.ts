@@ -225,9 +225,9 @@ export async function requestTransfer(
   if (!asset) return { ok: false, code: 'not_found', message: 'Asset not found.' };
   const fromStationId = String(asset.station_id);
   if (!owns(actor, asset.station_manager_id == null ? null : String(asset.station_manager_id)))
-    return { ok: false, code: 'forbidden', message: 'Only the sending station can request this movement.' };
+    return { ok: false, code: 'forbidden', message: 'Only the sending location can request this movement.' };
   if (fromStationId === input.toStationId)
-    return { ok: false, code: 'invalid', message: 'Destination must differ from the current station.' };
+    return { ok: false, code: 'invalid', message: 'Destination must differ from the current location.' };
   const target = await db.execute({
     sql: `SELECT id FROM stations WHERE id = ? AND org_id = ?
              AND COALESCE(affiliate_org_id, org_id) = ?
@@ -356,7 +356,7 @@ export async function transitionTransfer(
       });
       if (!target.rows.length) {
         await tx.rollback();
-        return { ok: false, code: 'conflict', message: 'The receiving station is no longer active.' };
+        return { ok: false, code: 'conflict', message: 'The receiving location is no longer active.' };
       }
       // A late work request cannot silently pass the physical handover.
       if (await hasOpenWork(tx, actor.orgId, tr.assetId)) {
