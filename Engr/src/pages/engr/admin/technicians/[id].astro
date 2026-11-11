@@ -89,7 +89,7 @@ const t = technician;
         That technician was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/technicians" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/technicians" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={t!.id} />}
         <div class="engr-field">
           <label for="contractor_id">Contractor</label>
