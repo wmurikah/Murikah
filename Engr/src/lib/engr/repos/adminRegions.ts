@@ -44,9 +44,9 @@ export interface RegionInput {
 }
 
 /**
- * Group-affiliate choices are exposed only when the current acting organisation
- * is the group's root and the actor is its Owner/Admin or platform owner.
- * Switching to an unrelated tenant doesn't bring Hass affiliates into scope.
+ * Only child organisations are affiliates. A root tenant is NEVER an affiliate
+ * option. Group owners/admins may select active children of their current root.
+ * Legacy child-scoped administrators can select their own affiliate only.
  */
 export async function listRegionAffiliates(db: Client, actor: RegionActor): Promise<AffiliateOption[]> {
   const canManageGroup =
@@ -59,12 +59,13 @@ export async function listRegionAffiliates(db: Client, actor: RegionActor): Prom
             JOIN organisations current ON current.id = ?
            WHERE current.deleted_at IS NULL AND current.status = 'ACTIVE'
              AND a.deleted_at IS NULL AND a.status = 'ACTIVE'
+             AND a.parent_org_id IS NOT NULL
              AND (
-               a.id = current.id
-               OR (current.parent_org_id IS NULL AND ? = 1
-                   AND a.parent_org_id = current.id)
+               (current.parent_org_id IS NULL AND ? = 1
+                AND a.parent_org_id = current.id)
+               OR (current.parent_org_id IS NOT NULL AND a.id = current.id)
              )
-        ORDER BY CASE WHEN a.id = current.id THEN 0 ELSE 1 END, a.name`,
+        ORDER BY a.name`,
     args: [actor.orgId, canManageGroup ? 1 : 0],
   });
   return res.rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
@@ -85,7 +86,12 @@ const GROUP_REGION_WHERE = `(
 export async function listRegionsAdmin(db: Client, actor: RegionActor): Promise<RegionRow[]> {
   const res = await db.execute({
     sql: `SELECT r.id, r.org_id, r.affiliate_org_id, r.name, r.code,
-                 COALESCE(affiliate.name, owner.name) AS affiliate_name
+                 CASE
+                   WHEN owner.parent_org_id IS NULL AND
+                     (affiliate.parent_org_id IS NULL OR affiliate.parent_org_id <> owner.id)
+                   THEN 'Unassigned'
+                   ELSE COALESCE(affiliate.name, owner.name)
+                 END AS affiliate_name
             FROM regions r
             JOIN organisations owner ON owner.id = r.org_id
             LEFT JOIN organisations affiliate
@@ -107,7 +113,12 @@ export async function listRegionsAdmin(db: Client, actor: RegionActor): Promise<
 export async function getRegion(db: Client, actor: RegionActor, id: string): Promise<RegionDetail | null> {
   const res = await db.execute({
     sql: `SELECT r.id, r.org_id, r.affiliate_org_id, r.name, r.code,
-                 COALESCE(affiliate.name, owner.name) AS affiliate_name
+                 CASE
+                   WHEN owner.parent_org_id IS NULL AND
+                     (affiliate.parent_org_id IS NULL OR affiliate.parent_org_id <> owner.id)
+                   THEN 'Unassigned'
+                   ELSE COALESCE(affiliate.name, owner.name)
+                 END AS affiliate_name
             FROM regions r
             JOIN organisations owner ON owner.id = r.org_id
             LEFT JOIN organisations affiliate
@@ -190,10 +201,9 @@ export async function updateRegion(
     return { ok: false, code: 'invalid', message: 'A name of up to 120 characters is required.' };
   const current = await getRegion(db, actor, id);
   if (!current) return { ok: false, code: 'not_found', message: 'Region not found.' };
-  // Existing affiliation may be inactive. Keep it on a name-only edit, but
-  // require active authorised choices for every actual reassignment.
-  if (input.affiliateOrgId !== current.affiliateOrgId &&
-      !(await canClassify(db, actor, input.affiliateOrgId)))
+  // A root tenant is never an affiliate, including on legacy edits.
+  // Previously unclassified regions must select a valid child affiliate.
+  if (!(await canClassify(db, actor, input.affiliateOrgId)))
     return { ok: false, code: 'invalid', message: 'Choose an active affiliate in the current group.' };
 
   // Regions owned by an individual affiliate must remain classified to that
