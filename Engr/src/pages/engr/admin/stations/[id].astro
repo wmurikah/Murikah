@@ -86,7 +86,7 @@ const formAffiliates = affiliates;
         {!isNew && <input type="hidden" name="id" value={s!.id} />}
         <div class="engr-field">
           <label>Location code</label>
-          <div class="engr-static-control" role="textbox" aria-readonly="true">
+          <div class="engr-static-control" role="textbox" aria-label="Location code" aria-readonly="true">
             {isNew ? 'Generated on creation' : s?.code}
           </div>
         </div>
