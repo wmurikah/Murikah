@@ -8,6 +8,7 @@ export const prerender = false;
  * temporary password or send a single-use invitation. Entering a password on an existing user resets their password,
  * revokes their sessions and forces replacement at the next login.
  */
+import { displayLocationTerminology } from '@engr/format';
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
@@ -196,7 +197,7 @@ const selectedRoleIds = new Set(u?.roleIds ?? []);
                     value={role.id}
                     checked={selectedRoleIds.has(role.id)}
                   />
-                  <label for={`role_${role.id}`}>{role.name}</label>
+                  <label for={`role_${role.id}`}>{displayLocationTerminology(role.name)}</label>
                 </li>
               ))}
             </ul>
