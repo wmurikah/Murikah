@@ -64,6 +64,7 @@ const pageLink = (page: number) =>
                 <th scope="col">Contractor (source)</th>
                 <th scope="col">Work description</th>
                 <th scope="col">Expected closure</th>
+                <th scope="col">Review flags</th>
                 <th scope="col">Source row</th>
               </tr>
             </thead>
@@ -84,6 +85,7 @@ const pageLink = (page: number) =>
                   <td>{r.contractor || 'Not provided'}</td>
                   <td class="engr-wrap">{r.description}</td>
                   <td>{r.expectedClosure || 'Not recorded'}</td>
+                  <td>{r.qualityFlags || '—'}</td>
                   <td>{r.sourceRow}</td>
                 </tr>
               ))}
