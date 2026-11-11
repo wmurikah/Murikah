@@ -9,6 +9,7 @@ import { invoicesAndAssetMovements } from './008_invoices_asset_movements.ts';
 import { controlledAssetTransfers } from './009_controlled_asset_transfers.ts';
 import { regionAffiliateAssignments } from './010_region_affiliate_assignments.ts';
 import { stationAffiliateWithinTenant } from './011_station_affiliate_within_tenant.ts';
+import { legacyWorkOrderArchive } from './012_legacy_work_order_archive.ts';
 
 export const migrations = [
   initialSchema,
@@ -22,4 +23,5 @@ export const migrations = [
   controlledAssetTransfers,
   regionAffiliateAssignments,
   stationAffiliateWithinTenant,
+  legacyWorkOrderArchive,
 ];
