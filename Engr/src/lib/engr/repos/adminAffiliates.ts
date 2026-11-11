@@ -1,10 +1,9 @@
 /**
- * Affiliate management for a group. An affiliate is its own organisation whose
- * parent_org_id is the parent. Only a platform owner reaches these, and every
- * read and write is scoped to that parent (children by parent_org_id), so one
- * parent's affiliates can never be seen or touched under another. Creating an affiliate
- * also opens a TRIALING subscription on the TRIAL plan. The slug is set once from
- * the code and never changed here (logins depend on it).
+ * Affiliates are child organisation records used as labels under ONE group
+ * tenant. They are not independent tenant-switcher entries and newly created
+ * affiliates do not get subscriptions. Existing child identifiers and old
+ * subscriptions are preserved for reconciliation. Legacy user-login slugs
+ * remain immutable.
  */
 import type { Client } from '@libsql/client/web';
 
@@ -57,7 +56,10 @@ const STATUSES = new Set(['ACTIVE', 'SUSPENDED']);
 export async function listAffiliates(db: Client, groupId: string): Promise<AffiliateRow[]> {
   const res = await db.execute({
     sql: `SELECT o.id, o.name, o.slug, o.country, o.base_currency, o.status,
-                 (SELECT COUNT(*) FROM stations s WHERE s.org_id = o.id AND s.deleted_at IS NULL) AS station_count
+                 (SELECT COUNT(*) FROM stations s
+                   WHERE s.deleted_at IS NULL
+                     AND (s.org_id = o.id OR
+                          (s.org_id = o.parent_org_id AND s.affiliate_org_id = o.id))) AS station_count
             FROM organisations o
            WHERE o.parent_org_id = ? AND o.deleted_at IS NULL
         ORDER BY o.name`,
@@ -112,13 +114,6 @@ export async function createAffiliate(
   if (!currency) return { ok: false, code: 'invalid', message: 'A base currency is required.' };
   const slug = code.toLowerCase();
 
-  // The TRIAL plan every tenant shares (read before the write).
-  const planRes = await db.execute({
-    sql: `SELECT id FROM plans WHERE code = 'TRIAL' LIMIT 1`,
-    args: [],
-  });
-  const planId = planRes.rows[0] ? String(planRes.rows[0].id) : null;
-
   const id = newId();
   const tx = await db.transaction('write');
   try {
@@ -127,12 +122,6 @@ export async function createAffiliate(
             VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?)`,
       args: [id, name, slug, country, currency, ctx.groupId],
     });
-    if (planId) {
-      await tx.execute({
-        sql: `INSERT INTO subscriptions (id, org_id, plan_id, status) VALUES (?, ?, ?, 'TRIALING')`,
-        args: [newId(), id, planId],
-      });
-    }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, after_json)
             VALUES (?, ?, 'affiliate.create', 'organisation', ?, ?)`,

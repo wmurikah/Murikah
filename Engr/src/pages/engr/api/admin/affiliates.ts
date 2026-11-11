@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = await readBody(request);
   const id = str(body.id).trim();
   const db = await getDb(getEngrEnv(), locals);
-  const ctx = { groupId: engr.homeOrgId, userId: engr.userId };
+  const ctx = { groupId: engr.orgId, userId: engr.userId };
 
   const result = id
     ? await updateAffiliate(db, ctx, id, {

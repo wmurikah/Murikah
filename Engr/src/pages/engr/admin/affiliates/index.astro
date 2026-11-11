@@ -5,7 +5,7 @@ export const prerender = false;
  * Affiliates of the caller's home organisation. Shown only to a platform owner.
  * The organisation sits at the top with its affiliates beneath, so the structure
  * is legible. After creating an affiliate, switch into it (the sidebar switcher)
- * and use the ordinary Setup screens to add its stations and the rest.
+ * and classify regions/stations for it within the same tenant.
  */
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
@@ -26,7 +26,7 @@ const groupName = engr.orgName ?? 'Organisation';
 let rows: AffiliateRow[] = [];
 if (allowed) {
   const db = await getDb(getEngrEnv(), Astro.locals);
-  rows = await listAffiliates(db, engr.homeOrgId);
+  rows = await listAffiliates(db, engr.orgId);
 }
 ---
 
@@ -48,7 +48,7 @@ if (allowed) {
   {
     saved && (
       <p class="engr-notice" role="status">
-        Affiliate saved. Switch into it from the sidebar to set it up.
+        Affiliate saved. Assign regions and stations to it from Service Setup.
       </p>
     )
   }

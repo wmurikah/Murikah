@@ -66,7 +66,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     [
       {
         sql: `SELECT u.status, u.deleted_at, u.must_change_password, u.session_version,
-                 u.is_platform_owner, o.status AS org_status, o.deleted_at AS org_deleted_at,
+                 u.is_platform_owner, o.name AS org_name, o.slug AS org_slug,
+                 o.status AS org_status, o.deleted_at AS org_deleted_at,
                  s.session_version AS tracked_version, s.privilege_level, s.last_seen_at,
                  s.expires_at, s.revoked_at,
                  EXISTS(SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.enabled_at IS NOT NULL) AS mfa_enabled
@@ -215,8 +216,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const homeOrgId = session.org;
-  const homeName = session.orgName ?? session.orgSlug;
-  const homeSlug = session.orgSlug;
+  // Read the live group name: renaming Hass to Hass Group takes effect without
+  // waiting for a new login or trusting a stale session display label.
+  const homeName = String(account.org_name ?? session.orgName ?? session.orgSlug);
+  const homeSlug = String(account.org_slug ?? session.orgSlug);
 
   let actingOrgId = homeOrgId;
   let actingName: string = homeName;

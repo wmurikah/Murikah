@@ -215,7 +215,8 @@ export async function requestTransfer(
   if (!input.reason.trim() || input.reason.trim().length > 500)
     return { ok: false, code: 'invalid', message: 'Provide a reason (maximum 500 characters).' };
   const details = await db.execute({
-    sql: `SELECT a.station_id, a.serial_no, s.station_manager_id
+    sql: `SELECT a.station_id, a.serial_no, s.station_manager_id,
+                 COALESCE(s.affiliate_org_id, s.org_id) AS affiliate_org_id
             FROM assets a JOIN stations s ON s.id = a.station_id AND s.org_id = a.org_id
            WHERE a.org_id = ? AND a.id = ? AND a.deleted_at IS NULL LIMIT 1`,
     args: [actor.orgId, input.assetId],
@@ -228,11 +229,13 @@ export async function requestTransfer(
   if (fromStationId === input.toStationId)
     return { ok: false, code: 'invalid', message: 'Destination must differ from the current station.' };
   const target = await db.execute({
-    sql: `SELECT id FROM stations WHERE id = ? AND org_id = ? AND status = 'ACTIVE' AND deleted_at IS NULL LIMIT 1`,
-    args: [input.toStationId, actor.orgId],
+    sql: `SELECT id FROM stations WHERE id = ? AND org_id = ?
+             AND COALESCE(affiliate_org_id, org_id) = ?
+             AND status = 'ACTIVE' AND deleted_at IS NULL LIMIT 1`,
+    args: [input.toStationId, actor.orgId, String(asset.affiliate_org_id)],
   });
   if (!target.rows.length)
-    return { ok: false, code: 'invalid', message: 'Select an active destination in this affiliate.' };
+    return { ok: false, code: 'invalid', message: 'Select an active destination in the same affiliate.' };
   if (await hasOpenWork(db, actor.orgId, input.assetId))
     return { ok: false, code: 'conflict', message: 'Complete or cancel open repair work before requesting a transfer.' };
   const id = newId();

@@ -2,15 +2,16 @@
  * Acting-organisation resolution.
  *
  * Only a platform owner (users.is_platform_owner) may switch the acting
- * organisation, and they may act inside any organisation on the platform. This
+ * organisation, and may act only inside top-level tenant organisations. This
  * resolves, from the database and the requested acting id, the organisation the
  * request will actually operate inside, and the set the user may switch between.
  * The acting organisation is always validated here against that set, so a stale
  * or tampered cookie can never widen access: an id outside the set falls back to
  * the home organisation.
  *
- * Only a platform owner needs this resolution, so the middleware calls it only
- * for them; every other user acts inside their home organisation with no query.
+ * Affiliates (organisations.parent_org_id IS NOT NULL) are part of the
+ * parent's setup, not independent tenant choices in the switcher. The
+ * middleware continues to enforce the original account and role boundaries.
  */
 import type { Client } from '@libsql/client/web';
 
@@ -48,10 +49,10 @@ export async function resolveActingContext(
   // An ordinary user never switches: they always act inside their home org.
   if (!isPlatformOwner) return fallback;
 
-  // A platform owner may act inside any live organisation on the platform.
+  // Only true tenant roots are switchable; affiliate choices belong in setup.
   const res = await db.execute({
     sql: `SELECT id, name, slug FROM organisations
-            WHERE deleted_at IS NULL
+            WHERE parent_org_id IS NULL AND status = 'ACTIVE' AND deleted_at IS NULL
          ORDER BY name`,
     args: [],
   });
@@ -62,10 +63,14 @@ export async function resolveActingContext(
   }));
 
   // The requested id is honoured only when it is in the set; otherwise home.
-  const chosen =
-    requestedActingId && switchable.some((s) => s.id === requestedActingId)
-      ? requestedActingId
-      : homeOrgId;
+  const homeParent = await db.execute({
+    sql: 'SELECT COALESCE(parent_org_id, id) AS tenant_id FROM organisations WHERE id = ? LIMIT 1',
+    args: [homeOrgId],
+  });
+  const homeTenantId = String(homeParent.rows[0]?.tenant_id ?? homeOrgId);
+  const chosen = requestedActingId && switchable.some((s) => s.id === requestedActingId)
+    ? requestedActingId
+    : homeTenantId;
   const actingRow = switchable.find((s) => s.id === chosen) ?? null;
 
   return {

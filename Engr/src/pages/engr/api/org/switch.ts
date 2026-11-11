@@ -3,7 +3,7 @@ export const prerender = false;
 /**
  * Switch the acting organisation. Only a platform owner may switch, and only to
  * an organisation in the set the middleware resolved for this request
- * (locals.engr.switchable, every live organisation), so a forged form value
+ * (locals.engr.switchable, top-level tenants only), so a forged form value
  * cannot reach anything outside it. The switch is audited under the owner's home
  * organisation, then the acting-org cookie is set and the browser is sent to the
  * dashboard of the now-acting organisation.
