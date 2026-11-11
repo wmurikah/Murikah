@@ -114,8 +114,9 @@ Then deploy the existing Cloudflare Worker and verify:
 
 - Tenant switcher lists only top-level tenants, not Hass Kenya/Uganda.
 - Hass Group remains visible as the single parent after the optional rename.
-- Affiliate edit shows Code, Name, Country, Currency and Status across one
-  desktop row, wrapping at smaller screen widths.
+- Affiliate edit shows Code, Name and Country on the first desktop row;
+  Base currency and Status on the second, all in equally sized columns with
+  identical control heights. Tablet and mobile widths wrap responsively.
 - Station and Region forms show ONLY active Hass Group subsidiaries (HPK, HPU
   and others); Hass Group itself does not appear in the dropdown.
 - Station Region choices respond to affiliate changes, and API submissions
