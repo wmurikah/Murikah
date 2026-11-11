@@ -9,8 +9,9 @@
  * Operations, Procurement, Finance, Service Setup, Administration) into collapsible sections, each with a category
  * icon and user-specific pending-work counts. Only
  * items the user holds a permission for are rendered, so a contractor sees a
- * much shorter menu than an owner. All groups start closed and open when their
- * heading is selected; the active group is marked without forcing it open. On
+ * much shorter menu than an owner. Overview, Operations and Procurement
+ * start expanded; other sections remain collapsed. Users may toggle sections
+ * independently (more than one group can be open). On
  * narrow screens the sidebar is a drawer. Native details work without JavaScript.
  *
  * Navigation uses Astro view transitions with a top progress bar, so a click
@@ -211,7 +212,7 @@ const rawGroups: NavGroup[] = [
     icon: 'setup',
     items: visibleNavItems([
       has('stations.view')
-        ? { href: '/admin/stations', label: 'Stations', icon: 'stations' }
+        ? { href: '/admin/stations', label: 'Locations', icon: 'stations' }
         : null,
       // Region setup shares the existing station permission.
       has('stations.view')
@@ -334,7 +335,7 @@ const groupActive = (group: NavGroup) => group.items.some(activeItem);
                   class="engr-navgroup"
                   data-nav-group
                   data-nav-group-label={group.label}
-                  name="engr-nav"
+                  open={['Overview', 'Operations', 'Procurement'].includes(group.label)}
                   data-active={groupActive(group) ? 'yes' : undefined}
                 >
                   <summary class="engr-navgroup__summary">

@@ -24,16 +24,16 @@ if (allowed) {
 }
 ---
 
-<EngrLayout title="Stations">
+<EngrLayout title="Locations">
   <div class="engr-adminbar">
     <div>
-      <h1>Stations</h1>
+      <h1>Locations</h1>
       <p class="engr-lead">Sites where work is raised and carried out.</p>
     </div>
     {
       canManage && (
         <a href="/admin/stations/new" class="engr-btn engr-btn--primary">
-          New station
+          New location
         </a>
       )
     }
@@ -42,7 +42,7 @@ if (allowed) {
   {
     saved && (
       <p class="engr-notice" role="status">
-        Station saved.
+        Location saved.
       </p>
     )
   }
@@ -57,19 +57,19 @@ if (allowed) {
   {
     !allowed ? (
       <p class="engr-error" role="alert">
-        You do not have access to stations.
+        You do not have access to locations.
       </p>
     ) : rows.length === 0 ? (
       <EmptyState
-        message="No stations are set up yet."
+        message="No locations are set up yet."
         canAct={canManage}
         actionHref="/admin/stations/new"
-        actionLabel="Add a station"
-        hint="Ask an administrator to add a station."
+        actionLabel="Add a location"
+        hint="Ask an administrator to add a location."
       />
     ) : (
       <div class="engr-tablewrap">
-        <table class="engr-table engr-table--edit" aria-label="Stations">
+        <table class="engr-table engr-table--edit" aria-label="Locations">
           <thead>
             <tr>
               <th scope="col">Code</th>

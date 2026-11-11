@@ -110,7 +110,7 @@ export async function recordMovement(
   });
   const from = fromStationId ? result.rows.find((r) => String(r.id) === fromStationId) : null;
   const to = result.rows.find((r) => String(r.id) === toStationId);
-  if (!to || (fromStationId && !from)) throw new Error('Asset station is unavailable.');
+  if (!to || (fromStationId && !from)) throw new Error('Asset location is unavailable.');
   await tx.execute({
     sql: `INSERT INTO asset_movements
       (id, org_id, asset_id, from_station_id, from_station_name, from_region_id, from_region_name,
@@ -229,7 +229,7 @@ export async function createAsset(
     return {
       ok: false,
       code: 'invalid',
-      message: 'Choose a station and category from this organisation.',
+      message: 'Choose a location and category from this organisation.',
     };
   }
   const id = newId();
@@ -280,7 +280,7 @@ export async function updateAsset(
     return {
       ok: false,
       code: 'invalid',
-      message: 'Choose a station and category from this organisation.',
+      message: 'Choose a location and category from this organisation.',
     };
   }
   const tx = await db.transaction('write');
@@ -306,7 +306,7 @@ export async function updateAsset(
     }
     if (oldStationId !== input.stationId) {
       await tx.rollback();
-      return { ok: false, code: 'invalid', message: 'Station changes require the asset transfer workflow.' };
+      return { ok: false, code: 'invalid', message: 'Location changes require the asset transfer workflow.' };
     }
     const upd = await tx.execute({
       sql: `UPDATE assets

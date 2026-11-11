@@ -208,7 +208,7 @@ export async function createStation(
       throw err;
     }
   }
-  return { ok: false, code: 'conflict', message: 'A station code could not be reserved. Try again.' };
+  return { ok: false, code: 'conflict', message: 'A location code could not be reserved. Try again.' };
 }
 
 export async function updateStation(
@@ -220,7 +220,7 @@ export async function updateStation(
   const invalid = validate(input);
   if (invalid) return { ok: false, code: 'invalid', message: invalid };
   const current = await getStation(db, ctx.orgId, id);
-  if (!current) return { ok: false, code: 'not_found', message: 'That station was not found.' };
+  if (!current) return { ok: false, code: 'not_found', message: 'That location was not found.' };
   const affiliateOrgId = input.affiliateOrgId ?? current.affiliateOrgId;
   if (!(await affiliateAllowed(db, ctx, affiliateOrgId)) ||
       !(await referencesBelongToOrg(db, ctx.orgId, input, affiliateOrgId))) {
@@ -239,7 +239,7 @@ export async function updateStation(
       });
       if (pending.rows.length) {
         await tx.rollback();
-        return { ok: false, code: 'conflict', message: 'Finish pending asset transfers before changing this station affiliate.' };
+        return { ok: false, code: 'conflict', message: 'Finish pending asset transfers before changing this location affiliate.' };
       }
     }
     const upd = await tx.execute({
@@ -251,7 +251,7 @@ export async function updateStation(
     });
     if (upd.rowsAffected === 0) {
       await tx.rollback();
-      return { ok: false, code: 'conflict', message: 'Station changed. Reload and review its affiliate.' };
+      return { ok: false, code: 'conflict', message: 'Location changed. Reload and review its affiliate.' };
     }
     await tx.execute({
       sql: `INSERT INTO audit_logs (org_id, actor_user_id, action, entity_type, entity_id, before_json, after_json)
@@ -264,7 +264,7 @@ export async function updateStation(
     return { ok: true, id };
   } catch (err) {
     await tx.rollback();
-    if (isUniqueViolation(err)) return { ok: false, code: 'conflict', message: 'Unable to save the station.' };
+    if (isUniqueViolation(err)) return { ok: false, code: 'conflict', message: 'Unable to save the location.' };
     throw err;
   }
 }

@@ -34,7 +34,7 @@ if (allowed) {
   </div>
   {errorCode && <p class="engr-error" role="alert">Unable to submit. Check the destination, any outstanding work and whether this asset already has an open transfer.</p>}
   {!allowed ? <p class="engr-error">You do not have permission to request transfers.</p> : assets.length === 0 ? (
-    <p class="engr-empty">No assets are available at your permitted stations.</p>
+    <p class="engr-empty">No assets are available at your permitted locations.</p>
   ) : (
     <form method="post" action="/api/admin/asset-transfers" class="engr-form" style="max-width:44rem">
       <input type="hidden" name="action" value="request" />
@@ -46,7 +46,7 @@ if (allowed) {
         </select>
       </div>
       <div class="engr-field">
-        <label for="to_station_id">Receiving station</label>
+        <label for="to_station_id">Receiving location</label>
         <select class="engr-select" id="to_station_id" name="to_station_id" required>
           <option value="">Choose a destination</option>
           {stations.map((s) => <option value={s.id}>{s.name}</option>)}

@@ -22,7 +22,7 @@ test('six collapsible groups contain exactly the approved 25 destinations', () =
     'Requests', 'Work orders', 'Maintenance', 'Assets',
     'RFQs', 'LPOs', 'Contractors', 'Rate cards',
     'Costs', 'Bills', 'Invoices', 'Payments',
-    'Stations', 'Regions', 'Technicians', 'Engineers in charge', 'SLAs',
+    'Locations', 'Regions', 'Technicians', 'Engineers in charge', 'SLAs',
     'Affiliates', 'Users', 'Roles', 'Notification settings', 'Security settings', 'Audit history',
   ];
   assert.equal(items.length, 25);

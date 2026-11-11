@@ -54,7 +54,7 @@ const a = asset;
   <div class="engr-page-head">
     <div>
       <h1>{isNew ? 'New asset' : 'Edit asset'}</h1>
-      <p class="engr-lead">A piece of equipment tracked against a station.</p>
+      <p class="engr-lead">A piece of equipment tracked against a location.</p>
     </div>
     <a href="/admin/assets" class="engr-btn engr-btn--secondary">Back to assets</a>
   </div>
@@ -69,7 +69,7 @@ const a = asset;
   {
     errorCode === 'invalid' && (
       <p class="engr-error" role="alert">
-        Check required asset details. Use Request asset transfer to change its station.
+        Check required asset details. Use Request asset transfer to change its location.
       </p>
     )
   }
@@ -84,7 +84,7 @@ const a = asset;
         That asset was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/assets" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/assets" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={a!.id} />}
         <div class="engr-field">
           <label for="tag">Tag</label>
@@ -111,9 +111,9 @@ const a = asset;
           />
         </div>
         <div class="engr-field">
-          <label for="station_id">Station</label>
+          <label for="station_id">Location</label>
           {isNew ? <select id="station_id" class="engr-select" name="station_id" required>
-            <option value="">Choose a station</option>
+            <option value="">Choose a location</option>
             {stations.map((o) => (
               <option value={o.id} selected={a?.stationId === o.id}>
                 {o.label}

@@ -100,7 +100,7 @@ const c = card;
       </p>
     ) : (
       <>
-        <form method="post" action="/api/admin/rate-cards" class="engr-formgrid engr-formgrid--two">
+        <form method="post" action="/api/admin/rate-cards" class="engr-formgrid engr-formgrid--setup">
           {!isNew && <input type="hidden" name="id" value={c!.id} />}
           <div class="engr-field">
             <label for="name">Name</label>
@@ -277,7 +277,7 @@ const c = card;
             <form
               method="post"
               action="/api/admin/rate-items"
-              class="engr-formgrid engr-formgrid--two"
+              class="engr-formgrid engr-formgrid--setup"
             >
               <input type="hidden" name="rate_card_id" value={c.id} />
               <div class="engr-field engr-formgrid__full">

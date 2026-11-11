@@ -77,7 +77,7 @@ const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id 
         That region was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/regions" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/regions" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={s!.id} />}
         <div class="engr-field">
           <label for="name">Name</label>
@@ -100,13 +100,15 @@ const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id 
             ))}
           </select>
           <p class="engr-field__hint">
-            Select an affiliate under the currently selected tenant. The region and its stations retain their existing tenant ownership.
+            Select an affiliate under the currently selected tenant. The region and its locations retain their existing tenant ownership.
             {s && !currentAffiliateSelectable && ' This region has not yet been assigned to an affiliate.'}
           </p>
         </div>
         <div class="engr-field">
           <label>Region code</label>
-          <p class="engr-field__hint">{isNew ? 'Generated automatically on creation' : s?.code ?? 'Pending legacy code backfill'}</p>
+          <div class="engr-static-control" role="textbox" aria-label="Region code" aria-readonly="true">
+            {isNew ? 'Generated on creation' : s?.code ?? 'Pending code'}
+          </div>
         </div>
         <div class="engr-actionbar engr-formgrid__full">
           <button type="submit" class="engr-btn engr-btn--primary">

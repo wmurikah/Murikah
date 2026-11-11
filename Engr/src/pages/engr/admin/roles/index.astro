@@ -7,6 +7,7 @@ export const prerender = false;
  * organisation alone (copy-on-write), so other organisations are unaffected.
  * Gate: roles.view to see, roles.manage to change.
  */
+import { displayLocationTerminology } from '@engr/format';
 import EngrLayout from '@/layouts/EngrLayout.astro';
 import EmptyState from '@/components/engr/EmptyState.astro';
 import { getEngrEnv } from '@engr/env';
@@ -89,9 +90,9 @@ if (allowed) {
               <tr>
                 <td>
                   {canManage && mayManageRoleCode(managementScope, r.code) ? (
-                    <a href={`/admin/roles/${r.id}`}>{r.name}</a>
+                    <a href={`/admin/roles/${r.id}`}>{displayLocationTerminology(r.name)}</a>
                   ) : (
-                    r.name
+                    displayLocationTerminology(r.name)
                   )}
                 </td>
                 <td>{r.code}</td>

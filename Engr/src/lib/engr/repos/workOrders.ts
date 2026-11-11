@@ -87,7 +87,7 @@ export async function createWorkOrderFromRequest(
     return {
       ok: false,
       code: 'invalid',
-      message: 'The contractor does not cover this station or category.',
+      message: 'The contractor does not cover this location or category.',
     };
   }
 

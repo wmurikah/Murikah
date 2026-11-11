@@ -3,10 +3,10 @@
 **System:** Engineering Rhythm  
 **Address:** <https://engr.murikah.com>  
 **Initial pilot:** Kenya  
-**Audience:** Owners, administrators, engineering managers, engineers, station managers, finance controllers, contractors, technicians and viewers  
+**Audience:** Owners, administrators, engineering managers, engineers, location managers, finance controllers, contractors, technicians and viewers  
 **Last updated:** 10 November 2026
 
-This guide explains where to go, what to enter and which role completes each step. A user only sees menu items and records allowed by their role and organisation. The Hass Group tenant contains its own regions, stations and other operational records, each of which can be classified to an affiliate. The Kenya pilot should use real Kenya records only. Uganda, Tanzania and the other affiliates will be introduced after the Kenya workflow is confirmed.
+This guide explains where to go, what to enter and which role completes each step. A user only sees menu items and records allowed by their role and organisation. The Hass Group tenant contains its own regions, locations and other operational records, each of which can be classified to an affiliate. The Kenya pilot should use real Kenya records only. Uganda, Tanzania and the other affiliates will be introduced after the Kenya workflow is confirmed.
 
 ## 1. Sign in for the first time
 
@@ -32,10 +32,10 @@ Never share a personal password or authenticator code. Administrators can reset 
 The left menu is divided into sections. Each section starts closed; select its heading to show its pages. Opening another section closes the first. Only sections and pages your role can use are shown.
 
 - **Overview:** Dashboard and Report centre.
-- **Operations:** Requests, Work orders, Maintenance and Assets. Station confirmations are available from Work orders; asset transfers and categories are accessed from Assets.
+- **Operations:** Requests, Work orders, Maintenance and Assets. Location confirmations are available from Work orders; asset transfers and categories are accessed from Assets.
 - **Procurement:** RFQs, LPOs, Contractors and Rate cards. The procurement approval queue is accessed from RFQs.
 - **Finance:** Costs, Bills, Invoices and Payments. Mileage and cost approvals are available from Costs; bill approvals are available from Bills. Contractors see their own scoped records.
-- **Service Setup:** Stations, Regions, Technicians, Engineers in charge and SLAs.
+- **Service Setup:** Locations, Regions, Technicians, Engineers in charge and SLAs.
 - **Administration:** Affiliates, Users, Roles, Notification settings, Security settings and Audit history. Notification delivery history remains within Audit history for authorised administrators.
 
 On a phone, select **Menu** first. Select the organisation name or **Dashboard** to return to the home page. A gold number beside a page means you have that many items requiring action. When a menu section is closed, its number totals the pending items inside it; open the section to see which pages need attention. The counts refresh when you change pages, return to the tab or after approximately one minute. No number means nothing currently requires your action in that menu. Personal notification delivery and history still operate in the background, but a separate notification bell and Action Centre menu are no longer displayed.
@@ -50,13 +50,13 @@ Buttons only appear when the record is at the correct stage and the signed-in us
 | Administrator        | Organisation administration and all operational functions                                                          | Cannot create, assign, change or remove Owner authority; cannot bypass maker/checker controls                                                                                                              |
 | Engineering Manager  | Kenya operational administration, setup, routing, triage, release, engineering approvals and reporting             | Cannot assign Owner, Administrator, Engineering Manager or Financial Controller roles; cannot perform final finance approval or record payments; cannot approve work they made where maker/checker applies |
 | Engineer             | Create and populate requests, RFQs, maintenance schedules, LPOs and work-order drafts; submit them for approval    | Cannot accept/reject requests, release or award RFQs, activate PM schedules, approve/issue LPOs, approve costs/bills, record payments or administer users/setup                                            |
-| Station Manager      | Raise requests for assigned stations and confirm technician arrival and work closure                               | Cannot see other stations, approve engineering/procurement/finance work or change setup                                                                                                                    |
+| Location Manager      | Raise requests for assigned locations and confirm technician arrival and work closure                               | Cannot see other locations, approve engineering/procurement/finance work or change setup                                                                                                                    |
 | Financial Controller | Review finance records, give final bill approval, record/reverse payments and export finance reports               | Cannot perform engineering approval, edit engineering setup or operate contractor/technician records                                                                                                       |
 | Contractor           | Quote for invited RFQs, view issued LPOs, accept own work, assign own technicians, submit mileage, costs and bills | Cannot see other contractors, approve own submissions, issue LPOs or administer the organisation                                                                                                           |
-| Technician           | Accept assigned work, submit JSA, start work and complete a job card                                               | Cannot see unassigned work, change contractor/setup data, price/approve costs or close work without station confirmation                                                                                   |
+| Technician           | Accept assigned work, submit JSA, start work and complete a job card                                               | Cannot see unassigned work, change contractor/setup data, price/approve costs or close work without location confirmation                                                                                   |
 | Viewer               | Read organisation operations and reports                                                                           | Cannot create, edit, approve, assign, submit, pay or administer anything                                                                                                                                   |
 
-The role controls the type of action. The linked station, contractor or technician record further limits which records that user can see.
+The role controls the type of action. The linked location, contractor or technician record further limits which records that user can see.
 
 ## 4. Kenya pilot setup order
 
@@ -65,11 +65,11 @@ Complete setup in this order because later records depend on earlier ones:
 1. Confirm the Kenya affiliate.
 2. Create Kenya users and assign roles.
 3. Create regions.
-4. Create stations and assign station managers.
+4. Create locations and assign location managers.
 5. Create asset categories and assets.
 6. Create contractors and link their portal accounts.
 7. Create technicians and link their portal accounts.
-8. Assign engineers in charge by station or category.
+8. Assign engineers in charge by location or category.
 9. Create SLAs.
 10. Create rate cards and rate items.
 11. Review notification settings and delivery readiness.
@@ -80,7 +80,7 @@ Do not create Uganda, Tanzania or other affiliate records during the Kenya pilot
 
 ## 5. Create and manage users
 
-**Who can do this:** Owner and Administrator. An Engineering Manager can manage only Engineer, Station Manager, Contractor, Technician and Viewer accounts.
+**Who can do this:** Owner and Administrator. An Engineering Manager can manage only Engineer, Location Manager, Contractor, Technician and Viewer accounts.
 
 ### Create a user with a temporary password
 
@@ -112,7 +112,7 @@ Giving someone a Contractor or Technician role does not by itself connect them t
 
 - Link a Contractor user under **Procurement → Contractors → contractor → Portal account**.
 - Link a Technician user under **Service Setup → Technicians → technician → Portal account**.
-- Assign a Station Manager under **Service Setup → Stations → station → Station manager**.
+- Assign a Location Manager under **Service Setup → Locations → location → Location manager**.
 
 One portal user can be linked to only one contractor and one technician record of the relevant type.
 
@@ -163,24 +163,24 @@ An Administrator cannot change or assign the Owner role. Saving changes to a sha
 4. Select **Affiliate** from the existing organisations. When acting as the Hass Group owner or administrator, you can classify the region under Hass Kenya, Hass Uganda or another active Hass affiliate. Hass Group itself is the tenant, not an affiliate, and is never a dropdown choice. Ordinary affiliate users can select only their own organisation.
 5. Select **Create region**. The system generates its permanent `REG-000001`-style code in the owning organisation. It cannot be edited.
 
-To amend a region, open **Service Setup → Regions**, select its name, choose an allowed **Affiliate**, and select **Save changes**. Any legacy region still showing Unassigned must be allocated to a real affiliate before it can be saved. Affiliate classification is editable, and its linked stations are reclassified atomically. The owning tenant, region/station IDs and codes do not move or change. Complete outstanding asset transfers before reassignment. Earlier blank region codes are generated by migration 010; existing codes are retained.
+To amend a region, open **Service Setup → Regions**, select its name, choose an allowed **Affiliate**, and select **Save changes**. Any legacy region still showing Unassigned must be allocated to a real affiliate before it can be saved. Affiliate classification is editable, and its linked locations are reclassified atomically. The owning tenant, region/location IDs and codes do not move or change. Complete outstanding asset transfers before reassignment. Earlier blank region codes are generated by migration 010; existing codes are retained.
 
-## 9. Create a station
+## 9. Create a location
 
 **Who can do this:** Owner, Administrator or Engineering Manager.
 
-1. Create the region and Station Manager user first.
-2. Open **Service Setup → Stations**.
-3. Select **New station**.
-4. Enter the station **Name**. Its permanent `STN-000001`-style code is generated automatically when saved.
+1. Create the region and Location Manager user first.
+2. Open **Service Setup → Locations**.
+3. Select **New location**.
+4. Enter the location **Name**. Its permanent `STN-000001`-style code is generated automatically when saved.
 5. Choose the **Affiliate** from the existing group companies, then select a **Region** assigned to that affiliate. You can leave Region unset if necessary.
-6. Select the **Station manager** who will raise and confirm work for that station.
+6. Select the **Location manager** who will raise and confirm work for that location.
 7. Enter the optional **Address**.
 8. Set **Status** to **Active**.
-9. Select **Base station** only when this station is an origin used for mileage.
-10. Select **Create station**.
+9. Select **Base location** only when this location is an origin used for mileage.
+10. Select **Create location**.
 
-To change a station, select it in **Service Setup → Stations**, choose an actual affiliate (not Hass Group), and select a matching Region before saving. Legacy stations showing Unassigned also need an affiliate before saving. Its code and owning tenant remain unchanged; existing historical codes are preserved. Complete any pending asset transfer before reclassifying the station. Use **Inactive** instead of deleting a station with history.
+To change a location, select it in **Service Setup → Locations**, choose an actual affiliate (not Hass Group), and select a matching Region before saving. Legacy locations showing Unassigned also need an affiliate before saving. Its code and owning tenant remain unchanged; existing historical codes are preserved. Complete any pending asset transfer before reclassifying the location. Use **Inactive** instead of deleting a location with history.
 
 ## 10. Create asset categories and assets
 
@@ -200,24 +200,24 @@ To change a station, select it in **Service Setup → Stations**, choose an actu
 1. Open **Operations → Assets**.
 2. Select **New asset**.
 3. Enter the unique **Tag** and asset **Name**.
-4. Select the **Station** and optional **Category**.
+4. Select the **Location** and optional **Category**.
 5. Enter the optional manufacturer, model, serial number and install date.
 6. Set **Status** to **In service**, **Faulty** or **Decommissioned**.
 7. Select **Create asset**.
 
-Accurate station and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its station is read-only on the edit form. Physical changes of custody must use **Operations → Assets → Asset transfers**; simply editing an asset does not move it. A gold count on **Assets** and its **Asset transfers** button shows your pending custody decisions.
+Accurate location and category assignment makes request routing and contractor selection work correctly. Once an asset exists, its location is read-only on the edit form. Physical changes of custody must use **Operations → Assets → Asset transfers**; simply editing an asset does not move it. A gold count on **Assets** and its **Asset transfers** button shows your pending custody decisions.
 
 ### Controlled asset transfers
 
-A transfer passes through four stages: **Requested → Approved → Dispatched → Received**. Rejected or cancelled requests do not change the asset's official station.
+A transfer passes through four stages: **Requested → Approved → Dispatched → Received**. Rejected or cancelled requests do not change the asset's official location.
 
-1. From **Operations → Assets → Asset transfers**, select **Request transfer**, choose the asset and a different active destination station within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
+1. From **Operations → Assets → Asset transfers**, select **Request transfer**, choose the asset and a different active destination location within the same affiliate, and enter a reason. Open repair requests or work orders must be resolved first.
 2. An authorised Engineering Manager, Administrator or Owner **approves** the request. The requester cannot approve their own request.
-3. The sending station manager (or authorised management user) confirms **dispatch**, recording the actual condition and physical serial number where available.
-4. The destination station manager (or another authorised management user) confirms **receipt**. The person who dispatched the asset cannot confirm its receipt.
-5. Only after receiving confirmation does the system update the official location. The transfer, all actor decisions and the old/new station and region are retained in the audit trail. Active asset-specific preventive-maintenance schedules are paused for review before further allocation.
+3. The sending location manager (or authorised management user) confirms **dispatch**, recording the actual condition and physical serial number where available.
+4. The destination location manager (or another authorised management user) confirms **receipt**. The person who dispatched the asset cannot confirm its receipt.
+5. Only after receiving confirmation does the system update the official location. The transfer, all actor decisions and the old/new location and region are retained in the audit trail. Active asset-specific preventive-maintenance schedules are paused for review before further allocation.
 
-The sidebar displays outstanding transfer actions for your permissions and assigned station. A transfer waiting for someone else's decision is visible in history but does not count as your pending action. Station and region codes do not change when records are renamed.
+The sidebar displays outstanding transfer actions for your permissions and assigned location. A transfer waiting for someone else's decision is visible in history but does not count as your pending action. Location and region codes do not change when records are renamed.
 
 ## 11. Create and qualify a contractor
 
@@ -229,14 +229,14 @@ The sidebar displays outstanding transfer actions for your permissions and assig
 4. Enter the contractor **Name**.
 5. Select the Contractor user under **Portal account**.
 6. Enter the optional contact person, email and phone.
-7. Select the contractor’s optional **Base station**.
+7. Select the contractor’s optional **Base location**.
 8. Set the contractor **Status** to **Active**.
-9. Select every station the contractor covers.
+9. Select every location the contractor covers.
 10. Select every asset category the contractor covers.
 11. Select **Prequalified** only after the contractor is approved for invitations and assignments.
 12. Select **Create contractor**.
 
-Only an active, prequalified contractor whose coverage matches the request’s station or asset category is offered for direct assignment or an RFQ invitation.
+Only an active, prequalified contractor whose coverage matches the request’s location or asset category is offered for direct assignment or an RFQ invitation.
 
 ## 12. Create a technician
 
@@ -260,11 +260,11 @@ The technician sees only work assigned to this linked technician record.
 1. Create the Engineer user and give that user the Engineer role.
 2. Open **Service Setup → Engineers in charge**.
 3. Under **Assign an engineer**, select the **Engineer**.
-4. Under **Owns**, select **A station** or **A category**.
-5. Select the relevant **Station** or **Category**.
+4. Under **Owns**, select **A location** or **A category**.
+5. Select the relevant **Location** or **Category**.
 6. Select **Add assignment**.
 
-A station assignment takes priority over a category assignment. If neither matches, new requests route to Engineering Managers. Select **Remove** beside an assignment to end it.
+A location assignment takes priority over a category assignment. If neither matches, new requests route to Engineering Managers. Select **Remove** beside an assignment to end it.
 
 ## 14. Create an SLA
 
@@ -312,14 +312,14 @@ To review delivery issues, open **Administration → Audit history → Notificat
 
 ## 17. Raise and triage a request
 
-**Who can raise:** Engineer, Engineering Manager, Station Manager, Administrator or Owner.  
+**Who can raise:** Engineer, Engineering Manager, Location Manager, Administrator or Owner.  
 **Who can accept/reject:** Engineering Manager, Administrator or Owner, using a different account from the requester.
 
 ### Raise the request
 
 1. Open **Operations → Requests**.
 2. Select **Raise a request**.
-3. Select the **Station**.
+3. Select the **Location**.
 4. Select the optional **Asset category** and specific **Asset or equipment**.
 5. Enter a concise **Issue**.
 6. Add the optional **Nature of breakdown**.
@@ -328,12 +328,12 @@ To review delivery issues, open **Administration → Audit history → Notificat
 9. Optionally paste a photo/video/document link and select its attachment type.
 10. Select **Submit request**.
 
-A Station Manager can raise and view requests only for assigned stations.
+A Location Manager can raise and view requests only for assigned locations.
 
 ### Triage the request
 
 1. The Engineering Manager opens **Operations → Requests** and selects the request number.
-2. Check the station, asset, issue, priority, attachment and assigned engineer.
+2. Check the location, asset, issue, priority, attachment and assigned engineer.
 3. Select **Accept request**, or enter a reason and select **Reject request**.
 4. The requester cannot approve their own request. Another manager-level account must decide it.
 
@@ -399,18 +399,18 @@ Contractors see only their own invitations and quotes.
 
 1. Open **Procurement → LPOs**.
 2. Select **New LPO**.
-3. Select the **Contractor** and optional **Base station**.
+3. Select the **Contractor** and optional **Base location**.
 4. Select **Create LPO**.
 5. Open the LPO and add work:
    - Select an existing work order under **Attach an existing work order**, then attach it; or
-   - create an LPO work order by selecting station, optional category, optional SLA and optional mileage reference station.
+   - create an LPO work order by selecting location, optional category, optional SLA and optional mileage reference location.
 6. Repeat until all intended work orders appear on the LPO.
 7. Select **Submit for approval**.
 
 ### Manager: approve and issue
 
 1. Open **Procurement → LPOs** and select the submitted LPO.
-2. Check contractor, base station, total and work orders.
+2. Check contractor, base location, total and work orders.
 3. Select **Approve LPO**.
 4. Select **Issue to contractor**.
 
@@ -419,7 +419,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 ### Contractor mileage claim
 
 1. Open **Procurement → LPOs** and select the issued LPO.
-2. Under mileage, select the reference station and enter the round-trip distance.
+2. Under mileage, select the reference location and enter the round-trip distance.
 3. Select **Submit claim**.
 4. The Engineering Manager opens **Finance → Costs → Mileage approvals**.
 5. The manager reviews or overrides distance/rate, then selects **Approve**, or enters a reason and selects **Reject**.
@@ -431,7 +431,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 1. Open **Operations → Maintenance**.
 2. Select **New schedule**.
 3. Enter the schedule **Name**.
-4. Select a station, asset category or both.
+4. Select a location, asset category or both.
 5. Select the frequency. Enter a day interval only for **Custom day interval**.
 6. Select the assigned contractor, checklist template and SLA where available.
 7. Enter the first due date.
@@ -444,7 +444,7 @@ The submitter cannot approve the LPO. Contractors see an LPO only after it is is
 2. Find the draft/paused schedule and select **Resume** to activate it.
 3. A schedule creator cannot activate their own schedule; use a different manager-level account.
 4. Use **Calendar** to open a due occurrence.
-5. Review its station, contractor and checklist.
+5. Review its location, contractor and checklist.
 6. Select **Allocate and create work order**.
 
 Use **Pause** to stop future processing temporarily and **Archive** when a schedule should no longer be used.
@@ -467,9 +467,9 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 4. Under **Safety analysis and arrival**, enter task summary, hazards and controls.
 5. Select **Submit JSA and request arrival**.
 
-### Station Manager: confirm arrival
+### Location Manager: confirm arrival
 
-1. Open **Operations → Work orders → Station confirmations** and select the work order awaiting arrival confirmation.
+1. Open **Operations → Work orders → Location confirmations** and select the work order awaiting arrival confirmation.
 2. Verify the technician is physically on site.
 3. Select **Confirm arrival**.
 
@@ -481,9 +481,9 @@ Use **Pause** to stop future processing temporarily and **Archive** when a sched
 4. Add spare descriptions, rate items and quantities where applicable.
 5. Select **Complete and request closure**.
 
-### Station Manager: confirm closure
+### Location Manager: confirm closure
 
-1. Open **Operations → Work orders → Station confirmations** and select the work order awaiting closure confirmation.
+1. Open **Operations → Work orders → Location confirmations** and select the work order awaiting closure confirmation.
 2. Review the diagnosis, repair and spares.
 3. If the issue is resolved, select **Confirm closure**.
 4. If work is incomplete, enter the reason and select **Reopen work order**.
@@ -576,9 +576,9 @@ To correct an incorrect payment, find it in the payment history and select **Rev
 3. Submit records for the manager’s review.
 4. Follow work-order progress and correct draft data before submission.
 
-### Station Manager
+### Location Manager
 
-1. Raise accurate requests for assigned stations.
+1. Raise accurate requests for assigned locations.
 2. Confirm only technicians who have arrived physically.
 3. Verify repairs before confirming closure; reopen incomplete work with a reason.
 
@@ -616,3 +616,6 @@ When reporting a problem, provide:
 - the signed-in role and organisation.
 
 Do not send passwords, authenticator codes, recovery codes or confidential provider credentials.
+
+
+**Terminology:** The interface uses **Location** and **Location Manager**. Existing database tables (`stations`), foreign keys (`station_id`), routes (`/admin/stations`) and permission/role codes (`STATION_MANAGER`) remain unchanged for backward compatibility. No database rename is necessary.

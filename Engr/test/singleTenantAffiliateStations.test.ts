@@ -130,7 +130,7 @@ test('affiliate creation does not create another tenant subscription; station to
 test('affiliate fields align to two uniform desktop rows with equal-height inputs',()=>{
   const css=readFileSync(new URL('../src/styles/engr.css',import.meta.url),'utf8');
   const form=readFileSync(new URL('../src/pages/engr/admin/affiliates/[id].astro',import.meta.url),'utf8');
-  assert.match(form,/engr-formgrid--affiliate/);
+  assert.match(form,/engr-formgrid--setup/);
   const formStart = form.indexOf('<form method="post" action="/api/admin/affiliates"');
   const formEnd = form.indexOf('</form>', formStart);
   assert.ok(formStart >= 0 && formEnd > formStart);
@@ -143,14 +143,14 @@ test('affiliate fields align to two uniform desktop rows with equal-height input
   assert.ok(fields.indexOf('for="country"') < fields.indexOf('for="base_currency"'));
   assert.ok(fields.indexOf('for="base_currency"') < fields.indexOf('for="status"'));
 
-  const begin = css.indexOf('/* Affiliate edit:');
+  const begin = css.indexOf('/* All Engineering setup forms');
   const end = css.indexOf('.engr-checklist {', begin);
   assert.ok(begin >= 0 && end > begin);
   const rules = css.slice(begin, end);
   assert.match(rules,/repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(rules,/repeat\(2, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(rules,/repeat\(5,/);
-  assert.match(rules,/grid-template-rows: min-content 2\.75rem auto/);
+  assert.match(rules,/grid-template-rows: minmax\(1\.5rem, auto\) minmax\(2\.75rem, auto\) auto/);
   assert.match(rules,/height: 2\.75rem/);
   assert.match(rules,/max-height: 2\.75rem/);
   assert.match(rules,/width: 100%/);

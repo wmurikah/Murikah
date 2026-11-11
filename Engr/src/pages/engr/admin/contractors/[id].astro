@@ -59,7 +59,7 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
     <div>
       <h1>{isNew ? 'New contractor' : 'Edit contractor'}</h1>
       <p class="engr-lead">
-        A firm that carries out work, with the stations and categories it covers.
+        A firm that carries out work, with the locations and categories it covers.
       </p>
     </div>
     <a href="/admin/contractors" class="engr-btn engr-btn--secondary">Back to contractors</a>
@@ -90,7 +90,7 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
         That contractor was not found.
       </p>
     ) : (
-      <form method="post" action="/api/admin/contractors" class="engr-formgrid engr-formgrid--two">
+      <form method="post" action="/api/admin/contractors" class="engr-formgrid engr-formgrid--setup">
         {!isNew && <input type="hidden" name="id" value={c!.id} />}
         <div class="engr-field">
           <label for="name">Name</label>
@@ -159,7 +159,7 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
         </div>
         <div class="engr-field">
           <label for="base_station_id">
-            Base station <span class="engr-field__hint">(optional)</span>
+            Base location <span class="engr-field__hint">(optional)</span>
           </label>
           <select id="base_station_id" class="engr-select" name="base_station_id">
             <option value="">Not set</option>
@@ -186,7 +186,7 @@ const selectedCategories = new Set(c?.categoryIds ?? []);
         </div>
         <div class="engr-field engr-formgrid__full">
           <label>
-            Stations covered <span class="engr-field__hint">(optional)</span>
+            Locations covered <span class="engr-field__hint">(optional)</span>
           </label>
           <ul class="engr-checklist">
             {stations.map((s) => (
