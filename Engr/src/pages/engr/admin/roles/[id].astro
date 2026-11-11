@@ -19,7 +19,7 @@ import {
 } from '@engr/repos/adminRoles';
 import { can } from '@engr/auth/rbac';
 import { mayManageRoleCode, userManagementScope } from '@engr/auth/adminPolicy';
-import { titleCase } from '@engr/format';
+import { titleCase, locationDisplayLabel } from '@engr/format';
 
 const engr = Astro.locals.engr;
 if (!engr) return Astro.redirect('/login');
@@ -60,13 +60,13 @@ const MODULE_LABELS: Record<string, string> = {
   pm: 'Maintenance',
   workorder: 'Work orders',
 };
-const moduleLabel = (m: string) => MODULE_LABELS[m] ?? titleCase(m);
+const moduleLabel = (m: string) => locationDisplayLabel(MODULE_LABELS[m] ?? titleCase(m));
 ---
 
 <EngrLayout title={isNew ? 'New role' : 'Edit role'}>
   <div class="engr-page-head">
     <div>
-      <h1>{isNew ? 'New role' : `Edit ${role?.name ?? 'role'}`}</h1>
+      <h1>{isNew ? 'New role' : `Edit ${locationDisplayLabel(role?.name ?? 'role')}`}</h1>
       <p class="engr-lead">
         {
           isNew
@@ -169,7 +169,7 @@ const moduleLabel = (m: string) => MODULE_LABELS[m] ?? titleCase(m);
                       checked={held.has(p.key)}
                     />
                     <label for={`perm-${p.key}`}>
-                      {p.description ?? p.key}
+                      {locationDisplayLabel(p.description ?? p.key)}
                       <span class="engr-matrix__key">{p.key}</span>
                     </label>
                   </li>
