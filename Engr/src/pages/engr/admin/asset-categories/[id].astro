@@ -74,7 +74,7 @@ const parentOptions = c ? categories.filter((o) => o.id !== c.id) : categories;
       <form
         method="post"
         action="/api/admin/asset-categories"
-        class="engr-formgrid engr-formgrid--two"
+        class="engr-formgrid engr-formgrid--setup"
       >
         {!isNew && <input type="hidden" name="id" value={c!.id} />}
         <div class="engr-field">
