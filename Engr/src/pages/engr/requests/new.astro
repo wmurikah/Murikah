@@ -34,7 +34,7 @@ const errorMessage =
   errorCode === 'validation'
     ? 'Check the required fields, then submit again.'
     : errorCode === 'station'
-      ? 'Choose a station that belongs to your organisation.'
+      ? 'Choose a location that belongs to your organisation.'
       : errorCode === 'attachment'
         ? 'Use an approved HTTPS file link, or leave the attachment blank.'
         : errorCode
@@ -68,7 +68,7 @@ if (allowed) {
       <p class="engr-error" role="alert">
         You do not have permission to raise requests.
       </p>
-    ) : locations.length === 0 ? (
+    ) : stations.length === 0 ? (
       <EmptyState
         message="No locations are set up yet. A request is raised against a location."
         canAct={can(Astro.locals, 'stations.manage')}
