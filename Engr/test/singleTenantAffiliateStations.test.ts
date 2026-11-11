@@ -130,7 +130,7 @@ test('affiliate creation does not create another tenant subscription; station to
 test('affiliate fields align to two uniform desktop rows with equal-height inputs',()=>{
   const css=readFileSync(new URL('../src/styles/engr.css',import.meta.url),'utf8');
   const form=readFileSync(new URL('../src/pages/engr/admin/affiliates/[id].astro',import.meta.url),'utf8');
-  assert.match(form,/engr-formgrid--affiliate/);
+  assert.match(form,/engr-formgrid--setup/);
   const formStart = form.indexOf('<form method="post" action="/api/admin/affiliates"');
   const formEnd = form.indexOf('</form>', formStart);
   assert.ok(formStart >= 0 && formEnd > formStart);
