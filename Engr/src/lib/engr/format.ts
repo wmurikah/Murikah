@@ -66,3 +66,13 @@ export function relativeAge(iso: string, now: Date = new Date()): string {
   if (minutes > 0) return `${minutes}m`;
   return 'just now';
 }
+
+/** UI-only terminology translation. Never changes role codes, stored role names,
+ * station/region identifiers, URLs or permission keys. */
+export function displayLocationTerminology(label: string): string {
+  return label
+    .replace(/\bStations\b/g, 'Locations')
+    .replace(/\bstations\b/g, 'locations')
+    .replace(/\bStation\b/g, 'Location')
+    .replace(/\bstation\b/g, 'location');
+}
