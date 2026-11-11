@@ -100,7 +100,7 @@ const currentAffiliateSelectable = s != null && formAffiliates.some((o) => o.id 
             ))}
           </select>
           <p class="engr-field__hint">
-            Select an existing affiliate, not the Hass Group tenant. The region and its stations remain owned by Hass Group.
+            Select an affiliate under the currently selected tenant. The region and its stations retain their existing tenant ownership.
             {s && !currentAffiliateSelectable && ' This region has not yet been assigned to an affiliate.'}
           </p>
         </div>
