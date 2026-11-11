@@ -29,11 +29,6 @@ export function titleCase(text: string): string {
     .join(' ');
 }
 
-/**
- * The human-facing label for an organisation. Prefer the stored name; fall back
- * to a title-cased slug only when no name is available, so a raw slug is never
- * shown as-is.
- */
 /** Display-only terminology. Existing station keys, role codes and DB schema
  * remain unchanged so permissions and integrations continue to work. */
 export function locationDisplayLabel(text: string): string {
@@ -44,6 +39,11 @@ export function locationDisplayLabel(text: string): string {
     .replace(/\bstation\b/g, 'location');
 }
 
+/**
+ * The human-facing label for an organisation. Prefer the stored name; fall back
+ * to a title-cased slug only when no name is available, so a raw slug is never
+ * shown as-is.
+ */
 export function orgDisplayName(name: string | null | undefined, slug: string): string {
   const trimmed = (name ?? '').trim();
   return trimmed.length > 0 ? trimmed : titleCase(slug);
