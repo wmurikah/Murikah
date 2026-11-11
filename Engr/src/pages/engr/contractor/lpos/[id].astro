@@ -93,7 +93,7 @@ const rateMajor = (rateMinor / 100).toFixed(2);
           <dd>
             <span class="engr-pill">{lpo.status}</span>
           </dd>
-          <dt>Base station</dt>
+          <dt>Base location</dt>
           <dd>{lpo.baseStationName ?? 'Not set'}</dd>
         </dl>
 
@@ -107,7 +107,7 @@ const rateMajor = (rateMinor / 100).toFixed(2);
                 <thead>
                   <tr>
                     <th scope="col">Work order</th>
-                    <th scope="col">Station</th>
+                    <th scope="col">Location</th>
                     <th scope="col">Status</th>
                   </tr>
                 </thead>
@@ -165,14 +165,14 @@ const rateMajor = (rateMinor / 100).toFixed(2);
               data-rate-minor={rateMinor}
             >
               <div class="engr-field">
-                <label for="claim-ref">Referenced to station</label>
+                <label for="claim-ref">Referenced to location</label>
                 <select id="claim-ref" class="engr-select" name="referenced_to_station_id">
                   <option value="">Not set</option>
                   {stations.map((s) => (
                     <option value={s.id}>{s.name}</option>
                   ))}
                 </select>
-                <p class="engr-field__hint">Typically the furthest station visited on the trip.</p>
+                <p class="engr-field__hint">Typically the furthest location visited on the trip.</p>
               </div>
               <div class="engr-field">
                 <label for="claim-distance">Round-trip distance (km)</label>
