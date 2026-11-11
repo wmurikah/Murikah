@@ -56,7 +56,8 @@ ambiguous historical site.
 7. Run `05_post_import_checks.sql`. Expect **2,424** archived records,
    **485** linked rows if the nine registered names still match, and no
    foreign-key violations. The number of live `work_orders` must remain
-   unchanged.
+   unchanged. Optionally run `07_optional_record_import_audit.sql` to
+   record a single source-file import event in the existing audit trail.
 8. In **Work orders → Historical tracker**, review the imported source
    descriptions and search by reference, location or contractor. It is
    viewable only by signed-in users with organisation-scoped
