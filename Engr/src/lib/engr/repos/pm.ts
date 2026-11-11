@@ -86,7 +86,7 @@ export async function createSchedule(
   const problem = validate(input);
   if (problem) return { ok: false, code: 'invalid', message: problem };
   if (!(await scheduleReferencesValid(db, ctx.orgId, input)))
-    return { ok: false, code: 'invalid', message: 'Station, asset and category must belong to the same location and affiliate.' };
+    return { ok: false, code: 'invalid', message: 'Location, asset and category must belong to the same location and affiliate.' };
   const entitled = await pmAutomationEnabled(db, ctx.orgId);
   const automated = input.isAutomated && entitled ? 1 : 0;
   const id = newId();
@@ -172,7 +172,7 @@ export async function updateSchedule(
   const problem = validate(input);
   if (problem) return { ok: false, code: 'invalid', message: problem };
   if (!(await scheduleReferencesValid(db, ctx.orgId, input)))
-    return { ok: false, code: 'invalid', message: 'Station, asset and category must belong to the same location and affiliate.' };
+    return { ok: false, code: 'invalid', message: 'Location, asset and category must belong to the same location and affiliate.' };
   const current = await loadSchedule(db, ctx.orgId, id);
   if (!current) return { ok: false, code: 'not_found', message: 'Schedule not found.' };
   if (current.status !== 'PAUSED') {
