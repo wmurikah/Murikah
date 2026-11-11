@@ -41,7 +41,7 @@ const parentOptions = c ? categories.filter((o) => o.id !== c.id) : categories;
   <div class="engr-page-head">
     <div>
       <h1>{isNew ? 'New category' : 'Edit category'}</h1>
-      <p class="engr-lead">A group that classifies the assets on each station.</p>
+      <p class="engr-lead">A group that classifies the assets on each location.</p>
     </div>
     <a href="/admin/asset-categories" class="engr-btn engr-btn--secondary">Back to categories</a>
   </div>
@@ -74,7 +74,7 @@ const parentOptions = c ? categories.filter((o) => o.id !== c.id) : categories;
       <form
         method="post"
         action="/api/admin/asset-categories"
-        class="engr-formgrid engr-formgrid--two"
+        class="engr-formgrid engr-formgrid--setup"
       >
         {!isNew && <input type="hidden" name="id" value={c!.id} />}
         <div class="engr-field">
