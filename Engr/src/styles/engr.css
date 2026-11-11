@@ -1610,7 +1610,7 @@ input.engr-switch:hover {
 .engr-formgrid--affiliate > .engr-field {
   min-width: 0;
   display: grid;
-  grid-template-rows: minmax(1.5rem, auto) 2.75rem auto;
+  grid-template-rows: minmax(1.5rem, auto) minmax(2.75rem, auto) auto;
   align-content: start;
   align-items: start;
 }
