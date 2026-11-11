@@ -60,7 +60,7 @@ const errorMessage = errorCode
 
 <p class="engr-meta">
   <span>Status <strong>{wo.status}</strong></span>
-  <span>Station <strong>{wo.stationName}</strong></span>
+  <span>Location <strong>{wo.stationName}</strong></span>
   <span>Contractor <strong>{wo.contractorName ?? 'Unassigned'}</strong></span>
   <span>Technician <strong>{wo.technicianName ?? 'Unassigned'}</strong></span>
   {
@@ -195,7 +195,7 @@ const errorMessage = errorCode
     <div class="engr-panel">
       <h2>Safety analysis and arrival</h2>
       {arrival && arrival.confirmationStatus === 'PENDING' ? (
-        <p class="engr-notice">Arrival confirmation is pending with the station manager.</p>
+        <p class="engr-notice">Arrival confirmation is pending with the location manager.</p>
       ) : (
         <form method="post" action={`${api}/jsa`} class="engr-form">
           <div class="engr-field">
@@ -323,7 +323,7 @@ const errorMessage = errorCode
   has('confirm_arrival') && (
     <div class="engr-panel">
       <h2>Confirm arrival</h2>
-      <p class="engr-lead">The technician has requested arrival confirmation at this station.</p>
+      <p class="engr-lead">The technician has requested arrival confirmation at this location.</p>
       <form method="post" action={`${api}/confirm-arrival`} class="engr-actionbar">
         <button type="submit" class="engr-btn engr-btn--primary">
           Confirm arrival
