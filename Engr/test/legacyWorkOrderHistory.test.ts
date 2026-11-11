@@ -52,9 +52,9 @@ test('archive UI remains inside Work orders, without adding a sidebar item', () 
   const main = readFileSync(new URL('../src/pages/engr/workorders/index.astro',import.meta.url),'utf8');
   const history = readFileSync(new URL('../src/pages/engr/workorders/history.astro',import.meta.url),'utf8');
   const nav = readFileSync(new URL('../src/layouts/EngrLayout.astro',import.meta.url),'utf8');
-  assert.match(main,/href="\\/workorders\\/history"/);
-  assert.match(history,/workorder\\.view/);
-  assert.match(history,/actorDataScope\\(engr\\.roles\\) === 'org'/);
+  assert.match(main,/href="\/workorders\/history"/);
+  assert.match(history,/workorder\.view/);
+  assert.match(history,/actorDataScope\(engr\.roles\) === 'org'/);
   assert.match(history,/not active work orders or verified closures/i);
   assert.doesNotMatch(nav,/label: 'Historical tracker'/);
 });
