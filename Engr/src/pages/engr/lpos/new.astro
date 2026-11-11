@@ -30,7 +30,7 @@ if (allowed) {
   <div class="engr-page-head">
     <div>
       <h1>New LPO</h1>
-      <p class="engr-lead">Group work orders across stations for one contractor.</p>
+      <p class="engr-lead">Group work orders across locations for one contractor.</p>
     </div>
     <a href="/lpos" class="engr-btn engr-btn--secondary">Back</a>
   </div>
@@ -62,7 +62,7 @@ if (allowed) {
           </select>
         </div>
         <div class="engr-field">
-          <label for="lpo-base">Base station</label>
+          <label for="lpo-base">Base location</label>
           <select id="lpo-base" class="engr-select" name="base_station_id">
             <option value="">Not set</option>
             {stations.map((s) => (
