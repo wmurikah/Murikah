@@ -8,6 +8,7 @@ import { getEngrEnv } from '@engr/env';
 import { getDb } from '@engr/db';
 import { listUsersAdmin, type UserRow } from '@engr/repos/adminUsers';
 import { can } from '@engr/auth/rbac';
+import { locationDisplayLabel } from '@engr/format';
 import { mayManageTargetUser, userManagementScope } from '@engr/auth/adminPolicy';
 
 const engr = Astro.locals.engr;
@@ -93,7 +94,7 @@ if (allowed) {
                   )}
                 </td>
                 <td>{r.email}</td>
-                <td>{r.roleNames || 'None'}</td>
+                <td>{locationDisplayLabel(r.roleNames || 'None')}</td>
                 <td>
                   <span class="engr-status">{r.status}</span>
                 </td>
