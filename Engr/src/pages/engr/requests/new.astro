@@ -59,7 +59,7 @@ if (allowed) {
   <div class="engr-page-head">
     <div>
       <h1>Raise a request</h1>
-      <p class="engr-lead">Report a breakdown or a service need at a station.</p>
+      <p class="engr-lead">Report a breakdown or a service need at a location.</p>
     </div>
   </div>
 
@@ -68,13 +68,13 @@ if (allowed) {
       <p class="engr-error" role="alert">
         You do not have permission to raise requests.
       </p>
-    ) : stations.length === 0 ? (
+    ) : locations.length === 0 ? (
       <EmptyState
-        message="No stations are set up yet. A request is raised against a station."
+        message="No locations are set up yet. A request is raised against a location."
         canAct={can(Astro.locals, 'stations.manage')}
         actionHref="/admin/stations/new"
-        actionLabel="Add a station"
-        hint="Ask an administrator to add a station before raising a request."
+        actionLabel="Add a location"
+        hint="Ask an administrator to add a location before raising a request."
       />
     ) : (
       <>
@@ -85,9 +85,9 @@ if (allowed) {
         )}
         <form method="post" action="/api/requests" class="engr-form" enctype="multipart/form-data">
           <div class="engr-field">
-            <label for="station">Station</label>
+            <label for="station">Location</label>
             <select id="station" class="engr-select" name="station_id" required>
-              <option value="">Choose a station</option>
+              <option value="">Choose a location</option>
               {stations.map((s) => (
                 <option value={s.id}>
                   {s.name} ({s.code})
@@ -118,7 +118,7 @@ if (allowed) {
                 <option value={a.id} data-station-id={a.stationId}>{a.label}</option>
               ))}
             </select>
-            <p class="engr-field__hint">Choose the specific asset at the station, if known.</p>
+            <p class="engr-field__hint">Choose the specific asset at the location, if known.</p>
           </div>
 
           <div class="engr-field">
