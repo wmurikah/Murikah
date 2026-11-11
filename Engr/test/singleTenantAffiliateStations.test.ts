@@ -127,10 +127,31 @@ test('affiliate creation does not create another tenant subscription; station to
   } finally {h.close();}
 });
 
-test('affiliate form keeps five fields on a single desktop row with responsive fallbacks',()=>{
+test('affiliate fields align to two uniform desktop rows with equal-height inputs',()=>{
   const css=readFileSync(new URL('../src/styles/engr.css',import.meta.url),'utf8');
   const form=readFileSync(new URL('../src/pages/engr/admin/affiliates/[id].astro',import.meta.url),'utf8');
   assert.match(form,/engr-formgrid--affiliate/);
-  assert.match(css,/repeat\(5, minmax\(0, 1fr\)\)/);
-  assert.match(css,/repeat\(2, minmax\(0, 1fr\)\)/);
+  const formStart = form.indexOf('<form method="post" action="/api/admin/affiliates"');
+  const formEnd = form.indexOf('</form>', formStart);
+  assert.ok(formStart >= 0 && formEnd > formStart);
+  const fields = form.slice(formStart, formEnd);
+  for (const label of ['Code', 'Name', 'Country', 'Base currency', 'Status']) {
+    assert.match(fields, new RegExp('>' + label + '<'));
+  }
+  // Grid flow: Code, Name, Country / Base currency, Status.
+  assert.ok(fields.indexOf('for="name"') < fields.indexOf('for="country"'));
+  assert.ok(fields.indexOf('for="country"') < fields.indexOf('for="base_currency"'));
+  assert.ok(fields.indexOf('for="base_currency"') < fields.indexOf('for="status"'));
+
+  const begin = css.indexOf('/* Affiliate edit:');
+  const end = css.indexOf('.engr-checklist {', begin);
+  assert.ok(begin >= 0 && end > begin);
+  const rules = css.slice(begin, end);
+  assert.match(rules,/repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(rules,/repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(rules,/repeat\(5,/);
+  assert.match(rules,/grid-template-rows: min-content 2\.75rem auto/);
+  assert.match(rules,/height: 2\.75rem/);
+  assert.match(rules,/max-height: 2\.75rem/);
+  assert.match(rules,/width: 100%/);
 });
