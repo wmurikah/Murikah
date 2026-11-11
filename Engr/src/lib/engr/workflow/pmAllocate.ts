@@ -86,13 +86,13 @@ export async function allocateOccurrence(
     return { ok: false, code: 'conflict', message: 'Review and reactivate the maintenance schedule before allocating.' };
   }
   if (occ.assetId && occ.stationId !== occ.assetStationId) {
-    return { ok: false, code: 'conflict', message: 'Asset location differs from the maintenance station.' };
+    return { ok: false, code: 'conflict', message: 'Asset location differs from the maintenance location.' };
   }
   if (!ALLOCATABLE.includes(occ.status)) {
     return { ok: false, code: 'conflict', message: 'This occurrence cannot be allocated now.' };
   }
   if (!occ.stationId) {
-    return { ok: false, code: 'invalid', message: 'The schedule has no station to allocate to.' };
+    return { ok: false, code: 'invalid', message: 'The schedule has no location to allocate to.' };
   }
   if (!occ.contractorId) {
     return { ok: false, code: 'invalid', message: 'The schedule has no assigned contractor.' };
