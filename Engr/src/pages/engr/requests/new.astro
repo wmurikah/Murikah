@@ -68,7 +68,7 @@ if (allowed) {
       <p class="engr-error" role="alert">
         You do not have permission to raise requests.
       </p>
-    ) : locations.length === 0 ? (
+    ) : stations.length === 0 ? (
       <EmptyState
         message="No locations are set up yet. A request is raised against a location."
         canAct={can(Astro.locals, 'stations.manage')}
