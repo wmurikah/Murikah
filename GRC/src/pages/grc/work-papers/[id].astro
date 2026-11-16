@@ -39,6 +39,8 @@ import GrcFindingCards from '@/components/grc/GrcFindingCards.astro';
 import { listActionPlans, type ActionPlanListRow } from '@grc/repos/actionPlans';
 import type { FindingSource } from '@grc/reports/findingCards';
 import GrcEvidence from '@/components/grc/GrcEvidence.astro';
+import GrcStepper from '@/components/grc/GrcStepper.astro';
+import GrcSheet from '@/components/grc/GrcSheet.astro';
 import { listAuditors, type Option } from '@grc/repos/workPaperLookups';
 import { loadEnumLabels, statusLabel } from '@grc/repos/enums';
 import { WORK_PAPER_ENUM_TYPE, WP_STATUS, isEditable } from '@grc/workflow/workPaperActions';
@@ -247,6 +249,22 @@ const findingSource: FindingSource | null = wp
       trailFacts: responseFacts,
     }
   : null;
+const workflowSteps = [
+  { label: 'Draft', description: 'Prepare observation' },
+  { label: 'Review', description: 'Independent review' },
+  { label: 'Authorised', description: 'Ready for issue' },
+  { label: 'Sent', description: 'Shared with auditee' },
+  { label: 'Response', description: 'Management response' },
+  { label: 'Closed', description: 'Assurance complete' },
+];
+const workflowStepFor = (status: string): number => {
+  if (['Closed', 'Finalised'].includes(status)) return 6;
+  if (status === 'Response Received') return 5;
+  if (status === 'Sent to Auditee') return 4;
+  if (status === 'Approved') return 3;
+  if (['Submitted', 'Under Review'].includes(status)) return 2;
+  return 1;
+};
 ---
 
 <GrcLayout title={wp ? String(wp.reference) : 'Work paper'}>
@@ -257,6 +275,50 @@ const findingSource: FindingSource | null = wp
         <p class="grc-lead">{wp ? String(wp.observation_title ?? 'Untitled observation') : ''}</p>
       </div>
       <div class="grc-actionbar" style="margin:0">
+        {
+          wp && (
+            <GrcSheet id="work-paper-summary" title="Observation summary" trigger="Quick summary">
+              <dl class="grc-detail-list">
+                <div>
+                  <>
+                    <dt>Status</dt>
+                    <dd>{statusLabel(labels, wp.status)}</dd>
+                  </>
+                </div>
+                <div>
+                  <>
+                    <dt>Risk</dt>
+                    <dd>{val('risk_rating')}</dd>
+                  </>
+                </div>
+                <div>
+                  <>
+                    <dt>Affiliate</dt>
+                    <dd>{val('affiliate_name')}</dd>
+                  </>
+                </div>
+                <div>
+                  <>
+                    <dt>Audit area</dt>
+                    <dd>{val('audit_area_name')}</dd>
+                  </>
+                </div>
+                <div>
+                  <>
+                    <dt>Assigned auditor</dt>
+                    <dd>{val('assigned_auditor_name')}</dd>
+                  </>
+                </div>
+                <div>
+                  <>
+                    <dt>Response deadline</dt>
+                    <dd>{val('response_deadline')}</dd>
+                  </>
+                </div>
+              </dl>
+            </GrcSheet>
+          )
+        }
         {
           wp && editable && canEdit && (
             <a href={`/work-papers/${id}/edit`} class="grc-btn grc-btn--secondary">
@@ -276,6 +338,8 @@ const findingSource: FindingSource | null = wp
         <a href="/work-papers" class="grc-btn grc-btn--secondary">Back to list</a>
       </div>
     </div>
+
+    {wp && <GrcStepper steps={workflowSteps} current={workflowStepFor(wp.status)} />}
 
     {
       errorCode && (

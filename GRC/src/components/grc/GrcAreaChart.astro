@@ -1,0 +1,102 @@
+---
+export interface AreaPoint {
+  label: string;
+  value: number;
+}
+interface Props {
+  title: string;
+  description?: string;
+  data: AreaPoint[];
+  valueHeading?: string;
+}
+const { title, description, data, valueHeading = 'Count' } = Astro.props;
+const width = 640;
+const height = 220;
+const pad = 28;
+const max = Math.max(1, ...data.map((d) => d.value));
+const point = (d: AreaPoint, index: number): [number, number] => [
+  pad + (index * (width - pad * 2)) / Math.max(1, data.length - 1),
+  height - pad - (d.value / max) * (height - pad * 2),
+];
+const points = data.map(point);
+const line = points
+  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+  .join(' ');
+const area = points.length
+  ? `${line} L ${points.at(-1)![0].toFixed(1)} ${height - pad} L ${points[0][0].toFixed(1)} ${height - pad} Z`
+  : '';
+---
+
+<figure class="grc-chart grc-area">
+  <figcaption class="grc-chart__cap">
+    <h3 class="grc-chart__title">{title}</h3>{
+      description && <p class="grc-chart__desc">{description}</p>
+    }
+  </figcaption>
+  {
+    data.length === 0 ? (
+      <p class="grc-chart__empty">No trend data yet.</p>
+    ) : (
+      <div class="grc-area__plot">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={`${title}. ${data.map((d) => `${d.label}: ${d.value}`).join(', ')}.`}
+        >
+          <defs>
+            <linearGradient id="grc-area-fill" x1="0" y1="0" x2="0" y2="1">
+              <>
+                <stop offset="0" stop-color="var(--grc-gold)" stop-opacity=".38" />
+                <stop offset="1" stop-color="var(--grc-gold)" stop-opacity=".03" />
+              </>
+            </linearGradient>
+          </defs>
+          <path d={area} fill="url(#grc-area-fill)" />
+          <path
+            d={line}
+            fill="none"
+            stroke="var(--grc-navy-2)"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          {points.map((p, i) => (
+            <circle
+              cx={p[0]}
+              cy={p[1]}
+              r="5"
+              fill="var(--grc-surface)"
+              stroke="var(--grc-navy-2)"
+              stroke-width="3"
+            >
+              <title>
+                {data[i].label}: {data[i].value}
+              </title>
+            </circle>
+          ))}
+        </svg>
+        <div class="grc-area__labels" aria-hidden="true">
+          {data.map((d) => (
+            <span>{d.label}</span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  <table class="grc-vh">
+    <caption>{title} data</caption><thead
+      ><tr><th scope="col">Period</th><th scope="col">{valueHeading}</th></tr></thead
+    ><tbody
+      >{
+        data.map((d) => (
+          <tr>
+            <>
+              <th scope="row">{d.label}</th>
+              <td>{d.value}</td>
+            </>
+          </tr>
+        ))
+      }</tbody
+    >
+  </table>
+</figure>

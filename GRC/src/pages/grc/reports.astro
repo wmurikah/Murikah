@@ -228,7 +228,7 @@ const visibleStatuses = STATUS_OPTIONS.filter(
                   )}
                 </>
               ) : (
-                <select id="affiliate" name="affiliate" class="grc-select">
+                <select id="affiliate" name="affiliate" class="grc-select" data-searchable>
                   <option value="">All affiliates</option>
                   {affiliates.map((a) => (
                     <option value={a.id} selected={f?.affiliateCode === a.id}>
@@ -241,7 +241,7 @@ const visibleStatuses = STATUS_OPTIONS.filter(
 
             <div class="grc-field">
               <label for="audit_area">Audit area</label>
-              <select id="audit_area" name="audit_area" class="grc-select">
+              <select id="audit_area" name="audit_area" class="grc-select" data-searchable>
                 <option value="">All areas</option>
                 {auditAreas.map((a) => (
                   <option value={a.id} selected={f?.auditAreaId === a.id}>
@@ -291,26 +291,28 @@ const visibleStatuses = STATUS_OPTIONS.filter(
               Preview
             </button>
             {canExport && (
-              <>
-                {[
-                  ['docx', 'Word'],
-                  ['xlsx', 'Excel'],
-                  ['csv', 'CSV'],
-                  ['pdf', 'PDF'],
-                  ['svg', 'Image'],
-                ].map(([format, label]) => (
-                  <button
-                    type="submit"
-                    name="format"
-                    value={format}
-                    class="grc-btn grc-btn--secondary"
-                    formmethod="post"
-                    formaction="/api/reports/export"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </>
+              <details class="grc-split">
+                <summary class="grc-btn grc-btn--secondary">Export report</summary>
+                <div class="grc-split__menu" role="group" aria-label="Export format">
+                  {[
+                    ['docx', 'Word document'],
+                    ['xlsx', 'Excel workbook'],
+                    ['csv', 'CSV data'],
+                    ['pdf', 'PDF document'],
+                    ['svg', 'Image'],
+                  ].map(([format, label]) => (
+                    <button
+                      type="submit"
+                      name="format"
+                      value={format}
+                      formmethod="post"
+                      formaction="/api/reports/export"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </details>
             )}
           </div>
         </form>

@@ -1,0 +1,21 @@
+---
+interface Props {
+  lines?: number;
+  kind?: 'text' | 'card' | 'table';
+  label?: string;
+}
+const { lines = 3, kind = 'text', label = 'Loading content' } = Astro.props;
+---
+
+<div
+  class:list={['grc-skeleton', `grc-skeleton--${kind}`]}
+  role="status"
+  aria-label={label}
+  aria-live="polite"
+>
+  {
+    Array.from({ length: lines }).map((_, index) => (
+      <span class="grc-skeleton__line" style={`--skeleton-line:${index}`} aria-hidden="true" />
+    ))
+  }
+</div>

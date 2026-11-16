@@ -625,6 +625,107 @@ export interface DashboardCharts {
   riskPerArea: GroupedBarData;
   notImplementedHighRisk: ChartDatum[];
   actionPlanStatusPerArea: GroupedBarData;
+  workflowFunnel: ChartDatum[];
+  activityHeatmap: Array<{ date: string; value: number }>;
+  highRiskTrend: Array<{ label: string; value: number }>;
+}
+
+/** Current observations in each recognisable stage of the assurance workflow. */
+export async function getWorkflowFunnel(
+  db: Client,
+  organizationId: string,
+  year: number,
+  scope: DashboardScope,
+): Promise<ChartDatum[]> {
+  const confine = confineWp(scope);
+  const result = await db.execute({
+    sql: `SELECT
+            SUM(CASE WHEN ${WPa.status} IN ('Draft', 'Revision Required') THEN 1 ELSE 0 END) AS draft,
+            SUM(CASE WHEN ${WPa.status} IN ('Submitted', 'Under Review') THEN 1 ELSE 0 END) AS review,
+            SUM(CASE WHEN ${WPa.status} = 'Approved' THEN 1 ELSE 0 END) AS approved,
+            SUM(CASE WHEN ${WPa.status} = 'Sent to Auditee' THEN 1 ELSE 0 END) AS sent,
+            SUM(CASE WHEN ${WPa.status} = 'Response Received' THEN 1 ELSE 0 END) AS response,
+            SUM(CASE WHEN ${WPa.status} IN ('Closed', 'Finalised') THEN 1 ELSE 0 END) AS closed
+          FROM work_papers wp
+         WHERE ${WPa.organization_id} = ? AND ${WPa.year} = ?${confine.clause}`,
+    args: [organizationId, year, ...confine.args],
+  });
+  const row = result.rows[0] ?? {};
+  return [
+    { label: 'Draft', value: num(row.draft), href: `/work-papers?year=${year}&status=Draft` },
+    { label: 'Review', value: num(row.review), href: `/work-papers?year=${year}&status=Submitted` },
+    {
+      label: 'Approved',
+      value: num(row.approved),
+      href: `/work-papers?year=${year}&status=Approved`,
+    },
+    {
+      label: 'Sent',
+      value: num(row.sent),
+      href: `/work-papers?year=${year}&status=Sent%20to%20Auditee`,
+    },
+    {
+      label: 'Response',
+      value: num(row.response),
+      href: `/work-papers?year=${year}&status=Response%20Received`,
+    },
+    { label: 'Closed', value: num(row.closed), href: `/work-papers?year=${year}&status=Closed` },
+  ];
+}
+
+/** Daily audit activity for the last 91 days, used by the keyboard-readable heatmap. */
+export async function getActivityHeatmap(
+  db: Client,
+  organizationId: string,
+  scope: DashboardScope,
+): Promise<Array<{ date: string; value: number }>> {
+  const confine = confineWp(scope);
+  const result = await db.execute({
+    sql: `SELECT activity.day, COUNT(*) AS n
+            FROM (
+              SELECT date(${WPa.updated_at}) AS day
+                FROM work_papers wp
+               WHERE ${WPa.organization_id} = ?
+                 AND date(${WPa.updated_at}) >= date('now', '-90 days')${confine.clause}
+              UNION ALL
+              SELECT date(${APa.updated_at}) AS day
+                FROM action_plans ap
+                JOIN work_papers wp ON ${WPa.work_paper_id} = ${APa.work_paper_id}
+                     AND ${WPa.organization_id} = ${APa.organization_id}
+               WHERE ${APa.organization_id} = ?
+                 AND date(${APa.updated_at}) >= date('now', '-90 days')${confine.clause}
+            ) activity
+        GROUP BY activity.day
+        ORDER BY day`,
+    args: [organizationId, ...confine.args, organizationId, ...confine.args],
+  });
+  return result.rows.map((row) => ({ date: String(row.day), value: num(row.n) }));
+}
+
+/** Six-month high/extreme-risk creation trend; no invented historical snapshots. */
+export async function getHighRiskTrend(
+  db: Client,
+  organizationId: string,
+  scope: DashboardScope,
+): Promise<Array<{ label: string; value: number }>> {
+  const confine = confineWp(scope);
+  const result = await db.execute({
+    sql: `SELECT strftime('%Y-%m', ${WPa.created_at}) AS month, COUNT(*) AS n
+            FROM work_papers wp
+           WHERE ${WPa.organization_id} = ?
+             AND UPPER(${WPa.risk_rating}) IN ('HIGH', 'EXTREME')
+             AND date(${WPa.created_at}) >= date('now', 'start of month', '-5 months')${confine.clause}
+        GROUP BY strftime('%Y-%m', ${WPa.created_at})
+        ORDER BY month`,
+    args: [organizationId, ...confine.args],
+  });
+  const counts = new Map(result.rows.map((row) => [String(row.month), num(row.n)]));
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, index) => {
+    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + index, 1));
+    const label = month.toISOString().slice(0, 7);
+    return { label, value: counts.get(label) ?? 0 };
+  });
 }
 
 /** The four dashboard charts for the year, in one round of parallel queries. */
@@ -654,14 +755,32 @@ async function readDashboardCharts(
   year: number,
   scope: DashboardScope,
 ): Promise<DashboardCharts> {
-  const [issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea] =
-    await Promise.all([
-      getIssuesPerArea(db, organizationId, year, scope),
-      getRiskPerArea(db, organizationId, year, scope),
-      getNotImplementedHighRisk(db, organizationId, year, scope),
-      getActionPlanStatusPerArea(db, organizationId, year, scope),
-    ]);
-  return { issuesPerArea, riskPerArea, notImplementedHighRisk, actionPlanStatusPerArea };
+  const [
+    issuesPerArea,
+    riskPerArea,
+    notImplementedHighRisk,
+    actionPlanStatusPerArea,
+    workflowFunnel,
+    activityHeatmap,
+    highRiskTrend,
+  ] = await Promise.all([
+    getIssuesPerArea(db, organizationId, year, scope),
+    getRiskPerArea(db, organizationId, year, scope),
+    getNotImplementedHighRisk(db, organizationId, year, scope),
+    getActionPlanStatusPerArea(db, organizationId, year, scope),
+    getWorkflowFunnel(db, organizationId, year, scope),
+    getActivityHeatmap(db, organizationId, scope),
+    getHighRiskTrend(db, organizationId, scope),
+  ]);
+  return {
+    issuesPerArea,
+    riskPerArea,
+    notImplementedHighRisk,
+    actionPlanStatusPerArea,
+    workflowFunnel,
+    activityHeatmap,
+    highRiskTrend,
+  };
 }
 
 export interface SidebarCounts {

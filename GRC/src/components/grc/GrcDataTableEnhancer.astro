@@ -1,0 +1,183 @@
+---
+// Progressive enhancement for server-rendered GRC tables. With JavaScript off
+// every table remains readable and complete; with it on, opted-in lists gain
+// local search, sorting, density control, CSV export and safe row selection.
+---
+
+<script>
+  const clean = (value: string): string => value.replace(/\s+/g, ' ').trim();
+  const csvCell = (value: string): string => `"${value.replaceAll('"', '""')}"`;
+
+  document.querySelectorAll<HTMLTableElement>('table.grc-table[data-enhance]').forEach((table) => {
+    if (table.dataset.enhanced === '1') return;
+    table.dataset.enhanced = '1';
+    const wrapper = table.closest<HTMLElement>('.grc-tablewrap');
+    const rows = Array.from(table.tBodies[0]?.rows ?? []);
+    const headings = Array.from(table.tHead?.rows[0]?.cells ?? []);
+    if (!wrapper || rows.length === 0) return;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'grc-tabletools';
+    toolbar.innerHTML = `
+      <label class="grc-tabletools__search"><span class="grc-vh">Search this table</span><input type="search" placeholder="Search this list…" data-table-search></label>
+      <span class="grc-tabletools__count" role="status" aria-live="polite"></span>
+      <div class="grc-tabletools__actions">
+        <button type="button" class="grc-iconbtn" data-table-density aria-label="Use compact table rows" title="Toggle row density">↕</button>
+        <button type="button" class="grc-btn grc-btn--secondary grc-btn--small" data-table-export>Export CSV</button>
+      </div>`;
+    wrapper.parentElement?.insertBefore(toolbar, wrapper);
+    const search = toolbar.querySelector<HTMLInputElement>('[data-table-search]')!;
+    const count = toolbar.querySelector<HTMLElement>('.grc-tabletools__count')!;
+    const refreshCount = (): void => {
+      const shown = rows.filter((row) => !row.hidden).length;
+      count.textContent = `${shown} of ${rows.length}`;
+    };
+    search.addEventListener('input', () => {
+      const term = search.value.trim().toLowerCase();
+      rows.forEach((row) => {
+        row.hidden =
+          Boolean(term) &&
+          !clean(row.textContent ?? '')
+            .toLowerCase()
+            .includes(term);
+      });
+      refreshCount();
+    });
+    refreshCount();
+
+    headings.forEach((heading, column) => {
+      if (heading.dataset.noSort != null) return;
+      const label = clean(heading.textContent ?? 'column');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'grc-sort';
+      button.innerHTML = `<span>${label}</span><span aria-hidden="true">↕</span>`;
+      button.setAttribute('aria-label', `Sort by ${label}`);
+      heading.replaceChildren(button);
+      let direction = 1;
+      button.addEventListener('click', () => {
+        headings.forEach((cell) => cell.removeAttribute('aria-sort'));
+        const offset = table.dataset.selectable == null ? 0 : 1;
+        const numeric = rows.every(
+          (row) =>
+            clean(row.cells[column + offset]?.textContent ?? '') === '' ||
+            !Number.isNaN(
+              Number(clean(row.cells[column + offset]?.textContent ?? '').replaceAll(',', '')),
+            ),
+        );
+        rows
+          .sort((a, b) => {
+            const av = clean(a.cells[column + offset]?.textContent ?? '');
+            const bv = clean(b.cells[column + offset]?.textContent ?? '');
+            return (
+              direction *
+              (numeric
+                ? Number(av.replaceAll(',', '')) - Number(bv.replaceAll(',', ''))
+                : av.localeCompare(bv, undefined, { numeric: true }))
+            );
+          })
+          .forEach((row) => table.tBodies[0].appendChild(row));
+        heading.setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+        direction *= -1;
+      });
+    });
+
+    toolbar.querySelector('[data-table-density]')?.addEventListener('click', (event) => {
+      const compact = table.classList.toggle('grc-table--compact');
+      (event.currentTarget as HTMLElement).setAttribute(
+        'aria-label',
+        compact ? 'Use comfortable table rows' : 'Use compact table rows',
+      );
+    });
+    const exportRows = (selectedOnly = false): void => {
+      const offset = table.dataset.selectable == null ? 0 : 1;
+      const visibleRows = rows.filter(
+        (row) =>
+          !row.hidden &&
+          (!selectedOnly ||
+            Boolean(row.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked)),
+      );
+      const lines = [
+        headings.map((h) => csvCell(clean(h.textContent ?? ''))).join(','),
+        ...visibleRows.map((row) =>
+          Array.from(row.cells)
+            .slice(offset)
+            .map((cell) => csvCell(clean(cell.textContent ?? '')))
+            .join(','),
+        ),
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const link = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `${table.getAttribute('aria-label') ?? 'grc-export'}.csv`,
+      });
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+    toolbar
+      .querySelector('[data-table-export]')
+      ?.addEventListener('click', () => exportRows(false));
+
+    if (table.dataset.selectable == null) return;
+    const selectionHead = document.createElement('th');
+    selectionHead.scope = 'col';
+    selectionHead.dataset.noSort = '';
+    const selectAll = document.createElement('input');
+    selectAll.type = 'checkbox';
+    selectAll.setAttribute('aria-label', 'Select all visible rows');
+    selectionHead.appendChild(selectAll);
+    table.tHead?.rows[0]?.insertBefore(selectionHead, table.tHead.rows[0].firstChild);
+    rows.forEach((row, index) => {
+      const cell = row.insertCell(0);
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('aria-label', `Select row ${index + 1}`);
+      cell.appendChild(input);
+    });
+    const basket = document.createElement('div');
+    basket.className = 'grc-selection-basket';
+    basket.hidden = true;
+    basket.innerHTML = `<strong><span data-selected-count>0</span> selected</strong><button type="button" class="grc-btn grc-btn--secondary grc-btn--small" data-selected-export>Export selected</button><button type="button" class="grc-iconbtn" data-selected-clear aria-label="Clear selection">×</button>`;
+    document.body.appendChild(basket);
+    const rowInputs = rows.map(
+      (row) => row.querySelector<HTMLInputElement>('input[type="checkbox"]')!,
+    );
+    const paintSelection = (): void => {
+      const n = rowInputs.filter((input) => input.checked).length;
+      basket.hidden = n === 0;
+      basket.querySelector('[data-selected-count]')!.textContent = String(n);
+    };
+    selectAll.addEventListener('change', () => {
+      rows.forEach((row, i) => {
+        if (!row.hidden) rowInputs[i].checked = selectAll.checked;
+      });
+      paintSelection();
+    });
+    rowInputs.forEach((input) => input.addEventListener('change', paintSelection));
+    basket.querySelector('[data-selected-clear]')?.addEventListener('click', () => {
+      const previous = rowInputs.map((input) => input.checked);
+      selectAll.checked = false;
+      rowInputs.forEach((input) => {
+        input.checked = false;
+      });
+      paintSelection();
+      const toast = document.createElement('div');
+      toast.className = 'grc-undo-toast';
+      toast.setAttribute('role', 'status');
+      toast.innerHTML = '<span>Selection cleared</span><button type="button">Undo</button>';
+      document.body.appendChild(toast);
+      const timer = window.setTimeout(() => toast.remove(), 6000);
+      toast.querySelector('button')?.addEventListener('click', () => {
+        window.clearTimeout(timer);
+        rowInputs.forEach((input, index) => {
+          input.checked = previous[index];
+        });
+        paintSelection();
+        toast.remove();
+      });
+    });
+    basket
+      .querySelector('[data-selected-export]')
+      ?.addEventListener('click', () => exportRows(true));
+  });
+</script>

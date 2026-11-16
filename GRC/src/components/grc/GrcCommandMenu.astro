@@ -1,0 +1,109 @@
+---
+import GrcIcon from './GrcIcon.astro';
+
+interface CommandItem {
+  label: string;
+  href: string;
+  group: string;
+  icon: string;
+}
+interface Props {
+  items: CommandItem[];
+}
+const { items } = Astro.props;
+---
+
+<button
+  type="button"
+  class="grc-command-trigger"
+  data-command-open
+  aria-haspopup="dialog"
+  aria-controls="grc-command"
+>
+  <GrcIcon name="search" size={17} />
+  <span>Search</span>
+  <kbd>⌘K</kbd>
+</button>
+
+<dialog class="grc-command" id="grc-command" aria-labelledby="grc-command-title">
+  <div class="grc-command__head">
+    <GrcIcon name="search" size={20} />
+    <label class="grc-vh" for="grc-command-query" id="grc-command-title"
+      >Search the application</label
+    >
+    <input
+      id="grc-command-query"
+      type="search"
+      autocomplete="off"
+      placeholder="Go to a page or workflow…"
+      data-command-query
+    />
+    <kbd>Esc</kbd>
+  </div>
+  <div class="grc-command__results" role="listbox" aria-label="Destinations" data-command-results>
+    {
+      items.map((item) => (
+        <a
+          href={item.href}
+          role="option"
+          data-command-item
+          data-search={`${item.label} ${item.group}`.toLowerCase()}
+        >
+          <GrcIcon name={item.icon} size={18} />
+          <span>
+            <>
+              <strong>{item.label}</strong>
+              <small>{item.group}</small>
+            </>
+          </span>
+          <GrcIcon name="chevron" size={14} />
+        </a>
+      ))
+    }
+    <p class="grc-command__empty" data-command-empty hidden>No matching destination.</p>
+  </div>
+</dialog>
+
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>('#grc-command');
+  const query = dialog?.querySelector<HTMLInputElement>('[data-command-query]');
+  const items = Array.from(dialog?.querySelectorAll<HTMLElement>('[data-command-item]') ?? []);
+  const empty = dialog?.querySelector<HTMLElement>('[data-command-empty]');
+  const filter = (): void => {
+    const term = query?.value.trim().toLowerCase() ?? '';
+    let visible = 0;
+    items.forEach((item) => {
+      const show = !term || (item.dataset.search ?? '').includes(term);
+      item.hidden = !show;
+      if (show) visible += 1;
+    });
+    if (empty) empty.hidden = visible > 0;
+  };
+  const open = (): void => {
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    if (query) {
+      query.value = '';
+      filter();
+      requestAnimationFrame(() => query.focus());
+    }
+  };
+  document
+    .querySelectorAll('[data-command-open]')
+    .forEach((button) => button.addEventListener('click', open));
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      open();
+    }
+  });
+  query?.addEventListener('input', filter);
+  query?.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    items.find((item) => !item.hidden)?.focus();
+  });
+  dialog?.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+</script>

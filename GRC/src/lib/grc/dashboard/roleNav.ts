@@ -138,7 +138,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     audit.push({
       label: 'Work papers',
       href: '/work-papers',
-      icon: 'workpapers',
+      icon: 'filesearch',
       countKey: 'pendingReview',
       alert: true,
     });
@@ -146,7 +146,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     audit.push({
       label: 'Action plans',
       href: '/action-plans',
-      icon: 'actionplans',
+      icon: 'clipboardcheck',
       countKey: 'myOverdue',
       alert: true,
     });
@@ -154,7 +154,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     audit.push({
       label: 'Auditee responses',
       href: '/auditee-responses',
-      icon: 'responses',
+      icon: 'messagereply',
       countKey: 'responsesToReview',
       alert: true,
     });
@@ -167,12 +167,12 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     audit.push({
       label: 'Requirements',
       href: '/requirements',
-      icon: 'list',
+      icon: 'clipboardlist',
       countKey: 'myRequirements',
       alert: true,
     });
-  if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'reports' });
-  if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'analytics' });
+  if (show.reports) audit.push({ label: 'Reports', href: '/reports', icon: 'chartreport' });
+  if (show.analytics) audit.push({ label: 'Analytics', href: '/analytics', icon: 'trend' });
 
   // Administration is two different jobs, so it is two groups rather than one
   // long list (Build Prompt 52). Organisation is who and what the audit covers;
@@ -184,14 +184,14 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
   const platform: NavItemDef[] = [];
   if (show.setup) {
     organisation.push(
-      { label: 'Affiliates', href: '/settings/affiliates', icon: 'affiliates' },
-      { label: 'Audit universe', href: '/settings/audit-universe', icon: 'universe' },
+      { label: 'Affiliates', href: '/settings/affiliates', icon: 'buildings' },
+      { label: 'Audit universe', href: '/settings/audit-universe', icon: 'network' },
       { label: 'Users', href: '/settings/users', icon: 'users' },
-      { label: 'Roles', href: '/settings/access-control', icon: 'roles' },
+      { label: 'Roles', href: '/settings/access-control', icon: 'shieldkey' },
     );
     configuration.push(
       { label: 'General settings', href: '/settings/general', icon: 'settings' },
-      { label: 'Dropdowns', href: '/settings/dropdowns', icon: 'list' },
+      { label: 'Dropdowns', href: '/settings/dropdowns', icon: 'sliders' },
       { label: 'Email', href: '/settings/email', icon: 'mail' },
       { label: 'Evidence storage', href: '/settings/storage', icon: 'storage' },
     );
@@ -199,7 +199,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     configuration.push({ label: 'All settings', href: '/settings', icon: 'setup' });
   }
   if (show.auditLog) {
-    configuration.push({ label: 'Audit history', href: '/audit-history', icon: 'audit' });
+    configuration.push({ label: 'Audit history', href: '/audit-history', icon: 'history' });
   }
   // Provisioning a customer organisation is the platform owner's, and it stayed
   // reachable only from the settings grid. It has its own group here, so the two

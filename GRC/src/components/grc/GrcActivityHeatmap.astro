@@ -1,0 +1,74 @@
+---
+export interface HeatmapDatum {
+  date: string;
+  value: number;
+}
+interface Props {
+  title: string;
+  description?: string;
+  data: HeatmapDatum[];
+}
+const { title, description, data } = Astro.props;
+const byDate = new Map(data.map((d) => [d.date.slice(0, 10), d.value]));
+const days = 91;
+const today = new Date();
+today.setUTCHours(0, 0, 0, 0);
+const start = new Date(today);
+start.setUTCDate(start.getUTCDate() - days + 1);
+const values = Array.from({ length: days }, (_, i) => {
+  const date = new Date(start);
+  date.setUTCDate(start.getUTCDate() + i);
+  const key = date.toISOString().slice(0, 10);
+  return { date: key, value: byDate.get(key) ?? 0, weekday: date.getUTCDay() };
+});
+const max = Math.max(1, ...values.map((d) => d.value));
+const level = (value: number): number =>
+  value === 0 ? 0 : Math.max(1, Math.ceil((value / max) * 4));
+---
+
+<figure class="grc-chart grc-heatmap">
+  <figcaption class="grc-chart__cap">
+    <h3 class="grc-chart__title">{title}</h3>
+    {description && <p class="grc-chart__desc">{description}</p>}
+  </figcaption>
+  <div
+    class="grc-heatmap__grid"
+    role="img"
+    aria-label={`${title}. Activity over the last ${days} days.`}
+  >
+    {
+      values.map((datum) => (
+        <span
+          class={`grc-heatmap__day level-${level(datum.value)}`}
+          tabindex="0"
+          aria-label={`${datum.date}: ${datum.value} activities`}
+        >
+          <span class="grc-tooltip" aria-hidden="true">
+            {datum.date}
+            <strong>{datum.value}</strong>
+          </span>
+        </span>
+      ))
+    }
+  </div>
+  <div class="grc-heatmap__legend" aria-hidden="true">
+    <span>Less</span>{[0, 1, 2, 3, 4].map((n) => <i class={`level-${n}`} />)}<span>More</span>
+  </div>
+  <table class="grc-vh">
+    <caption>{title} data</caption><thead
+      ><tr><th scope="col">Date</th><th scope="col">Activity</th></tr></thead
+    >
+    <tbody
+      >{
+        data.map((d) => (
+          <tr>
+            <>
+              <th scope="row">{d.date.slice(0, 10)}</th>
+              <td>{d.value}</td>
+            </>
+          </tr>
+        ))
+      }</tbody
+    >
+  </table>
+</figure>

@@ -150,7 +150,7 @@ const failed = Astro.url.searchParams.get('error');
                 role="region"
                 aria-label="Scrollable observations shared with you"
               >
-                <table class="grc-table" aria-label="Observations shared with you">
+                <table class="grc-table" aria-label="Observations shared with you" data-enhance>
                   <thead>
                     <tr>
                       <th scope="col">Reference</th>
@@ -225,7 +225,12 @@ const failed = Astro.url.searchParams.get('error');
                 role="region"
                 aria-label="Scrollable responses awaiting review"
               >
-                <table class="grc-table" aria-label="Responses awaiting review">
+                <table
+                  class="grc-table"
+                  aria-label="Responses awaiting review"
+                  data-enhance
+                  data-selectable
+                >
                   <thead>
                     <tr>
                       <th scope="col">Reference</th>

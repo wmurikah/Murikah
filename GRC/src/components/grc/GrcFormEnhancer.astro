@@ -1,0 +1,32 @@
+---
+// Native controls remain authoritative. Search is an optional progressive layer
+// for long selects; date inputs keep the platform's locale-aware date picker.
+---
+
+<script>
+  document.querySelectorAll('select[data-searchable]').forEach((node) => {
+    const select = node as unknown as HTMLSelectElement;
+    if (select.dataset.searchReady === '1') return;
+    select.dataset.searchReady = '1';
+    const label =
+      document
+        .querySelector<HTMLLabelElement>(`label[for="${CSS.escape(select.id)}"]`)
+        ?.textContent?.trim() ?? 'options';
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'grc-input grc-select-search';
+    search.placeholder = `Search ${label.toLowerCase()}…`;
+    search.setAttribute('aria-label', `Search ${label}`);
+    select.parentElement?.insertBefore(search, select);
+    const options = Array.from(select.options) as HTMLOptionElement[];
+    search.addEventListener('input', () => {
+      const term = search.value.trim().toLowerCase();
+      options.forEach((option) => {
+        option.hidden =
+          Boolean(term) && !option.text.toLowerCase().includes(term) && option.value !== '';
+      });
+      const visible = options.find((option) => !option.hidden && option.value !== '');
+      if (term && visible) select.value = visible.value;
+    });
+  });
+</script>
