@@ -9,7 +9,7 @@ import { writeAuditLog } from '@grc/repos/audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
-  if (!grc?.isPlatformOwnerAccount) return new Response('Forbidden', { status: 403 });
+  if (!grc?.canRolePreview) return new Response('Forbidden', { status: 403 });
   const form = await request.formData();
   const next = safeNextPath(String(form.get('next') ?? '')) ?? '/';
   if (grc.instanceSelected) {

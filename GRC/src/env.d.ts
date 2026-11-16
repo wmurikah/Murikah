@@ -176,6 +176,8 @@ declare namespace App {
       isPlatformOwner: boolean;
       /** The immutable account fact; remains true while owner bypass is disabled for role preview. */
       isPlatformOwnerAccount: boolean;
+      /** Immutable entitlement: platform owners and real SUPER_ADMIN accounts may preview roles. */
+      canRolePreview: boolean;
       /** Effective read-only persona, or null during normal access. */
       rolePreview: { roleCode: string; affiliateCode: string | null } | null;
       /** True while users.must_change_password is set; the middleware forces the change-password flow. */
