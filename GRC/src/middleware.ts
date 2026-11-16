@@ -129,12 +129,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // instance. The signed cookie is revalidated against the live role and
       // affiliate rows on every request. It changes effective access only; the
       // underlying user, session and database role remain untouched.
+      // Preview entitlement comes from the signed-in account, never from the
+      // effective preview role. Selecting SUPER_ADMIN in preview therefore
+      // cannot grant this capability to an ordinary account.
+      const canRolePreview = identity.isPlatformOwner || identity.roleCode === 'SUPER_ADMIN';
       const requestedPreview =
-        identity.isPlatformOwner && instanceSelected
+        canRolePreview && instanceSelected
           ? await readRolePreview(context.request, env.sessionSecret)
           : null;
       const rolePreview =
-        identity.isPlatformOwner && instanceSelected
+        canRolePreview && instanceSelected
           ? await resolveRolePreview(db, organizationId, requestedPreview)
           : null;
       const effectiveRoleCode = rolePreview?.roleCode ?? identity.roleCode;
@@ -196,6 +200,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         userEmail: identity.userEmail,
         isPlatformOwner: effectivePlatformOwner,
         isPlatformOwnerAccount: identity.isPlatformOwner,
+        canRolePreview,
         rolePreview,
         mustChangePassword: identity.mustChangePassword,
         affiliateScope,
