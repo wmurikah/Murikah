@@ -28,6 +28,13 @@ database and sign the GRC session; they are distinct from engr's.
 | `TURSO_GRC_AUTH_TOKEN`   | auth token for that database                               |
 | `GRC_SESSION_SECRET`     | 32+ random bytes, base64 encoded; signs the session cookie |
 
+MFA is enabled by default. During a controlled onboarding window, an operator
+may add the ordinary Production runtime variable `GRC_MFA_ENABLED=false` to
+pause the second factor without deleting enrolled authenticators, challenges or
+backup codes. Remove the variable (or set it to `true`) to restore MFA. Because
+already-authorised sessions remain valid until their normal expiry, revoke open
+sessions if MFA must take effect immediately when it is restored.
+
 Set them in production with:
 
 ```

@@ -62,6 +62,7 @@ declare namespace Cloudflare {
     TURSO_GRC_DATABASE_URL?: string;
     TURSO_GRC_AUTH_TOKEN?: string;
     GRC_SESSION_SECRET?: string;
+    GRC_MFA_ENABLED?: string; // secure default: only the exact value 'false' disables MFA
 
     // GRC notification delivery via Microsoft Graph (Outlook), sent as the
     // delegated mailbox an admin connects once on Settings -> Email. All
@@ -215,6 +216,5 @@ declare namespace App {
 
     /** The visitor-facing root-relative path on grc.murikah.com, before the /grc rewrite. */
     grcPath?: string;
-
   }
 }
