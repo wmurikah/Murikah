@@ -92,7 +92,7 @@ const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
 // an instance so they can move straight to another one. An instance admin never
 // has it: there is nowhere for them to switch to.
 const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ?? 0) > 0;
-const showRolePreview = grc?.isPlatformOwnerAccount === true && inInstance;
+const showRolePreview = grc?.canRolePreview === true && inInstance;
 let previewRoles: string[] = [];
 let previewAffiliates: Option[] = [];
 if (showRolePreview && grc) {
