@@ -20,11 +20,8 @@ import { getDb } from '@grc/db';
 import { readGrcSessionCookie, createSessionCookie, hashToken } from '@grc/auth/session';
 import { resolveSession } from '@grc/repos/session';
 import { ensureMfaRecord, consumeBackupCode, saveMfaChallenge } from '@grc/repos/mfa';
-import { defaultLandingPath, isAuditeeRole } from '@grc/dashboard/roleNav';
-import { hasMyOverdue } from '@grc/repos/dashboard';
-import { getScopedRoleMatrix } from '@grc/auth/rbac';
-import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
-import { GRC_MFA_SETUP_PATH, safeNextPath } from '@grc/routing';
+import { GRC_MFA_SETUP_PATH } from '@grc/routing';
+import { postAuthLanding } from '@grc/auth/postAuthLanding';
 import { verifyTotp } from '@grc/auth/totp';
 import { open } from '@grc/auth/secretBox';
 import { checkOtpAttempt, OTP_MAX_ATTEMPTS } from '@grc/auth/emailOtp';
@@ -143,32 +140,11 @@ export const POST: APIRoute = async ({ request }) => {
     // by safeNextPath, which returns only a path inside this app, so neither
     // branch can become an open redirect (Build Prompt 53).
     const requested = String(form.get('next') ?? '');
-    const intended = requested === GRC_MFA_SETUP_PATH ? null : safeNextPath(requested);
     let location: string;
     if (requested === GRC_MFA_SETUP_PATH) {
       location = GRC_MFA_SETUP_PATH;
-    } else if (intended) {
-      location = intended;
     } else {
-      let hasOverdue = false;
-      if (!identity.isPlatformOwner && isAuditeeRole(identity.roleCode)) {
-        // The landing choice runs before locals.grc exists, so the confinement
-        // is resolved here rather than inherited. It matters: "you have an
-        // overdue plan" must not be said about a plan the viewer's affiliate
-        // confinement means they cannot open (Build Prompt 45).
-        const access = await getScopedRoleMatrix(
-          db,
-          identity.roleCode,
-          identity.homeOrganizationId,
-        );
-        const scope = resolveAffiliateScope(
-          access.scopeToAffiliate,
-          identity.affiliateCode,
-          identity.isPlatformOwner,
-        );
-        hasOverdue = await hasMyOverdue(db, identity.homeOrganizationId, identity.userId, scope);
-      }
-      location = defaultLandingPath(identity.roleCode, identity.isPlatformOwner, hasOverdue);
+      location = await postAuthLanding(db, identity, requested);
     }
     return new Response(null, {
       status: 303,

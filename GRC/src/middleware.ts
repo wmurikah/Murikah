@@ -81,7 +81,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // step's endpoint resolves the session itself, so no locals are
       // attached before then. There is no enrolment wall: email codes are
       // the automatic default and need no setup.
-      if (sessionCookie.mfa === 'pending') {
+      if (env.mfaEnabled && sessionCookie.mfa === 'pending') {
         if (isGrcMfaPendingAllowed(appPath)) return next();
         return isApi
           ? jsonResponse({ error: 'mfa_required' }, 401)

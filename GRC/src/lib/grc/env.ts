@@ -10,11 +10,13 @@
  * wrong database or an unsigned session.
  */
 import { env } from 'cloudflare:workers';
+import { mfaEnabledFromBinding } from '@grc/auth/mfaToggle';
 
 export interface GrcEnv {
   dbUrl: string;
   dbToken: string;
   sessionSecret: string;
+  mfaEnabled: boolean;
 }
 
 export function getGrcEnv(): GrcEnv {
@@ -26,5 +28,10 @@ export function getGrcEnv(): GrcEnv {
       'GRC platform environment is not configured. Set TURSO_GRC_DATABASE_URL, TURSO_GRC_AUTH_TOKEN and GRC_SESSION_SECRET in .dev.vars (local) or as Cloudflare secrets (production).',
     );
   }
-  return { dbUrl, dbToken, sessionSecret };
+  return {
+    dbUrl,
+    dbToken,
+    sessionSecret,
+    mfaEnabled: mfaEnabledFromBinding(env.GRC_MFA_ENABLED),
+  };
 }

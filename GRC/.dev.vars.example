@@ -2,4 +2,5 @@
 TURSO_GRC_DATABASE_URL=""
 TURSO_GRC_AUTH_TOKEN=""
 GRC_SESSION_SECRET=""
+GRC_MFA_ENABLED="true"
 # Optional delivery/storage bindings are described in src/env.d.ts and product docs.

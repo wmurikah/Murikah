@@ -21,7 +21,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { verifyPassword } from '@grc/auth/password';
 import { resolveUserByEmail, touchLastLogin } from '@grc/repos/login';
-import { createSession } from '@grc/repos/session';
+import { createSession, resolveSession } from '@grc/repos/session';
 import { createSessionCookie } from '@grc/auth/session';
 import { throttleDecision } from '@grc/auth/loginThrottle';
 import { failureStreaks, recordLoginAttempt, recordSecurityEvent } from '@grc/repos/loginAttempts';
@@ -29,6 +29,7 @@ import { ensureMfaRecord } from '@grc/repos/mfa';
 import { getGrcDeliveryEnv } from '@grc/notify/env';
 import { issueEmailOtp } from '@grc/notify/otpMail';
 import { GRC_MFA_PATH, safeNextPath } from '@grc/routing';
+import { postAuthLanding } from '@grc/auth/postAuthLanding';
 
 const TAG = '[grc.auth.login]';
 const REQUIRED_BINDINGS = [
@@ -189,6 +190,26 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const secure = new URL(request.url).protocol === 'https:';
+
+    // A production runtime switch lets an operator pause MFA during onboarding
+    // without deleting any user's factor, challenge or backup codes. The
+    // secure default remains enabled; only GRC_MFA_ENABLED=false reaches this
+    // branch. Re-enabling the binding restores the existing factors.
+    if (!env.mfaEnabled) {
+      const identity = await resolveSession(db, sessionId);
+      if (!identity) throw new Error('Fresh session could not be resolved.');
+      const authorisedCookie = await createSessionCookie(
+        sessionId,
+        env.sessionSecret,
+        secure,
+        'ok',
+      );
+      const location = await postAuthLanding(db, identity, credentials.next);
+      return new Response(null, {
+        status: 303,
+        headers: { location, 'set-cookie': authorisedCookie },
+      });
+    }
 
     // Two-step verification is universal (Build Prompt 37): every sign-in
     // gets a half-authorised session (cookie mfa=pending) that only the
