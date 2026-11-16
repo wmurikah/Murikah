@@ -174,6 +174,10 @@ declare namespace App {
       userEmail?: string;
       /** True for a platform owner (users.is_platform_owner); only they may switch the acting organisation. */
       isPlatformOwner: boolean;
+      /** The immutable account fact; remains true while owner bypass is disabled for role preview. */
+      isPlatformOwnerAccount: boolean;
+      /** Effective read-only persona, or null during normal access. */
+      rolePreview: { roleCode: string; affiliateCode: string | null } | null;
       /** True while users.must_change_password is set; the middleware forces the change-password flow. */
       mustChangePassword: boolean;
       /** The organisations a platform owner may switch between; empty for every other user. */

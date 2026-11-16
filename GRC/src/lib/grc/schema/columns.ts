@@ -167,6 +167,7 @@ export const C = {
   },
   audit_log: {
     log_id: 'log_id',
+    organization_id: 'organization_id',
     action: 'action',
     entity_type: 'entity_type',
     entity_id: 'entity_id',

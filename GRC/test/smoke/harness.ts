@@ -19,6 +19,7 @@ import { FakeS3Server } from './fakeS3.ts';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const WRANGLER_CONFIG = join(REPO_ROOT, 'dist', 'server', 'wrangler.json');
+const WRANGLER_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'wrangler');
 const SCHEMA_MD = join(REPO_ROOT, 'db', 'schema.md');
 const HOST = 'grc.localhost';
 const BOOT_TIMEOUT_MS = 120_000;
@@ -81,10 +82,8 @@ export class SmokeServer {
 
     this.port = 20000 + Math.floor(Math.random() * 20000);
     this.wrangler = spawn(
-      'pnpm',
+      WRANGLER_BIN,
       [
-        'exec',
-        'wrangler',
         'dev',
         '--config',
         WRANGLER_CONFIG,

@@ -81,8 +81,6 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     // best-effort audit
   }
 
-  const note = retainUntil
-    ? 'Deletion queued; the file is retained until the retention date.'
-    : 'Deletion queued.';
+  const note = `Evidence hidden immediately; permanent deletion is scheduled after ${retainUntil.slice(0, 10)}.`;
   return redirect(`${dest}?done=${encodeURIComponent(note)}`);
 };

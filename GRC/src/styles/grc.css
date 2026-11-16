@@ -283,6 +283,49 @@
   cursor: pointer;
 }
 
+.grc-rolepreview {
+  margin: 0.55rem 0.75rem 0;
+  padding: 0.7rem;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.65rem;
+  background: rgb(255 255 255 / 5%);
+}
+
+.grc-rolepreview__label {
+  margin: 0 0 0.45rem;
+  color: var(--grc-sidebar-muted, #bcc6da);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.grc-rolepreview .grc-switcher__select + .grc-switcher__select {
+  margin-top: 0.4rem;
+}
+
+.grc-rolepreview .grc-switcher__go {
+  width: 100%;
+  margin-top: 0.45rem;
+}
+
+.grc-rolepreview-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d6aa16;
+  border-radius: 0.7rem;
+  background: #fff4c7;
+  color: #3d3106;
+}
+
+.grc-rolepreview-banner form {
+  margin: 0;
+}
+
 /* Grouped navigation. */
 .grc-nav {
   display: flex;

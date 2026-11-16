@@ -23,6 +23,8 @@ import { getDb } from '@grc/db';
 import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 import { aiEnabled } from '@grc/ai/gate';
+import { listRoleCodes } from '@grc/repos/permissionsAdmin';
+import { listAffiliates, type Option } from '@grc/repos/workPaperLookups';
 
 interface Props {
   title: string;
@@ -90,6 +92,26 @@ const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
 // an instance so they can move straight to another one. An instance admin never
 // has it: there is nowhere for them to switch to.
 const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ?? 0) > 0;
+const showRolePreview = grc?.isPlatformOwnerAccount === true && inInstance;
+let previewRoles: string[] = [];
+let previewAffiliates: Option[] = [];
+if (showRolePreview && grc) {
+  try {
+    const db = await getDb(getGrcEnv());
+    [previewRoles, previewAffiliates] = await Promise.all([
+      listRoleCodes(db),
+      listAffiliates(db, grc.organizationId),
+    ]);
+  } catch (err) {
+    console.error('[grc.layout] role preview options failed', err);
+  }
+}
+const roleLabel = (code: string): string =>
+  code
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 ---
 
 <!doctype html>
@@ -219,6 +241,55 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
           )
         }
 
+        {
+          showRolePreview && grc && (
+            <div class="grc-rolepreview">
+              <p class="grc-rolepreview__label">View as role</p>
+              <form method="post" action="/api/role-preview/set" class="grc-switcher__form">
+                <input type="hidden" name="next" value={path} />
+                <label class="grc-vh" for="grc-preview-role">Preview role</label>
+                <select
+                  id="grc-preview-role"
+                  name="role_code"
+                  class="grc-switcher__select"
+                  required
+                >
+                  {previewRoles.map((role) => (
+                    <option value={role} selected={grc.rolePreview?.roleCode === role}>
+                      {roleLabel(role)}
+                    </option>
+                  ))}
+                </select>
+                <label class="grc-vh" for="grc-preview-affiliate">Preview affiliate</label>
+                <select
+                  id="grc-preview-affiliate"
+                  name="affiliate_code"
+                  class="grc-switcher__select"
+                >
+                  <option value="" selected={!grc.rolePreview?.affiliateCode}>
+                    No affiliate assigned
+                  </option>
+                  {previewAffiliates.map((affiliate) => (
+                    <option
+                      value={affiliate.id}
+                      selected={grc.rolePreview?.affiliateCode === affiliate.id}
+                    >
+                      {affiliate.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" class="grc-switcher__go">Preview</button>
+              </form>
+              {grc.rolePreview && (
+                <form method="post" action="/api/role-preview/clear" class="grc-switcher__form">
+                  <input type="hidden" name="next" value={path} />
+                  <button type="submit" class="grc-switcher__leave">Exit role preview</button>
+                </form>
+              )}
+            </div>
+          )
+        }
+
         <div class="grc-nav">
           {
             groups.map((group) => (
@@ -321,6 +392,20 @@ const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ??
       <div class="grc-scrim" id="grc-scrim"></div>
 
       <main id="grc-main" class="grc-main">
+        {grc?.rolePreview && (
+          <div class="grc-rolepreview-banner" role="status">
+            <span>
+              Read-only preview: <strong>{roleLabel(grc.rolePreview.roleCode)}</strong>
+              {grc.rolePreview.affiliateCode
+                ? ` · ${previewAffiliates.find((a) => a.id === grc.rolePreview?.affiliateCode)?.label ?? grc.rolePreview.affiliateCode}`
+                : ' · no affiliate assigned'}
+            </span>
+            <form method="post" action="/api/role-preview/clear">
+              <input type="hidden" name="next" value={path} />
+              <button type="submit" class="grc-btn grc-btn--secondary">Return to owner view</button>
+            </form>
+          </div>
+        )}
         <slot />
       </main>
     </div>

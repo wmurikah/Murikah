@@ -10,6 +10,9 @@ import {
   runDueSoonReminders,
 } from './lib/grc/notify/reminders';
 import { runEvidenceMigration } from './lib/grc/storage/migrate';
+import { runEvidencePurge } from './lib/grc/storage/purge';
+import { anchorAuditLog } from './lib/grc/repos/auditAnchor';
+import { runRecordedJob } from './lib/grc/repos/scheduledJobs';
 import { shouldRunDailyMaintenance } from './lib/grc/schedule';
 
 import { systemClock } from './lib/shared/time';
@@ -53,20 +56,32 @@ export default {
         try {
           const grcEnv = getGrcEnv();
           const grcDb = await getGrcDb(grcEnv);
-          await runGrcDispatch(grcDb, getGrcDeliveryEnv(), grcEnv.sessionSecret, systemClock, {
-            limit: 200,
-          });
-          if (shouldRunDailyMaintenance(controller.scheduledTime)) {
-            await updateOverdueStatuses(grcDb);
-            await runStaleReminders(grcDb, systemClock);
-            await runDueSoonReminders(grcDb, systemClock);
-            await runOverdueReminders(grcDb, systemClock);
-            // Migrate a batch of Drive-backed evidence to R2 (skipping legal
-            // holds). A no-op until both R2 and the Drive credential are set.
-            await runEvidenceMigration(grcDb, 25);
-          }
-        } catch {
-          // best-effort GRC maintenance
+          await runRecordedJob(grcDb, 'notification-dispatch', () =>
+            runGrcDispatch(grcDb, getGrcDeliveryEnv(), grcEnv.sessionSecret, systemClock, {
+              limit: 200,
+            }),
+          );
+          await runRecordedJob(grcDb, 'audit-log-anchor', () => anchorAuditLog(grcDb));
+          if (!shouldRunDailyMaintenance(controller.scheduledTime)) return;
+
+          await runRecordedJob(grcDb, 'overdue-statuses', () => updateOverdueStatuses(grcDb));
+          await runRecordedJob(grcDb, 'stale-reminders', () =>
+            runStaleReminders(grcDb, systemClock),
+          );
+          await runRecordedJob(grcDb, 'due-soon-reminders', () =>
+            runDueSoonReminders(grcDb, systemClock),
+          );
+          await runRecordedJob(grcDb, 'overdue-reminders', () =>
+            runOverdueReminders(grcDb, systemClock),
+          );
+          await runRecordedJob(grcDb, 'evidence-migration', () => runEvidenceMigration(grcDb, 25));
+          await runRecordedJob(grcDb, 'evidence-purge', () =>
+            runEvidencePurge(grcDb, new Date(controller.scheduledTime), 50),
+          );
+        } catch (error) {
+          // Database/bootstrap failures cannot be recorded in scheduled_jobs,
+          // but must still reach Cloudflare observability.
+          console.error('[grc.scheduled.bootstrap]', error);
         }
       })(),
     );

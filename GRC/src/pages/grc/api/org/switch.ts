@@ -14,6 +14,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { resolveActingContext } from '@grc/repos/orgContext';
 import { createActingCookie } from '@grc/auth/actingOrg';
+import { clearRolePreviewCookie } from '@grc/auth/rolePreview';
 import { writeAuditLog } from '@grc/repos/audit';
 import { GRC_PLATFORM_PATH } from '@grc/routing';
 
@@ -67,5 +68,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // Continue: the switch still applies.
   }
 
-  return new Response(null, { status: 303, headers: { location: '/', 'set-cookie': cookie } });
+  const headers = new Headers({ location: '/' });
+  headers.append('set-cookie', cookie);
+  headers.append('set-cookie', clearRolePreviewCookie(secure));
+  return new Response(null, { status: 303, headers });
 };

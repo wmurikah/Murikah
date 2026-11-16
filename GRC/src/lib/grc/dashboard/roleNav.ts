@@ -130,6 +130,7 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     reports: hasPerm(ctx, 'REPORTS.view') || BOARD_ROLES.includes(ctx.roleCode) || isAdmin(ctx),
     analytics: ctx.hasAi && (hasPerm(ctx, 'WORK_PAPERS.view') || hasPerm(ctx, 'REPORTS.view')),
     setup: isAdmin(ctx),
+    auditLog: hasPerm(ctx, 'AUDIT_LOG.view') || isAdmin(ctx),
   };
 
   const audit: NavItemDef[] = [];
@@ -196,6 +197,9 @@ export function buildNav(ctx: NavContext): NavGroupDef[] {
     );
     if (ctx.hasAi) configuration.push({ label: 'AI settings', href: '/settings/ai', icon: 'ai' });
     configuration.push({ label: 'All settings', href: '/settings', icon: 'setup' });
+  }
+  if (show.auditLog) {
+    configuration.push({ label: 'Audit history', href: '/audit-history', icon: 'audit' });
   }
   // Provisioning a customer organisation is the platform owner's, and it stayed
   // reachable only from the settings grid. It has its own group here, so the two

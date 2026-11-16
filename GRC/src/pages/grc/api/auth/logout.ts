@@ -9,6 +9,7 @@ import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { readSessionId, clearSession } from '@grc/auth/session';
+import { clearRolePreviewCookie } from '@grc/auth/rolePreview';
 import { deleteSession } from '@grc/repos/session';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -23,8 +24,8 @@ export const POST: APIRoute = async ({ request }) => {
   } catch {
     // Even if the delete fails, clear the cookie and sign the user out locally.
   }
-  return new Response(null, {
-    status: 303,
-    headers: { location: '/login', 'set-cookie': clearSession(secure) },
-  });
+  const headers = new Headers({ location: '/login' });
+  headers.append('set-cookie', clearSession(secure));
+  headers.append('set-cookie', clearRolePreviewCookie(secure));
+  return new Response(null, { status: 303, headers });
 };

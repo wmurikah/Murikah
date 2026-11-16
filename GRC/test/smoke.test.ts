@@ -1594,6 +1594,40 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'role-preview/set.ts',
+    title: 'the platform owner starts a read-only auditor preview',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'ROLE_PREVIEW.start' AND entity_id = 'AUDITOR'`,
+        )
+        .get() as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'starting a role preview must be audited');
+    },
+    method: 'POST',
+    path: () => '/api/role-preview/set',
+    form: () => ({ role_code: 'AUDITOR', affiliate_code: SMOKE.affiliateCode, next: '/' }),
+  },
+  {
+    endpoint: 'role-preview/clear.ts',
+    title: 'the platform owner returns from role preview',
+    expect: 'success',
+    verify: (db) => {
+      const r = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_log
+            WHERE action = 'ROLE_PREVIEW.end' AND entity_id = 'AUDITOR'`,
+        )
+        .get() as { n: number | bigint };
+      assert.ok(Number(r.n) >= 1, 'ending a role preview must be audited');
+    },
+    method: 'POST',
+    path: () => '/api/role-preview/clear',
+    form: () => ({ next: '/' }),
+  },
+  {
     // No setup wall (Build Prompt 37): backup codes are generated from
     // account security, hashes stored for verification, sealed plaintext
     // kept to show once.
@@ -1939,6 +1973,32 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
       // Back inside Hass for the page crawl and the mutation steps below.
       await enterInstance();
+    });
+
+    await t.test('role preview changes the shell and cannot mutate live data', async () => {
+      const started = await server.request('POST', '/api/role-preview/set', {
+        role_code: 'JUNIOR_STAFF',
+        affiliate_code: SMOKE.affiliateCode,
+        next: '/',
+      });
+      assert.equal(started.status, 303, `preview start answered ${started.status}`);
+      assert.equal(String(started.headers.location ?? ''), '/', 'preview returns to the same page');
+
+      const preview = await server.get('/');
+      assert.equal(preview.status, 200, `preview dashboard answered ${preview.status}`);
+      assert.ok(preview.body.includes('Read-only preview:'), 'the shell must identify preview mode');
+      assert.ok(preview.body.includes('Junior Staff'), 'the effective role must be visible');
+
+      const write = await server.request('POST', '/api/work-papers', {
+        title: 'This must not be created',
+      });
+      assert.equal(write.status, 403, 'all ordinary mutations must be blocked during preview');
+      assert.ok(write.body.includes('role_preview_read_only'), 'the refusal explains preview mode');
+
+      const cleared = await server.request('POST', '/api/role-preview/clear', { next: '/' });
+      assert.equal(cleared.status, 303, `preview clear answered ${cleared.status}`);
+      const owner = await server.get('/');
+      assert.ok(!owner.body.includes('Read-only preview:'), 'owner access returns after clearing');
     });
 
     // An access change must reach a session that is already open, on its very
@@ -2313,7 +2373,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         const deliberate503 = res.status === 503 && res.body.trimStart().startsWith('{');
         assert.ok(
           res.status < 500 || deliberate503,
-          `${step.method} ${path} answered ${res.status}: ${res.body.slice(0, 300)}`,
+          `${step.method} ${path} answered ${res.status}: ${res.body.slice(0, 300)}\n${server.log.slice(-1200)}`,
         );
         if (step.capture) {
           const location = String(res.headers.location ?? '');
@@ -3832,7 +3892,7 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       );
       const released = await server.request('POST', '/api/auditee-responses/submit', {
         work_paper_id: id,
-        management_response: 'We accept the finding. Monthly review starts in April.',
+        management_response: 'We accept the observation. Monthly review starts in April.',
       });
       const releasedAt = decodeURIComponent(String(released.headers.location ?? ''));
       assert.ok(!/[?&]error=/.test(releasedAt), `the release must be accepted, got ${releasedAt}`);

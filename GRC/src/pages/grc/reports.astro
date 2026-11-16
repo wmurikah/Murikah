@@ -291,14 +291,26 @@ const visibleStatuses = STATUS_OPTIONS.filter(
               Preview
             </button>
             {canExport && (
-              <button
-                type="submit"
-                class="grc-btn grc-btn--secondary"
-                formmethod="post"
-                formaction="/api/reports/export"
-              >
-                Download as Word
-              </button>
+              <>
+                {[
+                  ['docx', 'Word'],
+                  ['xlsx', 'Excel'],
+                  ['csv', 'CSV'],
+                  ['pdf', 'PDF'],
+                  ['svg', 'Image'],
+                ].map(([format, label]) => (
+                  <button
+                    type="submit"
+                    name="format"
+                    value={format}
+                    class="grc-btn grc-btn--secondary"
+                    formmethod="post"
+                    formaction="/api/reports/export"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </>
             )}
           </div>
         </form>
