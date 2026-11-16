@@ -13,7 +13,8 @@
  */
 import { SignJWT, jwtVerify } from 'jose';
 
-export const GRC_ACTING_COOKIE = 'grc_acting_org';
+export const GRC_ACTING_COOKIE = '__Host-grc_acting_org';
+export const GRC_ACTING_COOKIE_LEGACY = 'grc_acting_org';
 const MAX_AGE_SECONDS = 12 * 60 * 60; // matches the session
 
 function keyFromSecret(secret: string): Uint8Array {
@@ -36,7 +37,8 @@ function readCookie(request: Request, name: string): string | null {
 
 /** Read and verify the acting-org cookie, returning the organization id or null. */
 export async function readActingOrg(request: Request, secret: string): Promise<string | null> {
-  const token = readCookie(request, GRC_ACTING_COOKIE);
+  const token =
+    readCookie(request, GRC_ACTING_COOKIE) ?? readCookie(request, GRC_ACTING_COOKIE_LEGACY);
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, keyFromSecret(secret), { algorithms: ['HS256'] });
@@ -58,7 +60,8 @@ export async function createActingCookie(
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(keyFromSecret(secret));
   const secureAttr = secure ? '; Secure' : '';
-  return `${GRC_ACTING_COOKIE}=${token}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
+  const name = secure ? GRC_ACTING_COOKIE : GRC_ACTING_COOKIE_LEGACY;
+  return `${name}=${token}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
 }
 
 /**
@@ -68,5 +71,14 @@ export async function createActingCookie(
  */
 export function clearActingCookie(secure: boolean): string {
   const secureAttr = secure ? '; Secure' : '';
-  return `${GRC_ACTING_COOKIE}=; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=0`;
+  const name = secure ? GRC_ACTING_COOKIE : GRC_ACTING_COOKIE_LEGACY;
+  return `${name}=; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+export function clearActingCookies(secure: boolean): string[] {
+  if (!secure) return [clearActingCookie(false)];
+  return [
+    clearActingCookie(true),
+    `${GRC_ACTING_COOKIE_LEGACY}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+  ];
 }

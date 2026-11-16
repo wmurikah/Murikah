@@ -124,13 +124,22 @@ const rateTone =
 
         <section class="grc-panel">
           <h2>Six-month trend</h2>
-          <div class="grc-tablewrap">
+          <div
+            class="grc-tablewrap"
+            tabindex="0"
+            role="region"
+            aria-label="Scrollable six-month creation trend"
+          >
             <table class="grc-table" aria-label="Six-month creation trend">
               <thead>
                 <tr>
-                  <th>Month</th>
-                  <th class="grc-num">Work papers</th>
-                  <th class="grc-num">Action plans</th>
+                  <th scope="col">Month</th>
+                  <th scope="col" class="grc-num">
+                    Work papers
+                  </th>
+                  <th scope="col" class="grc-num">
+                    Action plans
+                  </th>
                 </tr>
               </thead>
               <tbody>

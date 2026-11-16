@@ -43,13 +43,15 @@
   --grc-status-impl: #2e7d51; /* green */
   --grc-status-notdue: #2563a6; /* blue */
 
-  /* Type scale, matching engr's tightened scale. */
-  --grc-fs-body: 13px;
-  --grc-fs-small: 12px;
-  --grc-fs-caption: 11.5px;
-  --grc-fs-micro: 11px;
-  --grc-fs-h1: 20px;
-  --grc-fs-h2: 15px;
+  /* A relative type scale honours browser/OS text preferences and reflows at
+     200% zoom. Keep screen typography in rem; print and SVG chart coordinates
+     may retain physical/graphic units in their own contexts. */
+  --grc-fs-body: 1rem;
+  --grc-fs-small: 0.875rem;
+  --grc-fs-caption: 0.8125rem;
+  --grc-fs-micro: 0.75rem;
+  --grc-fs-h1: 1.5rem;
+  --grc-fs-h2: 1.125rem;
 
   /* Spacing rhythm (8px based) and radii. */
   --grc-s1: 0.25rem;
@@ -289,6 +291,18 @@
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 0.65rem;
   background: rgb(255 255 255 / 5%);
+}
+.grc-rolepreview > summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+.grc-rolepreview[open] > summary {
+  margin-bottom: 0.55rem;
+}
+.grc-rolepreview__status {
+  margin: 0.45rem 0 0;
+  color: var(--grc-sidebar-muted, #bcc6da);
+  font-size: var(--grc-fs-caption);
 }
 
 .grc-rolepreview__label {
@@ -891,6 +905,35 @@
   outline-offset: 1px;
   border-color: var(--grc-gold-deep);
 }
+.grc-input:user-invalid {
+  border-color: var(--grc-danger, #a53025);
+}
+.grc-password-control {
+  position: relative;
+}
+.grc-password-control .grc-input {
+  padding-right: 4.75rem;
+}
+.grc-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  min-height: 2rem;
+  padding: 0 0.55rem;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--grc-radius-sm);
+  background: transparent;
+  color: var(--grc-navy-2);
+  font: inherit;
+  font-size: var(--grc-fs-caption);
+  font-weight: 700;
+  cursor: pointer;
+}
+.grc-password-toggle:focus-visible {
+  outline: 2px solid var(--grc-gold-deep);
+  outline-offset: 1px;
+}
 .grc-authcard .grc-btn--primary {
   width: 100%;
   min-height: 2.75rem;
@@ -935,6 +978,10 @@
   background: var(--grc-surface);
   box-shadow: var(--grc-shadow);
 }
+.grc-tablewrap:focus-visible {
+  outline: 2px solid var(--grc-gold-deep);
+  outline-offset: 2px;
+}
 .grc-table {
   width: 100%;
   border-collapse: collapse;
@@ -970,6 +1017,12 @@
   letter-spacing: var(--grc-tracking);
   color: var(--grc-muted);
   background: var(--grc-stone);
+}
+.grc-tablewrap .grc-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--grc-surface);
 }
 .grc-table tbody tr:last-child td {
   border-bottom: 0;
@@ -1965,7 +2018,7 @@
   margin-bottom: 16px;
 }
 .grc-snap__ref {
-  font-size: 12.5px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--sn-muted);
@@ -1982,7 +2035,7 @@
    questions the reader has not asked yet. */
 .grc-snap__title {
   margin: 0;
-  font-size: 23px;
+  font-size: 1.5rem;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.01em;
@@ -2006,7 +2059,7 @@
   border: 1px solid var(--sn-border, #ece7db);
   border-radius: 999px;
   background: transparent;
-  font-size: 12px;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--sn-muted, #71767f);
   white-space: nowrap;
@@ -2025,7 +2078,7 @@
 }
 .grc-snap__label {
   margin: 0 0 8px;
-  font-size: 11.5px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2033,7 +2086,7 @@
 }
 .grc-snap__body {
   margin: 0;
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.6;
   color: var(--sn-ink);
 }
@@ -2054,11 +2107,11 @@
   display: grid;
   gap: 8px;
   margin: 0;
-  font-size: 15px;
+  font-size: 1rem;
 }
 .grc-snap__facts dt {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2073,20 +2126,20 @@
    a fact rather than a warning, because nothing has gone wrong. */
 .grc-snap__empty {
   margin: 0;
-  font-size: 15px;
+  font-size: 1rem;
   font-style: italic;
   color: var(--sn-muted);
 }
 .grc-snap__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 0.9375rem;
 }
 .grc-snap__table th {
   text-align: left;
   padding: 0 16px 8px 0;
   border-bottom: 1px solid var(--sn-divider);
-  font-size: 11.5px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2151,14 +2204,14 @@
 }
 .grc-snap__evidence-name {
   color: var(--sn-ink);
-  font-size: 14px;
+  font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 .grc-snap__evidence-detail {
   color: var(--sn-muted);
-  font-size: 12px;
+  font-size: 0.875rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }

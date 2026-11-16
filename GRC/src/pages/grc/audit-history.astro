@@ -106,15 +106,20 @@ const anchorSummary = anchor as AuditAnchorSummary | null;
               No matching activity.
             </p>
           ) : (
-            <div class="grc-tablewrap">
-              <table class="grc-table">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label="Scrollable audit history"
+            >
+              <table class="grc-table" aria-label="Audit history">
                 <thead>
                   <tr>
-                    <th>When</th>
-                    <th>Actor</th>
-                    <th>Action</th>
-                    <th>Entity</th>
-                    <th>Details</th>
+                    <th scope="col">When</th>
+                    <th scope="col">Actor</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Entity</th>
+                    <th scope="col">Details</th>
                   </tr>
                 </thead>
                 <tbody>

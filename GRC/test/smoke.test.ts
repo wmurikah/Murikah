@@ -1594,6 +1594,13 @@ const MUTATION_STEPS: MutationStep[] = [
     }),
   },
   {
+    endpoint: 'role-preview/options.ts',
+    title: 'the platform owner loads role-preview options on demand',
+    expect: 'success',
+    method: 'GET',
+    path: () => '/api/role-preview/options',
+  },
+  {
     endpoint: 'role-preview/set.ts',
     title: 'the platform owner starts a read-only auditor preview',
     expect: 'success',
@@ -1986,7 +1993,10 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
 
       const preview = await server.get('/');
       assert.equal(preview.status, 200, `preview dashboard answered ${preview.status}`);
-      assert.ok(preview.body.includes('Read-only preview:'), 'the shell must identify preview mode');
+      assert.ok(
+        preview.body.includes('Read-only preview:'),
+        'the shell must identify preview mode',
+      );
       assert.ok(preview.body.includes('Junior Staff'), 'the effective role must be visible');
 
       const write = await server.request('POST', '/api/work-papers', {
@@ -3259,12 +3269,6 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
       const db = server.database;
       assert.ok(db, 'the fake database is reachable for verification');
 
-      const countFrom = (body: string, key: string): number => {
-        const m = new RegExp(`data-count-key="${key}"[^>]*>([\\s\\S]*?)</sup>`).exec(body);
-        if (!m) return -1;
-        const digits = m[1].replace(/<[^>]*>/g, '').match(/\d+/);
-        return digits ? Number(digits[0]) : 0;
-      };
       const hidden = (body: string, key: string): boolean =>
         new RegExp(`data-count-key="${key}"[^>]*hidden`).test(body) ||
         new RegExp(`hidden[^>]*data-count-key="${key}"`).test(body);
@@ -3283,8 +3287,15 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         ).n,
       );
       const auditorPage = await server.get('/work-papers');
+      assert.equal(auditorPage.status, 200, 'the auditor work-paper page loads');
+      assert.ok(
+        hidden(auditorPage.body, 'pendingReview'),
+        'the shell does not block first paint on a count query',
+      );
+      const auditorJson = await server.request('GET', '/api/sidebar-counts');
+      const auditorCounts = JSON.parse(auditorJson.body) as Record<string, number>;
       assert.equal(
-        countFrom(auditorPage.body, 'pendingReview'),
+        auditorCounts.pendingReview,
         mine,
         'an auditor is badged with their own work, not the organisation’s',
       );
@@ -3302,16 +3313,17 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         ).n,
       );
       const reviewerPage = await server.get('/work-papers');
-      const reviewerCount = countFrom(reviewerPage.body, 'pendingReview');
+      assert.ok(hidden(reviewerPage.body, 'pendingReview'), 'the initial reviewer bubble is empty');
+      const json = await server.request('GET', '/api/sidebar-counts');
+      assert.equal(json.status, 200, `the counts endpoint answered ${json.status}`);
+      const counts = JSON.parse(json.body) as Record<string, number>;
+      const reviewerCount = counts.pendingReview;
       assert.ok(
         reviewerCount >= waiting,
         `a reviewer is badged with the queue waiting on them, got ${reviewerCount} for ${waiting} waiting`,
       );
 
       // And the endpoint the live refresh polls answers the same shape.
-      const json = await server.request('GET', '/api/sidebar-counts');
-      assert.equal(json.status, 200, `the counts endpoint answered ${json.status}`);
-      const counts = JSON.parse(json.body) as Record<string, number>;
       assert.equal(typeof counts.pendingReview, 'number', 'the badge count is served');
       assert.equal(typeof counts.myRequirements, 'number', 'and the requirements one beside it');
 
@@ -3332,16 +3344,17 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
             .get(SMOKE.orgId, SMOKE.auditeeId) as { n: number | bigint }
         ).n,
       );
+      const auditeeJson = await server.request('GET', '/api/sidebar-counts');
+      assert.equal(auditeeJson.status, 200, 'the auditee counts endpoint answers');
+      const auditeeCounts = JSON.parse(auditeeJson.body) as Record<string, number>;
       if (owned === 0) {
         assert.ok(
           hidden(auditeePage.body, 'myRequirements'),
           'nothing pending means no bubble, not a zero',
         );
+        assert.equal(auditeeCounts.myRequirements, 0, 'the live count keeps the bubble hidden');
       } else {
-        assert.ok(
-          !hidden(auditeePage.body, 'myRequirements'),
-          'something pending means the bubble shows',
-        );
+        assert.equal(auditeeCounts.myRequirements, owned, 'the live count supplies the bubble');
       }
 
       await signInAsOwnerInsideHass();

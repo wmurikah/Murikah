@@ -109,7 +109,12 @@ const rate = stats ? hitRate(stats.total) : 0;
             : 'Nothing is bound, so entries are held in this isolate only and every lifetime is clamped to a few seconds. Bind a KV namespace to enable the shared cache.'}
         </p>
 
-        <div class="grc-tablewrap">
+        <div
+          class="grc-tablewrap"
+          tabindex="0"
+          role="region"
+          aria-label="Scrollable cache counters"
+        >
           <table class="grc-table" aria-label="Cache counters">
             <thead>
               <tr>

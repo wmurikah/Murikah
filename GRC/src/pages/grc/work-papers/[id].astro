@@ -468,15 +468,20 @@ const findingSource: FindingSource | null = wp
                 No requirements recorded.
               </p>
             ) : (
-              <div class="grc-tablewrap">
-                <table class="grc-table">
+              <div
+                class="grc-tablewrap"
+                tabindex="0"
+                role="region"
+                aria-label="Scrollable information requirements"
+              >
+                <table class="grc-table" aria-label="Information requirements">
                   <thead>
                     <tr>
-                      <th>Information requested</th>
-                      <th>Date requested</th>
-                      <th>Date received</th>
-                      <th>Status</th>
-                      {canManageReq && <th>Update</th>}
+                      <th scope="col">Information requested</th>
+                      <th scope="col">Date requested</th>
+                      <th scope="col">Date received</th>
+                      <th scope="col">Status</th>
+                      {canManageReq && <th scope="col">Update</th>}
                     </tr>
                   </thead>
                   <tbody>

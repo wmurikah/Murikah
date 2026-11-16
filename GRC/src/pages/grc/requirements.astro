@@ -212,7 +212,12 @@ const error = p.get('error');
             </p>
           </div>
         ) : (
-          <div class="grc-tablewrap">
+          <div
+            class="grc-tablewrap"
+            tabindex="0"
+            role="region"
+            aria-label="Scrollable requirements"
+          >
             <table class="grc-table" aria-label="Requirements">
               <thead>
                 <tr>

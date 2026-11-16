@@ -19,8 +19,6 @@ interface Props {
 }
 const { card } = Astro.props;
 const filled = (value: string | null | undefined): boolean => String(value ?? '').trim() !== '';
-const meaningful = (value: string | null | undefined): boolean =>
-  filled(value) && String(value).trim() !== '-';
 ---
 
 <section class="grc-snap__section" data-card={card.key}>
@@ -61,8 +59,13 @@ const meaningful = (value: string | null | undefined): boolean =>
             ))}
           </ul>
         ) : (
-          <div class="grc-tablewrap grc-tablewrap--fit">
-            <table class="grc-snap__table">
+          <div
+            class="grc-tablewrap grc-tablewrap--fit"
+            tabindex="0"
+            role="region"
+            aria-label={`Scrollable ${card.heading} table`}
+          >
+            <table class="grc-snap__table" aria-label={`${card.heading} table`}>
               <thead>
                 <tr>
                   {body.columns.map((c) => (

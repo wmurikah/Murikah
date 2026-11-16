@@ -144,16 +144,21 @@ const failed = Astro.url.searchParams.get('error');
                 </p>
               </div>
             ) : (
-              <div class="grc-tablewrap">
+              <div
+                class="grc-tablewrap"
+                tabindex="0"
+                role="region"
+                aria-label="Scrollable observations shared with you"
+              >
                 <table class="grc-table" aria-label="Observations shared with you">
                   <thead>
                     <tr>
-                      <th>Reference</th>
-                      <th>Observation</th>
-                      <th>Risk</th>
-                      <th>Round</th>
-                      <th>Respond by</th>
-                      <th>State</th>
+                      <th scope="col">Reference</th>
+                      <th scope="col">Observation</th>
+                      <th scope="col">Risk</th>
+                      <th scope="col">Round</th>
+                      <th scope="col">Respond by</th>
+                      <th scope="col">State</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -214,16 +219,21 @@ const failed = Astro.url.searchParams.get('error');
                 </p>
               </div>
             ) : (
-              <div class="grc-tablewrap">
+              <div
+                class="grc-tablewrap"
+                tabindex="0"
+                role="region"
+                aria-label="Scrollable responses awaiting review"
+              >
                 <table class="grc-table" aria-label="Responses awaiting review">
                   <thead>
                     <tr>
-                      <th>Reference</th>
-                      <th>Observation</th>
-                      <th>Round</th>
-                      <th>Submitted by</th>
-                      <th>Submitted</th>
-                      <th />
+                      <th scope="col">Reference</th>
+                      <th scope="col">Observation</th>
+                      <th scope="col">Round</th>
+                      <th scope="col">Submitted by</th>
+                      <th scope="col">Submitted</th>
+                      <th scope="col" />
                     </tr>
                   </thead>
                   <tbody>

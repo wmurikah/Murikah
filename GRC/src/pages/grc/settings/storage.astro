@@ -268,12 +268,17 @@ const activeName =
                     what a picker on SharePoint or Drive actually needs.
                   */}
                   {listing && folders.length > 0 && (
-                    <div class="grc-tablewrap">
-                      <table class="grc-table">
+                    <div
+                      class="grc-tablewrap"
+                      tabindex="0"
+                      role="region"
+                      aria-label={`Scrollable ${def.folderLabel} storage folders`}
+                    >
+                      <table class="grc-table" aria-label={`${def.folderLabel} storage folders`}>
                         <thead>
                           <tr>
-                            <th>{def.folderLabel}</th>
-                            <th>Choose</th>
+                            <th scope="col">{def.folderLabel}</th>
+                            <th scope="col">Choose</th>
                           </tr>
                         </thead>
                         <tbody>

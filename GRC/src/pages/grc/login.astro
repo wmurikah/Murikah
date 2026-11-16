@@ -25,7 +25,7 @@ const next = safeNextPath(Astro.url.searchParams.get('next'));
 
   {
     failed && (
-      <p class="grc-error" role="alert" style="margin-bottom:1rem">
+      <p id="login-error" class="grc-error" role="alert" tabindex="-1" style="margin-bottom:1rem">
         That email and password did not match. Please try again.
       </p>
     )
@@ -56,25 +56,55 @@ const next = safeNextPath(Astro.url.searchParams.get('next'));
         name="email"
         class="grc-input"
         autocomplete="username"
+        inputmode="email"
+        enterkeyhint="next"
+        spellcheck="false"
         required
         aria-invalid={failed ? 'true' : undefined}
+        aria-describedby={failed ? 'login-error' : undefined}
       />
     </div>
     <div class="grc-field">
       <label for="password">Password</label>
-      <input
-        type="password"
-        id="password"
-        name="password"
-        class="grc-input"
-        autocomplete="current-password"
-        required
-        aria-invalid={failed ? 'true' : undefined}
-      />
+      <div class="grc-password-control">
+        <input
+          type="password"
+          id="password"
+          name="password"
+          class="grc-input"
+          autocomplete="current-password"
+          enterkeyhint="go"
+          required
+          aria-invalid={failed ? 'true' : undefined}
+          aria-describedby={failed ? 'login-error' : undefined}
+        />
+        <button
+          type="button"
+          class="grc-password-toggle"
+          aria-controls="password"
+          aria-pressed="false"
+        >
+          Show
+        </button>
+      </div>
     </div>
     <button type="submit" class="grc-btn grc-btn--primary">Sign in</button>
   </form>
 
   <p class="grc-authmeta"><a href="/forgot-password">Forgot your password?</a></p>
   <p class="grc-authmeta">Trouble signing in? Contact your organisation's audit administrator.</p>
+
+  <script>
+    const password = document.getElementById('password');
+    const toggle = document.querySelector<HTMLButtonElement>('.grc-password-toggle');
+    toggle?.addEventListener('click', () => {
+      if (!(password instanceof HTMLInputElement)) return;
+      const showing = password.type === 'text';
+      password.type = showing ? 'password' : 'text';
+      toggle.textContent = showing ? 'Show' : 'Hide';
+      toggle.setAttribute('aria-pressed', showing ? 'false' : 'true');
+      password.focus({ preventScroll: true });
+    });
+    document.getElementById('login-error')?.focus({ preventScroll: true });
+  </script>
 </GrcAuthLayout>

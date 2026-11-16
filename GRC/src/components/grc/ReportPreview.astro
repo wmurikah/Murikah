@@ -96,12 +96,17 @@ const cellClass = (c: Cell): string =>
                 ))}
               </p>
             )}
-            <div class="grc-tablewrap">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label="Scrollable report table"
+            >
               <table class="grc-report__table">
                 <thead>
                   <tr>
                     {block.columns.map((c) => (
-                      <th>{c}</th>
+                      <th scope="col">{c}</th>
                     ))}
                   </tr>
                 </thead>
@@ -122,12 +127,17 @@ const cellClass = (c: Cell): string =>
       return (
         <section class="grc-report__section">
           {block.title && <h3 class="grc-report__h">{block.title}</h3>}
-          <div class="grc-tablewrap">
+          <div
+            class="grc-tablewrap"
+            tabindex="0"
+            role="region"
+            aria-label="Scrollable report table"
+          >
             <table class="grc-report__table">
               <thead>
                 <tr>
                   {block.columns.map((c) => (
-                    <th>{c}</th>
+                    <th scope="col">{c}</th>
                   ))}
                 </tr>
               </thead>

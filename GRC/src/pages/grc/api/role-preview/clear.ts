@@ -3,7 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
-import { clearRolePreviewCookie } from '@grc/auth/rolePreview';
+import { clearRolePreviewCookies } from '@grc/auth/rolePreview';
 import { safeNextPath } from '@grc/routing';
 import { writeAuditLog } from '@grc/repos/audit';
 
@@ -28,8 +28,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
   const secure = new URL(request.url).protocol === 'https:';
+  const headers = new Headers({ location: next });
+  for (const value of clearRolePreviewCookies(secure)) headers.append('set-cookie', value);
   return new Response(null, {
     status: 303,
-    headers: { location: next, 'set-cookie': clearRolePreviewCookie(secure) },
+    headers,
   });
 };
