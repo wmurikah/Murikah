@@ -1,21 +1,17 @@
 # GRC platform: deploy and runtime configuration
 
-The GRC platform is a second product in this repo, served at `grc.murikah.com`
-by the same Cloudflare Worker that serves Engineering Rhythm and the marketing
-site. It shares the tooling and the Murikah design system; its data, routes and
-session are separate.
+The GRC platform is an independently built product in this repository. It is
+served at `grc.murikah.com` by the `murikah-grc` Cloudflare Worker. Its build,
+runtime bindings, scheduled jobs, data, routes and session are separate from
+Engineering Rhythm, HassCMS and the public website.
 
-## How the worker routes by host
+## How the GRC worker routes by host
 
 `src/worker.ts` decides the branch by host, before the Astro adapter resolves a
 route:
 
 - `grc.murikah.com` (and `*.grc.murikah.com`, and `grc.localhost` in dev): the
   GRC app, rewritten internally to the `/grc/*` routes under `src/pages/grc/**`.
-- `engr.murikah.com`: Engineering Rhythm, unchanged.
-- `murikah.com`: the marketing site; a stray `/grc` path is redirected to the
-  subdomain, exactly as `/engr` is.
-- `www.murikah.com`: redirected to the apex.
 - any other host: a neutral 404.
 
 The session guard for `/grc/*` runs in `src/middleware.ts`, separate from engr's.
@@ -46,21 +42,41 @@ Generate a session secret with:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
+For a Git-connected Cloudflare build, add the same three values under **Workers
+& Pages → murikah-grc → Settings → Variables and Secrets → Production**. Add
+each value as a **Secret**, not as a build variable. `keep_vars` is enabled in
+`wrangler.jsonc`, so a Wrangler deployment preserves these dashboard-managed
+runtime secrets. Never reuse the Engineering database URL, token or session
+secret.
+
 The GRC env accessor (`src/lib/grc/env.ts`) throws a clear error at runtime if any
 is missing, so the app fails loudly rather than running unconfigured. The
 marketing preview typechecks without them (they are optional in the env types).
+
+## Cloudflare build settings
+
+The standalone Git build uses:
+
+- Root directory: `/GRC`
+- Build command: `pnpm run build`
+- Deploy command: `pnpm exec wrangler deploy --config dist/server/wrangler.json`
+
+The generated `dist/server/wrangler.json` carries the Worker name
+`murikah-grc` and preserves runtime variables. Runtime secrets belong in the
+Worker's Production settings and must not be entered in the Git build-variable
+form or committed to this repository.
 
 ## Custom domain
 
 The operator points the custom domain at the worker:
 
-1. In the Cloudflare dashboard, add `grc.murikah.com` as a Custom Domain (or a
-   route) for the worker that serves this project.
+1. In the Cloudflare dashboard, add `grc.murikah.com` as a Custom Domain for the
+   `murikah-grc` Worker.
 2. No code change is needed: the worker already recognises the host and serves
-   the GRC app. Confirm on the deployed preview that `grc.murikah.com` shows the
-   sign-in and that `engr.murikah.com` and `murikah.com` are unaffected. Every
-   response carries `x-mrk-host` and `x-mrk-branch` (the grc branch is
-   `grc-app`) so the routing is observable with a plain `curl`.
+   the GRC app. Test first on `preview.grc.murikah.com`, then move the production
+   hostname after sign-in and database access succeed. Every response carries
+   `x-mrk-host` and `x-mrk-branch` (the GRC branch is `grc-app`) so routing is
+   observable with a plain `curl`.
 
 ## Schema
 
