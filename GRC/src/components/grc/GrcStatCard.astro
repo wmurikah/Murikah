@@ -1,0 +1,24 @@
+---
+import GrcIcon from './GrcIcon.astro';
+
+interface Props {
+  label: string;
+  value: number | string;
+  href?: string;
+  note?: string;
+  icon?: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+}
+const { label, value, href, note, icon = 'analytics', tone = 'neutral' } = Astro.props;
+const Tag = href ? 'a' : 'article';
+---
+
+<Tag
+  class:list={['grc-stat', `grc-stat--${tone}`, { 'grc-stat--link': Boolean(href) }]}
+  href={href}
+>
+  <span class="grc-stat__icon" aria-hidden="true"><GrcIcon name={icon} size={20} /></span>
+  <span class="grc-stat__label">{label}</span>
+  <strong class="grc-stat__value" data-stat-value>{value}</strong>
+  {note && <span class="grc-stat__note">{note}</span>}
+</Tag>

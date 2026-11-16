@@ -1,0 +1,15 @@
+---
+interface Props {
+  tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  pulse?: boolean;
+  label?: string;
+}
+const { tone = 'neutral', pulse = false, label } = Astro.props;
+---
+
+<span
+  class:list={['grc-badge', `grc-badge--${tone}`, { 'grc-badge--pulse': pulse }]}
+  aria-label={label}
+>
+  <slot />
+</span>

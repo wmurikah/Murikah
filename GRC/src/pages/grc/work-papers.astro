@@ -282,7 +282,12 @@ const submittable = rows.filter(canSubmitRow);
                 role="region"
                 aria-label="Scrollable observations"
               >
-                <table class="grc-table grc-table--responsive" aria-label="Observations">
+                <table
+                  class="grc-table grc-table--responsive"
+                  aria-label="Observations"
+                  data-enhance
+                  data-selectable
+                >
                   <thead>
                     <tr>
                       {submittable.length > 0 && (

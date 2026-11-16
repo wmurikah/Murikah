@@ -1,0 +1,38 @@
+---
+import GrcBadge from './GrcBadge.astro';
+
+export interface ActivityFeedItem {
+  label: string;
+  title: string;
+  href?: string;
+  meta?: string;
+  status?: string;
+}
+interface Props {
+  items: ActivityFeedItem[];
+  emptyText?: string;
+}
+const { items, emptyText = 'No recent activity.' } = Astro.props;
+---
+
+{
+  items.length === 0 ? (
+    <p class="grc-empty">{emptyText}</p>
+  ) : (
+    <ol class="grc-activity-feed">
+      {items.map((item) => (
+        <li class="grc-activity-feed__item">
+          <span class="grc-activity-feed__node" aria-hidden="true" />
+          <div class="grc-activity-feed__content">
+            <span class="grc-activity-feed__eyebrow">{item.label}</span>
+            {item.href ? <a href={item.href}>{item.title}</a> : <strong>{item.title}</strong>}
+            <div class="grc-activity-feed__meta">
+              {item.status && <GrcBadge>{item.status}</GrcBadge>}
+              {item.meta && <time>{item.meta}</time>}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}

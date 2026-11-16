@@ -1,0 +1,35 @@
+---
+interface Step {
+  label: string;
+  description?: string;
+}
+interface Props {
+  steps: Step[];
+  current: number;
+  label?: string;
+}
+const { steps, current, label = 'Workflow progress' } = Astro.props;
+---
+
+<ol class="grc-stepper" aria-label={label} style={`--step-count:${steps.length}`}>
+  {
+    steps.map((step, index) => {
+      const number = index + 1;
+      const state = number < current ? 'complete' : number === current ? 'current' : 'upcoming';
+      return (
+        <li
+          class:list={['grc-stepper__step', `is-${state}`]}
+          aria-current={state === 'current' ? 'step' : undefined}
+        >
+          <span class="grc-stepper__marker" aria-hidden="true">
+            {state === 'complete' ? '✓' : number}
+          </span>
+          <span class="grc-stepper__copy">
+            <strong>{step.label}</strong>
+            {step.description && <span>{step.description}</span>}
+          </span>
+        </li>
+      );
+    })
+  }
+</ol>

@@ -17,6 +17,13 @@ import GrcGroupedBar from '@/components/grc/GrcGroupedBar.astro';
 import GrcDonut from '@/components/grc/GrcDonut.astro';
 import GrcGroupedBars from '@/components/grc/GrcGroupedBars.astro';
 import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import GrcStatCard from '@/components/grc/GrcStatCard.astro';
+import GrcActivityFeed from '@/components/grc/GrcActivityFeed.astro';
+import GrcActivityHeatmap from '@/components/grc/GrcActivityHeatmap.astro';
+import GrcFunnelChart from '@/components/grc/GrcFunnelChart.astro';
+import GrcAreaChart from '@/components/grc/GrcAreaChart.astro';
+import GrcAlert from '@/components/grc/GrcAlert.astro';
+import GrcProductTour from '@/components/grc/GrcProductTour.astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { can } from '@grc/auth/rbac';
@@ -132,15 +139,39 @@ const riskClass = (r: string | null): string => {
       <h1>Dashboard</h1>
       <p class="grc-lead">Your internal audit workspace for {grc.organizationName}.</p>
     </div>
+    <GrcProductTour
+      steps={[
+        {
+          title: 'Find anything quickly',
+          body: 'Press Control or Command plus K anywhere to jump to a workflow or setting.',
+          icon: 'search',
+        },
+        {
+          title: 'Work from the counters',
+          body: 'Red sidebar badges identify work waiting for you. Open a group to see the exact queue.',
+          icon: 'clipboardcheck',
+        },
+        {
+          title: 'Inspect the assurance pipeline',
+          body: 'Dashboard charts show workflow stage, risk distribution, trends and recent activity, with accessible data behind every visual.',
+          icon: 'trend',
+        },
+        {
+          title: 'Shape and export every list',
+          body: 'Search, sort, change density, select rows and export CSV directly from enhanced tables.',
+          icon: 'chartreport',
+        },
+      ]}
+    />
   </div>
 
   <GrcAffiliateNotice subject="figures" />
 
   {
     passwordChanged && (
-      <p class="grc-notice" role="status" style="margin-bottom:1rem">
-        Your password has been changed.
-      </p>
+      <GrcAlert tone="success" title="Password updated" dismissible>
+        Your password has been changed successfully.
+      </GrcAlert>
     )
   }
 
@@ -159,33 +190,36 @@ const riskClass = (r: string | null): string => {
           <GrcErrorCard subject="The dashboard statistics" />
         ) : (
           <div class="grc-cards grc-cards--stats">
-            <a class="grc-card grc-card--link" href={stats.workPapers.href}>
-              <p class="grc-card__label">Work papers</p>
-              <p class="grc-card__count">{stats.workPapers.count}</p>
-              <p class="grc-card__note">View all</p>
-            </a>
-            <a class="grc-card grc-card--link" href={stats.pendingReview.href}>
-              <p class="grc-card__label">Pending review</p>
-              <p class="grc-card__count">{stats.pendingReview.count}</p>
-              <p class="grc-card__note">Submitted for review</p>
-            </a>
-            <a class="grc-card grc-card--link" href={stats.actionPlans.href}>
-              <p class="grc-card__label">Action plans</p>
-              <p class="grc-card__count">{stats.actionPlans.count}</p>
-              <p class="grc-card__note">View all</p>
-            </a>
-            <a
-              class:list={[
-                'grc-card',
-                'grc-card--link',
-                { 'grc-card--alert': stats.overdue.count > 0 },
-              ]}
+            <GrcStatCard
+              label="Work papers"
+              value={stats.workPapers.count}
+              href={stats.workPapers.href}
+              note="All observations in scope"
+              icon="filesearch"
+            />
+            <GrcStatCard
+              label="Pending review"
+              value={stats.pendingReview.count}
+              href={stats.pendingReview.href}
+              note="Submitted for review"
+              icon="clipboardcheck"
+              tone={stats.pendingReview.count > 0 ? 'warning' : 'neutral'}
+            />
+            <GrcStatCard
+              label="Action plans"
+              value={stats.actionPlans.count}
+              href={stats.actionPlans.href}
+              note="Implementation commitments"
+              icon="clipboardlist"
+            />
+            <GrcStatCard
+              label="Overdue"
+              value={stats.overdue.count}
               href={stats.overdue.href}
-            >
-              <p class="grc-card__label">Overdue</p>
-              <p class="grc-card__count">{stats.overdue.count}</p>
-              <p class="grc-card__note">Past due, not settled</p>
-            </a>
+              note="Past due and not settled"
+              icon="warning"
+              tone={stats.overdue.count > 0 ? 'danger' : 'success'}
+            />
           </div>
         )}
 
@@ -292,6 +326,28 @@ const riskClass = (r: string | null): string => {
                   emptyText={`No action plans for ${chartYear}.`}
                 />
               </div>
+              <div class="grc-chartcard">
+                <GrcFunnelChart
+                  title="Assurance workflow"
+                  description={`Current observations at each workflow stage for ${chartYear}.`}
+                  stages={charts.workflowFunnel}
+                />
+              </div>
+              <div class="grc-chartcard">
+                <GrcAreaChart
+                  title="High-risk observation trend"
+                  description="High and extreme risk observations created during the last six months."
+                  data={charts.highRiskTrend}
+                  valueHeading="Observations"
+                />
+              </div>
+              <div class="grc-chartcard grc-chartcard--wide">
+                <GrcActivityHeatmap
+                  title="Assurance activity"
+                  description="Recorded audit activity over the last 91 days. Focus any square for its exact date and count."
+                  data={charts.activityHeatmap}
+                />
+              </div>
             </div>
           </section>
         )}
@@ -387,19 +443,15 @@ const riskClass = (r: string | null): string => {
               No recent activity.
             </p>
           ) : (
-            <ul class="grc-dash-list grc-dash-list--activity">
-              {recent.map((r) => (
-                <li>
-                  <span class="grc-tag">
-                    {r.type === 'work_paper' ? 'Work paper' : 'Action plan'}
-                  </span>
-                  <a href={r.href}>{r.reference}</a>
-                  <span class="grc-dash-list__title">{r.title}</span>
-                  <span class="grc-pill">{statusLabel(labels, r.status)}</span>
-                  <span class="grc-dash-list__meta">{fmtDate(r.updatedAt)}</span>
-                </li>
-              ))}
-            </ul>
+            <GrcActivityFeed
+              items={recent.map((r) => ({
+                label: r.type === 'work_paper' ? 'Work paper' : 'Action plan',
+                title: `${r.reference} · ${r.title}`,
+                href: r.href,
+                status: statusLabel(labels, r.status),
+                meta: fmtDate(r.updatedAt),
+              }))}
+            />
           )}
         </section>
 
