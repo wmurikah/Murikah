@@ -302,7 +302,7 @@ test('default filters: all risks and statuses on, six-month range, executive typ
     NOW,
   );
   assert.equal(f.risks.length, 4);
-  assert.equal(f.statuses.length, 4);
+  assert.equal(f.statuses.length, 8);
   assert.equal(f.reportType, 'executive');
   assert.equal(f.dateTo, '2026-07-04');
   assert.equal(f.dateFrom, defaultDateRange(NOW).from);

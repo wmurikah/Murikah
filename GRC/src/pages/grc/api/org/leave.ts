@@ -11,6 +11,7 @@ import type { APIRoute } from 'astro';
 import { getGrcEnv } from '@grc/env';
 import { getDb } from '@grc/db';
 import { clearActingCookie } from '@grc/auth/actingOrg';
+import { clearRolePreviewCookie } from '@grc/auth/rolePreview';
 import { writeAuditLog } from '@grc/repos/audit';
 import { GRC_PLATFORM_PATH } from '@grc/routing';
 
@@ -38,8 +39,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const secure = new URL(request.url).protocol === 'https:';
-  return new Response(null, {
-    status: 303,
-    headers: { location: GRC_PLATFORM_PATH, 'set-cookie': clearActingCookie(secure) },
-  });
+  const headers = new Headers({ location: GRC_PLATFORM_PATH });
+  headers.append('set-cookie', clearActingCookie(secure));
+  headers.append('set-cookie', clearRolePreviewCookie(secure));
+  return new Response(null, { status: 303, headers });
 };

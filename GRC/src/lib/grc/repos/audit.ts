@@ -3,12 +3,10 @@
  * transition, an organisation switch) records a row in `audit_log`, stamped with
  * the actor and the time.
  *
- * Column names come from the typed schema layer (@grc/schema/columns). The live
- * `audit_log` has no organization_id of its own: the acting organisation and any
- * human detail are preserved in `new_data` so nothing is lost, and `log_id` is
- * assigned by the database. `buildAuditStatement` returns the same insert as an
- * InStatement so a caller can include it in an atomic batch alongside the change
- * it records.
+ * Every row has an application-generated id and a first-class organisation id.
+ * The latter makes tenant scoping and time-range searches enforceable without
+ * parsing JSON. `buildAuditStatement` returns the same insert as an InStatement
+ * so a caller can include it in an atomic batch alongside the change it records.
  */
 import type { Client, InStatement } from '@libsql/client/web';
 import { C, cols } from '@grc/schema/columns';
@@ -36,9 +34,12 @@ function newData(entry: AuditEntry): string {
 export function buildAuditStatement(entry: AuditEntry): InStatement {
   return {
     sql: `INSERT INTO audit_log
-            (${A.action}, ${A.entity_type}, ${A.entity_id}, ${A.new_data}, ${A.actor_user_id}, ${A.occurred_at})
-          VALUES (?, ?, ?, ?, ?, ?)`,
+            (${A.log_id}, ${A.organization_id}, ${A.action}, ${A.entity_type}, ${A.entity_id},
+             ${A.new_data}, ${A.actor_user_id}, ${A.occurred_at})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
+      crypto.randomUUID(),
+      entry.organizationId,
       entry.action,
       entry.entityType ?? null,
       entry.entityId ?? null,

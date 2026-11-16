@@ -3,6 +3,7 @@ import { getGrcEnv } from '@grc/env';
 import { getDb as getGrcDb } from '@grc/db';
 import { readGrcSessionCookie } from '@grc/auth/session';
 import { readActingOrg as readGrcActingOrg } from '@grc/auth/actingOrg';
+import { readRolePreview } from '@grc/auth/rolePreview';
 import { resolveSession } from '@grc/repos/session';
 import {
   resolveActingContext as resolveGrcActingContext,
@@ -11,6 +12,7 @@ import {
 import { resolveRoleAccess, deriveLegacyPerms, canMatrix } from '@grc/auth/rbac';
 import { resolveAffiliateScope } from '@grc/auth/affiliateScope';
 import { isGroupAffiliate } from '@grc/repos/affiliatesAdmin';
+import { resolveRolePreview } from '@grc/repos/rolePreview';
 import { pageAccess, pageSlugForPath } from '@grc/auth/matrix';
 import { loadSubscription } from '@grc/repos/features';
 import {
@@ -123,6 +125,24 @@ export const onRequest = defineMiddleware(async (context, next) => {
         switchable = acting.switchable;
       }
 
+      // A platform owner may preview an ordinary role inside the selected
+      // instance. The signed cookie is revalidated against the live role and
+      // affiliate rows on every request. It changes effective access only; the
+      // underlying user, session and database role remain untouched.
+      const requestedPreview =
+        identity.isPlatformOwner && instanceSelected
+          ? await readRolePreview(context.request, env.sessionSecret)
+          : null;
+      const rolePreview =
+        identity.isPlatformOwner && instanceSelected
+          ? await resolveRolePreview(db, organizationId, requestedPreview)
+          : null;
+      const effectiveRoleCode = rolePreview?.roleCode ?? identity.roleCode;
+      const effectiveAffiliateCode = rolePreview?.affiliateCode ?? identity.affiliateCode;
+      // Owner bypass must be disabled in preview, otherwise the menu might say
+      // "Auditee" while every gate still grants platform-owner access.
+      const effectivePlatformOwner = identity.isPlatformOwner && rolePreview === null;
+
       // The permission matrix from role_permissions drives every gate. A SUPER_ADMIN
       // and a platform owner hold the full matrix; every other role holds its grants,
       // resolved inside the acting organisation (its own rows if it has any, else the
@@ -138,9 +158,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // can never resolve the same role differently.
       const access = await resolveRoleAccess(
         db,
-        identity.roleCode,
+        effectiveRoleCode,
         organizationId,
-        identity.isPlatformOwner,
+        effectivePlatformOwner,
       );
       const matrix = access.matrix;
       // The Group exemption (Build Prompt 48): a user posted to an affiliate
@@ -149,13 +169,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // and only asked for when a confinement would otherwise bite: an
       // unconfined request makes no extra query at all.
       const onGroupAffiliate =
-        access.scopeToAffiliate && identity.affiliateCode
-          ? await isGroupAffiliate(db, organizationId, identity.affiliateCode)
+        access.scopeToAffiliate && effectiveAffiliateCode
+          ? await isGroupAffiliate(db, organizationId, effectiveAffiliateCode)
           : false;
       const affiliateScope = resolveAffiliateScope(
         access.scopeToAffiliate,
-        identity.affiliateCode,
-        identity.isPlatformOwner,
+        effectiveAffiliateCode,
+        effectivePlatformOwner,
         onGroupAffiliate,
       );
       const perms = deriveLegacyPerms(matrix);
@@ -171,10 +191,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
         homeOrganizationId: identity.homeOrganizationId,
         organizationName,
         instanceSelected,
-        roleCode: identity.roleCode,
+        roleCode: effectiveRoleCode,
         userName: identity.userName,
         userEmail: identity.userEmail,
-        isPlatformOwner: identity.isPlatformOwner,
+        isPlatformOwner: effectivePlatformOwner,
+        isPlatformOwnerAccount: identity.isPlatformOwner,
+        rolePreview,
         mustChangePassword: identity.mustChangePassword,
         affiliateScope,
         switchable,
@@ -184,7 +206,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         can: (action: string, module: string) => canMatrix(matrix, action, module),
         // A platform owner is entitled to every feature regardless of the acting
         // organisation's plan; an ordinary user is gated by their plan flags.
-        hasFeature: (flag: string) => identity.isPlatformOwner || features[flag] === true,
+        hasFeature: (flag: string) => effectivePlatformOwner || features[flag] === true,
       };
 
       // A temporary password locks the account to the change-password flow: every
@@ -210,8 +232,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
             ? jsonResponse({ error: 'instance_required' }, 409)
             : context.redirect(GRC_PLATFORM_PATH);
         }
+        if (rolePreview && appPath === GRC_PLATFORM_PATH) return context.redirect('/');
       } else if (appPath === GRC_PLATFORM_PATH) {
         return isApi ? jsonResponse({ error: 'forbidden' }, 403) : context.redirect('/');
+      }
+
+      // Preview is deliberately observational. Forms and action buttons may be
+      // visible exactly as that role sees them, but mutation endpoints refuse
+      // the write so the owner cannot accidentally change live data while
+      // testing a persona. Starting, changing or ending preview and signing out
+      // remain available.
+      if (
+        rolePreview &&
+        isApi &&
+        !['GET', 'HEAD', 'OPTIONS'].includes(context.request.method.toUpperCase()) &&
+        !new Set([
+          '/api/role-preview/set',
+          '/api/role-preview/clear',
+          '/api/auth/logout',
+        ]).has(appPath)
+      ) {
+        return jsonResponse({ error: 'role_preview_read_only' }, 403);
       }
 
       // Central page-map enforcement (PAGE_PERMISSION_MAP): a page section the

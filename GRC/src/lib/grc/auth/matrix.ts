@@ -91,6 +91,7 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermission[]> = {
     { module: 'CONFIG', action: 'read' },
     { module: 'NOTIFICATION', action: 'read' },
   ],
+  'audit-history': [{ module: 'AUDIT_LOG', action: 'read' }],
   settings: [
     { module: 'CONFIG', action: 'read' },
     { module: 'USER', action: 'read' },

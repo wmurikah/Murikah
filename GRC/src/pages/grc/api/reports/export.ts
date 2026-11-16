@@ -25,6 +25,13 @@ import {
 } from '@grc/reports/reportModel';
 import { getComprehensiveReportData, resolveUserAffiliate } from '@grc/repos/reportData';
 import { renderReportDocx, reportFilename } from '@grc/reports/docx/ooxml';
+import {
+  renderReportCsv,
+  renderReportExcel,
+  renderReportPdf,
+  renderReportSvg,
+  type ReportExportFormat,
+} from '@grc/reports/exportFormats';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const grc = locals.grc;
@@ -40,6 +47,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
   const params = new URLSearchParams();
   for (const [k, v] of form.entries()) params.append(k, String(v));
+  const requestedFormat = String(form.get('format') ?? 'docx');
+  const format: ReportExportFormat = ['docx', 'csv', 'xlsx', 'pdf', 'svg'].includes(requestedFormat)
+    ? (requestedFormat as ReportExportFormat)
+    : 'docx';
 
   const now = new Date();
   const db = await getDb(getGrcEnv());
@@ -98,27 +109,91 @@ export const POST: APIRoute = async ({ request, locals }) => {
     statusLabels,
   });
 
-  const bytes = renderReportDocx(doc);
-  const filename = reportFilename(filters.reportType, ymd(now));
+  const exportId = crypto.randomUUID();
+  await db.execute({
+    sql: `INSERT INTO export_jobs
+            (export_id, organization_id, requested_by, export_type, format, filters,
+             status, requested_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'running', ?)`,
+    args: [
+      exportId,
+      grc.organizationId,
+      grc.userId,
+      filters.reportType,
+      format,
+      params.toString(),
+      now.toISOString(),
+    ],
+  });
+
+  let bytes: Uint8Array;
+  let contentType: string;
+  let extension: string;
+  try {
+    if (format === 'csv') {
+      bytes = renderReportCsv(doc);
+      contentType = 'text/csv; charset=utf-8';
+      extension = 'csv';
+    } else if (format === 'xlsx') {
+      bytes = renderReportExcel(doc);
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      extension = 'xlsx';
+    } else if (format === 'pdf') {
+      bytes = renderReportPdf(doc);
+      contentType = 'application/pdf';
+      extension = 'pdf';
+    } else if (format === 'svg') {
+      bytes = renderReportSvg(doc);
+      contentType = 'image/svg+xml; charset=utf-8';
+      extension = 'svg';
+    } else {
+      bytes = renderReportDocx(doc);
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      extension = 'docx';
+    }
+    await db.execute({
+      sql: `UPDATE export_jobs
+               SET status = 'success', row_count = ?, completed_at = ?
+             WHERE export_id = ? AND organization_id = ?`,
+      args: [
+        dataset.observations.length + dataset.actionPlans.length,
+        new Date().toISOString(),
+        exportId,
+        grc.organizationId,
+      ],
+    });
+  } catch (error) {
+    await db.execute({
+      sql: `UPDATE export_jobs
+               SET status = 'failed', completed_at = ?, error_message = ?
+             WHERE export_id = ? AND organization_id = ?`,
+      args: [
+        new Date().toISOString(),
+        error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000),
+        exportId,
+        grc.organizationId,
+      ],
+    });
+    throw error;
+  }
+  const filename = reportFilename(filters.reportType, ymd(now)).replace(/\.docx$/, `.${extension}`);
 
   try {
     await writeAuditLog(db, {
       organizationId: grc.organizationId,
       userId: grc.userId,
       action: 'REPORT.export',
-      details: `${filters.reportType}: ${summary}`,
+      details: `${filters.reportType}.${format}: ${summary}`,
     });
   } catch {
     // best-effort audit
   }
 
-  const blob = new Blob([bytes], {
-    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
+  const blob = new Blob([Uint8Array.from(bytes).buffer], { type: contentType });
   return new Response(blob, {
     status: 200,
     headers: {
-      'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'content-type': contentType,
       'content-disposition': `attachment; filename="${filename}"`,
       'cache-control': 'no-store',
     },

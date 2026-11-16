@@ -213,6 +213,13 @@ export function createTables(db: DatabaseSync, tables: Map<string, string[]>): v
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_storage_connections_one_active
        ON storage_connections (organization_id) WHERE is_active = 1`,
   );
+  // Production permits only one pending deletion record for an entity. The
+  // governance repository relies on this constraint for its idempotent upsert,
+  // so the smoke database must model it as well.
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_deletion_queue_entity
+       ON deletion_queue (entity_type, entity_id)`,
+  );
   // The external-content full-text index over work papers, maintained by the
   // work-papers repository on create, edit and delete.
   db.exec(

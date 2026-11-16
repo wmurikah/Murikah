@@ -1,0 +1,144 @@
+---
+export const prerender = false;
+
+import GrcLayout from '@/layouts/GrcLayout.astro';
+import GrcErrorCard from '@/components/grc/GrcErrorCard.astro';
+import { getGrcEnv } from '@grc/env';
+import { getDb } from '@grc/db';
+import { can } from '@grc/auth/rbac';
+import { guardPageLoad } from '@grc/pageGuard';
+import {
+  listAuditHistory,
+  latestAuditAnchor,
+  type AuditHistoryRow,
+  type AuditAnchorSummary,
+} from '@grc/repos/auditHistory';
+
+const grc = Astro.locals.grc;
+if (!grc) return Astro.redirect('/login');
+const allowed = grc.isPlatformOwner || can(Astro.locals, 'read', 'AUDIT_LOG');
+const filters = {
+  action: Astro.url.searchParams.get('action') || undefined,
+  entityType: Astro.url.searchParams.get('entity_type') || undefined,
+  from: Astro.url.searchParams.get('from') || undefined,
+  to: Astro.url.searchParams.get('to') || undefined,
+};
+let rows: AuditHistoryRow[] = [];
+let anchor: AuditAnchorSummary | null = null;
+let loadError = false;
+if (allowed) {
+  loadError = !(await guardPageLoad('audit-history', async () => {
+    const db = await getDb(getGrcEnv());
+    [rows, anchor] = await Promise.all([
+      listAuditHistory(db, grc.organizationId, filters),
+      latestAuditAnchor(db),
+    ]);
+  }));
+}
+const fmt = (value: string): string => value.slice(0, 19).replace('T', ' ');
+const anchorSummary = anchor as AuditAnchorSummary | null;
+---
+
+<GrcLayout title="Audit history">
+  <div class="grc-page-head">
+    <div>
+      <h1>Audit history</h1>
+      <p class="grc-lead">Searchable activity trail for {grc.organizationName}.</p>
+    </div>
+  </div>
+
+  {
+    !allowed ? (
+      <p class="grc-error" role="alert">
+        You do not have permission to read the audit history.
+      </p>
+    ) : loadError ? (
+      <GrcErrorCard subject="Audit history" />
+    ) : (
+      <>
+        <div class="grc-panel" style="margin-bottom:1rem">
+          <form method="get" class="grc-report-filters" aria-label="Audit history filters">
+            <div class="grc-report-filters__grid">
+              <div class="grc-field">
+                <label for="action">Action contains</label>
+                <input id="action" name="action" class="grc-input" value={filters.action ?? ''} />
+              </div>
+              <div class="grc-field">
+                <label for="entity_type">Entity type</label>
+                <input
+                  id="entity_type"
+                  name="entity_type"
+                  class="grc-input"
+                  value={filters.entityType ?? ''}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="from">From</label>
+                <input
+                  id="from"
+                  name="from"
+                  type="date"
+                  class="grc-input"
+                  value={filters.from ?? ''}
+                />
+              </div>
+              <div class="grc-field">
+                <label for="to">To</label>
+                <input id="to" name="to" type="date" class="grc-input" value={filters.to ?? ''} />
+              </div>
+            </div>
+            <div class="grc-actionbar">
+              <button class="grc-btn grc-btn--primary">Apply filters</button>
+            </div>
+          </form>
+        </div>
+
+        {anchorSummary && (
+          <p class="grc-notice" role="status" style="margin-bottom:1rem">
+            Latest integrity anchor covers {anchorSummary.logCount} entries at{' '}
+            {fmt(anchorSummary.anchoredAt)}. Hash: <code>{anchorSummary.hash.slice(0, 16)}…</code>
+          </p>
+        )}
+
+        <div class="grc-panel">
+          {rows.length === 0 ? (
+            <p class="grc-lead" style="margin:0">
+              No matching activity.
+            </p>
+          ) : (
+            <div class="grc-tablewrap">
+              <table class="grc-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Entity</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr>
+                      <td>{fmt(row.occurredAt)}</td>
+                      <td>{row.actor}</td>
+                      <td>
+                        <code>{row.action}</code>
+                      </td>
+                      <td>
+                        {row.entityType
+                          ? `${row.entityType}${row.entityId ? ` · ${row.entityId}` : ''}`
+                          : '-'}
+                      </td>
+                      <td>{row.details ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>
+    )
+  }
+</GrcLayout>

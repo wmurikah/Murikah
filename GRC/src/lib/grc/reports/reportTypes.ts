@@ -15,7 +15,22 @@
  * is the action-plan status summary. `observations` and `overdue` are the
  * detailed and exception views the source board report also carries.
  */
-export type ReportType = 'executive' | 'barc' | 'observations' | 'trend' | 'tracker' | 'overdue';
+export type ReportType =
+  | 'executive'
+  | 'barc'
+  | 'observations'
+  | 'trend'
+  | 'tracker'
+  | 'overdue'
+  | 'assurance';
+
+/** A tenant-scoped aggregate used by the assurance-operations report. */
+export interface OperationalMetric {
+  area: string;
+  metric: string;
+  value: string;
+  detail?: string | null;
+}
 
 /** The four risk buckets the board report groups by (source labels). */
 export type RiskBucket = 'EXTREME' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -66,6 +81,15 @@ export interface ActionPlan {
 export interface ReportDataset {
   observations: Observation[];
   actionPlans: ActionPlan[];
+  /** Aggregates for requirements, responses, evidence, access, audit and delivery. */
+  operationalMetrics?: OperationalMetric[];
+  /** Present when the bounded production query omitted additional rows. */
+  truncation?: {
+    observations: boolean;
+    actionPlans: boolean;
+    observationLimit: number;
+    actionPlanLimit: number;
+  };
 }
 
 /** The report builder's filter state. */

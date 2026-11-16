@@ -37,6 +37,7 @@ export const REPORT_TYPES: { value: ReportType; label: string }[] = [
   { value: 'trend', label: 'Observation Trend' },
   { value: 'tracker', label: 'Action Plan Status Summary' },
   { value: 'overdue', label: 'Overdue and At-Risk' },
+  { value: 'assurance', label: 'Assurance Operations' },
 ];
 
 export const RISK_BUCKETS: RiskBucket[] = ['EXTREME', 'HIGH', 'MEDIUM', 'LOW'];
@@ -55,10 +56,14 @@ export const RISK_LABELS: Record<RiskBucket, string> = {
 
 /** The work-paper statuses the report filters by, with their labels. */
 export const STATUS_OPTIONS: { value: string; label: string; auditeeOnly?: boolean }[] = [
+  { value: 'Draft', label: 'Draft', auditeeOnly: true },
+  { value: 'Submitted', label: 'Submitted', auditeeOnly: true },
+  { value: 'Under Review', label: 'Under Review' },
+  { value: 'Revision Required', label: 'Revision Required' },
   { value: 'Approved', label: 'Approved' },
   { value: 'Sent to Auditee', label: 'Sent to Auditee' },
-  { value: 'Submitted', label: 'Submitted', auditeeOnly: true },
-  { value: 'Draft', label: 'Draft', auditeeOnly: true },
+  { value: 'Response Received', label: 'Response Received' },
+  { value: 'Response Reviewed', label: 'Response Reviewed' },
 ];
 
 /** Statuses a UNIT_MANAGER never sees in the report (drafts and submissions). */
@@ -320,9 +325,19 @@ export function applyModelFilters(
   if (filters.overdueOnly) {
     actionPlans = actionPlans.filter((ap) => isPlanOverdue(ap, now));
     const overdueObs = new Set(actionPlans.map((ap) => ap.workPaperId).filter(Boolean) as string[]);
-    return { observations: observations.filter((o) => overdueObs.has(o.id)), actionPlans };
+    return {
+      observations: observations.filter((o) => overdueObs.has(o.id)),
+      actionPlans,
+      ...(dataset.operationalMetrics ? { operationalMetrics: dataset.operationalMetrics } : {}),
+      ...(dataset.truncation ? { truncation: dataset.truncation } : {}),
+    };
   }
-  return { observations, actionPlans };
+  return {
+    observations,
+    actionPlans,
+    ...(dataset.operationalMetrics ? { operationalMetrics: dataset.operationalMetrics } : {}),
+    ...(dataset.truncation ? { truncation: dataset.truncation } : {}),
+  };
 }
 
 // ---- Executive Summary -----------------------------------------------------
@@ -1119,6 +1134,26 @@ export interface BuildOptions {
   statusLabels?: Record<string, string>;
 }
 
+function assuranceOperations(data: ReportDataset): ReportBlock[] {
+  const metrics = data.operationalMetrics ?? [];
+  if (metrics.length === 0) {
+    return [{ kind: 'note', text: 'No organisation-wide operational metrics are available for this scope and period.' }];
+  }
+  return [
+    {
+      kind: 'table',
+      title: 'Assurance operations',
+      columns: ['Area', 'Metric', 'Value', 'Detail'],
+      rows: metrics.map((m) => [
+        { text: m.area },
+        { text: m.metric },
+        { text: m.value, align: 'right' },
+        { text: m.detail ?? '-' },
+      ]),
+    },
+  ];
+}
+
 /** Build the report document for the selected type from the scoped dataset. */
 export function buildReport(
   dataset: ReportDataset,
@@ -1137,6 +1172,8 @@ export function buildReport(
   switch (filters.reportType) {
     case 'barc':
       body.push(...barcBoardPack(data, opts.now, labels));
+      body.push({ kind: 'heading', text: '4A. Assurance operations', level: 1 });
+      body.push(...assuranceOperations(data));
       body.push(...observationNarratives(data, opts.now, labels));
       appendices = observationAppendix(sortedByRisk(data.observations));
       break;
@@ -1157,16 +1194,30 @@ export function buildReport(
       body.push({ kind: 'heading', text: '4. Overdue and at-risk actions', level: 1 });
       body.push(...overdueAtRisk(data, opts.now, labels));
       break;
+    case 'assurance':
+      body.push({ kind: 'heading', text: '4. Assurance operations', level: 1 });
+      body.push(...assuranceOperations(data));
+      break;
     case 'executive':
     default:
       body.push({ kind: 'heading', text: '4. Period audit summary', level: 1 });
       body.push(...executiveSummary(data, opts.now, labels));
+      body.push({ kind: 'heading', text: '4A. Assurance operations', level: 1 });
+      body.push(...assuranceOperations(data));
       body.push(...observationNarratives(data, opts.now, labels));
       appendices = observationAppendix(sortedByRisk(data.observations));
       break;
   }
 
   const blocks: ReportBlock[] = [
+    ...(data.truncation?.observations || data.truncation?.actionPlans
+      ? [
+          {
+            kind: 'note' as const,
+            text: `Warning: this report reached the configured data limit (${data.truncation.observationLimit} observations; ${data.truncation.actionPlanLimit} action plans). Narrow the filters or use a data extract before relying on totals.`,
+          },
+        ]
+      : []),
     ...introduction(data, filters, opts.now),
     { kind: 'heading', text: '2. Executive summary', level: 1 },
     { kind: 'kpis', items: executiveKpis(data, opts.now) },

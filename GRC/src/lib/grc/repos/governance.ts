@@ -24,6 +24,7 @@ const RP = cols(C.retention_policies);
 const DQ = cols(C.deletion_queue);
 const F = cols(C.files);
 const FA = cols(C.file_attachments);
+const DEFAULT_DELETION_GRACE_DAYS = 30;
 
 interface ActiveHold {
   filter: string | null;
@@ -58,20 +59,20 @@ export async function isUnderLegalHold(
  * matching policy's retention_days relative to the given now. Policies are
  * platform-wide reference data, keyed by entity type.
  */
-export async function retentionFloor(
-  db: Client,
-  entityType: string,
-  now: Date,
-): Promise<string | null> {
+export async function retentionFloor(db: Client, entityType: string, now: Date): Promise<string> {
   const res = await db.execute({
     sql: `SELECT MAX(${RP.retention_days}) AS days FROM retention_policies
            WHERE ${RP.entity_type} = ? AND (${RP.is_active} IS NULL OR ${RP.is_active} = 1)`,
     args: [entityType],
   });
   const days = res.rows[0]?.days;
-  if (days == null) return null;
+  if (days == null) {
+    return new Date(now.getTime() + DEFAULT_DELETION_GRACE_DAYS * 86_400_000).toISOString();
+  }
   const n = Number(days);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  if (!Number.isFinite(n) || n <= 0) {
+    return new Date(now.getTime() + DEFAULT_DELETION_GRACE_DAYS * 86_400_000).toISOString();
+  }
   return new Date(now.getTime() + n * 86_400_000).toISOString();
 }
 
@@ -83,7 +84,7 @@ export interface QueueDeletionInput {
   requestedBy: string;
   reason: string;
   /** The retention floor: the object must not be purged before this instant. */
-  retainUntil: string | null;
+  retainUntil: string;
 }
 
 /**
@@ -94,20 +95,36 @@ export interface QueueDeletionInput {
 export async function queueDeletion(db: Client, input: QueueDeletionInput): Promise<string> {
   const queueId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db.execute({
-    sql: `INSERT INTO deletion_queue
-            (${DQ.queue_id}, ${DQ.entity_type}, ${DQ.entity_id}, ${DQ.soft_deleted_at},
-             ${DQ.hard_delete_after}, ${DQ.reason}, ${DQ.requested_by})
-          VALUES (?, 'file', ?, ?, ?, ?, ?)`,
-    args: [
-      queueId,
-      input.fileId,
-      now,
-      input.retainUntil,
-      `${input.reason} (${input.entityType} ${input.entityId})`,
-      input.requestedBy,
+  await db.batch(
+    [
+      {
+        sql: `INSERT INTO deletion_queue
+                (${DQ.queue_id}, ${DQ.entity_type}, ${DQ.entity_id}, ${DQ.soft_deleted_at},
+                 ${DQ.hard_delete_after}, ${DQ.reason}, ${DQ.requested_by}, ${DQ.processed_at})
+              VALUES (?, 'file', ?, ?, ?, ?, ?, NULL)
+              ON CONFLICT(${DQ.entity_type}, ${DQ.entity_id}) DO UPDATE /* upsert */ SET
+                ${DQ.soft_deleted_at} = excluded.${DQ.soft_deleted_at},
+                ${DQ.hard_delete_after} = excluded.${DQ.hard_delete_after},
+                ${DQ.reason} = excluded.${DQ.reason},
+                ${DQ.requested_by} = excluded.${DQ.requested_by},
+                ${DQ.processed_at} = NULL`,
+        args: [
+          queueId,
+          input.fileId,
+          now,
+          input.retainUntil,
+          `${input.reason} (${input.entityType} ${input.entityId})`,
+          input.requestedBy,
+        ],
+      },
+      {
+        sql: `UPDATE files SET ${F.deleted_at} = ?
+               WHERE ${F.file_id} = ? AND ${F.deleted_at} IS NULL`,
+        args: [now, input.fileId],
+      },
     ],
-  });
+    'write',
+  );
   return queueId;
 }
 

@@ -28,7 +28,7 @@ never their internal columns.
 - **api_keys**: api_key_id, organization_id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, last_used_ip, is_active, revoked_at, revoked_by, created_at, created_by
 - **audit_activity**: event_id, organization_id, occurred_at, actor_user_id, actor_email, actor_role, actor_ip, actor_location, user_agent, action, module_code, entity_type, entity_id, details_json, success
 - **audit_areas**: audit_area_id, organization_id, area_code, area_name, description, is_active, created_at, updated_at, deleted_at
-- **audit_log**: log_id, action, entity_type, entity_id, old_data, new_data, actor_user_id, actor_email, actor_ip, occurred_at
+- **audit_log**: log_id, organization_id, action, entity_type, entity_id, old_data, new_data, actor_user_id, actor_email, actor_ip, occurred_at
 - **audit_log_anchors**: anchor_id, last_log_id, log_count, cumulative_hash, anchored_at, external_proof
 - **auditee_delegations**: delegation_id, organization_id, work_paper_id, round_number, delegated_by, delegated_by_name, delegated_to, delegated_to_name, instructions, status, delegated_at, returned_at, return_note, closed_at
 - **auditee_responses**: response_id, organization_id, work_paper_id, action_plan_id, response_round, response_text, status, submitted_by, submitted_date, reviewed_by, review_date, review_comments, created_at, updated_at, deleted_at, round_number, response_type, management_response, submitted_by_id, submitted_by_name, action_plan_ids, reviewed_by_id, reviewed_by_name

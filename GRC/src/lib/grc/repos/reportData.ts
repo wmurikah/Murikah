@@ -15,6 +15,7 @@ import type { Client } from '@libsql/client/web';
 import type {
   ActionPlan,
   Observation,
+  OperationalMetric,
   ReportDataset,
   ReportFilters,
 } from '@grc/reports/reportTypes';
@@ -29,6 +30,113 @@ export interface ReportViewer {
 
 const s = (v: unknown): string | null => (v == null ? null : String(v));
 const n = (v: unknown): number | null => (v == null ? null : Number(v));
+
+async function getOperationalMetrics(
+  db: Client,
+  organizationId: string,
+  filters: ReportFilters,
+): Promise<OperationalMetric[]> {
+  const range = [organizationId, filters.dateFrom, filters.dateTo];
+  const [requirements, responses, evidence, access, audit, notifications, users] =
+    await Promise.all([
+      db.execute({
+        sql: `SELECT status AS label, COUNT(*) AS total
+                FROM work_paper_requirements
+               WHERE organization_id = ? AND deleted_at IS NULL
+                 AND date(created_at) BETWEEN ? AND ?
+            GROUP BY status ORDER BY status`,
+        args: range,
+      }),
+      db.execute({
+        sql: `SELECT status AS label, COUNT(*) AS total,
+                     ROUND(AVG(CASE WHEN review_date IS NOT NULL AND submitted_date IS NOT NULL
+                       THEN julianday(review_date) - julianday(submitted_date) END), 1) AS avg_days
+                FROM auditee_responses
+               WHERE organization_id = ? AND deleted_at IS NULL
+                 AND date(COALESCE(submitted_date, created_at)) BETWEEN ? AND ?
+            GROUP BY status ORDER BY status`,
+        args: range,
+      }),
+      db.execute({
+        sql: `SELECT CASE WHEN deleted_at IS NULL THEN 'Active' ELSE 'Soft deleted' END AS label,
+                     COUNT(*) AS total
+                FROM files
+               WHERE organization_id = ? AND date(created_at) BETWEEN ? AND ?
+            GROUP BY CASE WHEN deleted_at IS NULL THEN 'Active' ELSE 'Soft deleted' END`,
+        args: range,
+      }),
+      db.execute({
+        sql: `SELECT COUNT(DISTINCT role_code) AS role_count,
+                     COALESCE(SUM(CASE WHEN is_allowed = 1 THEN 1 ELSE 0 END), 0) AS grant_count,
+                     COALESCE(SUM(CASE WHEN is_allowed = 0 THEN 1 ELSE 0 END), 0) AS deny_count
+                FROM role_permissions WHERE organization_id = ?`,
+        args: [organizationId],
+      }),
+      db.execute({
+        sql: `SELECT COUNT(*) AS total, COUNT(DISTINCT actor_user_id) AS actors
+                FROM audit_log
+               WHERE organization_id = ? AND date(occurred_at) BETWEEN ? AND ?`,
+        args: range,
+      }),
+      db.execute({
+        sql: `SELECT status AS label, COUNT(*) AS total
+                FROM notification_queue
+               WHERE organization_id = ? AND deleted_at IS NULL
+                 AND date(created_at) BETWEEN ? AND ?
+            GROUP BY status ORDER BY status`,
+        args: range,
+      }),
+      db.execute({
+        sql: `SELECT status AS label, COUNT(*) AS total,
+                     SUM(CASE WHEN last_login_at IS NOT NULL
+                                  AND date(last_login_at) BETWEEN ? AND ? THEN 1 ELSE 0 END) AS active_period
+                FROM users
+               WHERE organization_id = ? AND deleted_at IS NULL
+            GROUP BY status ORDER BY status`,
+        args: [filters.dateFrom, filters.dateTo, organizationId],
+      }),
+    ]);
+
+  const metrics: OperationalMetric[] = [];
+  for (const row of requirements.rows)
+    metrics.push({ area: 'Requirements', metric: String(row.label), value: String(row.total) });
+  for (const row of responses.rows)
+    metrics.push({
+      area: 'Response rounds',
+      metric: String(row.label),
+      value: String(row.total),
+      detail: row.avg_days == null ? null : `Average review turnaround: ${row.avg_days} days`,
+    });
+  for (const row of evidence.rows)
+    metrics.push({ area: 'Evidence', metric: String(row.label), value: String(row.total) });
+  const accessRow = access.rows[0];
+  if (accessRow) {
+    metrics.push(
+      { area: 'Access control', metric: 'Configured roles', value: String(accessRow.role_count) },
+      { area: 'Access control', metric: 'Allowed grants', value: String(accessRow.grant_count) },
+      { area: 'Access control', metric: 'Explicit denials', value: String(accessRow.deny_count) },
+    );
+  }
+  const auditRow = audit.rows[0];
+  if (auditRow) {
+    metrics.push(
+      { area: 'Audit trail', metric: 'Recorded events', value: String(auditRow.total) },
+      { area: 'Audit trail', metric: 'Distinct actors', value: String(auditRow.actors) },
+    );
+  }
+  for (const row of notifications.rows)
+    metrics.push({ area: 'Notification delivery', metric: String(row.label), value: String(row.total) });
+  for (const row of users.rows) {
+    metrics.push({ area: 'User activity', metric: String(row.label), value: String(row.total) });
+    if (Number(row.active_period ?? 0) > 0)
+      metrics.push({
+        area: 'User activity',
+        metric: `${String(row.label)} users active in period`,
+        value: String(row.active_period),
+      });
+  }
+  return metrics;
+}
 
 /**
  * The UNIT_MANAGER's own affiliate, read defensively: users.affiliate_code is a
@@ -148,12 +256,13 @@ export async function getComprehensiveReportData(
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
             LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
-           WHERE ${obsWhere}
+           WHERE ${obsWhere} AND wp.deleted_at IS NULL
         ORDER BY wp.work_paper_date DESC, wp.work_paper_ref DESC
-           LIMIT 2000`,
+           LIMIT 2001`,
     args: obsArgs,
   });
-  const observations: Observation[] = obsRes.rows.map((r) => {
+  const observationsTruncated = obsRes.rows.length > 2000;
+  const observations: Observation[] = obsRes.rows.slice(0, 2000).map((r) => {
     const status = String(r.status);
     const managementResponse = s(r.latest_response) ?? s(r.management_response);
     return {
@@ -204,12 +313,13 @@ export async function getComprehensiveReportData(
             LEFT JOIN affiliates aff ON aff.affiliate_code = wp.affiliate_code
                  AND aff.organization_id = wp.organization_id
             LEFT JOIN audit_areas aa ON aa.audit_area_id = wp.audit_area_id
-           WHERE ${apWhere}
+           WHERE ${apWhere} AND ap.deleted_at IS NULL AND wp.deleted_at IS NULL
         ORDER BY ap.due_date IS NULL, ap.due_date ASC
-           LIMIT 4000`,
+           LIMIT 4001`,
     args: apArgs,
   });
-  const actionPlans: ActionPlan[] = apRes.rows.map((r) => ({
+  const actionPlansTruncated = apRes.rows.length > 4000;
+  const actionPlans: ActionPlan[] = apRes.rows.slice(0, 4000).map((r) => ({
     id: String(r.id),
     actionNumber: String(r.action_number ?? r.id),
     workPaperId: s(r.work_paper_id),
@@ -226,5 +336,22 @@ export async function getComprehensiveReportData(
     observationStatus: s(r.obs_status),
   }));
 
-  return { observations, actionPlans };
+  // Operational assurance metrics are organisation-wide and therefore are not
+  // included for the affiliate-confined UNIT_MANAGER role. Everyone else still
+  // receives aggregates only—never raw notification bodies or audit payloads.
+  const operationalMetrics = unitScope
+    ? []
+    : await getOperationalMetrics(db, organizationId, filters);
+
+  return {
+    observations,
+    actionPlans,
+    operationalMetrics,
+    truncation: {
+      observations: observationsTruncated,
+      actionPlans: actionPlansTruncated,
+      observationLimit: 2000,
+      actionPlanLimit: 4000,
+    },
+  };
 }
