@@ -2072,7 +2072,31 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         !home.body.includes('All organisations'),
         'a pinned admin has no all-instances view',
       );
-      assert.ok(!home.body.includes('grc-switcher'), 'a pinned admin has no instance switcher');
+      assert.ok(
+        !home.body.includes('name="organization_id"'),
+        'a pinned admin has no instance switcher',
+      );
+      assert.ok(
+        home.body.includes('View as role'),
+        'a real SUPER_ADMIN account is offered role preview',
+      );
+
+      const previewStarted = await server.request('POST', '/api/role-preview/set', {
+        role_code: 'JUNIOR_STAFF',
+        affiliate_code: SMOKE.affiliateCode,
+        next: '/',
+      });
+      assert.equal(previewStarted.status, 303, 'a real SUPER_ADMIN may start role preview');
+      const previewHome = await server.get('/');
+      assert.ok(previewHome.body.includes('Read-only preview:'), 'preview mode is clearly marked');
+      assert.ok(previewHome.body.includes('Junior Staff'), 'the selected role becomes effective');
+      const previewWrite = await server.request('POST', '/api/work-papers', {
+        title: 'A preview must never create this',
+      });
+      assert.equal(previewWrite.status, 403, 'SUPER_ADMIN preview remains read-only');
+      const previewCleared = await server.request('POST', '/api/role-preview/clear', { next: '/' });
+      assert.equal(previewCleared.status, 303, 'SUPER_ADMIN may leave preview');
+
       // The platform view and its endpoints are not theirs to reach.
       const platform = await server.get('/platform');
       assert.equal(
@@ -5387,6 +5411,15 @@ test('GRC smoke: every page loads and every mutation dry-runs without a 500', as
         control_frequency: 'Monthly',
       });
       assert.equal(res.status, 403, `/api/dropdowns answered ${res.status} for the auditee`);
+      const preview = await server.request('POST', '/api/role-preview/set', {
+        role_code: 'SUPER_ADMIN',
+        next: '/',
+      });
+      assert.equal(
+        preview.status,
+        403,
+        'selecting SUPER_ADMIN cannot grant preview entitlement to an ordinary account',
+      );
     });
 
     // Login security round trips (Build Prompt 25), then the forgotten-password
