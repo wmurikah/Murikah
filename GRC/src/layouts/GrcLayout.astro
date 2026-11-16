@@ -18,13 +18,8 @@ import '@fontsource-variable/inter/wght.css';
 import '@/styles/global.css';
 import '@/styles/grc.css';
 import GrcIcon from '@/components/grc/GrcIcon.astro';
-import { getGrcEnv } from '@grc/env';
-import { getDb } from '@grc/db';
-import { getSidebarCounts, type SidebarCounts } from '@grc/repos/dashboard';
 import { buildNav, type CountKey, type NavGroupDef, type NavItemDef } from '@grc/dashboard/roleNav';
 import { aiEnabled } from '@grc/ai/gate';
-import { listRoleCodes } from '@grc/repos/permissionsAdmin';
-import { listAffiliates, type Option } from '@grc/repos/workPaperLookups';
 
 interface Props {
   title: string;
@@ -48,27 +43,9 @@ const groups = buildNav({
   instanceSelected: inInstance,
 });
 
-// Sidebar badge counts, server-rendered on every navigation and refreshed by a
-// light client poll. Best-effort: a count failure never breaks the app shell.
-// They count an organisation's queues, so with no instance selected there is
-// nothing to count and no query is made.
-let counts: SidebarCounts | null = null;
-if (grc && inInstance) {
-  try {
-    const db = await getDb(getGrcEnv());
-    counts = await getSidebarCounts(
-      db,
-      grc.organizationId,
-      grc.userId,
-      grc.affiliateScope,
-      grc.isPlatformOwner || grc.perms.includes('WORK_PAPERS.review'),
-    );
-  } catch (err) {
-    console.error('[grc.layout] sidebar counts failed', err);
-    counts = null;
-  }
-}
-const countFor = (key: CountKey | undefined): number => (key && counts ? counts[key] : 0);
+// Counts are deliberately loaded after first paint. They are useful live queue
+// hints, but must not add a remote database round-trip to every page navigation.
+const countFor = (_key: CountKey | undefined): number => 0;
 
 // Nested items can share a prefix (Settings at /settings, Users at
 // /settings/users), so the longest matching href wins and only one item is
@@ -93,19 +70,6 @@ const userName = grc?.userName ?? grc?.userEmail ?? 'Signed in';
 // has it: there is nowhere for them to switch to.
 const showSwitcher = grc?.isPlatformOwner === true && (grc?.switchable.length ?? 0) > 0;
 const showRolePreview = grc?.canRolePreview === true && inInstance;
-let previewRoles: string[] = [];
-let previewAffiliates: Option[] = [];
-if (showRolePreview && grc) {
-  try {
-    const db = await getDb(getGrcEnv());
-    [previewRoles, previewAffiliates] = await Promise.all([
-      listRoleCodes(db),
-      listAffiliates(db, grc.organizationId),
-    ]);
-  } catch (err) {
-    console.error('[grc.layout] role preview options failed', err);
-  }
-}
 const roleLabel = (code: string): string =>
   code
     .toLowerCase()
@@ -119,6 +83,7 @@ const roleLabel = (code: string): string =>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="text-scale" content="scale" />
     <meta name="robots" content="noindex, nofollow" />
     <title>{pageTitle}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -243,50 +208,51 @@ const roleLabel = (code: string): string =>
 
         {
           showRolePreview && grc && (
-            <div class="grc-rolepreview">
-              <p class="grc-rolepreview__label">View as role</p>
+            <details
+              class="grc-rolepreview"
+              data-role-preview-options
+              data-current-role={grc.rolePreview?.roleCode ?? ''}
+              data-current-affiliate={grc.rolePreview?.affiliateCode ?? ''}
+              open={grc.rolePreview ? true : undefined}
+            >
+              <summary class="grc-rolepreview__label">View as role</summary>
               <form method="post" action="/api/role-preview/set" class="grc-switcher__form">
                 <input type="hidden" name="next" value={path} />
-                <label class="grc-vh" for="grc-preview-role">Preview role</label>
+                <label class="grc-vh" for="grc-preview-role">
+                  Preview role
+                </label>
                 <select
                   id="grc-preview-role"
                   name="role_code"
                   class="grc-switcher__select"
                   required
                 >
-                  {previewRoles.map((role) => (
-                    <option value={role} selected={grc.rolePreview?.roleCode === role}>
-                      {roleLabel(role)}
-                    </option>
-                  ))}
+                  <option value="">Open to load roles</option>
                 </select>
-                <label class="grc-vh" for="grc-preview-affiliate">Preview affiliate</label>
+                <label class="grc-vh" for="grc-preview-affiliate">
+                  Preview affiliate
+                </label>
                 <select
                   id="grc-preview-affiliate"
                   name="affiliate_code"
                   class="grc-switcher__select"
                 >
-                  <option value="" selected={!grc.rolePreview?.affiliateCode}>
-                    No affiliate assigned
-                  </option>
-                  {previewAffiliates.map((affiliate) => (
-                    <option
-                      value={affiliate.id}
-                      selected={grc.rolePreview?.affiliateCode === affiliate.id}
-                    >
-                      {affiliate.label}
-                    </option>
-                  ))}
+                  <option value="">No affiliate assigned</option>
                 </select>
-                <button type="submit" class="grc-switcher__go">Preview</button>
+                <button type="submit" class="grc-switcher__go" disabled>
+                  Preview
+                </button>
               </form>
+              <p class="grc-rolepreview__status" role="status" aria-live="polite" />
               {grc.rolePreview && (
                 <form method="post" action="/api/role-preview/clear" class="grc-switcher__form">
                   <input type="hidden" name="next" value={path} />
-                  <button type="submit" class="grc-switcher__leave">Exit role preview</button>
+                  <button type="submit" class="grc-switcher__leave">
+                    Exit role preview
+                  </button>
                 </form>
               )}
-            </div>
+            </details>
           )
         }
 
@@ -392,28 +358,33 @@ const roleLabel = (code: string): string =>
       <div class="grc-scrim" id="grc-scrim"></div>
 
       <main id="grc-main" class="grc-main">
-        {grc?.rolePreview && (
-          <div class="grc-rolepreview-banner" role="status">
-            <span>
-              Read-only preview: <strong>{roleLabel(grc.rolePreview.roleCode)}</strong>
-              {grc.rolePreview.affiliateCode
-                ? ` · ${previewAffiliates.find((a) => a.id === grc.rolePreview?.affiliateCode)?.label ?? grc.rolePreview.affiliateCode}`
-                : ' · no affiliate assigned'}
-            </span>
-            <form method="post" action="/api/role-preview/clear">
-              <input type="hidden" name="next" value={path} />
-              <button type="submit" class="grc-btn grc-btn--secondary">Return to owner view</button>
-            </form>
-          </div>
-        )}
+        {
+          grc?.rolePreview && (
+            <div class="grc-rolepreview-banner" role="status">
+              <span>
+                Read-only preview: <strong>{roleLabel(grc.rolePreview.roleCode)}</strong>
+                {' · '}
+                <span data-preview-affiliate-label>
+                  {grc.rolePreview.affiliateCode ?? 'no affiliate assigned'}
+                </span>
+              </span>
+              <form method="post" action="/api/role-preview/clear">
+                <input type="hidden" name="next" value={path} />
+                <button type="submit" class="grc-btn grc-btn--secondary">
+                  Return to owner view
+                </button>
+              </form>
+            </div>
+          )
+        }
         <slot />
       </main>
     </div>
 
     <script>
-      // Refresh the sidebar badge counts on a light interval and when the tab
-      // regains focus, so the queues stay current between navigations. The
-      // server-renders the counts on every navigation; this only tops them up.
+      // Load sidebar badge counts after first paint, then refresh on a light
+      // interval and when the tab regains focus. Queue data stays current without
+      // putting its remote query on the page-navigation critical path.
       const applyCounts = (counts: Record<string, number>): void => {
         document.querySelectorAll<HTMLElement>('[data-count-key]').forEach((el) => {
           const key = el.getAttribute('data-count-key');
@@ -432,15 +403,103 @@ const roleLabel = (code: string): string =>
           });
           if (res.ok) applyCounts(await res.json());
         } catch {
-          // best-effort; the server-rendered counts stand
+          // Best-effort: leave the existing bubbles unchanged and try later.
         } finally {
           refreshing = false;
         }
       };
+      // Paint the shell first, then fill the live counts without delaying the
+      // requested page on a Turso round-trip.
+      void refresh();
       setInterval(refresh, 60000);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') void refresh();
       });
+
+      // Role/affiliate lists are administrative data and can be relatively
+      // expensive. Fetch them only when an authorised owner/admin opens the
+      // preview control instead of blocking every page render.
+      const preview = document.querySelector<HTMLDetailsElement>('[data-role-preview-options]');
+      if (preview) {
+        let loaded = false;
+        let loading = false;
+        const loadPreviewOptions = async (): Promise<void> => {
+          if (loaded || loading) return;
+          loading = true;
+          const roleSelect = preview.querySelector(
+            '[name="role_code"]',
+          ) as HTMLSelectElement | null;
+          const affiliateSelect = preview.querySelector(
+            '[name="affiliate_code"]',
+          ) as HTMLSelectElement | null;
+          const submit = preview.querySelector<HTMLButtonElement>('button[type="submit"]');
+          const status = preview.querySelector<HTMLElement>('[role="status"]');
+          if (!roleSelect || !affiliateSelect || !submit || !status) {
+            loading = false;
+            return;
+          }
+          status.textContent = 'Loading preview options…';
+          try {
+            const response = await fetch('/api/role-preview/options', {
+              headers: { accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = (await response.json()) as {
+              roles: string[];
+              affiliates: Array<{ id: string; label: string }>;
+            };
+            const currentRole = preview.dataset.currentRole ?? '';
+            const currentAffiliate = preview.dataset.currentAffiliate ?? '';
+            roleSelect.replaceChildren(
+              ...data.roles.map((role) => {
+                const option = document.createElement('option');
+                option.value = role;
+                option.textContent = role
+                  .toLowerCase()
+                  .split('_')
+                  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                  .join(' ');
+                option.selected = role === currentRole;
+                return option;
+              }),
+            );
+            affiliateSelect.replaceChildren(
+              Object.assign(document.createElement('option'), {
+                value: '',
+                textContent: 'No affiliate assigned',
+                selected: currentAffiliate === '',
+              }),
+              ...data.affiliates.map((affiliate) => {
+                const option = document.createElement('option');
+                option.value = affiliate.id;
+                option.textContent = affiliate.label;
+                option.selected = affiliate.id === currentAffiliate;
+                return option;
+              }),
+            );
+            const activeAffiliate = data.affiliates.find(
+              (affiliate) => affiliate.id === currentAffiliate,
+            );
+            const bannerAffiliate = document.querySelector<HTMLElement>(
+              '[data-preview-affiliate-label]',
+            );
+            if (bannerAffiliate && activeAffiliate) {
+              bannerAffiliate.textContent = activeAffiliate.label;
+            }
+            submit.disabled = data.roles.length === 0;
+            status.textContent = data.roles.length === 0 ? 'No preview roles are configured.' : '';
+            loaded = true;
+          } catch {
+            status.textContent = 'Preview options could not be loaded. Close and try again.';
+          } finally {
+            loading = false;
+          }
+        };
+        preview.addEventListener('toggle', () => {
+          if (preview.open) void loadPreviewOptions();
+        });
+        if (preview.open) void loadPreviewOptions();
+      }
 
       // ---- Auto-collapsing sidebar (Build Prompt 31) ----------------------
       // Unpinned and wide, the sidebar is a folded icon rail that expands as
@@ -455,12 +514,13 @@ const roleLabel = (code: string): string =>
       const railBtn = document.getElementById('grc-rail-expand');
       const menuBtn = document.getElementById('grc-menu');
       const scrim = document.getElementById('grc-scrim');
+      const main = document.getElementById('grc-main');
       const narrow = window.matchMedia('(max-width: 60rem)');
       const hoverable = window.matchMedia('(hover: hover)');
       const OPEN_DELAY = 150;
       const CLOSE_DELAY = 300;
 
-      if (sidebar && pinBtn && railBtn && menuBtn && scrim) {
+      if (sidebar && pinBtn && railBtn && menuBtn && scrim && main) {
         let openTimer = 0;
         let closeTimer = 0;
         const pinned = (): boolean => root.classList.contains('grc-pin');
@@ -541,13 +601,42 @@ const roleLabel = (code: string): string =>
           root.classList.toggle('grc-drawer-open', open);
           menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
           menuBtn.setAttribute('aria-label', open ? 'Close the navigation' : 'Open the navigation');
-          if (!open) menuBtn.focus({ preventScroll: true });
+          main.inert = open;
+          if (open) {
+            requestAnimationFrame(() => {
+              const target = sidebar.querySelector<HTMLElement>(
+                'a[href], button:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+              );
+              target?.focus({ preventScroll: true });
+            });
+          } else {
+            menuBtn.focus({ preventScroll: true });
+          }
         };
         menuBtn.addEventListener('click', () => {
           setDrawer(!root.classList.contains('grc-drawer-open'));
         });
         scrim.addEventListener('click', () => setDrawer(false));
         document.addEventListener('keydown', (e) => {
+          if (e.key === 'Tab' && root.classList.contains('grc-drawer-open')) {
+            const controls = Array.from(
+              sidebar.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+              ),
+            ).filter((el) => !el.hidden && el.getClientRects().length > 0);
+            const first = controls[0];
+            const last = controls.at(-1);
+            if (first && last) {
+              if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+              } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+              }
+            }
+            return;
+          }
           if (e.key !== 'Escape') return;
           if (root.classList.contains('grc-drawer-open')) setDrawer(false);
           else if (!pinned() && isOpen() && !narrow.matches) setOpen(false);
@@ -555,6 +644,7 @@ const roleLabel = (code: string): string =>
         narrow.addEventListener('change', () => {
           setOpen(false);
           root.classList.remove('grc-drawer-open');
+          main.inert = false;
           menuBtn.setAttribute('aria-expanded', 'false');
           syncTips();
         });

@@ -198,18 +198,18 @@ const groupAffiliates = affiliates.filter((a) => a.isGroup);
         {affiliates.length === 0 ? (
           <p class="grc-empty">No affiliates yet. Add the first one above.</p>
         ) : (
-          <div class="grc-tablewrap">
-            <table class="grc-table">
+          <div class="grc-tablewrap" tabindex="0" role="region" aria-label="Scrollable affiliates">
+            <table class="grc-table" aria-label="Affiliates">
               <thead>
                 <tr>
-                  <th>Code</th>
-                  <th>Name</th>
-                  <th>Country</th>
-                  <th>Region</th>
-                  <th>Access</th>
-                  <th>Status</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Country</th>
+                  <th scope="col">Region</th>
+                  <th scope="col">Access</th>
+                  <th scope="col">Status</th>
                   {canWrite && (
-                    <th>
+                    <th scope="col">
                       <span class="grc-visually-hidden">Actions</span>
                     </th>
                   )}

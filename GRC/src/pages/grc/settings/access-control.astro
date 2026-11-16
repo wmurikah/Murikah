@@ -180,7 +180,12 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
                 {selected} is confined to each user's own affiliate in {scopeName}.
               </p>
             )}
-            <div class="grc-tablewrap">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label="Scrollable role access matrix"
+            >
               <table class="grc-table grc-matrix" aria-label={`Permissions for ${selected}`}>
                 <thead>
                   <tr>
@@ -223,13 +228,18 @@ const granted = (module: string, action: string): boolean => matrix[module]?.[ac
         {selected && (
           <div class="grc-panel">
             <h2>Resulting page access</h2>
-            <div class="grc-tablewrap">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label={`Scrollable page access for ${selected}`}
+            >
               <table class="grc-table" aria-label={`Page access for ${selected}`}>
                 <thead>
                   <tr>
-                    <th>Page</th>
-                    <th>Requires</th>
-                    <th>Access</th>
+                    <th scope="col">Page</th>
+                    <th scope="col">Requires</th>
+                    <th scope="col">Access</th>
                   </tr>
                 </thead>
                 <tbody>

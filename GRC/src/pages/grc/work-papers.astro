@@ -276,7 +276,12 @@ const submittable = rows.filter(canSubmitRow);
                 the audit area and the auditor give way on a narrower screen and
                 reappear under the observation, so nothing is lost, it is simply
                 read where there is room. */}
-              <div class="grc-tablewrap grc-tablewrap--fit">
+              <div
+                class="grc-tablewrap grc-tablewrap--fit"
+                tabindex="0"
+                role="region"
+                aria-label="Scrollable observations"
+              >
                 <table class="grc-table grc-table--responsive" aria-label="Observations">
                   <thead>
                     <tr>

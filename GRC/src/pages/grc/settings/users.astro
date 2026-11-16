@@ -314,16 +314,16 @@ const roleLabel = (code: string): string => code.replace(/_/g, ' ');
         {users.length === 0 ? (
           <p class="grc-empty">No users yet.</p>
         ) : (
-          <div class="grc-tablewrap">
-            <table class="grc-table">
+          <div class="grc-tablewrap" tabindex="0" role="region" aria-label="Scrollable users">
+            <table class="grc-table" aria-label="Users">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Affiliate</th>
-                  <th>Status</th>
-                  <th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Affiliate</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">
                     <span class="grc-visually-hidden">Actions</span>
                   </th>
                 </tr>

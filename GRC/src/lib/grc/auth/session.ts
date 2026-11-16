@@ -6,11 +6,13 @@
  * carries only an opaque session id, HMAC-signed with GRC_SESSION_SECRET so a
  * forged or guessed id is rejected before any database lookup. The cookie is
  * HttpOnly, host-only (no Domain) and Path=/ on grc.murikah.com, separate from
- * engr's `engr_session`, so the two products never share a session. Secure is
- * gated on the caller (off only for http development on grc.localhost).
+ * engr's session. Production uses the `__Host-` prefix; development retains the
+ * legacy name because `__Host-` requires HTTPS. Secure is gated on the caller
+ * (off only for http development on grc.localhost).
  */
 
-export const GRC_SESSION_COOKIE = 'grc_session';
+export const GRC_SESSION_COOKIE = '__Host-grc_session';
+export const GRC_SESSION_COOKIE_LEGACY = 'grc_session';
 export const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60; // 12 hours
 
 // The secret is 32+ random bytes, base64 encoded; decode to the raw HMAC key.
@@ -58,20 +60,26 @@ export async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function cookie(value: string, maxAge: number, secure: boolean): string {
+function cookie(
+  value: string,
+  maxAge: number,
+  secure: boolean,
+  name = secure ? GRC_SESSION_COOKIE : GRC_SESSION_COOKIE_LEGACY,
+): string {
   const secureAttr = secure ? '; Secure' : '';
-  return `${GRC_SESSION_COOKIE}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+  return `${name}=${value}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 function readRawCookie(request: Request): string | null {
   const header = request.headers.get('cookie');
   if (!header) return null;
+  const values = new Map<string, string>();
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');
     if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === GRC_SESSION_COOKIE) return part.slice(eq + 1).trim();
+    values.set(part.slice(0, eq).trim(), part.slice(eq + 1).trim());
   }
-  return null;
+  return values.get(GRC_SESSION_COOKIE) ?? values.get(GRC_SESSION_COOKIE_LEGACY) ?? null;
 }
 
 /**
@@ -133,4 +141,10 @@ export async function readSessionId(request: Request, secret: string): Promise<s
 /** The Set-Cookie value that clears the session; attributes match the set cookie. */
 export function clearSession(secure: boolean): string {
   return cookie('', 0, secure);
+}
+
+/** Clear both the hardened production name and the pre-migration name. */
+export function clearSessionCookies(secure: boolean): string[] {
+  if (!secure) return [cookie('', 0, false, GRC_SESSION_COOKIE_LEGACY)];
+  return [cookie('', 0, true, GRC_SESSION_COOKIE), cookie('', 0, true, GRC_SESSION_COOKIE_LEGACY)];
 }

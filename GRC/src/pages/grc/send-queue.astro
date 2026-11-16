@@ -120,17 +120,24 @@ const filters: { value: string; label: string }[] = [
               No rows for this filter.
             </p>
           ) : (
-            <div class="grc-tablewrap">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label="Scrollable notification queue"
+            >
               <table class="grc-table" aria-label="Notification queue">
                 <thead>
                   <tr>
-                    <th>Type</th>
-                    <th>Recipient</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th class="grc-num">Attempts</th>
-                    <th>Created</th>
-                    <th>Action</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Recipient</th>
+                    <th scope="col">Priority</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="grc-num">
+                      Attempts
+                    </th>
+                    <th scope="col">Created</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -178,15 +185,20 @@ const filters: { value: string; label: string }[] = [
               Nothing dead-lettered.
             </p>
           ) : (
-            <div class="grc-tablewrap">
+            <div
+              class="grc-tablewrap"
+              tabindex="0"
+              role="region"
+              aria-label="Scrollable dead-letter notifications"
+            >
               <table class="grc-table" aria-label="Dead-letter">
                 <thead>
                   <tr>
-                    <th>Type</th>
-                    <th>Recipient</th>
-                    <th>Subject</th>
-                    <th>Error</th>
-                    <th>When</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Recipient</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Error</th>
+                    <th scope="col">When</th>
                   </tr>
                 </thead>
                 <tbody>

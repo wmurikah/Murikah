@@ -376,17 +376,22 @@ const done = p.get('done');
             </p>
           </div>
         ) : view === 'table' ? (
-          <div class="grc-tablewrap">
+          <div
+            class="grc-tablewrap"
+            tabindex="0"
+            role="region"
+            aria-label="Scrollable action plans"
+          >
             <table class="grc-table" aria-label="Action plans">
               <thead>
                 <tr>
-                  <th>Number</th>
-                  <th>Action</th>
-                  <th>Work paper</th>
-                  <th>Owner</th>
-                  <th>Priority</th>
-                  <th>Due</th>
-                  <th>Status</th>
+                  <th scope="col">Number</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Work paper</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Priority</th>
+                  <th scope="col">Due</th>
+                  <th scope="col">Status</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,11 +1,13 @@
 /**
- * Signed, session-length role preview for a platform owner. The cookie is only
- * a request; middleware validates the role and affiliate against the acting
- * organisation on every request. Ordinary users never read or honour it.
+ * Signed, session-length role preview for a platform owner or instance super
+ * admin. The cookie is only a request; middleware validates the role and
+ * affiliate against the acting organisation on every request. Ordinary users
+ * never read or honour it.
  */
 import { SignJWT, jwtVerify } from 'jose';
 
-export const GRC_ROLE_PREVIEW_COOKIE = 'grc_role_preview';
+export const GRC_ROLE_PREVIEW_COOKIE = '__Host-grc_role_preview';
+export const GRC_ROLE_PREVIEW_COOKIE_LEGACY = 'grc_role_preview';
 const MAX_AGE_SECONDS = 12 * 60 * 60;
 
 export interface RequestedRolePreview {
@@ -35,7 +37,9 @@ export async function readRolePreview(
   request: Request,
   secret: string,
 ): Promise<RequestedRolePreview | null> {
-  const token = readCookie(request, GRC_ROLE_PREVIEW_COOKIE);
+  const token =
+    readCookie(request, GRC_ROLE_PREVIEW_COOKIE) ??
+    readCookie(request, GRC_ROLE_PREVIEW_COOKIE_LEGACY);
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, keyFromSecret(secret), {
@@ -65,10 +69,20 @@ export async function createRolePreviewCookie(
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(keyFromSecret(secret));
   const secureAttr = secure ? '; Secure' : '';
-  return `${GRC_ROLE_PREVIEW_COOKIE}=${token}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
+  const name = secure ? GRC_ROLE_PREVIEW_COOKIE : GRC_ROLE_PREVIEW_COOKIE_LEGACY;
+  return `${name}=${token}; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
 }
 
 export function clearRolePreviewCookie(secure: boolean): string {
   const secureAttr = secure ? '; Secure' : '';
-  return `${GRC_ROLE_PREVIEW_COOKIE}=; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=0`;
+  const name = secure ? GRC_ROLE_PREVIEW_COOKIE : GRC_ROLE_PREVIEW_COOKIE_LEGACY;
+  return `${name}=; HttpOnly${secureAttr}; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+export function clearRolePreviewCookies(secure: boolean): string[] {
+  if (!secure) return [clearRolePreviewCookie(false)];
+  return [
+    clearRolePreviewCookie(true),
+    `${GRC_ROLE_PREVIEW_COOKIE_LEGACY}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+  ];
 }
