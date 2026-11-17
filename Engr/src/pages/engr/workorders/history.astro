@@ -1,0 +1,104 @@
+---
+export const prerender = false;
+
+/** Imported tracker archive: read-only, tenant-scoped, no active approvals. */
+import EngrLayout from '@/layouts/EngrLayout.astro';
+import { can } from '@engr/auth/rbac';
+import { actorDataScope } from '@engr/auth/dataScope';
+import { getEngrEnv } from '@engr/env';
+import { getDb } from '@engr/db';
+import { listLegacyWorkOrders, type LegacyWorkOrdersPage } from '@engr/repos/legacyWorkOrders';
+
+const engr = Astro.locals.engr;
+if (!engr) return Astro.redirect('/login');
+const allowed = can(Astro.locals, 'workorder.view') && actorDataScope(engr.roles) === 'org';
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
+const parsedPage = Number(Astro.url.searchParams.get('page') ?? '1');
+const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+let archive: LegacyWorkOrdersPage = { rows: [], total: 0, page: 1, pages: 1 };
+if (allowed) {
+  const db = await getDb(getEngrEnv(), Astro.locals);
+  archive = await listLegacyWorkOrders(db, engr.orgId, requestedPage, q);
+}
+const pageLink = (page: number) =>
+  `/workorders/history?page=${page}${q ? '&q=' + encodeURIComponent(q) : ''}`;
+---
+
+<EngrLayout title="Historical work orders">
+  <div class="engr-page-head">
+    <div>
+      <h1>Historical work orders</h1>
+      <p class="engr-lead">Imported tracker history. These are not active work orders or verified closures.</p>
+    </div>
+    <a href="/workorders" class="engr-btn engr-btn--secondary">Back to work orders</a>
+  </div>
+  {!allowed ? (
+    <p class="engr-error" role="alert">You do not have permission to view the organisation's historical work orders.</p>
+  ) : (
+    <>
+      <p class="engr-notice">
+        <strong>Historical records only.</strong> The original tracker does not establish
+        assignment approval, onsite attendance, work completion or actual closure.
+        Original descriptions and reference numbers are retained.
+      </p>
+      <form method="get" class="engr-actionbar">
+        <label for="legacy-wo-query">Search history</label>
+        <input id="legacy-wo-query" name="q" class="engr-input" type="search"
+          placeholder="Work order, location, contractor or description" maxlength="100" value={q} />
+        <button type="submit" class="engr-btn engr-btn--secondary">Search</button>
+        {q && <a href="/workorders/history" class="engr-btn engr-btn--secondary">Clear</a>}
+      </form>
+      <p class="engr-field__hint">
+        {archive.total.toLocaleString()} historical entries; page {archive.page} of {archive.pages}.
+      </p>
+      {archive.rows.length === 0 ? (
+        <p class="engr-empty">No historical records match the search.</p>
+      ) : (
+        <div class="engr-tablewrap">
+          <table class="engr-table" aria-label="Historical work order tracker entries">
+            <thead>
+              <tr>
+                <th scope="col">WO / reference</th>
+                <th scope="col">Reported</th>
+                <th scope="col">Location</th>
+                <th scope="col">Contractor (source)</th>
+                <th scope="col">Work description</th>
+                <th scope="col">Expected closure</th>
+                <th scope="col">Review flags</th>
+                <th scope="col">Source row</th>
+              </tr>
+            </thead>
+            <tbody>
+              {archive.rows.map((r) => (
+                <tr>
+                  <td><strong>{r.workOrderReference || 'Not provided'}</strong></td>
+                  <td>{r.reportedDate || 'Unverified'}</td>
+                  <td>
+                    {r.location}
+                    {!r.isLinked && (
+                      <small class="engr-field__hint"> · not linked to a Location</small>
+                    )}
+                    {r.isLinked && r.sourceLocation && r.sourceLocation !== r.location && (
+                      <small class="engr-field__hint"> · source: {r.sourceLocation}</small>
+                    )}
+                  </td>
+                  <td>{r.contractor || 'Not provided'}</td>
+                  <td class="engr-wrap">{r.description}</td>
+                  <td>{r.expectedClosure || 'Not recorded'}</td>
+                  <td>{r.qualityFlags || '—'}</td>
+                  <td>{r.sourceRow}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {archive.pages > 1 && (
+        <nav class="engr-actionbar" aria-label="Historical work order pages">
+          {archive.page > 1 && <a class="engr-btn engr-btn--secondary" href={pageLink(archive.page - 1)}>Previous</a>}
+          {archive.page < archive.pages && <a class="engr-btn engr-btn--secondary" href={pageLink(archive.page + 1)}>Next</a>}
+        </nav>
+      )}
+    </>
+  )}
+</EngrLayout>

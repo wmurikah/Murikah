@@ -33,7 +33,8 @@ export const DOMAIN_TABLES = [
   'pm_occurrences',
   'lpos',
   'work_orders',
-  'job_safety_analyses',
+  'legacy_work_order_history',
+  'job_safety_analyses', 
   'site_arrivals',
   'job_cards',
   'job_card_spares',
@@ -63,6 +64,8 @@ export const DOMAIN_TABLES = [
 ] as const;
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
+  legacy_work_order_history: ['id','org_id','source_file','source_row','location_source','description',
+    'station_id','reported_date','expected_closure_date','review_state'],
   bills: ['invoice_required'],
   supplier_invoices: [
     'id',
@@ -222,6 +225,7 @@ const REQUIRED_COLUMN_SHAPES: Record<string, Record<string, ColumnShape>> = {
 };
 
 export const REQUIRED_INDEXES = [
+  'ix_legacy_wo_org_date', 'ix_legacy_wo_station', 'ix_legacy_wo_ref',
   'ix_stations_affiliate',
   'ix_regions_affiliate',
   'ux_asset_transfers_open',
@@ -249,6 +253,12 @@ export const REQUIRED_INDEXES = [
 ] as const;
 
 const INDEX_CONTRACTS = [
+  { table: 'legacy_work_order_history', name: 'ix_legacy_wo_org_date', unique: false,
+    partial: false, columns: ['org_id','reported_date','source_row'] },
+  { table: 'legacy_work_order_history', name: 'ix_legacy_wo_station', unique: false,
+    partial: false, columns: ['org_id','station_id'] },
+  { table: 'legacy_work_order_history', name: 'ix_legacy_wo_ref', unique: false,
+    partial: false, columns: ['org_id','wo_number'] },
   { table: 'stations', name: 'ix_stations_affiliate', unique: false, partial: false,
     columns: ['org_id', 'affiliate_org_id', 'region_id'] },
   {
@@ -369,6 +379,8 @@ const INDEX_CONTRACTS = [
 ] as const;
 
 const FOREIGN_KEY_CONTRACTS = [
+  { table: 'legacy_work_order_history', from: 'org_id', target: 'organisations' },
+  { table: 'legacy_work_order_history', from: 'station_id', target: 'stations' },
   { table: 'stations', from: 'affiliate_org_id', target: 'organisations' },
   { table: 'regions', from: 'affiliate_org_id', target: 'organisations' },
   { table: 'asset_movements', from: 'transfer_id', target: 'asset_transfers' },
